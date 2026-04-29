@@ -249,6 +249,14 @@ const D: Record<string, StringMap> = {
   cal_idea_price_placeholder: {
     ru: 'Цена', en: 'Price', 'zh-CN': '价格', hi: 'मूल्य', es: 'Precio', ar: 'السعر',
   },
+  cal_idea_note_placeholder: {
+    ru: 'Заметка (необязательно)',
+    en: 'Note (optional)',
+    'zh-CN': '备注（可选）',
+    hi: 'टिप्पणी (वैकल्पिक)',
+    es: 'Nota (opcional)',
+    ar: 'ملاحظة (اختياري)',
+  },
   cal_idea_add_photo: {
     ru: 'Добавить фото',
     en: 'Add a photo',

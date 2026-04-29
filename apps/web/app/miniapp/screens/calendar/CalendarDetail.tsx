@@ -15,7 +15,7 @@
 
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { Locale } from '@wishlist/shared';
 import { gradients } from '@wishlist/ui-tokens';
 import type { TgFetch } from './api';
@@ -395,15 +395,24 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
   const [text, setText] = useState('');
   const [link, setLink] = useState('');
   const [price, setPrice] = useState('');
+  const [note, setNote] = useState('');
   const [currency, setCurrency] = useState<IdeaCurrency>('RUB');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const formRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (adding && formRef.current) {
+      formRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }, [adding]);
 
   const reset = () => {
-    setText(''); setLink(''); setPrice(''); setCurrency('RUB'); setAdding(false);
+    setText(''); setLink(''); setPrice(''); setNote(''); setCurrency('RUB'); setAdding(false);
     setPhotoFile(null);
     if (photoPreview) URL.revokeObjectURL(photoPreview);
     setPhotoPreview(null);
@@ -427,6 +436,7 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
         link: link.trim() ? link.trim() : null,
         price: priceNum != null && Number.isFinite(priceNum) && priceNum >= 0 ? Math.floor(priceNum) : null,
         currency,
+        note: note.trim() || undefined,
       });
       // Upload photo as a follow-up — the create endpoint accepts JSON only;
       // photos go through a multipart endpoint scoped to the new idea id.
@@ -496,6 +506,8 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
         <div>
           {visible.map(idea => {
             const done = idea.status === 'DONE';
+            const expanded = expandedId === idea.id;
+            const hasDetails = !!(idea.imageUrl || idea.note || idea.link);
             const priceText = idea.price != null
               ? `${idea.price.toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US')} ${idea.currency ?? ''}`.trim()
               : null;
@@ -504,71 +516,126 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
               <div key={idea.id} style={{
                 margin: '0 16px 8px', padding: 14, borderRadius: 18,
                 background: 'var(--wb-card)', border: '1px solid var(--wb-border)',
-                display: 'flex', gap: 12, alignItems: 'flex-start',
                 opacity: done ? 0.6 : 1,
                 WebkitBackdropFilter: 'blur(12px)' as never, backdropFilter: 'blur(12px)' as never,
               }}>
-                <button
-                  type="button"
-                  onClick={() => void toggleComplete(idea.id, done)}
-                  disabled={busyId === idea.id || done}
-                  aria-label={done ? 'Отмечено' : 'Отметить выполненным'}
-                  style={{
-                    width: 28, height: 28, borderRadius: 9, flexShrink: 0,
-                    background: done ? 'var(--wb-accent-soft)' : 'var(--wb-surface)',
-                    border: done ? '1px solid var(--wb-accent-soft-strong)' : '1px solid var(--wb-border)',
-                    color: done ? 'var(--wb-accent-strong)' : 'var(--wb-text-muted)',
-                    fontSize: 14, fontWeight: 700, cursor: done ? 'default' : 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontFamily: 'inherit', padding: 0,
-                  }}
-                >{done ? '✓' : ''}</button>
-                {idea.imageUrl && (
+                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                   <button
                     type="button"
-                    onClick={() => setViewingPhoto(idea.imageUrl)}
-                    aria-label="Открыть фото"
+                    onClick={() => void toggleComplete(idea.id, done)}
+                    disabled={busyId === idea.id || done}
+                    aria-label={done ? 'Отмечено' : 'Отметить выполненным'}
                     style={{
-                      width: 56, height: 56, borderRadius: 12, flexShrink: 0,
-                      padding: 0, fontFamily: 'inherit', cursor: 'pointer',
-                      backgroundImage: `url(${idea.imageUrl})`,
-                      backgroundSize: 'cover', backgroundPosition: 'center',
-                      border: '1px solid var(--wb-border)',
+                      width: 28, height: 28, borderRadius: 9, flexShrink: 0,
+                      background: done ? 'var(--wb-accent-soft)' : 'var(--wb-surface)',
+                      border: done ? '1px solid var(--wb-accent-soft-strong)' : '1px solid var(--wb-border)',
+                      color: done ? 'var(--wb-accent-strong)' : 'var(--wb-text-muted)',
+                      fontSize: 14, fontWeight: 700, cursor: done ? 'default' : 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontFamily: 'inherit', padding: 0,
                     }}
-                  />
-                )}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontSize: 14, fontWeight: 600, color: 'var(--wb-text)',
-                    letterSpacing: '-0.012em', lineHeight: 1.3,
-                    textDecoration: done ? 'line-through' : 'none',
-                    overflowWrap: 'anywhere',
-                  }}>{idea.text}</div>
-                  {(priceText || linkDomain || idea.note) && (
-                    <div style={{ fontSize: 11.5, color: 'var(--wb-text-muted)', marginTop: 4, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {priceText && <span style={{ fontWeight: 700, color: 'var(--wb-text-secondary)', fontFeatureSettings: '"tnum"' }}>{priceText}</span>}
-                      {linkDomain && (
-                        idea.link
-                          ? <a href={idea.link} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--wb-accent-strong)', textDecoration: 'none' }}>↗ {linkDomain}</a>
-                          : <span>· {linkDomain}</span>
-                      )}
-                      {idea.note && <span>· {idea.note}</span>}
-                    </div>
+                  >{done ? '✓' : ''}</button>
+                  {!expanded && idea.imageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setExpandedId(idea.id)}
+                      aria-label="Открыть фото"
+                      style={{
+                        width: 56, height: 56, borderRadius: 12, flexShrink: 0,
+                        padding: 0, fontFamily: 'inherit', cursor: 'pointer',
+                        backgroundImage: `url(${idea.imageUrl})`,
+                        backgroundSize: 'cover', backgroundPosition: 'center',
+                        border: '1px solid var(--wb-border)',
+                      }}
+                    />
                   )}
+                  <div
+                    onClick={() => hasDetails ? setExpandedId(expanded ? null : idea.id) : undefined}
+                    style={{ flex: 1, minWidth: 0, cursor: hasDetails ? 'pointer' : 'default' }}
+                  >
+                    <div style={{
+                      fontSize: 14, fontWeight: 600, color: 'var(--wb-text)',
+                      letterSpacing: '-0.012em', lineHeight: 1.3,
+                      textDecoration: done ? 'line-through' : 'none',
+                      overflowWrap: 'anywhere',
+                    }}>
+                      {idea.text}
+                      {hasDetails && !expanded && (
+                        <span style={{ color: 'var(--wb-text-muted)', fontSize: 12, marginLeft: 6 }}>›</span>
+                      )}
+                    </div>
+                    {(priceText || (!expanded && linkDomain)) && (
+                      <div style={{ fontSize: 11.5, color: 'var(--wb-text-muted)', marginTop: 4, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {priceText && <span style={{ fontWeight: 700, color: 'var(--wb-text-secondary)', fontFeatureSettings: '"tnum"' }}>{priceText}</span>}
+                        {!expanded && linkDomain && (
+                          idea.link
+                            ? <a href={idea.link} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ color: 'var(--wb-accent-strong)', textDecoration: 'none' }}>↗ {linkDomain}</a>
+                            : <span>· {linkDomain}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void remove(idea.id)}
+                    disabled={busyId === idea.id}
+                    aria-label={ct('cal_delete', locale)}
+                    style={{
+                      width: 28, height: 28, borderRadius: 9, flexShrink: 0,
+                      background: 'transparent', border: 'none',
+                      color: 'var(--wb-text-muted)', fontSize: 16,
+                      cursor: 'pointer', fontFamily: 'inherit', padding: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >×</button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void remove(idea.id)}
-                  disabled={busyId === idea.id}
-                  aria-label={ct('cal_delete', locale)}
-                  style={{
-                    width: 28, height: 28, borderRadius: 9, flexShrink: 0,
-                    background: 'transparent', border: 'none',
-                    color: 'var(--wb-text-muted)', fontSize: 16,
-                    cursor: 'pointer', fontFamily: 'inherit', padding: 0,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}
-                >×</button>
+
+                {expanded && (
+                  <div style={{ marginTop: 12, paddingLeft: 40 }}>
+                    {idea.imageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setViewingPhoto(idea.imageUrl)}
+                        aria-label="Открыть фото"
+                        style={{
+                          display: 'block', width: '100%', maxWidth: 280, aspectRatio: '4/3',
+                          borderRadius: 14, marginBottom: 10, padding: 0, fontFamily: 'inherit',
+                          cursor: 'pointer', backgroundImage: `url(${idea.imageUrl})`,
+                          backgroundSize: 'cover', backgroundPosition: 'center',
+                          border: '1px solid var(--wb-border)',
+                        }}
+                      />
+                    )}
+                    {idea.note && (
+                      <div style={{
+                        fontSize: 13, color: 'var(--wb-text-secondary)', lineHeight: 1.45,
+                        marginBottom: 8, overflowWrap: 'anywhere',
+                      }}>{idea.note}</div>
+                    )}
+                    {idea.link && (
+                      <a
+                        href={idea.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          fontSize: 13, color: 'var(--wb-accent-strong)', textDecoration: 'none',
+                          overflowWrap: 'anywhere', wordBreak: 'break-all',
+                        }}
+                      >↗ {idea.link}</a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setExpandedId(null)}
+                      style={{
+                        display: 'block', marginTop: 8, padding: '6px 0',
+                        background: 'transparent', border: 'none',
+                        color: 'var(--wb-text-muted)', fontSize: 12,
+                        cursor: 'pointer', fontFamily: 'inherit',
+                      }}
+                    >{locale === 'ru' ? 'Свернуть' : 'Collapse'}</button>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -576,17 +643,29 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
       )}
 
       {adding ? (
-        <div style={{ padding: '0 16px 14px' }}>
+        <div ref={formRef} style={{ padding: '0 16px 14px' }}>
           <input
             value={text} onChange={e => setText(e.target.value)}
             placeholder={ct('cal_idea_placeholder', locale)}
             maxLength={500}
             autoFocus
+            onFocus={() => { setTimeout(() => formRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300); }}
             style={{
               width: '100%', boxSizing: 'border-box',
               background: 'var(--wb-card)', border: '1px solid var(--wb-border)',
               borderRadius: 16, padding: '12px 14px',
               fontFamily: 'inherit', fontSize: 14, color: 'var(--wb-text)', outline: 'none', marginBottom: 8,
+            }}
+          />
+          <input
+            value={note} onChange={e => setNote(e.target.value)}
+            placeholder={ct('cal_idea_note_placeholder', locale)}
+            maxLength={500}
+            style={{
+              width: '100%', boxSizing: 'border-box',
+              background: 'var(--wb-card)', border: '1px solid var(--wb-border)',
+              borderRadius: 16, padding: '12px 14px',
+              fontFamily: 'inherit', fontSize: 13, color: 'var(--wb-text)', outline: 'none', marginBottom: 8,
             }}
           />
           <input
