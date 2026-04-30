@@ -6324,7 +6324,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         return;
       }
       pushToast(t('public_profile_subscribe_toast', locale), 'success');
-      trackEvent('profile_subscribe', { username });
+      // Birthday funnel: subscribing from a friend-without-public-wishlist
+      // banner is a key recovery signal — attribute when applicable.
+      trackBirthdayAttributedEvent('profile_subscribe', { username });
     } catch {
       setPublicProfileSubscribed(false);
     } finally {
@@ -6678,7 +6680,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       }
       const data = await res.json();
       setPublicProfileData(data);
-      trackEvent('public_profile.viewed', { hasShowcase: !!data.showcase });
+      trackBirthdayAttributedEvent('public_profile.viewed', { hasShowcase: !!data.showcase });
     } catch {
       setPublicProfileError('error');
     } finally {
@@ -8399,6 +8401,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       };
 
       trackEvent('miniapp.bootstrap_started', { startParamType: startParam ? (startParam.startsWith('santa_') ? 'santa' : startParam.startsWith('src_') ? 'attribution' : startParam.includes('__') ? 'guest' : 'service') : 'none' });
+
+      // Reset birthday-deeplink context on every boot. Telegram caches the
+      // Mini App root component, so a previous `br_<deliveryId>` session can
+      // leak into a fresh open via a different startParam (or no startParam).
+      // The `br_` branch below re-sets the context if appropriate.
+      if (!startParam || !startParam.startsWith('br_')) {
+        setBirthdayContext(null);
+      }
 
       if (startParam && startParam.startsWith('santa_')) {
         // Deep link from Santa invite.
@@ -10335,7 +10345,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return; }
       setItems((prev) => prev.filter((i) => i.id !== item.id));
       setWishlists((prev) => prev.map((wl) => wl.id === currentWl.id ? { ...wl, itemCount: Math.max(0, wl.itemCount - 1) } : wl));
-      trackEvent('item_completed');
+      // For owner birthday flow: marking gifts as received after a reminder is
+      // a key conversion signal — keep this attributed even though it fires on
+      // the owner's own surface (birthdayContext.isOwner = true).
+      trackBirthdayAttributedEvent('item_completed');
       pushToast(t('archive_received_toast', locale), 'success');
       try { tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch { /* ok */ }
     } finally {
@@ -10637,7 +10650,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       if (viewingItem && viewingItem.id === reservingItem.id) setViewingItem(updatedItem);
       setReservationsCount((prev) => prev + 1);
       setProfileStats((prev) => prev ? { ...prev, reservedByMe: prev.reservedByMe + 1 } : prev);
-      trackEvent('item_reserved', { itemId: reservingItem.id });
+      // Birthday-funnel attribution: when this reservation came from a `br_*`
+      // deeplink session, the wrapper adds birthdaySource + deliveryId props so
+      // we can measure deeplink → reservation conversion in God Mode.
+      trackBirthdayAttributedEvent('item_reserved', { itemId: reservingItem.id });
       pushToast(t('reserve_success', locale), 'success');
       setReservingItem(null);
       setGuestName('');
@@ -10662,7 +10678,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       setReservations((prev) => prev.filter((r) => r.id !== item.id));
       setReservationsCount((prev) => Math.max(0, prev - 1));
       setProfileStats((prev) => prev ? { ...prev, reservedByMe: Math.max(0, prev.reservedByMe - 1) } : prev);
-      trackEvent('item_unreserved', { itemId: item.id });
+      trackBirthdayAttributedEvent('item_unreserved', { itemId: item.id });
       pushToast(t('unreserve_success', locale), 'success');
     } finally {
       setLoading(false);
@@ -10956,8 +10972,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     }
     // Onboarded & unlocked → confirm sheet
     setSecretConfirmItem(item);
-    trackEvent('secret_res.confirm_open', { itemId: item.id });
-  }, [secretReservations, secretAccess.unlocked, secretOnboardingSeen, refreshSecretReservationDetail, trackEvent]);
+    // Birthday funnel: secret-res confirm-open from a `br_*` deeplink session
+    // is the strongest gifter-intent signal we can observe pre-conversion.
+    trackBirthdayAttributedEvent('secret_res.confirm_open', { itemId: item.id });
+  }, [secretReservations, secretAccess.unlocked, secretOnboardingSeen, refreshSecretReservationDetail, trackEvent, trackBirthdayAttributedEvent]);
 
   // ── Reservation Pro handlers ─────────────────────────────────────────────
   const handleResMetaUpdate = async (itemId: string, data: { note?: string | null; purchased?: boolean }) => {
@@ -31766,7 +31784,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       {showcase.pinned.map((wl) => (
                         <div key={wl.id}
                           onClick={() => {
-                            trackEvent('public_profile.wishlist_opened', { source: 'pinned' });
+                            trackBirthdayAttributedEvent('public_profile.wishlist_opened', { source: 'pinned' });
                             setGuestViewReturnToProfileUsername(pp.profile.username ?? null);
                             void loadGuestWishlist(wl.slug).then(() => { setScreen('guest-view'); window.scrollTo(0, 0); }).catch(() => {});
                           }}
@@ -31923,7 +31941,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       {nonPinnedWishlists.map((wl, i) => (
                         <div key={wl.id}
                           onClick={() => {
-                            trackEvent('public_profile.wishlist_opened', { source: 'list' });
+                            trackBirthdayAttributedEvent('public_profile.wishlist_opened', { source: 'list' });
                             setGuestViewReturnToProfileUsername(pp.profile.username ?? null);
                             void loadGuestWishlist(wl.slug).then(() => { setScreen('guest-view'); window.scrollTo(0, 0); }).catch(() => {});
                           }}

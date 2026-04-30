@@ -18831,7 +18831,9 @@ const BIRTHDAY_TZ_OFFSET_HOURS = 3; // MSK; matches GiftOccasionReminder cron
 const BIRTHDAY_SEND_HOUR_MSK_MIN = 9;  // earliest delivery hour in MSK
 const BIRTHDAY_SEND_HOUR_MSK_MAX = 22; // latest delivery hour in MSK
 const BIRTHDAY_RECIPIENT_DAILY_CAP = 3;     // max friend reminders received per recipient per MSK day
-const BIRTHDAY_RECIPIENT_WEEKLY_CAP = 10;   // max friend reminders received per recipient per 7 days
+// (weekly cap intentionally dropped — at current scale daily cap + dedup is
+// sufficient. Re-add a 7-day rolling cap here if recipients legitimately have
+// 10+ birthdays a week from their explicit-relationship audience.)
 const BIRTHDAY_BATCH_BIRTHDAY_USERS = 30;   // max birthday users processed per scheduler tick
 const BIRTHDAY_BATCH_RECIPIENTS = 100;      // max recipients per birthday user per tick
 const BIRTHDAY_RETRY_LOOKBACK_HOURS = 24;   // retry pending/deferred records up to this old
@@ -19608,15 +19610,23 @@ async function maybeCreateFriendDeliveries(
         throw err;
       }
 
+      // Branch order matters: 'daily_cap' is persisted as `deferred` status (with
+      // deferredUntil set), so it must be checked BEFORE the generic skip-reason
+      // catch-all. Previously this block was unreachable and `daily_cap` rows
+      // were mis-attributed to `birthday.delivery_skipped`, breaking the
+      // `noSendsDespiteCandidates` God Mode alert.
+      if (skipReason === 'daily_cap') {
+        stats.deferred++;
+        // Still record the skip-reason in bySkipReason so God Mode shows the
+        // load-shedding signal alongside the deferred count.
+        stats.bySkipReason[skipReason] = (stats.bySkipReason[skipReason] ?? 0) + 1;
+        trackEvent('birthday.delivery_deferred', cand.userId, { kind, until: 'next_morning_msk', reason: 'daily_cap' });
+        continue;
+      }
       if (skipReason) {
         stats.skipped++;
         stats.bySkipReason[skipReason] = (stats.bySkipReason[skipReason] ?? 0) + 1;
         trackEvent('birthday.delivery_skipped', cand.userId, { kind, skipReason });
-        continue;
-      }
-      if (skipReason as BirthdaySkipReason | null === 'daily_cap') {
-        stats.deferred++;
-        trackEvent('birthday.delivery_deferred', cand.userId, { kind, until: 'next_morning_msk' });
         continue;
       }
 
