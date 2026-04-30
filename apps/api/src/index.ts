@@ -10247,6 +10247,58 @@ tgRouter.get('/admin/birthday-reminders/metrics', asyncHandler(async (req, res) 
     },
   });
 
+  // ─── Conversion metrics ─────────────────────────────────────────────────
+  // Counts AnalyticsEvent rows where Mini App fired the canonical birthday.*
+  // mirror events. The mirrors are emitted by `trackBirthdayAttributedEvent`
+  // ONLY when the user is in a `br_<deliveryId>` deeplink session, so each
+  // count reflects birthday-deeplink → action conversion.
+  const countAttributedEvent = async (event: string): Promise<number> => {
+    return prisma.analyticsEvent.count({
+      where: { event, createdAt: { gte: sinceDay } },
+    });
+  };
+  const [
+    convFriendReservation,
+    convFriendSecretReservation,
+    convFriendItemOpened,
+    convFriendWishlistOpened,
+    convFriendProfileSubscribed,
+    convFriendGiftCompleted,
+  ] = await Promise.all([
+    countAttributedEvent('birthday.item_reserved'),
+    countAttributedEvent('birthday.secret_reservation_clicked'),
+    countAttributedEvent('birthday.item_opened'),
+    countAttributedEvent('birthday.public_wishlist_opened'),
+    countAttributedEvent('birthday.subscribe_clicked'),
+    countAttributedEvent('birthday.gift_completed'),
+  ]);
+
+  // Owner-flow conversion metrics — count birthday.* mirror events filtered to
+  // owner_* reminderKind via JSON props. Prisma's JSON path filtering needs
+  // raw SQL because the mirror events are emitted by the Mini App where we
+  // don't yet differentiate owner vs friend in the canonical event name.
+  // Approximate: owner conversion = events where birthdayReminderKind LIKE 'owner_%'.
+  const ownerConversionRows = await prisma.$queryRaw<Array<{ event: string; count: bigint }>>`
+    SELECT event, COUNT(*)::bigint AS count
+    FROM "AnalyticsEvent"
+    WHERE event IN ('birthday.gift_completed', 'wishlist_created', 'wish_created')
+      AND "createdAt" >= ${sinceDay}
+      AND props->>'birthdayReminderKind' LIKE 'owner_%'
+    GROUP BY event
+  `.catch(() => [] as Array<{ event: string; count: bigint }>);
+  const ownerConversionByEvent = Object.fromEntries(
+    ownerConversionRows.map(r => [r.event, Number(r.count)]),
+  );
+
+  // Pro-conversion from birthday context — paywall_converted events whose
+  // `from`/`source` prop indicates birthday_reminders_advanced context.
+  const proConversionFromBirthday = await prisma.analyticsEvent.count({
+    where: {
+      event: 'birthday.paywall_converted',
+      createdAt: { gte: sinceDay },
+    },
+  });
+
   return res.json({
     enabled: BIRTHDAY_REMINDERS_ENABLED,
     readiness: {
@@ -10268,6 +10320,20 @@ tgRouter.get('/admin/birthday-reminders/metrics', asyncHandler(async (req, res) 
       sent: sentCount,
       clicked: clickedCount,
       ctrPercent: sentCount > 0 ? Math.round((clickedCount / sentCount) * 1000) / 10 : 0,
+    },
+    conversions24h: {
+      // Friend-reminder funnel (recipient receives DM → opens Mini App → acts)
+      friendReminderToReservation: convFriendReservation,
+      friendReminderToSecretReservation: convFriendSecretReservation,
+      friendReminderToItemOpened: convFriendItemOpened,
+      friendReminderToWishlistOpened: convFriendWishlistOpened,
+      friendReminderToProfileSubscribed: convFriendProfileSubscribed,
+      // Owner-reminder funnel (owner receives DM → updates wishlist)
+      ownerReminderToItemAdded: ownerConversionByEvent['wish_created'] ?? 0,
+      ownerReminderToWishlistMadePublic: ownerConversionByEvent['wishlist_created'] ?? 0,
+      ownerReminderToGiftCompleted: ownerConversionByEvent['birthday.gift_completed'] ?? 0,
+      // Pro funnel (paywall shown → upgraded)
+      proConversionFromBirthdayContext: proConversionFromBirthday,
     },
     mutes: { total: totalMutes, last24h: mutes24h },
     scheduler: {
@@ -19077,6 +19143,57 @@ async function pickBirthdayPrimaryWishlist(birthdayUserId: string, primaryId: st
  * Excludes the birthday user themselves and any account with no telegramChatId
  * (those are filtered later when fetching the User row, but pre-filter saves work).
  */
+/**
+ * Resolve commenter userIds for the EXTENDED audience.
+ *
+ * Comments persist only `authorActorHash` (one-way SHA-256 of `tg_actor:${telegramId}`
+ * via `tgActorHash`), not a direct userId. To map back we enumerate Users with a
+ * `telegramId` and a `telegramChatId` (must be DM-able), compute their hash, and
+ * intersect with distinct hashes seen on comments for the owner's public wishlists.
+ *
+ * Bounded by O(activeUsers) hash computes per scheduler tick. Acceptable up to
+ * ~50k active users; cache or denormalize `Comment.authorUserId` past that.
+ *
+ * NEVER includes:
+ * - SYSTEM comments (status changes, etc.)
+ * - Comments on private wishlists
+ * - Users without `telegramChatId` (cannot receive a DM anyway)
+ */
+async function findCommenterRecipients(wishlistIds: string[]): Promise<string[]> {
+  if (wishlistIds.length === 0) return [];
+  const comments = await prisma.comment.findMany({
+    where: {
+      item: { wishlistId: { in: wishlistIds } },
+      type: 'USER',
+      authorActorHash: { not: null },
+    },
+    select: { authorActorHash: true },
+    distinct: ['authorActorHash'],
+    take: 5000,
+  });
+  const actorSet = new Set<string>();
+  for (const c of comments) {
+    if (c.authorActorHash) actorSet.add(c.authorActorHash);
+  }
+  if (actorSet.size === 0) return [];
+
+  // Scope user scan to DM-able users — no point computing hashes for unreachable accounts.
+  const users = await prisma.user.findMany({
+    where: { telegramId: { not: null }, telegramChatId: { not: null } },
+    select: { id: true, telegramId: true },
+    take: 50000,
+  });
+  const matched: string[] = [];
+  for (const u of users) {
+    if (!u.telegramId) continue;
+    const tid = Number(u.telegramId);
+    if (!Number.isFinite(tid)) continue;
+    const hash = tgActorHash(tid);
+    if (actorSet.has(hash)) matched.push(u.id);
+  }
+  return matched;
+}
+
 async function findBirthdayFriendRecipients(birthdayUserId: string, audience: 'SUBSCRIBERS' | 'EXTENDED'): Promise<{ userId: string; relationType: string }[]> {
   const relationByUserId = new Map<string, Set<string>>();
   const add = (userId: string, rel: string): void => {
@@ -19138,9 +19255,17 @@ async function findBirthdayFriendRecipients(birthdayUserId: string, audience: 'S
       });
       for (const r of secretRes) add(r.reserverUserId, 'reservation');
 
-      // NOTE: Comments are pseudonymous (authorActorHash, no userId link), so they
-      // cannot be used as a reliable audience source. Mention in audience copy
-      // is intentionally omitted.
+      // 5. Commenters — users who left a non-system comment on items in birthday user's
+      //    public-facing wishlists. Comments store `authorActorHash` (one-way SHA-256
+      //    of `tg_actor:${telegramId}` from `tgActorHash()`), no direct userId column.
+      //    To map back: collect distinct comment actor hashes, then enumerate Users with
+      //    telegramId set and check whose computed `tgActorHash` matches the set.
+      //    Acceptable for current user-base size (one-time hash compute per User per
+      //    scheduler tick, scoped to users who can actually receive a DM). Re-evaluate
+      //    if the User table grows past ~50k active rows — switch to a precomputed
+      //    cache or denormalize `authorUserId` on Comment.
+      const commenterIds = await findCommenterRecipients(wishlistIds);
+      for (const userId of commenterIds) add(userId, 'comment');
     }
   }
 
@@ -19428,13 +19553,27 @@ async function maybeCreateOwnerDelivery(
 
   const ent = await getEffectiveEntitlements(cand.userId, cand.user.godMode);
   const isPro = ent.isPro;
-  const ownerOffsets = (isPro || cand.birthdayAdvancedWindowsEnabled) ? BIRTHDAY_OWNER_PRO_OFFSETS : BIRTHDAY_OWNER_FREE_OFFSETS;
+  const proWindowActive = isPro && cand.birthdayAdvancedWindowsEnabled;
+  const ownerOffsets = proWindowActive ? BIRTHDAY_OWNER_PRO_OFFSETS : BIRTHDAY_OWNER_FREE_OFFSETS;
   if (!(ownerOffsets as readonly number[]).includes(offsetDays)) {
-    return; // window not active for this user
+    // Window not active for this user. Two reasons:
+    //   - Free user, never enabled — silent (offset just isn't in their plan)
+    //   - Ex-Pro user, downgraded after enabling advanced windows: persist a
+    //     `pro_required` skip so God Mode shows downgrade impact.
+    if (cand.birthdayAdvancedWindowsEnabled && !isPro) {
+      await persistOwnerSkip(cand.userId, offsetDays, kind, todayMsk, 'pro_required', stats, cand.birthday);
+    }
+    return;
   }
 
-  if (!cand.birthdayOwnerReminders) return;
-  if (!cand.user.telegramChatId) return;
+  if (!cand.birthdayOwnerReminders) {
+    await persistOwnerSkip(cand.userId, offsetDays, kind, todayMsk, 'friend_reminders_disabled', stats, cand.birthday);
+    return;
+  }
+  if (!cand.user.telegramChatId) {
+    await persistOwnerSkip(cand.userId, offsetDays, kind, todayMsk, 'no_chat_id', stats, cand.birthday);
+    return;
+  }
 
   const occurrenceKey = buildOccurrenceKey(cand.birthday, todayMsk, offsetDays);
   if (!occurrenceKey) return;
@@ -19527,14 +19666,31 @@ async function maybeCreateFriendDeliveries(
   const kind = BIRTHDAY_FRIEND_KINDS_BY_OFFSET[offsetDays];
   if (!kind) return;
   if (!cand.birthday) return;
-  if (!cand.birthdayFriendReminders) return;
-  // Privacy gate: profile must not be NOBODY (LINK_ONLY ok — recipient has explicit relationship)
-  if (cand.profileVisibility === 'NOBODY') return;
+
+  // Owner-level scheduling-blocked checks. Each persists a single skip row
+  // (recipientUserId = birthdayUserId as a marker) so God Mode can see why
+  // friends never got reminders for this owner. Idempotent via unique index.
+  if (!cand.birthdayFriendReminders) {
+    await persistOwnerSkip(cand.userId, offsetDays, kind, todayMsk, 'friend_reminders_disabled', stats, cand.birthday);
+    return;
+  }
+  if (cand.profileVisibility === 'NOBODY') {
+    await persistOwnerSkip(cand.userId, offsetDays, kind, todayMsk, 'profile_private', stats, cand.birthday);
+    return;
+  }
 
   const ent = await getEffectiveEntitlements(cand.userId, cand.user.godMode);
   const isPro = ent.isPro;
   const friendOffsets = (isPro || cand.birthdayAdvancedWindowsEnabled) ? BIRTHDAY_FRIEND_PRO_OFFSETS : BIRTHDAY_FRIEND_FREE_OFFSETS;
-  if (!(friendOffsets as readonly number[]).includes(offsetDays)) return;
+  if (!(friendOffsets as readonly number[]).includes(offsetDays)) {
+    // Pro window inactive. If user previously had it enabled (downgrade case),
+    // persist a `pro_required` skip so paywall-conversion analysis can compare
+    // pre/post downgrade volume. Free users who never enabled don't generate noise.
+    if (cand.birthdayAdvancedWindowsEnabled && !isPro) {
+      await persistOwnerSkip(cand.userId, offsetDays, kind, todayMsk, 'pro_required', stats, cand.birthday);
+    }
+    return;
+  }
 
   // Audience: only Pro can use EXTENDED. If user has it set but is now Free, downgrade to SUBSCRIBERS.
   const effectiveAudience: 'SUBSCRIBERS' | 'EXTENDED' =
@@ -19543,8 +19699,22 @@ async function maybeCreateFriendDeliveries(
   const occurrenceKey = buildOccurrenceKey(cand.birthday, todayMsk, offsetDays);
   if (!occurrenceKey) return;
 
-  // Pick target — wishlist (preferred) or profile fallback
-  const picked = await pickBirthdayPrimaryWishlist(cand.userId, cand.birthdayPrimaryWishlistId);
+  // Pick target — wishlist (preferred) or profile fallback.
+  // If owner has a primaryWishlistId set but the target wishlist is unavailable
+  // (deleted / private / no active items), fire the analytics signal so God Mode
+  // can show ghost-Pro-config impact. Auto-pick still proceeds gracefully.
+  let picked = null as Awaited<ReturnType<typeof pickBirthdayPrimaryWishlist>>;
+  if (cand.birthdayPrimaryWishlistId) {
+    picked = await pickBirthdayPrimaryWishlist(cand.userId, cand.birthdayPrimaryWishlistId);
+    if (!picked || !picked.fromPrimary) {
+      // primaryWishlistId points to something we can't use. Fire signal but continue.
+      trackEvent('birthday.primary_wishlist_unavailable' as never, cand.userId, {
+        kind, primaryWishlistId: cand.birthdayPrimaryWishlistId,
+      });
+    }
+  } else {
+    picked = await pickBirthdayPrimaryWishlist(cand.userId, null);
+  }
   const targetType: 'wishlist' | 'profile' = picked ? 'wishlist' : 'profile';
   const targetId: string | null = picked?.slug ?? cand.username ?? null;
 
@@ -19783,28 +19953,125 @@ async function sendBirthdayDelivery(deliveryId: string, miniAppUrl: string): Pro
   });
 
   // Send
-  const ok = await sendTgBotMessage(recipient.telegramChatId, text, replyMarkup).catch((err) => {
-    logger.error({ err, deliveryId: d.id }, 'birthday: sendTgBotMessage threw');
-    return false;
-  });
+  // Send with outcome detection. We re-implement the Telegram POST inline (rather
+  // than reusing the boolean-returning sendTgBotMessage) so we can distinguish
+  // bot_blocked (Telegram 403 / 'bot was blocked by the user') from generic
+  // transient/permanent failures. bot_blocked deliveries are recorded as
+  // `skipped` with skipReason='bot_blocked' so God Mode load-balance metrics
+  // don't conflate them with retryable failures.
+  const sendOutcome = await sendBirthdayBotPost(recipient.telegramChatId, text, replyMarkup);
 
-  if (ok) {
+  if (sendOutcome.kind === 'sent') {
     await prisma.birthdayReminderDelivery.update({
       where: { id: d.id },
-      data: { status: 'sent', sentAt: new Date() },
+      data: { status: 'sent', sentAt: new Date(), telegramMessageId: sendOutcome.messageId ?? null },
     });
     trackEvent('birthday.delivery_sent', d.birthdayUserId, {
       kind: d.reminderKind, targetType: d.targetType, recipientId: d.recipientUserId,
       isPro,
     });
     return 'sent';
-  } else {
+  }
+  if (sendOutcome.kind === 'bot_blocked') {
     await prisma.birthdayReminderDelivery.update({
       where: { id: d.id },
-      data: { status: 'failed', failureReason: 'send_failed' },
+      data: { status: 'skipped', skipReason: 'bot_blocked' },
     });
-    trackEvent('birthday.delivery_failed', d.birthdayUserId, { kind: d.reminderKind, reason: 'send_failed' });
-    return 'failed';
+    trackEvent('birthday.delivery_skipped', d.birthdayUserId, { kind: d.reminderKind, skipReason: 'bot_blocked' });
+    return 'skipped';
+  }
+  // transient or permanent send failure
+  await prisma.birthdayReminderDelivery.update({
+    where: { id: d.id },
+    data: { status: 'failed', failureReason: sendOutcome.reason ?? 'send_failed' },
+  });
+  trackEvent('birthday.delivery_failed', d.birthdayUserId, { kind: d.reminderKind, reason: sendOutcome.reason ?? 'send_failed' });
+  return 'failed';
+}
+
+/**
+ * Send a bot DM and classify the outcome. Mirrors the classification logic of
+ * sendLifecycleDM but accepts an arbitrary inline_keyboard (lifecycle helper
+ * only supports a single web_app button).
+ *
+ * Outcomes:
+ *   sent          — delivered (Telegram returned ok:true)
+ *   bot_blocked   — recipient blocked the bot (403 / "bot was blocked")
+ *   transient     — 429 / 5xx / network error; caller should leave row pending
+ *                   for retry on next scheduler tick
+ *   permanent     — other 4xx, not retryable
+ */
+async function sendBirthdayBotPost(
+  chatId: string,
+  text: string,
+  replyMarkup: Record<string, unknown>,
+): Promise<{ kind: 'sent'; messageId?: number } | { kind: 'bot_blocked' } | { kind: 'transient'; reason: string } | { kind: 'permanent'; reason: string }> {
+  const token = process.env.BOT_TOKEN;
+  if (!token || !chatId) return { kind: 'permanent', reason: 'no_token_or_chat_id' };
+  try {
+    const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', reply_markup: replyMarkup }),
+    });
+    if (resp.status === 429 || resp.status >= 500) {
+      return { kind: 'transient', reason: `http_${resp.status}` };
+    }
+    const data = await resp.json() as { ok: boolean; description?: string; result?: { message_id?: number } };
+    if (data.ok) {
+      return { kind: 'sent', messageId: data.result?.message_id };
+    }
+    const desc = (data.description ?? '').toLowerCase();
+    if (resp.status === 403 || desc.includes('bot was blocked') || desc.includes('user is deactivated')) {
+      return { kind: 'bot_blocked' };
+    }
+    if (desc.includes('chat not found')) {
+      return { kind: 'permanent', reason: 'chat_not_found' };
+    }
+    return { kind: 'permanent', reason: data.description ?? 'unknown' };
+  } catch (err) {
+    return { kind: 'transient', reason: err instanceof Error ? err.message : 'network_error' };
+  }
+}
+
+/**
+ * Persist a `skipped` row at scheduling-time (before any delivery row exists).
+ * Used by maybeCreateOwnerDelivery / maybeCreateFriendDeliveries to record
+ * pre-create skip causes so God Mode can see them. Idempotent via the unique
+ * (birthdayUserId, recipientUserId, occurrenceKey, reminderKind) constraint.
+ */
+async function persistOwnerSkip(
+  ownerUserId: string,
+  offsetDays: number,
+  kind: BirthdayReminderKind,
+  todayMsk: { year: number; month: number; day: number },
+  reason: BirthdaySkipReason,
+  stats: { skipped: number; bySkipReason: Record<string, number> },
+  birthday: Date,
+): Promise<void> {
+  const occurrenceKey = buildOccurrenceKey(birthday, todayMsk, offsetDays);
+  if (!occurrenceKey) return;
+  try {
+    await prisma.birthdayReminderDelivery.create({
+      data: {
+        birthdayUserId: ownerUserId,
+        recipientUserId: ownerUserId,
+        occurrenceKey,
+        reminderKind: kind,
+        status: 'skipped',
+        skipReason: reason,
+        targetType: null,
+        targetId: null,
+        deepLinkPayload: '',
+        relationType: null,
+      },
+    });
+    stats.skipped++;
+    stats.bySkipReason[reason] = (stats.bySkipReason[reason] ?? 0) + 1;
+    trackEvent('birthday.delivery_skipped', ownerUserId, { kind, skipReason: reason, owner: true });
+  } catch (err: unknown) {
+    if ((err as { code?: string }).code === 'P2002') return; // already recorded
+    throw err;
   }
 }
 

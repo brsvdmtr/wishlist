@@ -5560,25 +5560,69 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const birthdayContextRef = useRef<typeof birthdayContext>(null);
   useEffect(() => { birthdayContextRef.current = birthdayContext; }, [birthdayContext]);
 
-  // Convenience wrapper that adds birthday-source attribution props to any
-  // analytics event when the user is in a birthday-reminder session. Use this
-  // instead of trackEvent for: item_opened, reservation_created, secret_*,
-  // gift_completed, wishlist_opened, profile_subscribe_clicked, etc. — anything
-  // that should count toward birthday-funnel conversion.
+  // Convenience wrapper for birthday-funnel events. When the user is inside a
+  // birthday-reminder session, this fires:
+  //   1. The original event (e.g. `item_reserved`) with `birthdaySource:true`
+  //      props — useful for client-side observation, may or may not persist
+  //      depending on whether the original event is in ANALYTICS_EVENTS allowlist.
+  //   2. The mirrored `birthday.<canonical>` event — these ARE in the allowlist,
+  //      so they reliably persist to AnalyticsEvent and feed the God Mode
+  //      conversion-funnel queries.
+  // Both events carry the same attribution props.
+  // Used for: item_opened, item_reserved, item_completed, profile_subscribe,
+  // public_profile.viewed, public_profile.wishlist_opened, secret_res.confirm_open.
   const trackBirthdayAttributedEvent = useCallback((event: string, props?: Record<string, unknown>) => {
     const ctx = birthdayContextRef.current;
     if (!ctx) {
       trackEvent(event, props);
       return;
     }
-    trackEvent(event, {
-      ...props,
+    const attribution = {
       birthdaySource: true,
       birthdayDeliveryId: ctx.deliveryId,
       birthdayReminderKind: ctx.reminderKind,
       birthdayUserId: ctx.birthdayUser.userId,
-    });
+    };
+    trackEvent(event, { ...props, ...attribution });
+    // Mirror to the canonical birthday.* event for persistence.
+    // Mapping is explicit so unrelated events don't accidentally produce ghost
+    // birthday.* events.
+    const mirrors: Record<string, string> = {
+      'item_reserved': 'birthday.item_reserved',
+      'item_completed': 'birthday.gift_completed',
+      'item_opened': 'birthday.item_opened',
+      'profile_subscribe': 'birthday.subscribe_clicked',
+      'public_profile.viewed': 'birthday.public_profile_opened',
+      'public_profile.wishlist_opened': 'birthday.public_wishlist_opened',
+      'secret_res.confirm_open': 'birthday.secret_reservation_clicked',
+    };
+    const mirror = mirrors[event];
+    if (mirror) {
+      trackEvent(mirror, { ...props, ...attribution });
+    }
   }, [trackEvent]);
+
+  // Item-opened tracking — single useEffect that fires once per unique item
+  // open instead of editing dozens of `setScreen('guest-item-detail')` call
+  // sites. Uses a ref to dedupe re-renders of the same screen+item combo.
+  // Fires both on guest-item-detail (public wishlist) and item-detail (own).
+  // Only the birthday-attributed mirror event persists to AnalyticsEvent —
+  // the un-attributed call is a no-op for non-birthday sessions.
+  const lastItemOpenedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const isItemDetail = screen === 'guest-item-detail' || screen === 'item-detail';
+    if (!isItemDetail || !viewingItem?.id) {
+      lastItemOpenedKeyRef.current = null;
+      return;
+    }
+    const key = `${screen}:${viewingItem.id}`;
+    if (lastItemOpenedKeyRef.current === key) return;
+    lastItemOpenedKeyRef.current = key;
+    trackBirthdayAttributedEvent('item_opened', {
+      itemId: viewingItem.id,
+      source: screen === 'guest-item-detail' ? 'public' : 'own',
+    });
+  }, [screen, viewingItem?.id, trackBirthdayAttributedEvent]);
 
   /** Show context-aware PRO upsell sheet with anti-spam throttling.
    *  auto=true (402 response): max 1 auto-show per session + 30s cooldown.
