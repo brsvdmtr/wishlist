@@ -42,6 +42,7 @@ import {
 } from './security';
 import pinoHttp from 'pino-http';
 import { parseUrl, validateUrl } from './url-parser.js';
+import { getOrCreateProfile } from './profile.js';
 import { t, detectLocale, normalizeLocale, resolveEffectiveLocale, pluralize, type Locale, type LanguageMode, type LanguageSettings, getOnboardingMeta, type OnboardingMeta, type OnboardingVariant, type AcquisitionPath, type CatalogTemplate, getCatalogForSegment, deriveMarketBucket, isSupportedImportRegion, type MarketBucket, MARKET_BUCKET_LABELS, ANALYTICS_EVENTS } from '@wishlist/shared';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
@@ -664,18 +665,8 @@ async function generateUniqueShareToken(): Promise<string> {
   return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 }
 
-/** Generate a cryptographically random, opaque, collision-safe Support ID.
- *  Format: 16-char lowercase hex (e.g. "8c7f0c2e9a4b1d63").
- *  Not derived from Telegram ID or any user-identifying data. */
-async function generateUniqueSupportId(): Promise<string> {
-  for (let i = 0; i < 10; i++) {
-    const id = crypto.randomBytes(8).toString('hex'); // 16-char lowercase hex
-    const existing = await prisma.userProfile.findUnique({ where: { supportId: id } });
-    if (!existing) return id;
-  }
-  // Ultra-safe fallback: 32 hex chars — probability of collision is negligible
-  return crypto.randomBytes(16).toString('hex');
-}
+// generateUniqueSupportId + getOrCreateProfile live in ./profile so they can
+// be unit-tested in isolation (race-condition repro for P2002 on userId).
 
 async function getSystemUser() {
   const email = (process.env.SYSTEM_USER_EMAIL ?? 'owner@local').trim() || 'owner@local';
@@ -3456,36 +3447,7 @@ async function getOrCreateTgUser(tgUser: TelegramUser) {
   });
 }
 
-async function getOrCreateProfile(userId: string, locale?: Locale) {
-  // Try to fetch an existing profile first to avoid generating a supportId we won't use.
-  let profile = await prisma.userProfile.findUnique({ where: { userId } });
-
-  if (!profile) {
-    // New user: create with a fresh supportId immediately. Use upsert instead
-    // of create so parallel requests (e.g. mini-app boot firing several GETs
-    // for the same user) don't race into P2002 unique-constraint crashes on
-    // UserProfile.userId — observed as a 500 on /tg/me/profile in the wild.
-    const supportId = await generateUniqueSupportId();
-    profile = await prisma.userProfile.upsert({
-      where: { userId },
-      create: {
-        userId,
-        defaultCurrency: locale === 'ru' ? 'RUB' : 'USD',
-        supportId,
-      },
-      update: {}, // if another request won the race, keep their row intact
-    });
-  } else if (!profile.supportId) {
-    // Existing user without supportId (pre-migration row): lazy backfill.
-    const supportId = await generateUniqueSupportId();
-    profile = await prisma.userProfile.update({
-      where: { userId },
-      data: { supportId },
-    });
-  }
-
-  return profile;
-}
+// getOrCreateProfile lives in ./profile (see comment above generateUniqueSupportId).
 
 type ItemRole = 'owner' | 'reserver' | 'third_party';
 

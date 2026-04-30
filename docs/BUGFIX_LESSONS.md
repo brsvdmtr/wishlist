@@ -5,6 +5,88 @@ New entries go at the top.
 
 ---
 
+## 2026-04-30 — `getOrCreateProfile` race-condition 500 (повтор)
+
+### Ошибка
+GET `/tg/me/profile` периодически отвечает 500 для нового пользователя. В
+логах — `PrismaClientKnownRequestError P2002` на `UserProfile.userId`,
+вызов `prisma.userProfile.upsert()` внутри `getOrCreateProfile`. Mini-app
+boot параллельно стреляет несколькими GET'ами от одного юзера, оба
+запроса находят `findUnique == null`, оба делают `upsert`, второй падает
+на unique-constraint.
+
+Это **второе появление** того же бага. Первый фикс (`281379a`,
+2026-04-19) заменил `create` на `upsert({ update: {} })` в надежде, что
+Prisma переведёт это в атомарный `INSERT ... ON CONFLICT DO UPDATE`. На
+проде 2026-04-30 оно опять упало — Prisma 5.18 при пустом `update: {}`
+не использует native ON CONFLICT, а откатывается на тот же
+check-then-create, который мы пытались исправить.
+
+**Root cause:** ставка на «Prisma upsert магически атомарен» без проверки
+поведения движка. Empty update — особый кейс, который ломает
+оптимизацию. Гонка осталась.
+
+### Урок
+В Prisma `upsert` — **не безусловно атомарный** на уровне БД. При пустом
+`update: {}` или некоторых других формах он деградирует до
+find-then-create, и в условиях конкуренции от одного клиента выпадает в
+P2002. Надёжный race-safe паттерн в Prisma — это `try { create }
+catch (P2002) { findUnique }`. Это явный, тестируемый, не зависящий от
+внутренних оптимизаций ORM код.
+
+Отдельно: «фикс» race-condition нельзя считать закрытым, пока не
+воспроизвели гонку искусственно (две параллельные create-операции в
+тесте). Любая логика «оно теперь атомарное» без эмпирической проверки —
+гипотеза, а не фикс.
+
+### Правило
+1. **Prisma upsert не равно ON CONFLICT.** Не полагайся на upsert как
+   на race-safe primitive. Если нужна гарантия — пиши `create` + catch
+   `Prisma.PrismaClientKnownRequestError` с `code === 'P2002'` и
+   `meta.target.includes('<field>')`, потом re-fetch.
+2. **Узкий catch.** Catch P2002 только для конкретного поля; остальные
+   constraint violations (`username`, `supportId` и т.п.) пробрасывай —
+   это другие баги, маскировать нельзя.
+3. **Race-fixes требуют test-evidence.** Если фиксишь гонку без
+   юнит-теста, который её воспроизводит — фикс гипотетический. Минимум:
+   nightly e2e, который параллелит 5 одновременных вызовов проблемной
+   функции и ждёт стабильного результата.
+4. **Re-occurrence == уровень выше.** Если тот же баг с тем же symptom
+   возвращается после «фикса» — менять стратегию, не подкручивать
+   старый подход.
+
+### Лучший код
+```ts
+// ❌ Первый фикс: upsert с пустым update — Prisma фолбэчит на
+// check-then-create при некоторых конфигурациях
+profile = await prisma.userProfile.upsert({
+  where: { userId },
+  create: { userId, defaultCurrency, supportId },
+  update: {},
+});
+
+// ✅ Race-safe: явный create + узкий catch P2002 + re-fetch
+try {
+  profile = await prisma.userProfile.create({
+    data: { userId, defaultCurrency, supportId },
+  });
+} catch (err) {
+  const isUserIdConflict =
+    err instanceof Prisma.PrismaClientKnownRequestError &&
+    err.code === 'P2002' &&
+    Array.isArray((err.meta as { target?: unknown } | undefined)?.target) &&
+    ((err.meta as { target: string[] }).target.includes('userId'));
+  if (!isUserIdConflict) throw err; // другие constraints — наверх
+  const existing = await prisma.userProfile.findUnique({ where: { userId } });
+  if (!existing) throw err;
+  profile = existing;
+}
+```
+
+**Commit:** see `git log --grep="fix(profile): replace fragile upsert"` (commit hash chases itself on amend; pick by date 2026-04-30)
+
+---
+
 ## 2026-04-29 — Calendar idea cards: keyboard overlap + non-tappable cards
 
 ### Ошибка
