@@ -12687,7 +12687,7 @@ tgRouter.get('/gift-occasions', asyncHandler(async (req, res) => {
   });
   const mapped = occasions.map(o => {
     const nextDate = o.eventDate ? getNextOccurrenceDate(o.eventDate, o.recurrence) : null;
-    const daysUntil = nextDate ? Math.round((nextDate.getTime() - Date.now()) / (24 * 3600 * 1000)) : null;
+    const daysUntil = nextDate ? Math.round((nextDate.getTime() - Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())) / (24 * 3600 * 1000)) : null;
     return {
       ...o,
       eventDate: o.eventDate?.toISOString() ?? null,
@@ -13307,7 +13307,7 @@ tgRouter.get('/calendar/today-context', asyncHandler(async (req, res) => {
     if (!o.eventDate) continue;
     const next = getNextOccurrenceDate(o.eventDate, o.recurrence);
     if (!next) continue;
-    const days = Math.round((next.getTime() - Date.now()) / (24 * 3600 * 1000));
+    const days = Math.round((next.getTime() - Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())) / (24 * 3600 * 1000));
     if (days < 0 || days > 30) continue;
     if (!soonest || days < soonest.daysUntil) {
       soonest = { id: o.id, title: o.title, emoji: o.emoji, type: o.type, daysUntil: days, nextDate: next.toISOString(), ideasCount: o._count.ideas };
