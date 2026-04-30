@@ -1,0 +1,1488 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Birthday Reminders — WishBoard Mockups (DRAFT)</title>
+<style>
+  :root {
+    --wb-bg:            #0F0F12;
+    --wb-bg-elev:       #15151A;
+    --wb-surface:       rgba(255,255,255,0.035);
+    --wb-card:          rgba(255,255,255,0.045);
+    --wb-card-strong:   rgba(255,255,255,0.07);
+    --wb-border:        rgba(255,255,255,0.06);
+    --wb-border-light:  rgba(255,255,255,0.10);
+    --wb-hairline:      rgba(255,255,255,0.04);
+    --wb-accent:        #8B7BFF;
+    --wb-accent-strong: #B4A6FF;
+    --wb-accent-light:  #C8BDFF;
+    --wb-accent-deep:   #5B48E5;
+    --wb-accent-soft:   rgba(139,123,255,0.14);
+    --wb-accent-soft-strong: rgba(139,123,255,0.30);
+    --wb-accent-glow:   rgba(139,123,255,0.45);
+    --wb-success:       #4ADE80;
+    --wb-success-soft:  rgba(74,222,128,0.14);
+    --wb-warning:       #FBBF24;
+    --wb-warning-soft:  rgba(251,191,36,0.14);
+    --wb-danger:        #FB7185;
+    --wb-danger-soft:   rgba(251,113,133,0.14);
+    --wb-text:          #FFFFFF;
+    --wb-text-secondary:#C7CAD1;
+    --wb-text-muted:    #8F94A3;
+
+    --wb-r-xs:    4px;
+    --wb-r-sm:    7px;
+    --wb-r-md:   11px;
+    --wb-r-lg:   14px;
+    --wb-r-input:16px;
+    --wb-r-xl:   18px;
+    --wb-r-xxl:  22px;
+    --wb-r-hero: 26px;
+    --wb-r-sheet:28px;
+    --wb-r-pill: 9999px;
+
+    --wb-font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', sans-serif;
+  }
+
+  * {
+    margin: 0; padding: 0; box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    font-family: var(--wb-font);
+    background: #1a1a20;
+    color: var(--wb-text);
+    -webkit-font-smoothing: antialiased;
+    padding: 20px;
+  }
+
+  /* ── Layout ── */
+  .mockup-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 32px;
+    justify-content: center;
+    max-width: 1800px;
+    margin: 0 auto;
+  }
+  .mockup-col {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    align-items: center;
+  }
+
+  /* ── Phone frame ── */
+  .phone {
+    width: 390px;
+    min-height: 500px;
+    background: var(--wb-bg);
+    border-radius: 40px;
+    border: 2px solid rgba(255,255,255,0.06);
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .phone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 12% 0%, rgba(139,123,255,0.22), transparent 55%),
+      radial-gradient(ellipse 60% 50% at 100% 20%, rgba(255,120,180,0.10), transparent 55%),
+      radial-gradient(ellipse 100% 70% at 50% 110%, rgba(139,123,255,0.10), transparent 65%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .phone > * { position: relative; z-index: 1; }
+
+  .phone-content {
+    padding: 0 16px 24px;
+    overflow-y: auto;
+    max-height: 844px;
+  }
+
+  /* ── Labels ── */
+  .screen-label {
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--wb-text-muted);
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+  }
+  .draft-badge {
+    display: inline-block;
+    background: var(--wb-warning-soft);
+    color: var(--wb-warning);
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: var(--wb-r-sm);
+    margin-left: 6px;
+    vertical-align: middle;
+    letter-spacing: 0.5px;
+  }
+  .page-title-bar {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--wb-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    text-align: center;
+    padding: 56px 0 12px;
+  }
+
+  /* ── Section header ── */
+  .section-header {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--wb-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    margin: 24px 0 10px 4px;
+  }
+
+  /* ── Glass card ── */
+  .glass-card {
+    background: var(--wb-card);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--wb-border);
+    border-radius: var(--wb-r-xxl);
+    overflow: hidden;
+  }
+
+  /* ── Settings row ── */
+  .settings-row {
+    display: flex;
+    align-items: center;
+    padding: 14px 16px;
+    gap: 12px;
+    min-height: 50px;
+  }
+  .settings-row + .settings-row {
+    border-top: 1px solid var(--wb-hairline);
+  }
+  .settings-row-icon {
+    font-size: 20px;
+    width: 28px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .settings-row-content {
+    flex: 1;
+    min-width: 0;
+  }
+  .settings-row-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--wb-text);
+    letter-spacing: -0.012em;
+  }
+  .settings-row-hint {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--wb-text-muted);
+    margin-top: 2px;
+    letter-spacing: -0.005em;
+  }
+  .settings-row-chevron {
+    color: var(--wb-text-muted);
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  /* ── Toggle ── */
+  .toggle {
+    width: 51px;
+    height: 31px;
+    border-radius: 16px;
+    position: relative;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.2s;
+  }
+  .toggle.off {
+    background: rgba(255,255,255,0.12);
+  }
+  .toggle.on {
+    background: var(--wb-accent);
+  }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    width: 27px;
+    height: 27px;
+    border-radius: 50%;
+    background: #fff;
+    top: 2px;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+  .toggle.off::after { left: 2px; }
+  .toggle.on::after { left: 22px; }
+
+  /* ── Pro badge ── */
+  .pro-badge {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--wb-accent);
+    background: var(--wb-accent-soft);
+    padding: 2px 6px;
+    border-radius: var(--wb-r-sm);
+    letter-spacing: 0.3px;
+    flex-shrink: 0;
+  }
+
+  /* ── Banner ── */
+  .banner {
+    border-radius: var(--wb-r-xl);
+    padding: 14px 16px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .banner-accent {
+    background: var(--wb-accent-soft);
+    border: 1px solid var(--wb-accent-soft-strong);
+  }
+  .banner-warning {
+    background: var(--wb-warning-soft);
+    border: 1px solid rgba(251,191,36,0.25);
+  }
+  .banner-success {
+    background: var(--wb-success-soft);
+    border: 1px solid rgba(74,222,128,0.25);
+  }
+  .banner-icon {
+    font-size: 22px;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+  .banner-body {
+    flex: 1;
+    min-width: 0;
+  }
+  .banner-title {
+    font-size: 14px;
+    font-weight: 650;
+    color: var(--wb-text);
+    letter-spacing: -0.012em;
+  }
+  .banner-desc {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--wb-text-secondary);
+    margin-top: 4px;
+    line-height: 1.35;
+    letter-spacing: -0.005em;
+  }
+  .banner-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .banner-btn {
+    font-size: 13px;
+    font-weight: 650;
+    padding: 8px 14px;
+    border-radius: var(--wb-r-lg);
+    border: none;
+    cursor: pointer;
+    letter-spacing: -0.01em;
+  }
+  .banner-btn-primary {
+    background: var(--wb-accent);
+    color: #fff;
+  }
+  .banner-btn-ghost {
+    background: rgba(255,255,255,0.06);
+    color: var(--wb-text-secondary);
+  }
+  .banner-close {
+    color: var(--wb-text-muted);
+    font-size: 16px;
+    cursor: pointer;
+    flex-shrink: 0;
+    padding: 2px;
+    line-height: 1;
+  }
+
+  /* ── Button ── */
+  .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 50px;
+    border-radius: var(--wb-r-xl);
+    font-size: 15px;
+    font-weight: 650;
+    letter-spacing: -0.015em;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+    transition: all 0.15s;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, #8B7BFF, #B4A6FF);
+    color: #fff;
+    box-shadow: 0 8px 24px rgba(139,123,255,0.40);
+  }
+  .btn-secondary {
+    background: var(--wb-card);
+    color: var(--wb-text);
+    border: 1px solid var(--wb-border-light);
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--wb-text-muted);
+    height: 44px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  /* ── Telegram bot message ── */
+  .tg-chat {
+    background: #0e1621;
+    padding: 16px;
+    min-height: 500px;
+  }
+  .tg-msg {
+    background: #182533;
+    border-radius: 14px 14px 14px 4px;
+    padding: 10px 14px;
+    max-width: 320px;
+    margin-bottom: 12px;
+    border: 1px solid rgba(255,255,255,0.04);
+  }
+  .tg-msg-text {
+    font-size: 14px;
+    font-weight: 400;
+    color: #e4ecf2;
+    line-height: 1.45;
+    white-space: pre-line;
+  }
+  .tg-msg-text em {
+    font-style: normal;
+    font-weight: 500;
+  }
+  .tg-btn-row {
+    display: flex;
+    gap: 4px;
+    margin-top: 8px;
+  }
+  .tg-btn {
+    flex: 1;
+    text-align: center;
+    padding: 10px 8px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    line-height: 1.2;
+  }
+  .tg-btn-primary {
+    background: rgba(58,130,247,0.12);
+    color: #5eaaef;
+  }
+  .tg-btn-secondary {
+    background: rgba(255,255,255,0.04);
+    color: #8c99a8;
+    font-size: 13px;
+  }
+  .tg-time {
+    font-size: 11px;
+    color: #546778;
+    text-align: right;
+    margin-top: 4px;
+  }
+  .tg-bot-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #5eaaef;
+    margin-bottom: 6px;
+  }
+  .tg-callback-result {
+    background: rgba(74,222,128,0.08);
+    border: 1px solid rgba(74,222,128,0.15);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: #86e0a5;
+    margin-top: 8px;
+    text-align: center;
+  }
+
+  /* ── Sheet ── */
+  .sheet-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 10;
+  }
+  .sheet {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--wb-bg-elev);
+    border-radius: var(--wb-r-sheet) var(--wb-r-sheet) 0 0;
+    padding: 24px;
+    z-index: 11;
+    box-shadow: 0 -20px 60px rgba(0,0,0,0.5);
+  }
+  .sheet-handle {
+    width: 36px;
+    height: 4px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 2px;
+    margin: 0 auto 20px;
+  }
+  .sheet-title {
+    font-size: 19px;
+    font-weight: 650;
+    letter-spacing: -0.025em;
+    margin-bottom: 6px;
+  }
+  .sheet-desc {
+    font-size: 14px;
+    color: var(--wb-text-secondary);
+    line-height: 1.4;
+    margin-bottom: 20px;
+  }
+
+  /* ── Opt-in card ── */
+  .optin-card {
+    background: linear-gradient(135deg, rgba(139,123,255,0.12), rgba(139,123,255,0.04));
+    border: 1px solid rgba(139,123,255,0.20);
+    border-radius: var(--wb-r-xxl);
+    padding: 20px;
+    text-align: center;
+  }
+  .optin-emoji {
+    font-size: 40px;
+    margin-bottom: 12px;
+  }
+  .optin-title {
+    font-size: 17px;
+    font-weight: 650;
+    letter-spacing: -0.025em;
+    margin-bottom: 8px;
+  }
+  .optin-desc {
+    font-size: 14px;
+    color: var(--wb-text-secondary);
+    line-height: 1.4;
+    margin-bottom: 16px;
+  }
+  .optin-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* ── Profile birthday badge ── */
+  .birthday-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--wb-warning-soft);
+    border: 1px solid rgba(251,191,36,0.20);
+    border-radius: var(--wb-r-pill);
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--wb-warning);
+  }
+
+  /* ── Wishlist item row (simplified) ── */
+  .wish-item {
+    display: flex;
+    gap: 12px;
+    padding: 14px 16px;
+    align-items: center;
+  }
+  .wish-item + .wish-item {
+    border-top: 1px solid var(--wb-hairline);
+  }
+  .wish-thumb {
+    width: 56px;
+    height: 56px;
+    border-radius: var(--wb-r-lg);
+    background: var(--wb-card-strong);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+  }
+  .wish-info { flex: 1; min-width: 0; }
+  .wish-title {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .wish-price {
+    font-size: 13px;
+    color: var(--wb-text-muted);
+    margin-top: 2px;
+  }
+  .wish-reserve-btn {
+    font-size: 13px;
+    font-weight: 650;
+    padding: 8px 14px;
+    border-radius: var(--wb-r-lg);
+    background: var(--wb-accent);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  /* ── Public profile header (simplified) ── */
+  .profile-header {
+    text-align: center;
+    padding: 20px 0 16px;
+  }
+  .profile-avatar {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #8B7BFF, #B4A6FF);
+    margin: 0 auto 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .profile-name {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+  }
+  .profile-username {
+    font-size: 14px;
+    color: var(--wb-text-muted);
+    margin-top: 4px;
+  }
+
+  /* ── Muted users list ── */
+  .muted-row {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    gap: 12px;
+  }
+  .muted-row + .muted-row {
+    border-top: 1px solid var(--wb-hairline);
+  }
+  .muted-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #FBBF24, #F59E0B);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .muted-name {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+  }
+  .muted-unmute {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--wb-accent);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  /* ── Audience picker ── */
+  .audience-option {
+    display: flex;
+    align-items: center;
+    padding: 14px 16px;
+    gap: 12px;
+    cursor: pointer;
+  }
+  .audience-option + .audience-option {
+    border-top: 1px solid var(--wb-hairline);
+  }
+  .audience-radio {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid var(--wb-border-light);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .audience-radio.selected {
+    border-color: var(--wb-accent);
+  }
+  .audience-radio.selected::after {
+    content: '';
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--wb-accent);
+  }
+  .audience-info { flex: 1; }
+  .audience-title {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+  }
+  .audience-desc {
+    font-size: 13px;
+    color: var(--wb-text-muted);
+    margin-top: 2px;
+  }
+
+  h2.group-title {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    text-align: center;
+    margin: 40px 0 8px;
+    color: var(--wb-text);
+  }
+  p.group-desc {
+    font-size: 14px;
+    color: var(--wb-text-muted);
+    text-align: center;
+    margin-bottom: 24px;
+    line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+
+<!-- ================================================================
+     BIRTHDAY REMINDERS — UI Mockups (DRAFT)
+     Status: proposed / awaiting review
+     Date: 2026-04-30
+     Covers: Settings, Bot messages, Context banners, Opt-in, Profile badge
+     ================================================================ -->
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h2 class="group-title">1. Настройки дня рождения</h2>
+<p class="group-desc">Новая секция в Settings — основные переключатели</p>
+<!-- ════════════════════════════════════════════════════════════════ -->
+
+<div class="mockup-grid">
+<div class="mockup-col">
+<div class="screen-label">Settings — Birthday section <span class="draft-badge">DRAFT</span></div>
+<div class="phone">
+  <div class="phone-content">
+    <div class="page-title-bar">⚙️ Настройки</div>
+
+    <!-- Birthday section -->
+    <div class="section-header">🎂 День рождения</div>
+    <div class="glass-card">
+      <div class="settings-row">
+        <div class="settings-row-icon">📅</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Дата рождения</div>
+          <div class="settings-row-hint">15 мая</div>
+        </div>
+        <div class="settings-row-chevron">›</div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-icon">👁</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Скрыть год</div>
+          <div class="settings-row-hint">Друзья видят только день и месяц</div>
+        </div>
+        <div class="toggle on"></div>
+      </div>
+    </div>
+
+    <div class="section-header">📤 Напоминания друзьям</div>
+    <div class="glass-card">
+      <div class="settings-row">
+        <div class="settings-row-icon">🔔</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Напоминать о моём дне рождения</div>
+          <div class="settings-row-hint">Подписчики и связанные пользователи получат уведомление</div>
+        </div>
+        <div class="toggle on"></div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-icon">👥</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Аудитория</div>
+          <div class="settings-row-hint">Подписчики профиля и вишлистов</div>
+        </div>
+        <div class="settings-row-chevron">›</div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-icon">🎁</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Главный birthday-вишлист</div>
+          <div class="settings-row-hint">Мечты на день рождения</div>
+        </div>
+        <div class="pro-badge">PRO</div>
+        <div class="settings-row-chevron">›</div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-icon">✏️</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Своё сообщение</div>
+          <div class="settings-row-hint">Добавь текст к напоминанию</div>
+        </div>
+        <div class="pro-badge">PRO</div>
+        <div class="settings-row-chevron">›</div>
+      </div>
+    </div>
+
+    <div class="section-header">📥 Входящие напоминания</div>
+    <div class="glass-card">
+      <div class="settings-row">
+        <div class="settings-row-icon">🔔</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Получать напоминания</div>
+          <div class="settings-row-hint">О днях рождения других людей</div>
+        </div>
+        <div class="toggle on"></div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-icon">🔇</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Отключённые напоминания</div>
+          <div class="settings-row-hint">2 человека</div>
+        </div>
+        <div class="settings-row-chevron">›</div>
+      </div>
+    </div>
+
+    <div class="section-header">🔄 Напоминания мне</div>
+    <div class="glass-card">
+      <div class="settings-row">
+        <div class="settings-row-icon">📝</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Напоминать обновить вишлист</div>
+          <div class="settings-row-hint">За 30 / 14 / 7 дней до дня рождения</div>
+        </div>
+        <div class="toggle on"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Muted users screen -->
+<div class="screen-label" style="margin-top:16px">Скрытые пользователи <span class="draft-badge">DRAFT</span></div>
+<div class="phone" style="min-height:400px">
+  <div class="phone-content">
+    <div class="page-title-bar">🔇 Отключённые напоминания</div>
+
+    <div style="padding:0 4px 12px; font-size:13px; color:var(--wb-text-muted); line-height:1.4;">
+      Напоминания о днях рождения этих людей не приходят
+    </div>
+
+    <div class="glass-card">
+      <div class="muted-row">
+        <div class="muted-avatar">А</div>
+        <div class="muted-name">Анна К.</div>
+        <div class="muted-unmute">Включить</div>
+      </div>
+      <div class="muted-row">
+        <div class="muted-avatar" style="background: linear-gradient(135deg, #4ADE80, #10B981);">М</div>
+        <div class="muted-name">Максим П.</div>
+        <div class="muted-unmute">Включить</div>
+      </div>
+    </div>
+
+    <div style="text-align:center; padding:32px 0; color:var(--wb-text-muted); font-size:13px;">
+      Скрыть можно через кнопку «🔕» в уведомлении бота
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="mockup-col">
+<!-- Audience picker sheet -->
+<div class="screen-label">Выбор аудитории <span class="draft-badge">DRAFT</span></div>
+<div class="phone" style="min-height:600px">
+  <div class="phone-content" style="filter:brightness(0.5); padding-top:60px;">
+    <div class="section-header">📤 Напоминания друзьям</div>
+    <div class="glass-card">
+      <div class="settings-row"><div class="settings-row-icon">🔔</div><div class="settings-row-content"><div class="settings-row-title">Напоминать друзьям</div></div><div class="toggle on"></div></div>
+    </div>
+  </div>
+  <div class="sheet-backdrop"></div>
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Аудитория напоминаний</div>
+    <div class="sheet-desc">Кто получит уведомление о твоём дне рождения</div>
+
+    <div class="glass-card">
+      <div class="audience-option">
+        <div class="audience-radio selected"></div>
+        <div class="audience-info">
+          <div class="audience-title">Подписчики</div>
+          <div class="audience-desc">Подписчики профиля и публичных вишлистов</div>
+        </div>
+      </div>
+      <div class="audience-option">
+        <div class="audience-radio"></div>
+        <div class="audience-info">
+          <div class="audience-title">Расширенная</div>
+          <div class="audience-desc">Подписчики + те, кто бронировал или комментировал в публичных вишлистах</div>
+        </div>
+        <div class="pro-badge">PRO</div>
+      </div>
+    </div>
+
+    <div style="margin-top:20px">
+      <button class="btn btn-primary">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Custom message sheet (Pro) -->
+<div class="screen-label" style="margin-top:16px">Своё сообщение (Pro) <span class="draft-badge">DRAFT</span></div>
+<div class="phone" style="min-height:480px">
+  <div class="phone-content" style="filter:brightness(0.5)"></div>
+  <div class="sheet-backdrop"></div>
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">✏️ Своё сообщение</div>
+    <div class="sheet-desc">Добавь текст, который друзья увидят в напоминании</div>
+
+    <div style="background:var(--wb-card); border-radius:var(--wb-r-input); padding:14px 16px; border:1px solid var(--wb-border); min-height:100px;">
+      <div style="font-size:14px; color:var(--wb-text); line-height:1.4;">Привет! Буду рад любому подарку из вишлиста 💜</div>
+    </div>
+    <div style="text-align:right; font-size:12px; color:var(--wb-text-muted); margin-top:4px;">42 / 200</div>
+
+    <div style="margin-top:16px; padding:12px 14px; background:var(--wb-accent-soft); border-radius:var(--wb-r-lg); border:1px solid var(--wb-accent-soft-strong);">
+      <div style="font-size:12px; color:var(--wb-text-secondary); line-height:1.4;">
+        <span style="font-weight:600; color:var(--wb-accent-strong);">Превью:</span><br>
+        🎂 Через 14 дней день рождения у Дмитрий<br><br>
+        <em style="font-style:italic; color:var(--wb-text-muted);">«Привет! Буду рад любому подарку из вишлиста 💜»</em>
+      </div>
+    </div>
+
+    <div style="margin-top:20px">
+      <button class="btn btn-primary">Сохранить</button>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h2 class="group-title">2. Opt-in промпт</h2>
+<p class="group-desc">Появляется после сохранения даты рождения, если напоминания ещё не включены</p>
+<!-- ════════════════════════════════════════════════════════════════ -->
+
+<div class="mockup-grid">
+<div class="mockup-col">
+<div class="screen-label">Opt-in после сохранения даты <span class="draft-badge">DRAFT</span></div>
+<div class="phone" style="min-height:500px">
+  <div class="phone-content" style="filter:brightness(0.5); padding-top:40px;">
+    <div style="text-align:center; font-size:20px; font-weight:700; letter-spacing:-0.025em; padding:20px 0;">Редактирование профиля</div>
+  </div>
+  <div class="sheet-backdrop"></div>
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="optin-card">
+      <div class="optin-emoji">🎂</div>
+      <div class="optin-title">Напоминать о&nbsp;твоём дне рождения?</div>
+      <div class="optin-desc">
+        Подписчики и&nbsp;те, кто связан с&nbsp;твоими публичными вишлистами, получат уведомление за 14 дней.<br><br>
+        Они смогут заранее выбрать подарок из&nbsp;твоего вишлиста.
+      </div>
+      <div class="optin-actions">
+        <button class="btn btn-primary" style="height:44px; font-size:14px;">Включить напоминания</button>
+        <button class="btn-ghost" style="background:none; border:none; color:var(--wb-text-muted); font-size:14px; font-weight:600; cursor:pointer; padding:8px;">Не сейчас</button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h2 class="group-title">3. Бот-сообщения</h2>
+<p class="group-desc">Telegram Bot — уведомления для друзей и именинника</p>
+<!-- ════════════════════════════════════════════════════════════════ -->
+
+<div class="mockup-grid">
+<div class="mockup-col">
+
+<!-- Friend: 14d / 7d — with wishlist -->
+<div class="screen-label">Друг — за 14 дней (есть вишлист) <span class="draft-badge">DRAFT</span></div>
+<div class="phone" style="min-height:340px; border-radius:20px;">
+  <div class="tg-chat">
+    <div class="tg-bot-name">WishBoard Bot</div>
+    <div class="tg-msg">
+      <div class="tg-msg-text">🎂 Через 14 дней день рождения у <b>Анна К.</b>
+
+Самое время выбрать подарок заранее — так больше шансов найти то, что действительно порадует.</div>
+      <div class="tg-btn-row">
+        <button class="tg-btn tg-btn-primary">🎁 Выбрать подарок в вишлисте</button>
+      </div>
+      <div class="tg-btn-row">
+        <button class="tg-btn tg-btn-secondary">🔕 Не напоминать об этом человеке</button>
+      </div>
+      <div class="tg-time">10:00</div>
+    </div>
+  </div>
+</div>
+
+<!-- Friend: 14d — no wishlist -->
+<div class="screen-label" style="margin-top:16px">Друг — за 14 дней (нет вишлиста) <span class="draft-badge">DRAFT</span></div>
+<div class="phone" style="min-height:340px; border-radius:20px;">
+  <div class="tg-chat">
+    <div class="tg-bot-name">WishBoard Bot</div>
+    <div class="tg-msg">
+      <div class="tg-msg-text">🎂 Через 14 дней день рождения у <b>Максим П.</b>
+
+Публичного вишлиста нет — можно открыть профиль и подписаться, чтобы получить уведомление, если он появится.</div>
+      <div class="tg-btn-row">
+        <button class="tg-btn tg-btn-primary">👤 Перейти в профиль</button>
+      </div>
+      <div class="tg-btn-row">
+        <button class="tg-btn tg-btn-secondary">🔕 Не напоминать об этом человеке</button>
+      </div>
+      <div class="tg-time">10:00</div>
+    </div>
+  </div>
+</div>
+
+</div>
+<div class="mockup-col">
+
+<!-- Friend: today -->
+<div class="screen-label">Друг — сегодня <span class="draft-badge">DRAFT</span></div>
+<div class="phone" style="min-height:300px; border-radius:20px;">
+  <div class="tg-chat">
+    <div class="tg-bot-name">WishBoard Bot</div>
+    <div class="tg-msg">
+      <div class="tg-msg-text">🎉 Сегодня день рождения у <b>Анна К.</b>!
+
+Можно быстро выбрать подарок из вишлиста или проверить, что ещё не забронировано.</div>
+      <div class="tg-btn-row">
+        <button class="tg-btn tg-btn-primary">🎁 Открыть вишлист</button>
+      </div>
+      <div class="tg-time">10:00</div>
+    </div>
+  </div>
+</div>
+
+<!-- Friend: with custom message (Pro) -->
+<div class="screen-label" style="margin-top:16px">Друг — с кастомным сообщением (Pro) <span class="draft-badge">DRAFT</span></div>
+<div class="phone" style="min-height:360px; border-radius:20px;">
+  <div class="tg-chat">
+    <div class="tg-bot-name">WishBoard Bot</div>
+    <div class="tg-msg">
+      <div class="tg-msg-text">🎂 Через 14 дней день рождения у <b>Дмитрий</b>
+
+<i>«Привет! Буду рад любому подарку из вишлиста 💜»</i>
+
+Самое время выбрать подарок заранее.</div>
+      <div class="tg-btn-row">
+        <button class="tg-btn tg-btn-primary">🎁 Выбрать подарок в вишлисте</button>
+      </div>
+      <div class="tg-btn-row">
+        <button class="tg-btn tg-btn-secondary">🔕 Не напоминать об этом человеке</button>
+      </div>
+      <div class="tg-time">10:00</div>
+    </div>
+  </div>
+</div>
+
+<!-- Mute callback result -->
+<div class="screen-label" style="margin-top:16px">После нажатия «Не напоминать» <span class="draft-badge">DRAFT</span></div>
+<div class="phone" style="min-height:240px; border-radius:20px;">
+  <div class="tg-chat">
+    <div class="tg-bot-name">WishBoard Bot</div>
+    <div class="tg-msg">
+      <div class="tg-msg-text">🎂 Через 14 дней день рождения у <b>Анна К.</b>
+
+Самое время выбрать подарок заранее.</div>
+      <div class="tg-btn-row">
+        <button class="tg-btn tg-btn-primary">🎁 Выбрать подарок в вишлисте</button>
+      </div>
+      <div class="tg-time">10:00</div>
+    </div>
+    <div class="tg-callback-result">
+      ✅ Готово, больше не буду напоминать о дне рождения Анна К.
+    </div>
+  </div>
+</div>
+
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h2 class="group-title">4. Бот — именинник</h2>
+<p class="group-desc">Напоминания самому себе обновить вишлист</p>
+<!-- ════════════════════════════════════════════════════════════════ -->
+
+<div class="mockup-grid">
+<div class="mockup-col">
+
+<!-- Owner: 30d — has wishlist -->
+<div class="screen-label">Именинник — за 30 дней <span class="draft-badge">DRAFT</span></div>
+<div class="phone" style="min-height:300px; border-radius:20px;">
+  <div class="tg-chat">
+    <div class="tg-bot-name">WishBoard Bot</div>
+    <div class="tg-msg">
+      <div class="tg-msg-text">🎂 До твоего дня рождения осталось 30 дней
+
+Самое время обновить вишлист, чтобы друзьям было проще выбрать подарок.</div>
+      <div class="tg-btn-row">
+        <button class="tg-btn tg-btn-primary">📝 Обновить вишлист</button>
+      </div>
+      <div class="tg-time">10:00</div>
+    </div>
+  </div>
+</div>
+
+<!-- Owner: 14d — empty wishlist -->
+<div class="screen-label" style="margin-top:16px">Именинник — за 14 дней (пустой вишлист) <span class="draft-badge">DRAFT</span></div>
+<div class="phone" style="min-height:340px; border-radius:20px;">
+  <div class="tg-chat">
+    <div class="tg-bot-name">WishBoard Bot</div>
+    <div class="tg-msg">
+      <div class="tg-msg-text">🎂 До твоего дня рождения осталось 14 дней
+
+Похоже, в публичном вишлисте пока нет желаний. Добавь пару идей — друзьям будет проще выбрать подарок.</div>
+      <div class="tg-btn-row">
+        <button class="tg-btn tg-btn-primary">➕ Добавить желания</button>
+      </div>
+      <div class="tg-time">10:00</div>
+    </div>
+  </div>
+</div>
+
+</div>
+<div class="mockup-col">
+
+<!-- Owner: 7d — no public wishlist -->
+<div class="screen-label">Именинник — за 7 дней (нет публичного) <span class="draft-badge">DRAFT</span></div>
+<div class="phone" style="min-height:340px; border-radius:20px;">
+  <div class="tg-chat">
+    <div class="tg-bot-name">WishBoard Bot</div>
+    <div class="tg-msg">
+      <div class="tg-msg-text">🎂 До твоего дня рождения осталось 7 дней
+
+У тебя пока нет публичного вишлиста. Сделай один из вишлистов публичным — друзья смогут выбрать подарок.</div>
+      <div class="tg-btn-row">
+        <button class="tg-btn tg-btn-primary">📋 Открыть вишлисты</button>
+      </div>
+      <div class="tg-time">10:00</div>
+    </div>
+  </div>
+</div>
+
+<!-- Owner: birthday today -->
+<div class="screen-label" style="margin-top:16px">Именинник — в день рождения <span class="draft-badge">DRAFT</span></div>
+<div class="phone" style="min-height:260px; border-radius:20px;">
+  <div class="tg-chat">
+    <div class="tg-bot-name">WishBoard Bot</div>
+    <div class="tg-msg">
+      <div class="tg-msg-text">🎉 С днём рождения!
+
+Пусть все желания сбудутся. Если друзья подарили что-то из вишлиста — отметь подарок как полученный.</div>
+      <div class="tg-btn-row">
+        <button class="tg-btn tg-btn-primary">🎁 Открыть вишлист</button>
+      </div>
+      <div class="tg-time">10:00</div>
+    </div>
+  </div>
+</div>
+
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h2 class="group-title">5. Mini App — контекстный баннер</h2>
+<p class="group-desc">Показывается при переходе из бот-уведомления</p>
+<!-- ════════════════════════════════════════════════════════════════ -->
+
+<div class="mockup-grid">
+<div class="mockup-col">
+
+<!-- Friend context: public wishlist -->
+<div class="screen-label">Публичный вишлист именинника <span class="draft-badge">DRAFT</span></div>
+<div class="phone">
+  <div class="phone-content">
+    <!-- Profile header -->
+    <div class="profile-header">
+      <div class="profile-avatar">А</div>
+      <div class="profile-name">Анна К.</div>
+      <div class="profile-username">@annakay</div>
+      <div style="margin-top:8px">
+        <span class="birthday-badge">🎂 День рождения через 14 дней</span>
+      </div>
+    </div>
+
+    <!-- Birthday context banner -->
+    <div style="padding:0 0 12px;">
+      <div class="banner banner-accent">
+        <div class="banner-icon">🎂</div>
+        <div class="banner-body">
+          <div class="banner-title">Скоро день рождения у Анна К.</div>
+          <div class="banner-desc">Выбери подарок заранее или забронируй то, что хочешь подарить</div>
+          <div class="banner-actions">
+            <button class="banner-btn banner-btn-primary">Показать доступные</button>
+            <button class="banner-btn banner-btn-ghost">Забронировать тайно</button>
+          </div>
+        </div>
+        <div class="banner-close">✕</div>
+      </div>
+    </div>
+
+    <!-- Wishlist section header -->
+    <div class="section-header">🎁 Мечты на день рождения</div>
+    <div class="glass-card">
+      <div class="wish-item">
+        <div class="wish-thumb">📚</div>
+        <div class="wish-info">
+          <div class="wish-title">Книга «Думай медленно»</div>
+          <div class="wish-price">890 ₽</div>
+        </div>
+        <button class="wish-reserve-btn">Забронировать</button>
+      </div>
+      <div class="wish-item">
+        <div class="wish-thumb">🎧</div>
+        <div class="wish-info">
+          <div class="wish-title">Наушники Sony WH-1000XM5</div>
+          <div class="wish-price">24 990 ₽</div>
+        </div>
+        <button class="wish-reserve-btn">Забронировать</button>
+      </div>
+      <div class="wish-item">
+        <div class="wish-thumb">🧴</div>
+        <div class="wish-info">
+          <div class="wish-title">Набор уходовой косметики</div>
+          <div class="wish-price">3 500 ₽</div>
+        </div>
+        <button class="wish-reserve-btn" style="background:var(--wb-card-strong); color:var(--wb-text-muted);">Забронировано</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+<div class="mockup-col">
+
+<!-- Friend context: profile (no wishlist) -->
+<div class="screen-label">Профиль именинника (нет вишлиста) <span class="draft-badge">DRAFT</span></div>
+<div class="phone" style="min-height:500px">
+  <div class="phone-content">
+    <div class="profile-header">
+      <div class="profile-avatar" style="background: linear-gradient(135deg, #4ADE80, #10B981);">М</div>
+      <div class="profile-name">Максим П.</div>
+      <div class="profile-username">@maxp</div>
+      <div style="margin-top:8px">
+        <span class="birthday-badge">🎂 День рождения через 14 дней</span>
+      </div>
+    </div>
+
+    <div style="padding:0 0 12px;">
+      <div class="banner banner-accent">
+        <div class="banner-icon">🎂</div>
+        <div class="banner-body">
+          <div class="banner-title">Скоро день рождения у Максим П.</div>
+          <div class="banner-desc">У пользователя нет публичного вишлиста. Можно подписаться на профиль</div>
+          <div class="banner-actions">
+            <button class="banner-btn banner-btn-primary">Подписаться на профиль</button>
+          </div>
+        </div>
+        <div class="banner-close">✕</div>
+      </div>
+    </div>
+
+    <div style="text-align:center; padding:40px 20px; color:var(--wb-text-muted); font-size:14px; line-height:1.4;">
+      Публичных вишлистов пока нет
+    </div>
+  </div>
+</div>
+
+<!-- Owner context: update own wishlist -->
+<div class="screen-label" style="margin-top:16px">Именинник — обновить вишлист <span class="draft-badge">DRAFT</span></div>
+<div class="phone" style="min-height:450px">
+  <div class="phone-content">
+    <div class="page-title-bar">🎁 Мечты на день рождения</div>
+
+    <div style="padding:0 0 12px;">
+      <div class="banner banner-warning">
+        <div class="banner-icon">🎂</div>
+        <div class="banner-body">
+          <div class="banner-title">Скоро твой день рождения</div>
+          <div class="banner-desc">Обнови вишлист, чтобы друзьям было проще выбрать подарок</div>
+          <div class="banner-actions">
+            <button class="banner-btn" style="background:rgba(251,191,36,0.2); color:#FBBF24;">➕ Добавить желание</button>
+            <button class="banner-btn banner-btn-ghost">Сделать публичным</button>
+          </div>
+        </div>
+        <div class="banner-close">✕</div>
+      </div>
+    </div>
+
+    <div class="glass-card">
+      <div class="wish-item">
+        <div class="wish-thumb">📱</div>
+        <div class="wish-info">
+          <div class="wish-title">Чехол для iPhone</div>
+          <div class="wish-price">2 500 ₽</div>
+        </div>
+      </div>
+      <div class="wish-item">
+        <div class="wish-thumb">🎮</div>
+        <div class="wish-info">
+          <div class="wish-title">PS5 DualSense контроллер</div>
+          <div class="wish-price">6 990 ₽</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:16px 0;">
+      <button class="btn btn-primary" style="height:44px; font-size:14px;">
+        ➕ Добавить желание
+      </button>
+    </div>
+  </div>
+</div>
+
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h2 class="group-title">6. Профиль — birthday badge</h2>
+<p class="group-desc">Бейдж в публичном профиле (Pro — birthday showcase)</p>
+<!-- ════════════════════════════════════════════════════════════════ -->
+
+<div class="mockup-grid">
+<div class="mockup-col">
+
+<!-- Profile with birthday badge -->
+<div class="screen-label">Публичный профиль с бейджем <span class="draft-badge">DRAFT</span></div>
+<div class="phone" style="min-height:400px">
+  <div class="phone-content">
+    <div class="profile-header">
+      <div class="profile-avatar">Д</div>
+      <div class="profile-name">Дмитрий</div>
+      <div class="profile-username">@dmitriy</div>
+      <div style="margin-top:10px; display:flex; gap:6px; justify-content:center; flex-wrap:wrap;">
+        <span class="birthday-badge">🎂 День рождения 15 мая</span>
+        <span style="display:inline-flex; align-items:center; gap:4px; background:var(--wb-accent-soft); border:1px solid var(--wb-accent-soft-strong); border-radius:var(--wb-r-pill); padding:6px 12px; font-size:13px; font-weight:600; color:var(--wb-accent-strong);">⭐ PRO</span>
+      </div>
+    </div>
+
+    <!-- Birthday showcase card (Pro) -->
+    <div style="margin:0 0 16px; padding:16px; background: linear-gradient(135deg, rgba(251,191,36,0.08), rgba(251,191,36,0.02)); border:1px solid rgba(251,191,36,0.15); border-radius:var(--wb-r-xxl);">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+        <span style="font-size:28px;">🎂</span>
+        <div>
+          <div style="font-size:15px; font-weight:650; letter-spacing:-0.012em;">Скоро день рождения!</div>
+          <div style="font-size:13px; color:var(--wb-text-muted); margin-top:2px;">Через 14 дней — 15 мая</div>
+        </div>
+      </div>
+      <div style="font-size:13px; color:var(--wb-text-secondary); line-height:1.4; font-style:italic; padding:8px 12px; background:var(--wb-card); border-radius:var(--wb-r-lg);">
+        «Привет! Буду рад любому подарку из вишлиста 💜»
+      </div>
+      <div style="margin-top:10px;">
+        <button class="banner-btn banner-btn-primary" style="width:100%; padding:10px; text-align:center;">🎁 Выбрать подарок из вишлиста</button>
+      </div>
+    </div>
+
+    <div class="section-header">Публичные вишлисты</div>
+    <div class="glass-card">
+      <div class="settings-row">
+        <div class="settings-row-icon">🎁</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Мечты на день рождения</div>
+          <div class="settings-row-hint">8 желаний · 3 доступны</div>
+        </div>
+        <div class="settings-row-chevron">›</div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-icon">📚</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Книги</div>
+          <div class="settings-row-hint">12 желаний · 10 доступны</div>
+        </div>
+        <div class="settings-row-chevron">›</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+<div class="mockup-col">
+
+<!-- Profile: birthday today! -->
+<div class="screen-label">День рождения сегодня <span class="draft-badge">DRAFT</span></div>
+<div class="phone" style="min-height:400px">
+  <div class="phone-content">
+    <div class="profile-header">
+      <div class="profile-avatar">А</div>
+      <div class="profile-name">Анна К.</div>
+      <div class="profile-username">@annakay</div>
+      <div style="margin-top:10px;">
+        <span class="birthday-badge" style="background:rgba(251,191,36,0.20); border-color:rgba(251,191,36,0.35); font-size:14px; padding:8px 14px;">🎉 Сегодня день рождения!</span>
+      </div>
+    </div>
+
+    <div style="padding:0 0 12px;">
+      <div class="banner" style="background:linear-gradient(135deg, rgba(251,191,36,0.12), rgba(251,191,36,0.04)); border:1px solid rgba(251,191,36,0.20);">
+        <div class="banner-icon">🎉</div>
+        <div class="banner-body">
+          <div class="banner-title" style="color:var(--wb-warning);">Сегодня день рождения!</div>
+          <div class="banner-desc">Выбери подарок или забронируй — так Анна точно получит то, что хочет</div>
+          <div class="banner-actions">
+            <button class="banner-btn" style="background:rgba(251,191,36,0.2); color:#FBBF24;">🎁 Выбрать подарок</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-header">Вишлисты</div>
+    <div class="glass-card">
+      <div class="settings-row">
+        <div class="settings-row-icon">🎁</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Мечты</div>
+          <div class="settings-row-hint">5 желаний · 2 доступны</div>
+        </div>
+        <div class="settings-row-chevron">›</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h2 class="group-title">7. Состояния и edge cases</h2>
+<p class="group-desc">Fallback, ошибки, пустые состояния</p>
+<!-- ════════════════════════════════════════════════════════════════ -->
+
+<div class="mockup-grid">
+<div class="mockup-col">
+
+<!-- Deep link expired / target deleted -->
+<div class="screen-label">Вишлист удалён / стал приватным <span class="draft-badge">DRAFT</span></div>
+<div class="phone" style="min-height:400px">
+  <div class="phone-content">
+    <div class="profile-header">
+      <div class="profile-avatar">А</div>
+      <div class="profile-name">Анна К.</div>
+      <div class="profile-username">@annakay</div>
+    </div>
+
+    <div style="padding:0 0 12px;">
+      <div class="banner" style="background:rgba(255,255,255,0.03); border:1px solid var(--wb-border);">
+        <div class="banner-icon">ℹ️</div>
+        <div class="banner-body">
+          <div class="banner-title">Вишлист больше не доступен</div>
+          <div class="banner-desc">Возможно, владелец сделал его приватным. Можно посмотреть другие публичные вишлисты</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align:center; padding:32px 20px; color:var(--wb-text-muted); font-size:14px;">
+      Нет доступных публичных вишлистов
+    </div>
+  </div>
+</div>
+
+</div>
+<div class="mockup-col">
+
+<!-- Birthday already passed -->
+<div class="screen-label">День рождения уже прошёл <span class="draft-badge">DRAFT</span></div>
+<div class="phone" style="min-height:400px">
+  <div class="phone-content">
+    <div class="profile-header">
+      <div class="profile-avatar">А</div>
+      <div class="profile-name">Анна К.</div>
+      <div class="profile-username">@annakay</div>
+    </div>
+
+    <!-- No birthday banner shown when birthday has passed — just normal profile -->
+    <div class="section-header">Вишлисты</div>
+    <div class="glass-card">
+      <div class="settings-row">
+        <div class="settings-row-icon">🎁</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Мечты</div>
+          <div class="settings-row-hint">5 желаний · 2 доступны</div>
+        </div>
+        <div class="settings-row-chevron">›</div>
+      </div>
+    </div>
+
+    <div style="padding:16px 0 0; text-align:center; font-size:13px; color:var(--wb-text-muted);">
+      Обычный профиль — баннер не показан, т.к. ДР прошло
+    </div>
+  </div>
+</div>
+
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h2 class="group-title" style="margin-top:60px">Примечания к макетам</h2>
+<!-- ════════════════════════════════════════════════════════════════ -->
+
+<div style="max-width:700px; margin:0 auto; padding:20px; line-height:1.6; font-size:14px; color:var(--wb-text-secondary);">
+  <p><b>Статус:</b> DRAFT — ожидает ревью и аппрува</p>
+  <br>
+  <p><b>UI-примитивы:</b></p>
+  <ul style="margin:8px 0 16px 20px;">
+    <li>Settings секции: <code>SettingsSection</code>, <code>SettingsRow</code>, <code>SettingsToggle</code> (Wave 4, provisional)</li>
+    <li>Баннеры: <code>Banner</code> с тонами <code>accent</code> / <code>warning</code> / <code>info</code></li>
+    <li>Sheet: <code>Sheet</code> (canonical) для audience picker / custom message</li>
+    <li>Birthday badge: нужен новый <code>Chip</code> вариант <code>warning</code> или кастомный бейдж</li>
+    <li>Opt-in промпт: стандартный <code>Sheet</code> с карточкой</li>
+  </ul>
+  <p><b>Токены:</b></p>
+  <ul style="margin:8px 0 16px 20px;">
+    <li>Birthday accent: <code>--wb-warning</code> (#FBBF24) + <code>--wb-warning-soft</code> — уже есть</li>
+    <li>Birthday gradient: <code>rgba(251,191,36,0.08)</code> → <code>rgba(251,191,36,0.02)</code></li>
+    <li>Не нужны новые токены — всё покрывается существующей warning palette</li>
+  </ul>
+  <p><b>RTL (Arabic):</b></p>
+  <ul style="margin:8px 0 16px 20px;">
+    <li>Все row-элементы зеркалятся через <code>dir="rtl"</code></li>
+    <li>Chevron поворачивается: <code>›</code> → <code>‹</code></li>
+    <li>Toggle остаётся на месте (нативное поведение)</li>
+    <li>Текст выравнивается вправо</li>
+  </ul>
+  <p><b>Не показано в макетах (реализуется стандартно):</b></p>
+  <ul style="margin:8px 0 16px 20px;">
+    <li>Pro paywall context для birthday — аналогичен существующему calendar paywall</li>
+    <li>Загрузка / skeleton состояния</li>
+    <li>Анимация появления баннера</li>
+    <li>Pressed / disabled состояния кнопок</li>
+    <li>God Mode dashboard — серверный рендер, без UI</li>
+  </ul>
+</div>
+
+</body>
+</html>

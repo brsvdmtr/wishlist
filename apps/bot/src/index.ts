@@ -605,6 +605,27 @@ if (!token) {
       });
     }
 
+    if (payload?.startsWith('br_')) {
+      // Birthday reminder deep link: ?start=br_<deliveryId>
+      // The bot only acks here — actual target resolution + clickedAt
+      // attribution happens in the Mini App via /tg/birthday-reminders/resolve.
+      // We just open the Mini App with the same payload so the WebView gets it
+      // via initDataUnsafe.start_param.
+      try {
+        return ctx.reply(
+          t('bot_start', locale),
+          Markup.inlineKeyboard([
+            Markup.button.webApp(
+              t('bot_referral_open_btn', locale),
+              `${MINI_APP_URL}?startapp=${encodeURIComponent(payload)}`,
+            ),
+          ]),
+        );
+      } catch (err) {
+        logger.error({ err }, 'birthday deep link error');
+        return ctx.reply(t('bot_error', locale));
+      }
+    }
     if (payload?.startsWith('santa_')) {
       // Secret Santa invite deep link
       const token = payload.slice('santa_'.length);
@@ -945,6 +966,105 @@ if (!token) {
     } catch (err) {
       logger.error({ err }, 'res_purchased callback failed');
       await ctx.answerCbQuery('Произошла ошибка').catch(() => {});
+    }
+  });
+
+  // ─── Birthday Reminders: mute callback "🔕 Не напоминать об этом человеке" ──
+  // Callback data: bdm:<deliveryId>. Resolves the delivery → upserts a
+  // BirthdayReminderMute row → answers callback + edits the keyboard so the
+  // mute button is replaced by a confirmation-style row. Idempotent: clicking
+  // twice is a no-op apart from the toast.
+  bot.action(/^bdm:(.+)$/, async (ctx) => {
+    try {
+      const deliveryId = ctx.match[1]!;
+      const telegramId = String(ctx.from.id);
+      const locale = getLocale(ctx);
+
+      const user = await prisma.user.findFirst({
+        where: { telegramId },
+        select: { id: true },
+      });
+      if (!user) {
+        await ctx.answerCbQuery('User not found');
+        return;
+      }
+
+      const delivery = await prisma.birthdayReminderDelivery.findUnique({
+        where: { id: deliveryId },
+        select: {
+          id: true,
+          recipientUserId: true,
+          birthdayUserId: true,
+          birthdayUser: {
+            select: {
+              firstName: true,
+              profile: { select: { displayName: true, username: true } },
+            },
+          },
+        },
+      });
+      if (!delivery) {
+        await ctx.answerCbQuery('Delivery not found');
+        return;
+      }
+      if (delivery.recipientUserId !== user.id) {
+        await ctx.answerCbQuery('Forbidden');
+        return;
+      }
+
+      // Idempotent upsert
+      const existing = await prisma.birthdayReminderMute.findUnique({
+        where: {
+          userId_mutedBirthdayUserId: {
+            userId: user.id,
+            mutedBirthdayUserId: delivery.birthdayUserId,
+          },
+        },
+      });
+
+      if (!existing) {
+        await prisma.birthdayReminderMute.create({
+          data: {
+            userId: user.id,
+            mutedBirthdayUserId: delivery.birthdayUserId,
+          },
+        });
+      }
+
+      const displayName =
+        delivery.birthdayUser.profile?.displayName?.trim() ||
+        delivery.birthdayUser.firstName?.trim() ||
+        delivery.birthdayUser.profile?.username?.trim() ||
+        'WishBoard';
+
+      const toastText = existing
+        ? t('bot_br_mute_already', locale)
+        : t('bot_br_mute_done', locale, { name: displayName });
+      await ctx.answerCbQuery(toastText);
+
+      // Replace the inline keyboard: keep the primary CTA, drop the mute row.
+      // Telegram rejects edit if the new markup is identical, so guard with try/catch.
+      try {
+        const msg = ctx.callbackQuery.message;
+        const reply = (msg && 'reply_markup' in msg ? msg.reply_markup : undefined) as
+          | { inline_keyboard?: unknown[][] }
+          | undefined;
+        const original = (reply?.inline_keyboard ?? []) as Array<Array<Record<string, unknown>>>;
+        const filtered = original.filter(
+          (row) =>
+            !row.some(
+              (btn) =>
+                'callback_data' in btn && typeof btn.callback_data === 'string' && (btn.callback_data as string).startsWith('bdm:'),
+            ),
+        );
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await ctx.editMessageReplyMarkup({ inline_keyboard: filtered as any });
+      } catch {
+        // Already edited or no message context — toast is enough.
+      }
+    } catch (err) {
+      logger.error({ err }, 'birthday: bdm callback failed');
+      await ctx.answerCbQuery('Error').catch(() => {});
     }
   });
 

@@ -46,6 +46,7 @@ When a user opens `https://t.me/{BOT_USERNAME}?start=<payload>`, Telegram delive
 | `profile_{username}` | `profile_{username}` | Shows "View profile" button opening the public profile screen. |
 | `draft_{itemId}` | `draft_{itemId}` | URL import result -- opens drafts screen with the new item. |
 | `share_{token}` | `share_{token}` | Guest wishlist view via share token. |
+| `br_{deliveryId}` | `br_{deliveryId}` | Birthday reminder. The bot does **not** send the original DM — the API does, with an inline keyboard whose `web_app` button uses `br_{deliveryId}` as the payload. On `/start br_<id>` the bot only renders the WebApp button to re-open the Mini App. The Mini App calls `GET /tg/birthday-reminders/resolve/:deliveryId` to set `clickedAt`, fetch the birthday context, and route to the resolved target (public wishlist / public profile / own wishlist / wishlists index — re-resolved at click time, so a wishlist that turned private after send falls back gracefully). |
 | `{slug}__item_{id}` | `{slug}__item_{id}` | Direct item navigation within a wishlist. |
 | _(no prefix match)_ | Payload passed through as-is | Treated as a wishlist slug; opens generic "View wishlist" button. |
 
@@ -268,6 +269,28 @@ When a user selects recipients via a `request_users` keyboard button (from the M
 4. Updates `Hint` record with `status: DELIVERED`, `sentCount`, `pendingCount`.
 5. Sends summary to sender (X sent, Y pending).
 6. For pending recipients, sends a fallback deep link (`hint_{itemId}`) that the sender can share manually.
+
+---
+
+## Birthday Reminders
+
+Birthday reminders are **not sent by the bot process directly** — they are dispatched from the API's `processBirthdayReminders` scheduler (see `docs/BACKEND_MAP.md` § 12 Cron Jobs). The bot's only roles are:
+
+1. **Render the WebApp button** when a user opens `/start br_<deliveryId>` (the deep-link prefix the API embedded in the inline keyboard's `web_app` button when it sent the DM).
+2. **Handle the mute callback** described below.
+
+### `bdm:<deliveryId>` callback action
+
+The friend-reminder DM ships with two inline buttons: the WebApp button (deep-link `br_<deliveryId>`) and a "🔕 Не напоминать об этом человеке" button bound to callback `bdm:<deliveryId>`.
+
+When the user taps mute:
+
+1. Bot looks up the `BirthdayReminderDelivery` row and verifies the recipient matches `ctx.from.id`. Mismatch → silent no-op.
+2. Bot upserts a `BirthdayReminderMute` row keyed on `(userId, mutedBirthdayUserId)` (idempotent).
+3. Bot edits the message keyboard to drop the mute button (so a re-tap is impossible).
+4. Bot answers the callback with a localised toast: *"Готово, больше не буду напоминать о ДР {name}."*
+
+To unmute: Settings → 🎂 День рождения → Muted users in the Mini App, or `DELETE /tg/birthday-reminders/mute/:userId`.
 
 ---
 

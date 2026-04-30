@@ -97,6 +97,7 @@ All limits and feature gates are **enforced server-side**. The client performs p
 | Showcase (public profile page) | `PATCH /tg/me/showcase` | `isPro` → 403 |
 | Curated Selections | `POST /tg/curated-selections` | `isPro` → 403 |
 | Profile Subscriptions | `POST /tg/profiles/:id/subscribe` | `isPro` → 403 |
+| Birthday Reminders advanced (audience EXTENDED, primary wishlist, custom message, 7d/1d friend + 14d/7d owner windows) | `PATCH /tg/me/birthday-settings` | `isPro` → 402 `{ error: 'pro_required', feature: 'birthday_reminders_advanced', context: '<field>' }` |
 
 ### Reservation PRO — Beta-gated via `hasReservationPro()`
 
@@ -250,7 +251,8 @@ type UpsellContext =
   | 'item_limit'        // triggered on item add 402
   | 'participant_limit' // triggered on reserve 402
   | 'subscription_limit'// triggered on follow 402 (показывает до 5 подписок)
-  | 'sort_recommended'; // triggered on recommended sort click (client-only)
+  | 'sort_recommended'  // triggered on recommended sort click (client-only)
+  | 'birthday_reminders_advanced'; // triggered on PATCH /tg/me/birthday-settings 402
 ```
 
 Each context has a dedicated `emoji`, `title`, `subtitle`, and optional `benefits[]` list, defined in `getUpsellContent(locale)` in `MiniApp.tsx`. Keys are in `packages/shared/src/i18n.ts`.
@@ -459,6 +461,37 @@ Per-wishlist unlock (15 XTR each). Available to all users as an add-on.
 |--------|----------|-------------|
 | `POST` | `/tg/billing/addon/checkout` | Body: `{ sku: 'smart_reservations_unlock', targetId: wishlistId }` |
 | `POST` | `/tg/billing/addon/sync` | Verify purchase |
+
+---
+
+## 16a. Birthday Reminders Monetization
+
+Birthday reminders themselves are free (everyone with a birthday set can opt in to bot-driven 14d + day-of friend reminders, plus 30d owner self-reminders). A small set of advanced controls is gated behind PRO via the `birthday_reminders_advanced` paywall context.
+
+### Pro-gated fields
+
+| Field | FREE behaviour | PRO unlocks |
+|---|---|---|
+| `birthdayAudience: 'EXTENDED'` | 402 `pro_required` | Adds reservers (`ReservationMeta`) + secret reservers (`SecretReservation`) to the friend-reminder audience, on top of the SUBSCRIBERS baseline (profile + wishlist subscribers) |
+| `birthdayPrimaryWishlistId` | 402 `pro_required` | Override which wishlist the friend bot DM's CTA deep-links into; otherwise the scheduler auto-picks |
+| `birthdayCustomMessage` (max 200 chars) | 402 `pro_required` | An italicised line in the friend bot DM template |
+| `birthdayAdvancedWindowsEnabled: true` | 402 `pro_required` | Adds the 7d / 1d friend windows and the 14d / 7d owner windows. FREE keeps 14d + day-of (friend) and 30d (owner) only |
+
+### Paywall context
+
+`UpsellContext = 'birthday_reminders_advanced'`. Triggered by **402** from `PATCH /tg/me/birthday-settings`. The 402 response includes `{ error: 'pro_required', feature: 'birthday_reminders_advanced', context: '<field>' }` — never a silent 200.
+
+i18n: `plan_pro_f_birthday` (title) and `plan_pro_sub_birthday` (subtitle) for the paywall benefit row.
+
+### Downgrade behaviour
+
+When a PRO user downgrades to FREE, the DB values for `birthdayAudience`, `birthdayPrimaryWishlistId`, `birthdayCustomMessage`, `birthdayAdvancedWindowsEnabled` are **preserved** (no destructive write). The scheduler treats those flags as inactive — friend deliveries fall back to SUBSCRIBERS audience and the FREE 14d + day-of windows; the corresponding deliveries are skipped with `skipReason: 'pro_required'` and surface in the God Mode dashboard. Re-upgrading restores the previously configured values without re-entry.
+
+### Source files
+
+- API: `apps/api/src/index.ts` — `PATCH /tg/me/birthday-settings`, `processBirthdayReminders` scheduler.
+- Mini App: `apps/web/app/miniapp/MiniApp.tsx` — Settings → 🎂 День рождения section, paywall context wiring, `getUpsellContent('birthday_reminders_advanced')`.
+- Schema: `packages/db/prisma/schema.prisma` — `UserProfile.birthday*` fields, `BirthdayReminderDelivery`, `BirthdayReminderMute`.
 
 ---
 

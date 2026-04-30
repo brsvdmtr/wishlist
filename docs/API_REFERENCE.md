@@ -299,6 +299,36 @@ Allows users to specify items they don't want to receive as gifts. Visible on pu
 | DELETE | `/tg/gift-occasion-ideas/:ideaId` | Owner (GN) | Soft-delete idea (status=ARCHIVED) |
 | POST | `/tg/gift-occasion-ideas/:ideaId/complete` | Owner (GN) | Mark idea as DONE |
 
+### Birthday Reminders
+
+Bot-driven social notifications fired by the API to a user's audience (subscribers + connected users) before their birthday, plus self-reminders to update their wishlist. Source: `apps/api/src/index.ts`. State-changing routes use `state.changing` rate limit + idempotency category `'profile.update'`.
+
+| Method | Path | Who | Description |
+|--------|------|-----|-------------|
+| GET | `/tg/me/birthday-settings` | Auth user | Returns the full birthday settings payload: `{ isPro, birthday, hideYear, profileVisibility, optInPromptSeenAt, friendReminders: { enabled, audience, advancedWindowsEnabled, primaryWishlist, primaryWishlistId, customMessage }, ownerReminders: { enabled }, receiving: { enabled, mutedCount } }` |
+| PATCH | `/tg/me/birthday-settings` | Auth user | Update birthday settings. Zod body: `friendRemindersEnabled?`, `ownerRemindersEnabled?`, `audience?`, `advancedWindowsEnabled?`, `primaryWishlistId?`, `customMessage?` (max 200), `receivingEnabled?`, `optInPromptSeen?`. **402** with `{ error: 'pro_required', feature: 'birthday_reminders_advanced', context: '<field>' }` for FREE users on Pro-gated fields (`audience: 'EXTENDED'`, non-null `primaryWishlistId`, non-empty `customMessage`, `advancedWindowsEnabled: true`) — never silently saved as inactive |
+| GET | `/tg/birthday-reminders/muted` | Auth user | List of birthday users this recipient muted: `{ muted: [{ userId, displayName, username, avatarThumbUrl, mutedAt }] }` |
+| POST | `/tg/birthday-reminders/mute` | Auth user | Mute a specific birthday user. Body: `{ deliveryId? \| mutedUserId? }` (one required). Resolves delivery → birthday user. Idempotent upsert |
+| DELETE | `/tg/birthday-reminders/mute/:userId` | Auth user | Unmute a previously muted birthday user |
+| GET | `/tg/birthday-reminders/resolve/:deliveryId` | Auth user | Mini App boot resolves the deep-link target and sets `clickedAt`. Returns `{ deliveryId, reminderKind, targetType, targetId, originalTargetType, targetUnavailable, isOwner, birthdayUser: { userId, displayName, username, avatarThumbUrl, hideYear, customMessage }, daysUntil }`. Re-resolves the target at click time (handles wishlist becoming private after send) |
+
+**Admin / God Mode:**
+
+| Method | Path | Who | Description |
+|--------|------|-----|-------------|
+| GET | `/tg/admin/birthday-reminders/metrics` | God Mode | Readiness metrics (users_with_birthday, users_with_friend_reminders_enabled, users_with_public_birthday_profile, users_with_public_wishlist, users_with_active_public_items, users_with_primary_wishlist), 24h delivery breakdown by status / kind / skipReason / failureReason, engagement (sent / clicked / CTR), mutes (total / 24h), scheduler heartbeat + stuck pending count, alerts (`schedulerStale` / `stuckPendingHigh` / `noSendsDespiteCandidates`) |
+
+**Pro-gated fields (402 contract):**
+
+| Field | FREE behaviour |
+|---|---|
+| `audience: 'EXTENDED'` | 402 `{ error: 'pro_required', feature: 'birthday_reminders_advanced', context: 'audience' }` |
+| `primaryWishlistId: <id>` | 402 with `context: 'primaryWishlistId'` |
+| `customMessage: <non-empty>` | 402 with `context: 'customMessage'` |
+| `advancedWindowsEnabled: true` | 402 with `context: 'advancedWindowsEnabled'` |
+
+The 402 response is intentional — Pro fields are never silently saved as inactive. FREE users see the upsell via context `birthday_reminders_advanced`.
+
 ### Promo Codes
 
 | Method | Path | Who | Description |

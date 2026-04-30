@@ -42,6 +42,7 @@
 32. [Profile Subscriptions](#flow-32-profile-subscriptions)
 33. [Referral Program](#flow-33-referral-program)
 34. [Item Placements (cross-wishlist)](#flow-34-item-placements-cross-wishlist)
+35. [Birthday Reminders](#flow-35-birthday-reminders)
 
 ---
 
@@ -1230,3 +1231,59 @@ This flow manages what happens when a user loses PRO access (subscription expire
 - An item always has at least one home wishlist; removing the last placement deletes the item from the system (or moves it to Drafts, depending on configuration).
 - Item limits are counted per wishlist; placing an item in an additional wishlist counts toward that wishlist's item cap.
 - The `item-detail` screen shows a list of all wishlists the item is currently placed in.
+
+---
+
+## Flow 35: Birthday Reminders
+
+**Actors:** Birthday user (the one whose birthday is upcoming) and recipient (a subscriber, wishlist subscriber, reserver, or secret reserver). FREE and PRO users have different windows; PRO unlocks the advanced controls (audience EXTENDED, primary wishlist, custom message, advanced windows).
+
+### Stage 1 — User adds a birthday and opts in
+
+1. User opens **profile edit** and sets a birthday (and optionally `hideYear`).
+2. After the first save with a birthday set, the Mini App shows a one-time **opt-in BottomSheet** (gated by `birthdayFriendReminders === false && birthdayOptInPromptSeenAt === null`). It explains: *"We can remind your friends 14 days before and on the day, so they have time to pick a gift."* Buttons: **Enable reminders** / **Not now**.
+3. **Enable reminders** → `PATCH /tg/me/birthday-settings` with `{ friendRemindersEnabled: true, optInPromptSeen: true }`. Fires `birthday.optin_accepted`.
+4. **Not now** → `PATCH /tg/me/birthday-settings` with `{ optInPromptSeen: true }`. Fires `birthday.optin_dismissed`. The sheet does not re-appear; the user can still enable manually in Settings → 🎂 День рождения.
+5. Owner self-reminders (`birthdayOwnerReminders`) default to `true` — no opt-in required.
+
+### Stage 2 — Scheduler fires reminders
+
+Hourly tick within the 9–22 MSK window (`processBirthdayReminders` in `apps/api/src/index.ts`). For each user with a birthday matching offsets [30, 14, 7, 1, 0] from today (MSK):
+
+**FREE friend reminders:** `friend_14d` and `friend_today` are sent to the SUBSCRIBERS audience (profile + non-`NOBODY` wishlist subscribers). Day-of bypasses the daily cap.
+
+**PRO friend reminders (advanced windows):** add `friend_7d` and `friend_1d`. EXTENDED audience adds reservers + secret reservers.
+
+**Owner self-reminders:** `owner_30d` (FREE+PRO). PRO with advanced windows adds `owner_14d` and `owner_7d`, but only when there's a problem to solve (no public wishlist OR no active public items). `owner_today` always fires as a soft congratulations — never urgency-CTA.
+
+Each delivery is a `BirthdayReminderDelivery` row with unique `(birthdayUserId, recipientUserId, occurrenceKey, reminderKind)` — duplicate-send-proof.
+
+**Daily cap:** 3 friend reminders per recipient per MSK day; excess parked as `status: 'deferred'`, `deferredUntil = next MSK 10:00`.
+
+### Stage 3 — Recipient acts on the bot DM
+
+6. Recipient gets a Telegram DM with the birthday user's name, optional custom message, optional avatar, and an inline keyboard: **WebApp button** (deep-link `br_<deliveryId>`) + **🔕 Не напоминать об этом человеке**.
+7. Tap the WebApp button → Mini App opens, calls `GET /tg/birthday-reminders/resolve/:deliveryId`. Server sets `clickedAt`, re-resolves the target (handles wishlist that became private after send → falls back to public profile), returns birthday context.
+8. Mini App routes to public wishlist / public profile / own wishlist based on `targetType`. The **birthday context banner** shows on the destination screen — tone `info` (upcoming) or `warning` (today). Banner is dismissible per session; fires `birthday.banner_seen` once via dataset guard.
+9. Recipient reserves a gift / sends a hint / subscribes. Each action is tracked with `birthdaySource: true` props for attribution.
+10. Tap **🔕 Не напоминать** → `bdm:<deliveryId>` callback. Bot upserts `BirthdayReminderMute`, edits the keyboard to drop the mute button, answers with a localised toast.
+
+### Stage 4 — Owner acts on the self-reminder
+
+11. Owner gets `owner_30d` DM: *"Через 30 дней день рождения — обнови вишлист."* WebApp button opens own wishlist (or **Create wishlist** screen if none exists).
+12. Conditional `owner_14d` / `owner_7d` (PRO) only fire if there's still no public wishlist or no active public items.
+13. `owner_today`: soft congratulations, no urgency CTA, never promises a wishlist will appear.
+
+### Edge cases
+
+- **No public wishlist:** friend CTAs deep-link into the public profile instead. Never produces a "wishlist will appear" promise.
+- **`hideYear: true`:** the bot DM omits age and any year-derived phrasing.
+- **`profileVisibility: NOBODY`:** outgoing friend reminders are skipped with `skipReason: 'profile_private'`.
+- **Recipient `notifyBirthdays: false`:** all incoming birthday DMs skipped with `recipient_opted_out`.
+- **Recipient muted this birthday user:** skipped with `muted`.
+- **Recipient daily cap (3) exceeded:** `deferred` until next MSK 10:00.
+- **Bot blocked by recipient:** `failed` with `failureReason` set; never retried for that occurrence.
+- **PRO downgrade:** advanced fields preserved in DB but treated as inactive; corresponding deliveries skipped with `pro_required` and surface in the God Mode dashboard.
+- **Feb-29 birthday in non-leap year:** mapped to Feb-28.
+
+See `docs/SETTINGS_AND_PRIVACY.md` § Birthday reminders, `docs/MONETIZATION.md` § 16a, `docs/BACKEND_MAP.md` § 13 (cron), `docs/DATA_MODEL.md` (`BirthdayReminderDelivery`, `BirthdayReminderMute`).

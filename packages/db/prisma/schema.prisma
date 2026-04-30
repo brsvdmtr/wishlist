@@ -210,6 +210,12 @@ model User {
   profileSubscribers             ProfileSubscription[]          @relation("ProfileTarget")
   secretReservations             SecretReservation[]
 
+  // Birthday reminders — social notifications for own birthday (separate from GiftOccasion)
+  birthdayDeliveriesAsBirthdayUser BirthdayReminderDelivery[] @relation("BirthdayDeliveriesAsBirthdayUser")
+  birthdayDeliveriesAsRecipient    BirthdayReminderDelivery[] @relation("BirthdayDeliveriesAsRecipient")
+  birthdayMutesByUser              BirthdayReminderMute[]     @relation("BirthdayMutesByUser")
+  birthdayMutesAsMutedUser         BirthdayReminderMute[]     @relation("BirthdayMutesAsMutedUser")
+
   // Referral program
   referralAttributionsAsInviter ReferralAttribution[] @relation("ReferralInviter")
   referralAttributionsAsInvitee ReferralAttribution[] @relation("ReferralInvitee")
@@ -217,7 +223,7 @@ model User {
 
   // v2.1 Appearance preferences (free: dark+violet only; PRO unlocks rest)
   // Validated server-side in PATCH /tg/settings/appearance.
-  themePreference  String @default("dark")   // 'dark' | 'black'
+  themePreference  String @default("dark") // 'dark' | 'black'
   accentPreference String @default("violet") // 'violet' | 'blue' | 'pink' | 'green'
 
   // Set once when the user dismisses or finishes the calendar 4-step
@@ -478,6 +484,25 @@ model UserProfile {
   notifyReservations  Boolean @default(true)
   notifySubscriptions Boolean @default(true)
   notifyMarketing     Boolean @default(true)
+  notifyBirthdays     Boolean @default(true)
+
+  // Birthday reminders — opt-in social notifications about user's own birthday.
+  // birthdayFriendReminders defaults to false: existing users with `birthday` set MUST
+  // explicitly opt in via the post-save sheet before any notifications fire.
+  // birthdayOwnerReminders defaults to true (self-only): user gets reminders to update wishlist.
+  // birthdayAudience: 'SUBSCRIBERS' (free) | 'EXTENDED' (Pro). Pro-only values are
+  // rejected at API layer with 402 PRO_REQUIRED — never silent-saved as inactive.
+  // birthdayAdvancedWindowsEnabled: Pro-only flag enabling 7d/1d friend windows and 14d/7d owner windows.
+  // birthdayPrimaryWishlistId: Pro-only — overrides auto-pick of public wishlist for friend CTAs.
+  // birthdayCustomMessage: Pro-only — appears in italics inside friend reminder bot message.
+  // birthdayOptInPromptSeenAt: stamp when user saw post-save opt-in sheet (don't re-show).
+  birthdayFriendReminders        Boolean   @default(false)
+  birthdayOwnerReminders         Boolean   @default(true)
+  birthdayAudience               String    @default("SUBSCRIBERS")
+  birthdayAdvancedWindowsEnabled Boolean   @default(false)
+  birthdayPrimaryWishlistId      String?
+  birthdayCustomMessage          String?   @db.VarChar(200)
+  birthdayOptInPromptSeenAt      DateTime?
 
   // Settings — Privacy
   profileVisibility ProfileVisibility @default(ALL)
@@ -983,20 +1008,20 @@ model SantaCampaign {
   currentRoundId String? @unique
 
   // onDelete: Restrict — prevents user account deletion while owning an active campaign.
-  owner           User                  @relation("OwnedSantaCampaigns", fields: [ownerId], references: [id], onDelete: Restrict)
-  currentRound    SantaRound?           @relation("CampaignCurrentRound", fields: [currentRoundId], references: [id], onDelete: SetNull)
-  participants    SantaParticipant[]
-  rounds          SantaRound[]          @relation("CampaignRounds")
-  chatMessages    SantaChatMessage[]
-  readCursors     SantaChatReadCursor[]
-  chatMutes       SantaChatMute[]
-  polls           SantaPoll[]
-  notifications   SantaNotification[]
-  auditLogs       SantaAdminAuditLog[]
-  hintRequests    SantaHintRequest[]
-  exclusionGroups SantaExclusionGroup[]
-  exitRequests    SantaExitRequest[]
-  linkedGiftOccasions GiftOccasion[]    @relation("GiftOccasionsLinkedSanta")
+  owner               User                  @relation("OwnedSantaCampaigns", fields: [ownerId], references: [id], onDelete: Restrict)
+  currentRound        SantaRound?           @relation("CampaignCurrentRound", fields: [currentRoundId], references: [id], onDelete: SetNull)
+  participants        SantaParticipant[]
+  rounds              SantaRound[]          @relation("CampaignRounds")
+  chatMessages        SantaChatMessage[]
+  readCursors         SantaChatReadCursor[]
+  chatMutes           SantaChatMute[]
+  polls               SantaPoll[]
+  notifications       SantaNotification[]
+  auditLogs           SantaAdminAuditLog[]
+  hintRequests        SantaHintRequest[]
+  exclusionGroups     SantaExclusionGroup[]
+  exitRequests        SantaExitRequest[]
+  linkedGiftOccasions GiftOccasion[]        @relation("GiftOccasionsLinkedSanta")
 
   @@index([ownerId])
   @@index([inviteToken])
@@ -1463,13 +1488,13 @@ model GiftOccasion {
   reminders      GiftOccasionReminder[]
   inboxEntries   CalendarInboxEntry[]
 
+  @@unique([ownerUserId, holidayKey])
   @@index([ownerUserId])
   @@index([ownerUserId, status])
   @@index([ownerUserId, eventDate])
   @@index([linkedUserId])
   @@index([linkedWishlistId])
   @@index([linkedSantaId])
-  @@unique([ownerUserId, holidayKey])
 }
 
 model GiftOccasionIdea {
@@ -1524,6 +1549,83 @@ model GiftOccasionReminder {
   @@index([occasionId])
   @@index([ownerUserId])
   @@index([scheduledFor, sentAt, enabled])
+}
+
+// ═══════════════════════════════════════════
+// Birthday Reminders — social notifications for own birthday
+//
+// SEPARATE from GiftOccasionReminder by design:
+// - GiftOccasionReminder = personal calendar entries the user creates for friends
+// - BirthdayReminderDelivery = system-driven notifications to a user's audience
+//   when *their own* birthday approaches.
+//
+// Delivery dedup: unique (birthdayUserId, recipientUserId, occurrenceKey, reminderKind)
+// occurrenceKey format: "YYYY-MM-DD" — the birthday's actual MSK date this year.
+// Feb-29 birthdays in non-leap years use the Feb-28 occurrenceKey.
+// reminderKind enum: friend_14d | friend_7d | friend_1d | friend_today |
+//                    owner_30d | owner_14d | owner_7d | owner_today
+// status enum: pending | sent | skipped | failed | deferred
+//   - deferred used for daily-cap: deferredUntil set to next MSK 10:00, scheduler re-picks.
+// ═══════════════════════════════════════════
+
+model BirthdayReminderDelivery {
+  id String @id @default(cuid())
+
+  birthdayUserId  String
+  recipientUserId String
+
+  occurrenceKey String
+  reminderKind  String
+
+  status        String    @default("pending")
+  skipReason    String?
+  failureReason String?
+  deferredUntil DateTime?
+
+  telegramMessageId Int?
+
+  // What the bot CTA points to. Computed at send-time, not creation-time, so
+  // last-minute privacy changes are reflected.
+  // targetType: wishlist | profile | own_wishlist | create_wishlist | wishlists_index
+  targetType      String?
+  targetId        String?
+  deepLinkPayload String?
+
+  // Used at send-time for analytics + audience attribution.
+  // relationType (friend_*): subscription | wishlist_subscription | reservation | comment | mixed
+  // For owner_* deliveries this is null.
+  relationType String?
+
+  sentAt    DateTime?
+  clickedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  birthdayUser User @relation("BirthdayDeliveriesAsBirthdayUser", fields: [birthdayUserId], references: [id], onDelete: Cascade)
+  recipient    User @relation("BirthdayDeliveriesAsRecipient", fields: [recipientUserId], references: [id], onDelete: Cascade)
+
+  @@unique([birthdayUserId, recipientUserId, occurrenceKey, reminderKind])
+  @@index([status, deferredUntil])
+  @@index([recipientUserId, sentAt])
+  @@index([birthdayUserId, occurrenceKey])
+  @@index([sentAt])
+  @@index([createdAt])
+}
+
+// Per-recipient mute of a specific birthday user. Created via inline-keyboard
+// "🔕 Не напоминать об этом человеке" callback or via settings UI.
+model BirthdayReminderMute {
+  id                  String   @id @default(cuid())
+  userId              String
+  mutedBirthdayUserId String
+  createdAt           DateTime @default(now())
+
+  user      User @relation("BirthdayMutesByUser", fields: [userId], references: [id], onDelete: Cascade)
+  mutedUser User @relation("BirthdayMutesAsMutedUser", fields: [mutedBirthdayUserId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mutedBirthdayUserId])
+  @@index([userId])
 }
 
 model Holiday {

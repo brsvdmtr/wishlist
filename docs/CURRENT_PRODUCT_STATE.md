@@ -75,6 +75,7 @@ See also: `docs/MONETIZATION.md`
 
 ## Recently Shipped
 
+- **Birthday Reminders** — Bot-driven social notifications for friends (subscribers + connected users) before a user's birthday, plus self-reminders to update wishlist. FREE: 14d + day-of friend reminders, 30d owner self-reminder. PRO: adds 7d/1d friend windows, 14d/7d owner windows (conditional on wishlist state), audience EXTENDED (reservers + secret reservers), primary birthday wishlist override, custom italicised message in friend DM. Per-recipient mute via 🔕 button in bot DM. Quiet hours 9–22 MSK; daily cap of 3 friend reminders per recipient. Kill switch `BIRTHDAY_REMINDERS_ENABLED`. New schema: `BirthdayReminderDelivery`, `BirthdayReminderMute`, 8 new `UserProfile` fields. New paywall context `birthday_reminders_advanced`. ~75 i18n keys × 6 locales.
 - **v2.1 UI Refresh** — Complete visual redesign across all screens (80 wave items). Glass morphism, mesh gradients, accent glow, liquid-glass header/input bars, v2.1 display typography (26/700/−0.035em). All primitives from `@wishlist/ui` adopted (Button, Card, Chip, Banner, SectionHeader, ListRow, StatTile, FloatingNav, HeroCard)
 - **FloatingNav** — Persistent Instagram-like bottom navigation bar globally replacing the outer home tab bar. Tabs: Home / Archive / Profile / Reservations
 - **Yearly PRO Plan** — 800 XTR one-time purchase extends PRO by 365 days (~33% savings vs monthly). Monthly/yearly toggle on paywall. Bot sends DM renewal reminders at 7 days and 1 day before expiry

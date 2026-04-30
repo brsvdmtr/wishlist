@@ -347,7 +347,8 @@ type UpsellContext =
   | 'smart_reservations'
   | 'bot_import'
   | 'showcase'
-  | 'appearance'; // v2.1: theme/accent PRO gate
+  | 'appearance' // v2.1: theme/accent PRO gate
+  | 'birthday_reminders_advanced'; // birthday-reminders Pro features (audience EXTENDED, primary wishlist, custom message, advanced windows)
 
 // UpsellSheetState carries optional wishlistId for wishlist-scoped add-on offers
 type UpsellSheetState = { context: UpsellContext; wishlistId?: string } | null;
@@ -2322,6 +2323,19 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
       'OLED-чёрная тема (экономит батарею)',
       'Акценты: синий, розовый, зелёный',
       'Мгновенное переключение без перезагрузки',
+    ],
+  },
+  birthday_reminders_advanced: {
+    emoji: '🎂',
+    title: t('br_paywall_title', locale),
+    subtitle: t('br_paywall_desc', locale),
+    showTable: false,
+    benefits: [
+      t('br_paywall_feature_windows', locale),
+      t('br_paywall_feature_message', locale),
+      t('br_paywall_feature_primary', locale),
+      t('br_paywall_feature_audience', locale),
+      t('br_paywall_feature_owner_extra', locale),
     ],
   },
 });
@@ -4604,6 +4618,62 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     reservedByMe: number; archived: number;
   } | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
+
+  // Birthday Reminders — context from /tg/birthday-reminders/resolve. Set when
+  // user opens Mini App via a `br_<deliveryId>` deep link. Used by:
+  //   - context banner above wishlist/profile/own surfaces
+  //   - attribution on subsequent analytics events (item_opened, reservation_*)
+  //   - dismissal preference (banner dismissed → don't re-show this session)
+  // Cleared on logout / re-deep-link / manual close.
+  const [birthdayContext, setBirthdayContext] = useState<{
+    deliveryId: string;
+    reminderKind: string;
+    targetType: string | null;
+    targetId: string | null;
+    targetUnavailable: boolean;
+    isOwner: boolean;
+    birthdayUser: {
+      userId: string;
+      displayName: string | null;
+      username: string | null;
+      avatarThumbUrl: string | null;
+      hideYear: boolean;
+      customMessage: string | null;
+    };
+    daysUntil: number | null;
+    bannerDismissed: boolean;
+  } | null>(null);
+
+  // Birthday settings cache for the Settings screen. Lazy-loaded on first
+  // navigation. Mirrors the GET /tg/me/birthday-settings response.
+  const [birthdaySettings, setBirthdaySettings] = useState<{
+    isPro: boolean;
+    birthday: string | null;
+    hideYear: boolean;
+    profileVisibility: string;
+    optInPromptSeenAt: string | null;
+    friendReminders: {
+      enabled: boolean;
+      audience: string;
+      advancedWindowsEnabled: boolean;
+      primaryWishlist: { id: string; slug: string; title: string } | null;
+      primaryWishlistId: string | null;
+      customMessage: string | null;
+    };
+    ownerReminders: { enabled: boolean };
+    receiving: { enabled: boolean; mutedCount: number };
+  } | null>(null);
+  const [birthdaySettingsLoading, setBirthdaySettingsLoading] = useState(false);
+
+  // Birthday muted-users list for the muted screen (lazy-loaded).
+  const [birthdayMutedList, setBirthdayMutedList] = useState<Array<{
+    userId: string; displayName: string | null; username: string | null; avatarThumbUrl: string | null; mutedAt: string;
+  }>>([]);
+
+  // Birthday opt-in sheet state. Shown after first save of birthday in profile
+  // edit, only when birthdayFriendReminders === false AND optInPromptSeenAt === null.
+  const [birthdayOptInOpen, setBirthdayOptInOpen] = useState(false);
+
   // Public profile view state
   const [publicProfileUsername, setPublicProfileUsername] = useState<string | null>(null);
   const [publicProfileData, setPublicProfileData] = useState<{
@@ -5484,6 +5554,31 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     // eslint-disable-next-line no-console
     if (process.env.NODE_ENV === 'development') console.log(`[telemetry] ${event}`, entry.props);
   }, []);
+
+  // Stable ref to current birthdayContext, used by trackBirthdayAttributedEvent.
+  // Doesn't trigger re-renders for analytics callers that only need attribution.
+  const birthdayContextRef = useRef<typeof birthdayContext>(null);
+  useEffect(() => { birthdayContextRef.current = birthdayContext; }, [birthdayContext]);
+
+  // Convenience wrapper that adds birthday-source attribution props to any
+  // analytics event when the user is in a birthday-reminder session. Use this
+  // instead of trackEvent for: item_opened, reservation_created, secret_*,
+  // gift_completed, wishlist_opened, profile_subscribe_clicked, etc. — anything
+  // that should count toward birthday-funnel conversion.
+  const trackBirthdayAttributedEvent = useCallback((event: string, props?: Record<string, unknown>) => {
+    const ctx = birthdayContextRef.current;
+    if (!ctx) {
+      trackEvent(event, props);
+      return;
+    }
+    trackEvent(event, {
+      ...props,
+      birthdaySource: true,
+      birthdayDeliveryId: ctx.deliveryId,
+      birthdayReminderKind: ctx.reminderKind,
+      birthdayUserId: ctx.birthdayUser.userId,
+    });
+  }, [trackEvent]);
 
   /** Show context-aware PRO upsell sheet with anti-spam throttling.
    *  auto=true (402 response): max 1 auto-show per session + 30s cooldown.
@@ -8489,6 +8584,85 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           })
           .catch(handleErr);
         loadWishlists().catch(() => { /* non-critical for guest flow */ });
+      } else if (startParam && startParam.startsWith('br_')) {
+        // Birthday reminder deep link: br_{deliveryId}
+        // Resolve via API → set birthdayContext → navigate to target screen.
+        // Backend marks clickedAt and re-resolves the live target (handles
+        // wishlist becoming private/deleted between send + click).
+        const deliveryId = startParam.slice('br_'.length);
+        loadWishlists().catch(() => {});
+        tgFetch(`/tg/birthday-reminders/resolve/${encodeURIComponent(deliveryId)}`)
+          .then(async (r) => {
+            trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
+            if (!r.ok) {
+              trackEvent('birthday.deeplink_resolve_failed', { deliveryId, status: r.status });
+              bootSetScreen('my-wishlists');
+              return;
+            }
+            const data = await r.json() as {
+              deliveryId: string;
+              reminderKind: string;
+              targetType: string | null;
+              targetId: string | null;
+              originalTargetType?: string | null;
+              targetUnavailable?: boolean;
+              isOwner: boolean;
+              birthdayUser: {
+                userId: string;
+                displayName: string | null;
+                username: string | null;
+                avatarThumbUrl: string | null;
+                hideYear: boolean;
+                customMessage: string | null;
+              };
+              daysUntil: number | null;
+            };
+            setBirthdayContext({
+              deliveryId: data.deliveryId,
+              reminderKind: data.reminderKind,
+              targetType: data.targetType,
+              targetId: data.targetId,
+              targetUnavailable: !!data.targetUnavailable,
+              isOwner: data.isOwner,
+              birthdayUser: data.birthdayUser,
+              daysUntil: data.daysUntil,
+              bannerDismissed: false,
+            });
+            trackEvent('birthday.deeplink_opened', {
+              deliveryId: data.deliveryId,
+              reminderKind: data.reminderKind,
+              targetType: data.targetType,
+              isOwner: data.isOwner,
+              daysUntil: data.daysUntil,
+            });
+            // Route to target screen
+            if (data.isOwner) {
+              // Owner: open own wishlist or wishlists index
+              if (data.targetType === 'own_wishlist' && data.targetId) {
+                trackEvent('birthday.owner_update_wishlist_opened', { deliveryId: data.deliveryId });
+              }
+              bootSetScreen('my-wishlists');
+            } else if (data.targetType === 'wishlist' && data.targetId) {
+              // Friend: open public wishlist by slug
+              trackEvent('birthday.public_wishlist_opened', { deliveryId: data.deliveryId, slug: data.targetId });
+              void loadGuestWishlist(data.targetId);
+              bootSetScreen('guest-view');
+            } else if (data.birthdayUser.username) {
+              // Friend without wishlist: open public profile
+              trackEvent('birthday.public_profile_opened', { deliveryId: data.deliveryId, username: data.birthdayUser.username });
+              setPublicProfileUsername(data.birthdayUser.username);
+              setPublicProfileSubscribed(false);
+              void loadPublicProfile(data.birthdayUser.username);
+              void loadProfileSubscribeStatus(data.birthdayUser.username);
+              bootSetScreen('public-profile');
+            } else {
+              bootSetScreen('my-wishlists');
+            }
+          })
+          .catch(() => {
+            trackEvent('birthday.deeplink_resolve_failed', { deliveryId, error: 'fetch_failed' });
+            bootSetScreen('my-wishlists');
+          });
       } else if (startParam && startParam.startsWith('profile_')) {
         // Public profile deep link: profile_{username}
         const username = startParam.slice('profile_'.length);
@@ -12073,6 +12247,42 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </div>
           )}
           </div>{/* end seasonal wrapper */}
+
+          {/* Birthday context banner — owner reminder. Suggests adding wishes
+              or making a wishlist public. Day-of variant is soft and not
+              urgent (no "update wishlist" pressure). */}
+          {birthdayContext && birthdayContext.isOwner && !birthdayContext.bannerDismissed && (() => {
+            const ctx = birthdayContext;
+            const days = ctx.daysUntil ?? 0;
+            const isToday = days === 0 || ctx.reminderKind === 'owner_today';
+            return (
+              <div
+                style={{ marginBottom: 14 }}
+                ref={(el) => {
+                  if (el && !el.dataset.seen) {
+                    el.dataset.seen = '1';
+                    trackBirthdayAttributedEvent('birthday.banner_seen', { kind: ctx.reminderKind, target: 'own_wishlist' });
+                  }
+                }}
+              >
+                <Banner
+                  tone={isToday ? 'success' : 'warning'}
+                  icon={<span>{isToday ? '🎉' : '🎂'}</span>}
+                  title={isToday
+                    ? t('br_banner_owner_today_title', locale)
+                    : t('br_banner_owner_title', locale)}
+                  onClose={() => {
+                    setBirthdayContext((prev) => prev ? { ...prev, bannerDismissed: true } : prev);
+                    trackBirthdayAttributedEvent('birthday.banner_dismissed', { kind: ctx.reminderKind });
+                  }}
+                >
+                  {isToday
+                    ? t('br_banner_owner_today_desc', locale)
+                    : t('br_banner_owner_desc', locale)}
+                </Banner>
+              </div>
+            );
+          })()}
 
           {/* v2.1: outer 3-tab bar (Вишлисты/Желания/Мои брони) removed —
               FloatingNav handles top-level navigation (🏠 Главная /
@@ -16678,6 +16888,54 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           ══════════════════════════════════════════════ */}
       {screen === 'guest-view' && guestWl && (
         <div style={{ padding: '16px 20px 120px' }}>
+          {/* ── Birthday context banner — shown when arriving from a friend
+              birthday reminder. Offers wishlist-scoped CTAs.
+              Banner is dismissible per-session (not persisted). */}
+          {birthdayContext && !birthdayContext.isOwner && !birthdayContext.bannerDismissed && (() => {
+            const ctx = birthdayContext;
+            const days = ctx.daysUntil ?? 0;
+            const isToday = days === 0 || ctx.reminderKind === 'friend_today';
+            const name = ctx.birthdayUser.displayName || ctx.birthdayUser.username || 'WishBoard';
+            const dayWord = pluralize(
+              days,
+              t('br_days_word_one', locale),
+              t('br_days_word_few', locale),
+              t('br_days_word_many', locale),
+              locale,
+            );
+            // Fire banner_seen once per delivery; don't refire on re-renders.
+            // Local one-shot via dataset on the wrapper div.
+            return (
+              <div
+                style={{ marginBottom: 14 }}
+                ref={(el) => {
+                  if (el && !el.dataset.seen) {
+                    el.dataset.seen = '1';
+                    trackBirthdayAttributedEvent('birthday.banner_seen', { kind: ctx.reminderKind, target: 'wishlist' });
+                  }
+                }}
+              >
+                <Banner
+                  tone={isToday ? 'warning' : 'info'}
+                  icon={<span>{isToday ? '🎉' : '🎂'}</span>}
+                  title={isToday
+                    ? t('br_banner_friend_today_title', locale)
+                    : t('br_banner_friend_title', locale, { name })}
+                  onClose={() => {
+                    setBirthdayContext((prev) => prev ? { ...prev, bannerDismissed: true } : prev);
+                    trackBirthdayAttributedEvent('birthday.banner_dismissed', { kind: ctx.reminderKind });
+                  }}
+                >
+                  {isToday
+                    ? t('br_banner_friend_today_desc', locale, { name })
+                    : (ctx.targetUnavailable
+                        ? `${t('br_banner_target_unavailable_title', locale)}. ${t('br_banner_target_unavailable_desc', locale)}`
+                        : `${t('br_banner_friend_desc', locale)}${days > 0 ? ` · ${days} ${dayWord}` : ''}`)}
+                </Banner>
+              </div>
+            );
+          })()}
+
           {/* ── v2.1 HeroCard — wishlist hero with emoji + meta + 3-stat row ──
               Replaces the legacy owner-Card.current. Owner identity carried
               in subtitle text + click-through; subscribe action moves below.
@@ -19993,6 +20251,193 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       hint={cal.rowHint}
                       onClick={() => setScreen('calendar')}
                     />
+                  </SettingsSection>
+                );
+              })()}
+
+              {/* ── Birthday Reminders ─────────────────────────────────────
+                  Lazy-loads /tg/me/birthday-settings on first render.
+                  Pro-only fields (audience EXTENDED, primary wishlist,
+                  custom message, advanced windows) tap → upsell sheet
+                  with `birthday_reminders_advanced` context. */}
+              {(() => {
+                const bs = birthdaySettings;
+                if (!bs && !birthdaySettingsLoading) {
+                  setBirthdaySettingsLoading(true);
+                  void tgFetch('/tg/me/birthday-settings').then(async (r) => {
+                    if (r.ok) {
+                      const data = await r.json();
+                      setBirthdaySettings(data);
+                      trackEvent('birthday.settings_opened');
+                    }
+                    setBirthdaySettingsLoading(false);
+                  }).catch(() => setBirthdaySettingsLoading(false));
+                  return null;
+                }
+                if (!bs) return null;
+                const isPro = bs.isPro;
+                const friend = bs.friendReminders;
+                const owner = bs.ownerReminders;
+                const recv = bs.receiving;
+
+                const patchBirthday = async (body: Record<string, unknown>) => {
+                  const res = await tgFetch('/tg/me/birthday-settings', {
+                    method: 'PATCH',
+                    body: JSON.stringify(body),
+                    idempotency: { action: 'birthday.settings' },
+                  } as never).catch(() => null);
+                  if (!res) return;
+                  if (res.status === 402) {
+                    showUpsell('birthday_reminders_advanced', { auto: true });
+                    trackEvent('birthday.paywall_shown', { context: 'birthday_reminders_advanced', via: 'auto_402' });
+                    return;
+                  }
+                  if (res.ok) {
+                    // Re-fetch to get the canonical state
+                    void tgFetch('/tg/me/birthday-settings').then(async (r) => {
+                      if (r.ok) setBirthdaySettings(await r.json());
+                    });
+                  }
+                };
+
+                const formatBirthday = (iso: string | null): string => {
+                  if (!iso) return t('settings_coming_soon', locale);
+                  const d = new Date(iso);
+                  const day = d.getUTCDate();
+                  const month = d.getUTCMonth();
+                  const months = locale === 'ru'
+                    ? ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря']
+                    : ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                  return `${day} ${months[month]}`;
+                };
+
+                return (
+                  <SettingsSection title={t('br_section_title', locale)}>
+                    <SettingsRow
+                      icon={'\u{1F382}'}
+                      label={t('profile_birthday', locale)}
+                      value={bs.birthday ? formatBirthday(bs.birthday) : undefined}
+                      onClick={() => setScreen('profile')}
+                    />
+                    {bs.birthday && (
+                      <>
+                        <SDivider />
+                        <SettingsToggle
+                          icon={'\u{1F514}'}
+                          label={t('br_friend_reminders_label', locale)}
+                          value={friend.enabled}
+                          onChange={(v) => void patchBirthday({ friendRemindersEnabled: v })}
+                        />
+                        {friend.enabled && (
+                          <>
+                            <SDivider />
+                            <SettingsRow
+                              icon={'\u{1F465}'}
+                              label={t('br_audience_label', locale)}
+                              value={friend.audience === 'EXTENDED' ? t('br_audience_extended', locale) : t('br_audience_subscribers', locale)}
+                              onClick={() => {
+                                if (!isPro && friend.audience === 'SUBSCRIBERS') {
+                                  showUpsell('birthday_reminders_advanced');
+                                  trackEvent('birthday.paywall_shown', { context: 'audience_extended', via: 'tap' });
+                                  return;
+                                }
+                                // Open audience picker — toggle between two values for now
+                                void patchBirthday({ audience: friend.audience === 'EXTENDED' ? 'SUBSCRIBERS' : 'EXTENDED' });
+                              }}
+                            />
+                            <SDivider />
+                            <SettingsRow
+                              icon={'\u{1F381}'}
+                              label={t('br_primary_wishlist_label', locale)}
+                              value={friend.primaryWishlist?.title ?? t('br_primary_wishlist_auto', locale)}
+                              proBadge={!isPro}
+                              onClick={() => {
+                                if (!isPro) {
+                                  showUpsell('birthday_reminders_advanced');
+                                  trackEvent('birthday.paywall_shown', { context: 'primary_wishlist', via: 'tap' });
+                                  return;
+                                }
+                                // Picker UI lives in Profile screen; for now scroll to it
+                                setScreen('profile');
+                              }}
+                            />
+                            <SDivider />
+                            <SettingsRow
+                              icon={'\u{270F}\u{FE0F}'}
+                              label={t('br_custom_message_label', locale)}
+                              value={friend.customMessage ?? undefined}
+                              hint={!friend.customMessage ? t('br_custom_message_hint', locale) : undefined}
+                              proBadge={!isPro}
+                              onClick={() => {
+                                if (!isPro) {
+                                  showUpsell('birthday_reminders_advanced');
+                                  trackEvent('birthday.paywall_shown', { context: 'custom_message', via: 'tap' });
+                                  return;
+                                }
+                                const next = window.prompt(t('br_custom_message_title', locale), friend.customMessage ?? '');
+                                if (next !== null) {
+                                  void patchBirthday({ customMessage: next.slice(0, 200) });
+                                }
+                              }}
+                            />
+                            <SDivider />
+                            <SettingsToggle
+                              icon={'\u{2728}'}
+                              label={t('br_advanced_windows_label', locale)}
+                              value={friend.advancedWindowsEnabled && isPro}
+                              proBadge={!isPro}
+                              onChange={(v) => {
+                                if (v && !isPro) {
+                                  showUpsell('birthday_reminders_advanced');
+                                  trackEvent('birthday.paywall_shown', { context: 'advanced_windows', via: 'toggle' });
+                                  return;
+                                }
+                                void patchBirthday({ advancedWindowsEnabled: v });
+                              }}
+                            />
+                          </>
+                        )}
+                      </>
+                    )}
+                    <SDivider />
+                    <SettingsToggle
+                      icon={'\u{1F4DD}'}
+                      label={t('br_owner_reminders_label', locale)}
+                      value={owner.enabled}
+                      onChange={(v) => void patchBirthday({ ownerRemindersEnabled: v })}
+                    />
+                    <SDivider />
+                    <SettingsToggle
+                      icon={'\u{1F4E5}'}
+                      label={t('br_receiving_label', locale)}
+                      value={recv.enabled}
+                      onChange={(v) => void patchBirthday({ receivingEnabled: v })}
+                    />
+                    {recv.mutedCount > 0 && (
+                      <>
+                        <SDivider />
+                        <SettingsRow
+                          icon={'\u{1F507}'}
+                          label={t('br_muted_label', locale)}
+                          value={pluralize(
+                            recv.mutedCount,
+                            t('br_muted_count_one', locale, { count: recv.mutedCount }),
+                            t('br_muted_count_few', locale, { count: recv.mutedCount }),
+                            t('br_muted_count_many', locale, { count: recv.mutedCount }),
+                            locale,
+                          )}
+                          onClick={() => {
+                            // Lazy-load muted list; navigation handled via inline modal
+                            void tgFetch('/tg/birthday-reminders/muted').then(async (r) => {
+                              if (r.ok) {
+                                const data = await r.json() as { muted: typeof birthdayMutedList };
+                                setBirthdayMutedList(data.muted);
+                              }
+                            });
+                          }}
+                        />
+                      </>
+                    )}
                   </SettingsSection>
                 );
               })()}
@@ -25143,6 +25588,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             disabled={editProfileSaving}
             onClick={async () => {
               setEditProfileSaving(true);
+              // Capture pre-save birthday to detect first-time-set after success.
+              const hadBirthdayBefore = !!profileData?.birthday;
               try {
                 const res = await tgFetch('/tg/me/profile', {
                   method: 'PATCH',
@@ -25162,6 +25609,27 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 pushToast(t('profile_saved', locale), 'success');
                 setEditingProfile(false);
                 loadProfile();
+
+                // Birthday opt-in: trigger after first-time save of birthday.
+                // Conditions:
+                //   - new birthday is set (editProfileBirthday non-empty)
+                //   - had no birthday before this save
+                //   - opt-in prompt has never been seen (server-side flag)
+                //   - friend reminders are currently off
+                // Fetch latest birthday-settings to check seenAt + enabled state.
+                if (editProfileBirthday && !hadBirthdayBefore) {
+                  void tgFetch('/tg/me/birthday-settings').then(async (r) => {
+                    if (!r.ok) return;
+                    const data = await r.json() as {
+                      friendReminders: { enabled: boolean };
+                      optInPromptSeenAt: string | null;
+                    };
+                    if (!data.optInPromptSeenAt && !data.friendReminders.enabled) {
+                      setBirthdayOptInOpen(true);
+                      trackEvent('birthday.optin_shown');
+                    }
+                  });
+                }
               } catch {
                 pushToast(t('toast_save_error', locale), 'error');
               } finally {
@@ -25175,6 +25643,70 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       </BottomSheet>
 
       {/* ── REPORT PROBLEM BOTTOM SHEET ── */}
+      {/* ── Birthday Reminders: opt-in sheet (shown after first save of birthday)
+          Privacy-by-default: friend reminders stay off until explicit "Включить".
+          Both buttons mark optInPromptSeen=true so we don't re-show. */}
+      <BottomSheet
+        isOpen={birthdayOptInOpen}
+        onClose={() => {
+          setBirthdayOptInOpen(false);
+          trackEvent('birthday.optin_dismissed');
+          void tgFetch('/tg/me/birthday-settings', {
+            method: 'PATCH',
+            body: JSON.stringify({ optInPromptSeen: true }),
+            idempotency: { action: 'birthday.settings' },
+          } as never);
+        }}
+      >
+        <div style={{ textAlign: 'center', padding: '8px 0 4px' }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 56, height: 56, borderRadius: 18,
+            background: C.accentSoft, fontSize: 28, marginBottom: 16,
+          }}>🎂</div>
+          <div style={{ fontSize: 17, fontWeight: 650, color: C.text, lineHeight: 1.3, fontFamily: font, letterSpacing: '-0.025em' }}>
+            {t('br_optin_title', locale)}
+          </div>
+          <div style={{ fontSize: 14, color: C.textSec, marginTop: 10, lineHeight: 1.5, padding: '0 8px' }}>
+            {t('br_optin_desc', locale)}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 20 }}>
+            <Button
+              variant="primary"
+              onClick={async () => {
+                trackEvent('birthday.optin_accepted');
+                await tgFetch('/tg/me/birthday-settings', {
+                  method: 'PATCH',
+                  body: JSON.stringify({ friendRemindersEnabled: true, optInPromptSeen: true }),
+                  idempotency: { action: 'birthday.settings' },
+                } as never);
+                setBirthdayOptInOpen(false);
+                pushToast(t('profile_saved', locale), 'success');
+              }}
+            >
+              {t('br_optin_enable', locale)}
+            </Button>
+            <button
+              onClick={() => {
+                setBirthdayOptInOpen(false);
+                trackEvent('birthday.optin_dismissed');
+                void tgFetch('/tg/me/birthday-settings', {
+                  method: 'PATCH',
+                  body: JSON.stringify({ optInPromptSeen: true }),
+                  idempotency: { action: 'birthday.settings' },
+                } as never);
+              }}
+              style={{
+                background: 'transparent', border: 'none', color: C.textSec,
+                fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: 8,
+              }}
+            >
+              {t('br_optin_skip', locale)}
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
+
       <BottomSheet isOpen={showReportProblemSheet} onClose={() => { if (!reportSubmitting) setShowReportProblemSheet(false); }}>
         <div style={{ textAlign: 'center', padding: '0 0 8px' }}>
           <div style={{
@@ -31070,6 +31602,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             )}
 
             {pp && !publicProfileLoading && !publicProfileError && (() => {
+              // Birthday context banner — friend reminder where there's no public
+              // wishlist. Shown above the profile content. Doesn't promise that
+              // a wishlist will appear later; just suggests subscribing.
+              const showBirthdayBanner = !!birthdayContext && !birthdayContext.isOwner && !birthdayContext.bannerDismissed;
               const showcase = pp.showcase;
               const hasShowcase = !!showcase;
               const pinnedIds = new Set(showcase?.pinned.map((p) => p.id) ?? []);
@@ -31085,6 +31621,41 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               };
               return (
               <div style={{ padding: 0 }}>
+                {showBirthdayBanner && birthdayContext && (() => {
+                  const ctx = birthdayContext;
+                  const days = ctx.daysUntil ?? 0;
+                  const isToday = days === 0 || ctx.reminderKind === 'friend_today';
+                  const name = ctx.birthdayUser.displayName || ctx.birthdayUser.username || 'WishBoard';
+                  return (
+                    <div
+                      style={{ padding: '12px 16px 0' }}
+                      ref={(el) => {
+                        if (el && !el.dataset.seen) {
+                          el.dataset.seen = '1';
+                          trackBirthdayAttributedEvent('birthday.banner_seen', { kind: ctx.reminderKind, target: 'profile' });
+                        }
+                      }}
+                    >
+                      <Banner
+                        tone={isToday ? 'warning' : 'info'}
+                        icon={<span>{isToday ? '🎉' : '🎂'}</span>}
+                        title={isToday
+                          ? t('br_banner_friend_today_title', locale)
+                          : t('br_banner_friend_title', locale, { name })}
+                        onClose={() => {
+                          setBirthdayContext((prev) => prev ? { ...prev, bannerDismissed: true } : prev);
+                          trackBirthdayAttributedEvent('birthday.banner_dismissed', { kind: ctx.reminderKind });
+                        }}
+                      >
+                        {pp.wishlists.length === 0
+                          ? t('br_banner_friend_no_wishlist', locale, { name })
+                          : (isToday
+                              ? t('br_banner_friend_today_desc', locale, { name })
+                              : t('br_banner_friend_desc', locale))}
+                      </Banner>
+                    </div>
+                  );
+                })()}
                 {/* ── v2.1 Hero: cover (when set) + layered accent gradient fallback + 88px avatar ── */}
                 <div style={{ position: 'relative' }}>
                   {hasShowcase && showcase?.coverUrl ? (

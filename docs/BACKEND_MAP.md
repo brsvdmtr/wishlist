@@ -761,6 +761,27 @@ Checks calendar milestones hourly. Triggers broadcasts on Nov 1 (PROMO: "Secret 
 ### 12. Reservation reminders
 Runs every 15 minutes (`setInterval(..., 15 * 60 * 1000)`). Finds `ReservationMeta` records where `reminderAt <= now`, `reminderSent = false`, `active = true`. For each, sends a Telegram notification to the reserver with item title, price, owner name, and the user's private note (if any). Marks `reminderSent = true` after sending. Processes up to 50 reminders per batch.
 
+### 13. Birthday reminders (`processBirthdayReminders`)
+
+Runs hourly (`setInterval(..., 60 * 60 * 1000)`), plus an initial run 30s after boot. MSK timezone; sends only inside the **9–22 MSK** quiet-hours window. Two-phase per tick:
+
+1. **Retry phase** — picks up stuck `pending` deliveries (created >30 min ago) and `deferred` rows whose `deferredUntil <= now`. Limit **50 per run**.
+2. **Scan phase** — walks `UserProfile` for matches at offsets **[30, 14, 7, 1, 0]** days. For each match, creates and sends a delivery (idempotent via the unique constraint on `BirthdayReminderDelivery`). Owner reminders for `owner_14d` / `owner_7d` only fire when there is a problem to solve (no public wishlist OR no active public items). Day-of (`owner_today`) is a soft congratulations, no urgency CTA.
+
+**Daily cap:** 3 friend reminders per recipient per MSK day. Excess is parked as `status: 'deferred'`, `deferredUntil = next MSK 10:00`. `friend_today` bypasses the cap.
+
+**Audience resolution:**
+- `SUBSCRIBERS` (FREE): `ProfileSubscription` + `WishlistSubscription` on non-`NOBODY` wishlists.
+- `EXTENDED` (PRO): the SUBSCRIBERS set, plus reservers (active `ReservationMeta`) and secret reservers (active `SecretReservation`).
+- Never includes passive views, share-link opens, or profile-view history. Comments are pseudonymous (no `userId` on `Comment`) and explicitly excluded.
+
+**Skip reasons** (mirrored to God Mode dashboard):
+`no_public_wishlist`, `no_active_public_items`, `primary_wishlist_unavailable`, `profile_private`, `birthday_hidden`, `friend_reminders_disabled`, `recipient_opted_out`, `muted`, `no_chat_id`, `bot_blocked`, `daily_cap`, `pro_required`, `self_excluded`, `no_problem_to_solve`.
+
+**Heartbeat:** `ServiceHeartbeat[serviceName='birthday_reminders']` with last-run stats in `metadata`. Feb-29 is mapped to Feb-28 in non-leap years.
+
+**Kill switch:** env `BIRTHDAY_REMINDERS_ENABLED` (default `true`; set to `"false"` to disable the scheduler without code redeploy). See `apps/api/src/index.ts` → `processBirthdayReminders`.
+
 ---
 
 ## 13. Error Handling Patterns

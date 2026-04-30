@@ -77,6 +77,27 @@ All four notification settings are **PRO-only**. For FREE users:
 
 This means FREE users cannot disable notifications, and cannot enable marketing notifications.
 
+### Birthday reminders
+
+Birthday reminders are configured separately from the four core notification toggles, via `GET` / `PATCH /tg/me/birthday-settings`. They cover two directions: outgoing (bot DMs sent to your audience about your birthday) and incoming (DMs you receive about other people's birthdays).
+
+| Field | Default | Notes |
+|---|---|---|
+| `birthdayFriendReminders` | `false` | **Opt-in.** Existing users with a birthday set must explicitly enable via the post-save sheet. Controls whether the API sends bot DMs to your audience about your upcoming birthday |
+| `birthdayOwnerReminders` | `true` | Self-reminders to update your wishlist before your birthday (30d FREE; 30d/14d/7d PRO, conditional on wishlist state). Day-of is a soft congratulations |
+| `birthdayAudience` | `"SUBSCRIBERS"` | `SUBSCRIBERS` (FREE) — `ProfileSubscription` + `WishlistSubscription` on non-`NOBODY` wishlists. `EXTENDED` (PRO) — adds reservers (`ReservationMeta`) + secret reservers (`SecretReservation`). **Never** includes passive views, share-link opens, profile-view history, or comments (pseudonymous, no `userId`) |
+| `birthdayAdvancedWindowsEnabled` | `false` | PRO: enables the extra 7d / 1d friend windows and 14d / 7d owner windows |
+| `birthdayPrimaryWishlistId` | `null` | PRO: deep-link override for friend CTAs; otherwise the scheduler auto-picks |
+| `birthdayCustomMessage` | `null` | PRO: italicised line in the friend bot DM (max 200 chars) |
+| `notifyBirthdays` | `true` | Recipient opt-out for incoming birthday notifications. Independent of who sends them |
+| Per-person mute | — | `BirthdayReminderMute` lets a recipient mute a single birthday user (via the 🔕 button in the bot DM, or `POST /tg/birthday-reminders/mute`). Settings → Birthday → Muted lists them and lets you unmute |
+
+**Owner day-of:** the `owner_today` reminder is a soft congratulations only; it never adds urgency CTAs and never tells the user their wishlist will appear if they don't have one. If there is no public wishlist, friend CTAs route to the public profile instead (no false promise).
+
+**PRO gate (402 contract):** `audience: 'EXTENDED'`, non-null `birthdayPrimaryWishlistId`, non-empty `birthdayCustomMessage`, and `birthdayAdvancedWindowsEnabled: true` return **402 `{ error: 'pro_required', feature: 'birthday_reminders_advanced', context: '<field>' }`** for FREE users. **Never silently saved as inactive** — the FREE user sees the upsell sheet and the value is rejected. On downgrade from PRO to FREE, DB values are preserved but the scheduler treats the user as if those Pro flags were off (skip reason: `pro_required`).
+
+See `docs/MONETIZATION.md` § Birthday Reminders and the `BirthdayReminderDelivery` / `BirthdayReminderMute` models in `docs/DATA_MODEL.md`.
+
 ---
 
 ## 4. Privacy Settings — Profile Level

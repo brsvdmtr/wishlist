@@ -136,6 +136,67 @@ export const ANALYTICS_EVENTS = [
   // Celebration UI
   'referral.celebration_viewed',
   'referral.celebration_cta_clicked',
+
+  // ===== Birthday Reminders =====
+  // Settings (writes from Mini App)
+  'birthday.settings_opened',
+  'birthday.friend_reminders_enabled',
+  'birthday.friend_reminders_disabled',
+  'birthday.owner_reminders_enabled',
+  'birthday.owner_reminders_disabled',
+  'birthday.audience_changed',
+  'birthday.advanced_windows_enabled',
+  'birthday.advanced_windows_disabled',
+  'birthday.primary_wishlist_set',
+  'birthday.primary_wishlist_cleared',
+  'birthday.custom_message_saved',
+  'birthday.custom_message_cleared',
+  'birthday.receiving_enabled',
+  'birthday.receiving_disabled',
+  // Opt-in flow (after first save of birthday)
+  'birthday.optin_shown',
+  'birthday.optin_accepted',
+  'birthday.optin_dismissed',
+  // Mute / unmute
+  'birthday.mute_added',
+  'birthday.mute_removed',
+  // Pro paywall
+  'birthday.paywall_shown',
+  'birthday.paywall_converted',
+  'birthday.pro_required_hit',
+  // Scheduler (server-side)
+  'birthday.scheduler_run_started',
+  'birthday.scheduler_run_completed',
+  'birthday.scheduler_run_failed',
+  'birthday.candidate_found',
+  'birthday.delivery_created',
+  'birthday.delivery_sent',
+  'birthday.delivery_skipped',
+  'birthday.delivery_deferred',
+  'birthday.delivery_failed',
+  'birthday.delivery_retry',
+  // Bot side
+  'birthday.bot_message_sent',
+  'birthday.bot_message_failed',
+  'birthday.bot_cta_clicked',
+  'birthday.bot_mute_clicked',
+  // Mini App attribution (deep-link → in-app)
+  'birthday.deeplink_opened',
+  'birthday.deeplink_resolve_failed',
+  'birthday.banner_seen',
+  'birthday.banner_dismissed',
+  'birthday.banner_cta_clicked',
+  'birthday.public_wishlist_opened',
+  'birthday.public_profile_opened',
+  'birthday.item_opened',
+  'birthday.item_reserved',
+  'birthday.secret_reservation_clicked',
+  'birthday.gift_completed',
+  'birthday.subscribe_clicked',
+  // Owner attribution (post-owner-reminder behavior)
+  'birthday.owner_update_wishlist_opened',
+  'birthday.owner_item_added',
+  'birthday.owner_wishlist_made_public',
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];

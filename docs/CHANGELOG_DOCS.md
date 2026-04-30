@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-04-30 — Birthday Reminders Feature Documentation
+
+**10 docs updated** to reflect the newly-shipped Birthday Reminders feature (bot-driven social notifications + self-reminders to update wishlist):
+
+- **API_REFERENCE.md** — added Birthday Reminders section with 6 user endpoints + 1 admin metrics endpoint (`GET/PATCH /tg/me/birthday-settings`, `GET /tg/birthday-reminders/muted`, `POST /tg/birthday-reminders/mute`, `DELETE /tg/birthday-reminders/mute/:userId`, `GET /tg/birthday-reminders/resolve/:deliveryId`, `GET /tg/admin/birthday-reminders/metrics`)
+- **BACKEND_MAP.md** — added cron job §13 for `processBirthdayReminders` (hourly, 9–22 MSK send window, 50/run retry batch, daily cap 3 friend reminders/recipient, `BIRTHDAY_REMINDERS_ENABLED` kill switch)
+- **DATA_MODEL.md** — added 8 new `UserProfile` fields (`notifyBirthdays`, `birthdayFriendReminders`, `birthdayOwnerReminders`, `birthdayAudience`, `birthdayAdvancedWindowsEnabled`, `birthdayPrimaryWishlistId`, `birthdayCustomMessage`, `birthdayOptInPromptSeenAt`) and 2 new models (`BirthdayReminderDelivery`, `BirthdayReminderMute`) with full field tables, indexes, and unique constraints
+- **SETTINGS_AND_PRIVACY.md** — added "Birthday reminders" subsection covering opt-in default, recipient opt-out, audience rule (no passive views), Pro-gated 402 fields, mute mechanism, owner day-of soft message policy
+- **TELEGRAM_FLOW.md** — added `br_<deliveryId>` deep-link prefix and `bdm:<deliveryId>` callback action for mute. Note that bot does not send the original DM — the API does, with an inline keyboard whose web_app button uses `br_<id>`
+- **MONETIZATION.md** — added `birthday_reminders_advanced` to `UpsellContext` union, added 402 row to feature flags table, added §16a Birthday Reminders Monetization with field-by-field Pro gates and downgrade behaviour
+- **ANALYTICS_AND_GODMODE.md** — added God Mode dashboard endpoint `/tg/admin/birthday-reminders/metrics` with readiness/delivery/engagement/mutes/scheduler/alerts fields, plus full event list (settings/opt-in/mutes/Pro/scheduler/bot/Mini App attribution/owner attribution) and `birthday.*` pattern row
+- **USER_FLOWS.md** — added Flow 35 covering opt-in sheet, scheduler stages, recipient acts on bot DM, owner self-reminder, edge cases (no public wishlist, hideYear, profile private, mute, daily cap, bot blocked, downgrade, Feb-29)
+- **CURRENT_PRODUCT_STATE.md** — added Birthday Reminders entry to Recently Shipped
+- **CHANGELOG_DOCS.md** — this entry
+
+**Mockup reference:** `docs/design-system/mockups/proposed/birthday-reminders.html` (DRAFT, awaiting promotion to `approved/`).
+
+**FAQ note:** the WishBoard FAQ lives in-app (i18n keys `faq_q*` in `packages/shared/src/i18n.ts`), not as a standalone `docs/FAQ.md`. The seven proposed Q/A entries (where birthday data comes from, who can see it, age display consent, how to disable, why notifications arrive, how to mute one person, no-public-wishlist behaviour) are unmerged pending the human owner's decision on whether to add them to the in-app FAQ accordion.
+
+---
+
 ## 2026-04-24 — Weekly Documentation Update
 
 **6 docs updated** to reflect ~111 commits (April 17–24):

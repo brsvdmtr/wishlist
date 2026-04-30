@@ -489,6 +489,14 @@ Extended preferences and privacy settings for a user. Created lazily on the firs
 | `firstBotStartAt`          | DateTime           | No       | —            | First /start event timestamp                                          |
 | `firstWishlistAt`          | DateTime           | No       | —            | Timestamp of first wishlist creation                                  |
 | `firstItemAt`              | DateTime           | No       | —            | Timestamp of first item creation                                      |
+| `notifyBirthdays`          | Boolean            | Yes      | `true`       | Recipient opt-out for incoming birthday notifications                 |
+| `birthdayFriendReminders`  | Boolean            | Yes      | `false`      | Opt-in to send birthday reminders about you to your audience. Existing users with a birthday set must explicitly enable via the post-save sheet |
+| `birthdayOwnerReminders`   | Boolean            | Yes      | `true`       | Self-reminders to update wishlist before birthday                     |
+| `birthdayAudience`         | String             | Yes      | `"SUBSCRIBERS"` | `"SUBSCRIBERS"` (FREE) \| `"EXTENDED"` (PRO; adds reservers + secret reservers) |
+| `birthdayAdvancedWindowsEnabled` | Boolean      | Yes      | `false`      | PRO flag: enables 7d/1d friend windows + 14d/7d owner windows         |
+| `birthdayPrimaryWishlistId`| String             | No       | —            | PRO override: which wishlist friend CTAs deep-link into (else auto-pick) |
+| `birthdayCustomMessage`    | VarChar(200)       | No       | —            | PRO: italicised line in the friend bot DM                              |
+| `birthdayOptInPromptSeenAt`| DateTime           | No       | —            | When the post-save opt-in sheet was last shown                         |
 | `createdAt`                | DateTime           | Yes      | now          |                                                                       |
 | `updatedAt`                | DateTime           | Yes      | auto         |                                                                       |
 
@@ -1057,6 +1065,50 @@ Lightweight analytics event log for god-mode dashboard metrics. Not a full event
 | `userId`   | String   | No       | --      | Associated user (nullable)                   |
 | `props`    | Json     | No       | --      | Structured event properties                  |
 | `createdAt`| DateTime | Yes      | now     |                                              |
+
+---
+
+### `BirthdayReminderDelivery`
+One row per `(birthdayUserId, recipientUserId, occurrenceKey, reminderKind)` tuple — the dedup boundary for the birthday-reminder scheduler. The scheduler upserts a row before sending; the unique constraint guarantees that two scheduler ticks racing on the same offset will only send once.
+
+| Field               | Type     | Required | Default | Notes                                                                                         |
+|---------------------|----------|----------|---------|-----------------------------------------------------------------------------------------------|
+| `id`                | String   | Yes      | cuid    |                                                                                               |
+| `birthdayUserId`    | String   | Yes      | —       | The user whose birthday triggered the delivery                                                |
+| `recipientUserId`   | String   | Yes      | —       | The user receiving the bot DM                                                                 |
+| `occurrenceKey`     | String   | Yes      | —       | The target birthday occurrence in `YYYY-MM-DD` form (e.g. `"2026-05-15"`). Feb-29 → Feb-28 in non-leap years |
+| `reminderKind`      | String   | Yes      | —       | `friend_14d` \| `friend_7d` \| `friend_1d` \| `friend_today` \| `owner_30d` \| `owner_14d` \| `owner_7d` \| `owner_today` |
+| `status`            | String   | Yes      | `"pending"` | `pending` \| `sent` \| `skipped` \| `failed` \| `deferred`                                |
+| `skipReason`        | String   | No       | —       | One of: `no_public_wishlist`, `no_active_public_items`, `primary_wishlist_unavailable`, `profile_private`, `birthday_hidden`, `friend_reminders_disabled`, `recipient_opted_out`, `muted`, `no_chat_id`, `bot_blocked`, `daily_cap`, `pro_required`, `self_excluded`, `no_problem_to_solve` |
+| `failureReason`     | String   | No       | —       | Free-text error from Telegram API on `status = 'failed'`                                      |
+| `deferredUntil`     | DateTime | No       | —       | When `status = 'deferred'`, the next attempt time (e.g. next MSK 10:00 after a daily-cap defer) |
+| `telegramMessageId` | String   | No       | —       | Bot DM message id, populated on `status = 'sent'`                                             |
+| `targetType`        | String   | Yes      | —       | `wishlist` \| `profile` \| `own_wishlist` \| `create_wishlist` \| `wishlists_index`            |
+| `targetId`          | String   | No       | —       | Wishlist id (or other entity id) for deep-link routing                                        |
+| `deepLinkPayload`   | String   | Yes      | —       | The `br_<deliveryId>` payload that the bot keyboard's WebApp button uses                      |
+| `relationType`      | String   | No       | —       | `subscription` \| `wishlist_subscription` \| `reservation` \| `mixed` — how the recipient relates to the birthday user |
+| `sentAt`            | DateTime | No       | —       |                                                                                               |
+| `clickedAt`         | DateTime | No       | —       | Set by `GET /tg/birthday-reminders/resolve/:deliveryId` on Mini App boot                      |
+| `createdAt`         | DateTime | Yes      | now     |                                                                                               |
+| `updatedAt`         | DateTime | Yes      | auto    |                                                                                               |
+
+**Indexes:** `(status, deferredUntil)`, `(recipientUserId, sentAt)`, `(birthdayUserId, occurrenceKey)`, `(sentAt)`, `(createdAt)`.
+
+**Unique constraint:** `(birthdayUserId, recipientUserId, occurrenceKey, reminderKind)` — the dedup contract; a race on insert raises `P2002` and the scheduler skips that send.
+
+---
+
+### `BirthdayReminderMute`
+Per-recipient mute of a specific birthday user. Set via the bot inline keyboard ("🔕 Не напоминать об этом человеке") or via `POST /tg/birthday-reminders/mute`.
+
+| Field                  | Type     | Required | Default | Notes                                            |
+|------------------------|----------|----------|---------|--------------------------------------------------|
+| `id`                   | String   | Yes      | cuid    |                                                  |
+| `userId`               | String   | Yes      | —       | The recipient who muted                          |
+| `mutedBirthdayUserId`  | String   | Yes      | —       | The birthday user being muted                    |
+| `createdAt`            | DateTime | Yes      | now     |                                                  |
+
+**Unique constraint:** `(userId, mutedBirthdayUserId)` — idempotent upsert.
 
 ---
 
