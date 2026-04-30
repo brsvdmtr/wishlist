@@ -654,7 +654,9 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
               width: '100%', boxSizing: 'border-box',
               background: 'var(--wb-card)', border: '1px solid var(--wb-border)',
               borderRadius: 16, padding: '12px 14px',
-              fontFamily: 'inherit', fontSize: 14, color: 'var(--wb-text)', outline: 'none', marginBottom: 8,
+              fontFamily: 'inherit', fontSize: 14, lineHeight: '20px', color: 'var(--wb-text)',
+              outline: 'none', marginBottom: 8,
+              WebkitUserSelect: 'text', userSelect: 'text', touchAction: 'auto',
             }}
           />
           <input
@@ -665,7 +667,9 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
               width: '100%', boxSizing: 'border-box',
               background: 'var(--wb-card)', border: '1px solid var(--wb-border)',
               borderRadius: 16, padding: '12px 14px',
-              fontFamily: 'inherit', fontSize: 13, color: 'var(--wb-text)', outline: 'none', marginBottom: 8,
+              fontFamily: 'inherit', fontSize: 13, lineHeight: '20px', color: 'var(--wb-text)',
+              outline: 'none', marginBottom: 8,
+              WebkitUserSelect: 'text', userSelect: 'text', touchAction: 'auto',
             }}
           />
           <input
@@ -676,7 +680,9 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
               width: '100%', boxSizing: 'border-box',
               background: 'var(--wb-card)', border: '1px solid var(--wb-border)',
               borderRadius: 16, padding: '12px 14px',
-              fontFamily: 'inherit', fontSize: 13, color: 'var(--wb-text)', outline: 'none', marginBottom: 8,
+              fontFamily: 'inherit', fontSize: 13, lineHeight: '20px', color: 'var(--wb-text)',
+              outline: 'none', marginBottom: 8,
+              WebkitUserSelect: 'text', userSelect: 'text', touchAction: 'auto',
             }}
           />
           <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
@@ -689,7 +695,9 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
                 flex: 2, boxSizing: 'border-box',
                 background: 'var(--wb-card)', border: '1px solid var(--wb-border)',
                 borderRadius: 16, padding: '12px 14px',
-                fontFamily: 'inherit', fontSize: 14, color: 'var(--wb-text)', outline: 'none',
+                fontFamily: 'inherit', fontSize: 14, lineHeight: '20px', color: 'var(--wb-text)',
+                outline: 'none',
+                WebkitUserSelect: 'text', userSelect: 'text', touchAction: 'auto',
               }}
             />
             <select
@@ -698,7 +706,7 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
                 flex: 1, boxSizing: 'border-box',
                 background: 'var(--wb-card)', border: '1px solid var(--wb-border)',
                 borderRadius: 16, padding: '12px 14px',
-                fontFamily: 'inherit', fontSize: 14, color: 'var(--wb-text)',
+                fontFamily: 'inherit', fontSize: 14, lineHeight: '20px', color: 'var(--wb-text)',
               }}
             >
               {IDEA_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}

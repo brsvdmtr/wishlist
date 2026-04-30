@@ -81,23 +81,45 @@ const daysUntil = Math.round((nextDate.getTime() - todayUtcMs) / (24 * 3600 * 10
    поэтому multer на сервере получал тело как JSON и не видел поля
    `photo`. Запрос проходил с 200, фото никуда не сохранялось.
 
-2. **Каретка уезжает.** В форме «Добавить идею» при тапе на инпут «цена»
-   мигающая каретка отрисовывалась ниже самого инпута (где-то под
-   формой). Соседнее текстовое поле «текст идеи» работало нормально.
-   Корень — у поля «текст» был `onFocus`-хендлер с
-   `formRef.current?.scrollIntoView({ block: 'center' })` через 300 мс
-   (после открытия клавиатуры в Telegram WebView), а у инпута цены такого
-   хендлера не было. В Telegram WebView при открытии нативной клавиатуры
-   viewport сдвигается, но WebKit не пересчитывает позицию каретки до
-   следующего layout-события — `scrollIntoView` это событие триггерит.
+2. **Каретка уезжает (вертикально внутри инпута).** В форме «Добавить
+   идею», при тапе на инпут «цена», мигающая каретка отрисовывалась
+   значительно ниже видимой границы инпута (~50 px вниз, в зазоре между
+   price-row и upload-кнопкой). Текст «70000» при этом был на своём
+   месте.
+   
+   **Первая попытка фикса (мимо):** добавили `onFocus → scrollIntoView`,
+   как у соседнего text-инпута. Это не помогло — пользователь
+   подтвердил баг на проде после деплоя. Гипотеза «WebView не
+   пересчитывает caret после открытия клавиатуры» была ошибочной:
+   text-инпут работал не потому, что у него был scroll-handler, а
+   потому что ему хватало intrinsic line-height. Эти две вещи мы
+   связали по корреляции, не по причинно-следственной связи.
+   
+   **Настоящий root cause:** в WebKit (iOS WKWebView, Telegram) если у
+   `<input>` **нет явного `line-height`**, движок вычисляет caret-rect
+   из font ascent/descent и метрик контейнера. В `display: flex`
+   контейнере с растянутым по высоте инпутом этот расчёт даёт
+   смещённый вниз caret. Текст рисуется по `padding`, а каретка —
+   по неправильно посчитанной baseline. Эффект: caret «вылезает»
+   за нижнюю границу инпута.
+   
+   В коде MiniApp.tsx строка 797-798 уже есть комментарий **прямым
+   текстом**: `"Explicit lineHeight is required — without it, ...
+   WebKit caret to render displaced vertically in focused inputs"`.
+   Каноничный `inputStyle` имеет `lineHeight: '22px'` именно по этой
+   причине. Календарная форма была построена inline, без использования
+   канона, и `lineHeight` не выставлен ни на одном из 4 инпутов.
+   Проявилось только на цене из-за `flex: 2` контейнера.
 
 **Root cause:**
-- Bug 1: «глобальный default-header» в обёртке fetch без проверки типа
-  body. Эта ошибка системная — каждый будущий multipart-загрузчик через
-  `tgFetch` сломался бы тем же способом.
-- Bug 2: копипаста хендлеров между инпутами с пропущенным одним полем.
-  Обходной приём WebKit (scroll-on-focus) применяется на 1 поле из 4 в
-  одной форме.
+- Bug 1 (фото): «глобальный default-header» в обёртке fetch без
+  проверки типа body. Эта ошибка системная — каждый будущий
+  multipart-загрузчик через `tgFetch` сломался бы тем же способом.
+- Bug 2 (каретка): inline-стили инпутов вместо использования
+  каноничного `inputStyle`. В каноне есть defensive свойства
+  (`lineHeight`, `WebkitUserSelect`, `touchAction`), которые лечат
+  набор iOS WKWebView квирков; их пропуск проявляется
+  не-детерминированно — где-то работает «по случаю», где-то ломается.
 
 ### Урок
 1. **Обёртки над fetch не должны жёстко задавать `Content-Type`** —
@@ -110,22 +132,31 @@ const daysUntil = Math.round((nextDate.getTime() - todayUtcMs) / (24 * 3600 * 10
      ...
    }
    ```
-2. **Telegram WebView caret-displacement** — известное поведение iOS
-   WKWebView: после открытия нативной клавиатуры каретка остаётся в
-   старом visual layout, пока не произойдёт scroll/layout-pass.
-   Лечится `scrollIntoView` через ~300 мс на `onFocus` (300 мс — это
-   время анимации поднятия клавиатуры). Этот паттерн **должен быть на
-   каждом** интерактивном инпуте формы, а не выборочно.
+2. **Любой `<input>` в Mini App обязан иметь явный `line-height`**
+   (помимо font-size). Без него WebKit считает caret-rect из intrinsic
+   метрик, что в flex-контейнерах ломается. Также обязательны
+   `WebkitUserSelect: 'text'` и `touchAction: 'auto'` (комментарий в
+   коде про native selection handles при ancestor touchmove handlers).
+3. **Корреляция ≠ причина при отладке UI-багов.** Если после первого
+   фикса баг сохраняется, это означает, что гипотеза о root cause
+   неверна, а не «фикс не доехал до прода». Не повторять тот же фикс,
+   а пересобирать гипотезу. Здесь корреляция была: text-инпут имел
+   scroll-handler И работал → решили, что scroll-handler == фикс.
+   Реальная причина — у text-инпута caret-displacement не
+   проявлялся по другим случайным причинам.
 
 ### Правило
 - Любая обёртка над `fetch` должна проверять `body instanceof FormData`
   (и желательно `Blob`/`URLSearchParams`) и **не** заполнять
   Content-Type в этих случаях.
-- Если в форме хоть один инпут получает scroll-on-focus как обход
-  WebKit-бага — этот же хендлер должен стоять на **всех** инпутах формы.
-  Не «там, где заметили баг», а превентивно.
-- При добавлении нового инпута в существующую форму — копировать набор
-  обработчиков целиком (focus, blur, scroll-fix), не выборочно.
+- **Inline-стили на `<input>` без `lineHeight` запрещены.** Либо
+  использовать каноничный `inputStyle` из MiniApp.tsx (через spread
+  `...inputStyle`), либо явно прописать `lineHeight`,
+  `WebkitUserSelect: 'text'`, `touchAction: 'auto'`.
+- При фиксе UI-бага в Mini App **проверять на проде**, что симптом
+  ушёл, прежде чем закрывать тикет. Локальная проверка через TS-check
+  не покрывает iOS WKWebView quirks — нужен реальный тап.
+- Если фикс №1 не помог — **новая гипотеза**, не «усилить тот же фикс».
 
 ### Лучший код
 ```tsx
@@ -137,14 +168,20 @@ headers: {
   ...(init?.headers as Record<string, string> | undefined),
 },
 
-// CalendarDetail.tsx — price input (теперь как у text input)
-<input
-  value={price} onChange={e => setPrice(e.target.value)}
-  inputMode="numeric"
-  onFocus={() => { setTimeout(() => formRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300); }}
-  ...
-/>
+// CalendarDetail.tsx — каждый <input> формы:
+style={{
+  ...,
+  fontSize: 14, lineHeight: '20px',                    // ← lineHeight обязателен
+  WebkitUserSelect: 'text', userSelect: 'text',        // ← iOS native selection
+  touchAction: 'auto',                                 // ← iOS WKWebView quirk
+}}
 ```
+
+**Долгосрочно:** календарная форма должна быть переписана через
+`...inputStyle` из канона. Inline-стили в новом коде — нарушение
+design-system rules (CLAUDE.md: «No raw hex colors, no raw rgba, no
+arbitrary Tailwind values in new code» — то же касается inline
+inputs без primitive).
 
 ---
 
