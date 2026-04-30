@@ -2,7 +2,7 @@
 
 Production feature inventory for the Wishlist Telegram Mini App.
 
-**Last updated:** 2026-04-24
+**Last updated:** 2026-04-30
 
 ---
 
@@ -90,8 +90,8 @@ See also: `docs/MONETIZATION.md`
 - **Comment Quick Reply** — Reply to comments from notifications; threaded one-level replies (parentCommentId on Comment model)
 - **Gift Notes onboarding** — Demo-first paywall, 4-step onboarding. New screen: gift-notes-onboarding
 - **Referral Program** — Invite-a-friend PRO rewards (30 days PRO per qualified referral). Gated behind enabled=false. New screens: referral, referral-history
-- FAQ section in settings
-- Legal/terms section in settings
+- **FAQ** — 50 questions organized into 15 sections (About, Plans, Payments, Reservations, Secret Reservations, Smart Reservations, Group Gift, Gift Notes & Don't Gift, Showcase & Selections, Links & Access, Comments & Subscriptions, Secret Santa, Archive & Deletion, Support, Upcoming Features). Sectioned accordion UI
+- **Legal documents v2.0** (effective 30.04.2026) — Privacy Policy, Terms of Use, Pro & Purchase Terms. Terms of Use adds sections on Reservations, Group Gift liability, Public Links, Limitation of Liability. Pro & Purchase Terms adds pricing mechanics (Monthly 100 XTR, Yearly 800 XTR, add-ons, cancellation, refunds). All in 6 locales
 
 ## Key Source Paths
 

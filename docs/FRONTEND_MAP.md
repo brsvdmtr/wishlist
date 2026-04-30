@@ -1,6 +1,6 @@
 # FRONTEND_MAP.md — Frontend Architecture
 
-> Date: 2026-04-24. Verified from source code.
+> Date: 2026-04-30. Verified from source code.
 
 ---
 
@@ -229,10 +229,10 @@ Additional screens accessible from the settings area.
 
 | # | Screen | Description |
 |---|--------|-------------|
-| 54 | `faq` | FAQ screen in settings |
+| 54 | `faq` | FAQ screen: 50 questions in 15 sectioned accordion groups (About, Plans, Payments, Reservations, Secret Reservations, Smart Reservations, Group Gift, Gift Notes & Don't Gift, Showcase & Selections, Links & Access, Comments & Subscriptions, Secret Santa, Archive & Deletion, Support, Upcoming Features) |
 | 55 | `changelog` | Release notes / What's New |
-| 56 | `legal` | Legal documents list |
-| 57 | `legal-doc` | Single legal document view |
+| 56 | `legal` | Legal documents list (v2.0, effective 30.04.2026): Privacy Policy, Terms of Use, Pro & Purchase Terms |
+| 57 | `legal-doc` | Single legal document viewer (renders chosen v2.0 legal doc in user's locale) |
 
 #### Onboarding Extra (1)
 

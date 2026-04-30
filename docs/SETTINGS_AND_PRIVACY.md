@@ -1,5 +1,5 @@
 > Source of truth for user settings, privacy controls, and notification preferences.
-> Last updated: 2026-04-02 · Branch: main
+> Last updated: 2026-04-30 · Branch: main
 
 # Settings and Privacy
 

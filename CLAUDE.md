@@ -192,3 +192,26 @@ Reports raw-value counts (inline styles, hex colors, unique radius/spacing/shado
 - [docs/design-system/COMPONENT_REGISTRY.md](docs/design-system/COMPONENT_REGISTRY.md) — status per component
 - [docs/design-system/DESIGN_DECISIONS.md](docs/design-system/DESIGN_DECISIONS.md) — chronological decision log
 - [docs/design-system/mockups/](docs/design-system/mockups) — current-prod / proposed / approved
+
+---
+
+## Debugging & root-cause discipline — MANDATORY for every bug fix or behavior change
+
+These rules apply to **every** investigation, regardless of how small the symptom looks. Violations almost always create regressions or compounding patches.
+
+- **Do not fix symptoms before identifying the root cause.**
+- **Fix at the source-of-truth (owner layer), not where the symptom appears.**
+- **Avoid child-layer compensation** (fallbacks, patches, duplicated logic, branching).
+- **Always do ultra-deep system research end-to-end before fixing:**
+  - top-down: route → page → container → orchestration → state
+  - bottom-up: function → hook → service → API → DB
+- **Diagnose by layers:**
+  - data/contracts → business logic → async/timing → UI state → integration → architecture
+- **If a bug appears in a child, inspect the parent/owner layer first.**
+- **When changing a mechanic, align all directly coupled layers:**
+  - contracts, handlers, queries, cache, serializers, loading/error states
+- **Be skeptical of one-file fixes; justify why other layers are unaffected.**
+- **For frontend issues, inspect the full flow:**
+  - route → layout → page → hooks → API → backend
+- **Prefer systemic fixes, but keep changes proportional.**
+- **If re-architecture is required, define scope, risks, compatibility, and rollout order** before touching code.

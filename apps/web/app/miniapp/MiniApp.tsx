@@ -1002,8 +1002,8 @@ const LEGAL_DOCS: LegalDocDef[] = [
   {
     id: 'privacy',
     icon: '🔒',
-    version: '1.0',
-    effectiveDate: '03.04.2026',
+    version: '2.0',
+    effectiveDate: '30.04.2026',
     title: {
       ru: 'Политика конфиденциальности',
       en: 'Privacy Policy',
@@ -1021,9 +1021,9 @@ const LEGAL_DOCS: LegalDocDef[] = [
         '1.2. Сервис администрируется физическим лицом.',
         '1.3. По вопросам использования сервиса, обработки данных и поддержки пользователь может обратиться через:\nhttps://t.me/Wish_Support',
         '2. Какие данные могут обрабатываться',
-        '2.1. В рамках работы сервиса могут обрабатываться следующие данные пользователя:\n• идентификаторы Telegram, включая Telegram user ID, username, display name;\n• данные профиля и настройки сервиса, включая язык интерфейса, настройки отображения и иные пользовательские предпочтения;\n• данные, которые пользователь самостоятельно добавляет в сервис, включая названия вишлистов, карточки желаний, ссылки, описания, комментарии, статусы и иные материалы;\n• технические данные взаимодействия с сервисом, включая дату и время запросов, сведения об ошибках, служебные журналы, IP-адрес веб-запросов, user-agent и сведения о сессии;\n• данные, связанные с доступом к платным функциям, включая факт оплаты, срок действия доступа, идентификаторы транзакций и статусы платежей;\n• сведения, которые пользователь сообщает при обращении в поддержку.',
+        '2.1. В рамках работы сервиса могут обрабатываться следующие данные пользователя:\n• идентификаторы Telegram, включая Telegram user ID, username, display name;\n• данные профиля и настройки сервиса, включая язык интерфейса, настройки отображения и иные пользовательские предпочтения;\n• данные витрины и профиля: размеры, бренды, предпочтения;\n• предпочтения «не дарить»;\n• данные, которые пользователь самостоятельно добавляет в сервис, включая названия вишлистов, карточки желаний, ссылки, описания, комментарии, статусы и иные материалы;\n• данные совместных подарков: сведения об организаторе, взносы участников, сообщения;\n• ссылки на курируемые подборки;\n• данные бронирований, включая секретные бронирования;\n• данные кампаний Тайный Санта;\n• данные подарочных записок (Gift Notes);\n• данные календаря;\n• технические данные взаимодействия с сервисом, включая дату и время запросов, сведения об ошибках, служебные журналы, IP-адрес веб-запросов, user-agent и сведения о сессии;\n• данные, связанные с доступом к платным функциям, включая факт оплаты, срок действия доступа, идентификаторы транзакций и статусы платежей;\n• сведения, которые пользователь сообщает при обращении в поддержку.',
         '3. Цели обработки данных',
-        '3.1. Данные обрабатываются в следующих целях:\n• предоставление пользователю доступа к функциональности сервиса;\n• создание, хранение, отображение и синхронизация пользовательских вишлистов и связанных данных;\n• активация и предоставление платных функций сервиса;\n• обработка обращений в поддержку;\n• обеспечение безопасности сервиса, диагностика ошибок и предотвращение злоупотреблений;\n• исполнение требований применимого законодательства.',
+        '3.1. Данные обрабатываются в следующих целях:\n• предоставление пользователю доступа к функциональности сервиса;\n• создание, хранение, отображение и синхронизация пользовательских вишлистов и связанных данных;\n• координация подарков: бронирования, совместные подарки, Тайный Санта;\n• публичный обмен и управление доступом;\n• активация и предоставление платных функций сервиса;\n• обработка обращений в поддержку;\n• обеспечение безопасности сервиса, диагностика ошибок и предотвращение злоупотреблений;\n• предотвращение злоупотреблений и расследование мошенничества;\n• исполнение требований применимого законодательства.',
         '4. Передача данных третьим лицам',
         '4.1. Данные могут передаваться третьим лицам только в объеме, необходимом для функционирования сервиса, включая:\n• Telegram как платформу взаимодействия пользователя с сервисом;\n• хостинг- и инфраструктурных провайдеров;\n• сервисы, используемые для технического обеспечения работы продукта, логирования, мониторинга и обработки цифровых покупок внутри Telegram.',
         '4.2. Сервис не продает персональные данные пользователей третьим лицам.',
@@ -1043,9 +1043,9 @@ const LEGAL_DOCS: LegalDocDef[] = [
         '1.2. The service is administered by an individual.',
         '1.3. For questions about the service, data processing, and support, the user may contact:\nhttps://t.me/Wish_Support',
         '2. What Data May Be Processed',
-        '2.1. The following user data may be processed as part of the service:\n• Telegram identifiers, including Telegram user ID, username, display name;\n• profile data and service settings, including interface language, display preferences, and other user preferences;\n• data that the user independently adds to the service, including wishlist names, wish cards, links, descriptions, comments, statuses, and other materials;\n• technical interaction data, including request timestamps, error information, service logs, web request IP addresses, user-agent, and session information;\n• data related to paid feature access, including payment status, access duration, transaction identifiers, and payment statuses;\n• information that the user provides when contacting support.',
+        '2.1. The following user data may be processed as part of the service:\n• Telegram identifiers, including Telegram user ID, username, display name;\n• profile data and service settings, including interface language, display preferences, and other user preferences;\n• showcase and profile data: sizes, brands, preferences;\n• "don\'t gift" preferences;\n• data that the user independently adds to the service, including wishlist names, wish cards, links, descriptions, comments, statuses, and other materials;\n• group gift data: organizer information, participant pledges, messages;\n• curated selection links;\n• reservation data, including secret reservations;\n• Secret Santa campaign data;\n• Gift Notes data;\n• calendar data;\n• technical interaction data, including request timestamps, error information, service logs, web request IP addresses, user-agent, and session information;\n• data related to paid feature access, including payment status, access duration, transaction identifiers, and payment statuses;\n• information that the user provides when contacting support.',
         '3. Purposes of Data Processing',
-        '3.1. Data is processed for the following purposes:\n• providing the user with access to service functionality;\n• creating, storing, displaying, and synchronizing user wishlists and related data;\n• activating and providing paid service features;\n• processing support requests;\n• ensuring service security, error diagnostics, and abuse prevention;\n• compliance with applicable legislation.',
+        '3.1. Data is processed for the following purposes:\n• providing the user with access to service functionality;\n• creating, storing, displaying, and synchronizing user wishlists and related data;\n• gift coordination: reservations, group gifts, Secret Santa;\n• public sharing and access management;\n• activating and providing paid service features;\n• processing support requests;\n• ensuring service security, error diagnostics, and abuse prevention;\n• prevention of abuse and fraud investigation;\n• compliance with applicable legislation.',
         '4. Data Sharing with Third Parties',
         '4.1. Data may be shared with third parties only to the extent necessary for the service to function, including:\n• Telegram as the platform through which the user interacts with the service;\n• hosting and infrastructure providers;\n• services used for technical support of the product, logging, monitoring, and processing digital purchases within Telegram.',
         '4.2. The service does not sell users\' personal data to third parties.',
@@ -1065,9 +1065,9 @@ const LEGAL_DOCS: LegalDocDef[] = [
         '1.2. 本服务由个人管理运营。',
         '1.3. 如有关于服务使用、数据处理和支持的问题，用户可通过以下方式联系：\nhttps://t.me/Wish_Support',
         '2. 可能处理的数据',
-        '2.1. 在服务运行过程中，可能处理以下用户数据：\n• Telegram 标识符，包括 Telegram 用户 ID、用户名、显示名称；\n• 个人资料数据和服务设置，包括界面语言、显示偏好及其他用户偏好；\n• 用户自行添加到服务中的数据，包括心愿单名称、心愿卡片、链接、描述、评论、状态及其他内容；\n• 技术交互数据，包括请求时间戳、错误信息、服务日志、网络请求 IP 地址、user-agent 和会话信息；\n• 与付费功能访问相关的数据，包括付款状态、访问期限、交易标识符和付款状态；\n• 用户在联系支持时提供的信息。',
+        '2.1. 在服务运行过程中，可能处理以下用户数据：\n• Telegram 标识符，包括 Telegram 用户 ID、用户名、显示名称；\n• 个人资料数据和服务设置，包括界面语言、显示偏好及其他用户偏好；\n• 展示和个人资料数据：尺码、品牌、偏好；\n• 「不要送」偏好；\n• 用户自行添加到服务中的数据，包括心愿单名称、心愿卡片、链接、描述、评论、状态及其他内容；\n• 拼单礼物数据：组织者信息、参与者认捐、消息；\n• 精选合集链接；\n• 预订数据，包括秘密预订；\n• 神秘圣诞老人活动数据；\n• 礼物备注数据；\n• 日历数据；\n• 技术交互数据，包括请求时间戳、错误信息、服务日志、网络请求 IP 地址、user-agent 和会话信息；\n• 与付费功能访问相关的数据，包括付款状态、访问期限、交易标识符和付款状态；\n• 用户在联系支持时提供的信息。',
         '3. 数据处理目的',
-        '3.1. 数据出于以下目的进行处理：\n• 向用户提供服务功能的访问权限；\n• 创建、存储、展示和同步用户心愿单及相关数据；\n• 激活和提供付费服务功能；\n• 处理支持请求；\n• 确保服务安全、错误诊断和防止滥用；\n• 遵守适用法律法规。',
+        '3.1. 数据出于以下目的进行处理：\n• 向用户提供服务功能的访问权限；\n• 创建、存储、展示和同步用户心愿单及相关数据；\n• 礼物协调：预订、拼单礼物、神秘圣诞老人；\n• 公开分享和访问管理；\n• 激活和提供付费服务功能；\n• 处理支持请求；\n• 确保服务安全、错误诊断和防止滥用；\n• 防止滥用和欺诈调查；\n• 遵守适用法律法规。',
         '4. 向第三方传输数据',
         '4.1. 数据仅在服务正常运行所必需的范围内向第三方传输，包括：\n• Telegram 作为用户与服务交互的平台；\n• 托管和基础设施提供商；\n• 用于产品技术支持、日志记录、监控和处理 Telegram 内数字购买的服务。',
         '4.2. 本服务不会将用户个人数据出售给第三方。',
@@ -1087,9 +1087,9 @@ const LEGAL_DOCS: LegalDocDef[] = [
         '1.2. सेवा एक व्यक्ति द्वारा प्रशासित है।',
         '1.3. सेवा उपयोग, डेटा प्रसंस्करण और सहायता के बारे में प्रश्नों के लिए, उपयोगकर्ता संपर्क कर सकता है:\nhttps://t.me/Wish_Support',
         '2. कौन सा डेटा संसाधित किया जा सकता है',
-        '2.1. सेवा के संचालन के दौरान निम्नलिखित उपयोगकर्ता डेटा संसाधित किया जा सकता है:\n• Telegram पहचानकर्ता, जिसमें Telegram user ID, username, display name शामिल हैं;\n• प्रोफ़ाइल डेटा और सेवा सेटिंग्स, जिसमें इंटरफ़ेस भाषा, प्रदर्शन प्राथमिकताएं और अन्य उपयोगकर्ता प्राथमिकताएं शामिल हैं;\n• उपयोगकर्ता द्वारा स्वतंत्र रूप से सेवा में जोड़ा गया डेटा, जिसमें विशलिस्ट नाम, विश कार्ड, लिंक, विवरण, टिप्पणियां, स्थिति और अन्य सामग्री शामिल हैं;\n• तकनीकी इंटरैक्शन डेटा, जिसमें अनुरोध समय, त्रुटि जानकारी, सेवा लॉग, IP पता, user-agent और सत्र जानकारी शामिल हैं;\n• सशुल्क सुविधा पहुंच से संबंधित डेटा, जिसमें भुगतान स्थिति, पहुंच अवधि, लेनदेन पहचानकर्ता और भुगतान स्थिति शामिल हैं;\n• उपयोगकर्ता द्वारा सहायता से संपर्क करते समय प्रदान की गई जानकारी।',
+        '2.1. सेवा के संचालन के दौरान निम्नलिखित उपयोगकर्ता डेटा संसाधित किया जा सकता है:\n• Telegram पहचानकर्ता, जिसमें Telegram user ID, username, display name शामिल हैं;\n• प्रोफ़ाइल डेटा और सेवा सेटिंग्स, जिसमें इंटरफ़ेस भाषा, प्रदर्शन प्राथमिकताएं और अन्य उपयोगकर्ता प्राथमिकताएं शामिल हैं;\n• शोकेस और प्रोफ़ाइल डेटा: साइज़, ब्रांड, प्राथमिकताएं;\n• «न दें» प्राथमिकताएं;\n• उपयोगकर्ता द्वारा स्वतंत्र रूप से सेवा में जोड़ा गया डेटा, जिसमें विशलिस्ट नाम, विश कार्ड, लिंक, विवरण, टिप्पणियां, स्थिति और अन्य सामग्री शामिल हैं;\n• सामूहिक उपहार डेटा: आयोजक जानकारी, प्रतिभागी योगदान, संदेश;\n• क्यूरेटेड संग्रह लिंक;\n• आरक्षण डेटा, गुप्त आरक्षणों सहित;\n• Secret Santa अभियान डेटा;\n• Gift Notes डेटा;\n• कैलेंडर डेटा;\n• तकनीकी इंटरैक्शन डेटा, जिसमें अनुरोध समय, त्रुटि जानकारी, सेवा लॉग, IP पता, user-agent और सत्र जानकारी शामिल हैं;\n• सशुल्क सुविधा पहुंच से संबंधित डेटा, जिसमें भुगतान स्थिति, पहुंच अवधि, लेनदेन पहचानकर्ता और भुगतान स्थिति शामिल हैं;\n• उपयोगकर्ता द्वारा सहायता से संपर्क करते समय प्रदान की गई जानकारी।',
         '3. डेटा प्रसंस्करण के उद्देश्य',
-        '3.1. डेटा निम्नलिखित उद्देश्यों के लिए संसाधित किया जाता है:\n• उपयोगकर्ता को सेवा कार्यक्षमता तक पहुंच प्रदान करना;\n• उपयोगकर्ता विशलिस्ट और संबंधित डेटा बनाना, संग्रहीत करना, प्रदर्शित करना और सिंक्रनाइज़ करना;\n• सशुल्क सेवा सुविधाओं को सक्रिय करना और प्रदान करना;\n• सहायता अनुरोधों का प्रसंस्करण;\n• सेवा सुरक्षा सुनिश्चित करना, त्रुटि निदान और दुरुपयोग रोकथाम;\n• लागू कानून का अनुपालन।',
+        '3.1. डेटा निम्नलिखित उद्देश्यों के लिए संसाधित किया जाता है:\n• उपयोगकर्ता को सेवा कार्यक्षमता तक पहुंच प्रदान करना;\n• उपयोगकर्ता विशलिस्ट और संबंधित डेटा बनाना, संग्रहीत करना, प्रदर्शित करना और सिंक्रनाइज़ करना;\n• उपहार समन्वय: आरक्षण, सामूहिक उपहार, Secret Santa;\n• सार्वजनिक साझाकरण और पहुंच प्रबंधन;\n• सशुल्क सेवा सुविधाओं को सक्रिय करना और प्रदान करना;\n• सहायता अनुरोधों का प्रसंस्करण;\n• सेवा सुरक्षा सुनिश्चित करना, त्रुटि निदान और दुरुपयोग रोकथाम;\n• दुरुपयोग रोकथाम और धोखाधड़ी जांच;\n• लागू कानून का अनुपालन।',
         '4. तीसरे पक्ष को डेटा हस्तांतरण',
         '4.1. डेटा केवल सेवा के कार्य करने के लिए आवश्यक सीमा तक तीसरे पक्ष को हस्तांतरित किया जा सकता है, जिसमें शामिल हैं:\n• Telegram एक प्लेटफ़ॉर्म के रूप में;\n• होस्टिंग और बुनियादी ढांचा प्रदाता;\n• उत्पाद के तकनीकी समर्थन, लॉगिंग, निगरानी और Telegram के भीतर डिजिटल खरीद के प्रसंस्करण के लिए उपयोग की जाने वाली सेवाएं।',
         '4.2. सेवा उपयोगकर्ताओं का व्यक्तिगत डेटा तीसरे पक्ष को नहीं बेचती।',
@@ -1109,9 +1109,9 @@ const LEGAL_DOCS: LegalDocDef[] = [
         '1.2. El servicio es administrado por una persona física.',
         '1.3. Para consultas sobre el servicio, el procesamiento de datos y el soporte, el usuario puede contactar a:\nhttps://t.me/Wish_Support',
         '2. Qué datos pueden ser procesados',
-        '2.1. Los siguientes datos del usuario pueden ser procesados como parte del servicio:\n• Identificadores de Telegram, incluyendo Telegram user ID, nombre de usuario, nombre visible;\n• datos del perfil y configuración del servicio, incluyendo idioma de interfaz, preferencias de visualización y otras preferencias del usuario;\n• datos que el usuario añade de forma independiente al servicio, incluyendo nombres de listas de deseos, tarjetas de deseos, enlaces, descripciones, comentarios, estados y otros materiales;\n• datos técnicos de interacción, incluyendo marcas de tiempo de solicitudes, información de errores, registros del servicio, direcciones IP, user-agent e información de sesión;\n• datos relacionados con el acceso a funciones de pago, incluyendo estado de pago, duración del acceso, identificadores de transacciones y estados de pago;\n• información que el usuario proporciona al contactar con soporte.',
+        '2.1. Los siguientes datos del usuario pueden ser procesados como parte del servicio:\n• Identificadores de Telegram, incluyendo Telegram user ID, nombre de usuario, nombre visible;\n• datos del perfil y configuración del servicio, incluyendo idioma de interfaz, preferencias de visualización y otras preferencias del usuario;\n• datos de escaparate y perfil: tallas, marcas, preferencias;\n• preferencias de «no regalar»;\n• datos que el usuario añade de forma independiente al servicio, incluyendo nombres de listas de deseos, tarjetas de deseos, enlaces, descripciones, comentarios, estados y otros materiales;\n• datos de regalos grupales: información del organizador, contribuciones de los participantes, mensajes;\n• enlaces de selecciones curadas;\n• datos de reservas, incluidas reservas secretas;\n• datos de campañas de Secret Santa;\n• datos de notas de regalo (Gift Notes);\n• datos de calendario;\n• datos técnicos de interacción, incluyendo marcas de tiempo de solicitudes, información de errores, registros del servicio, direcciones IP, user-agent e información de sesión;\n• datos relacionados con el acceso a funciones de pago, incluyendo estado de pago, duración del acceso, identificadores de transacciones y estados de pago;\n• información que el usuario proporciona al contactar con soporte.',
         '3. Propósitos del procesamiento de datos',
-        '3.1. Los datos se procesan con los siguientes propósitos:\n• proporcionar al usuario acceso a la funcionalidad del servicio;\n• crear, almacenar, mostrar y sincronizar las listas de deseos del usuario y datos relacionados;\n• activar y proporcionar funciones de pago del servicio;\n• procesar solicitudes de soporte;\n• garantizar la seguridad del servicio, diagnóstico de errores y prevención de abusos;\n• cumplimiento de la legislación aplicable.',
+        '3.1. Los datos se procesan con los siguientes propósitos:\n• proporcionar al usuario acceso a la funcionalidad del servicio;\n• crear, almacenar, mostrar y sincronizar las listas de deseos del usuario y datos relacionados;\n• coordinación de regalos: reservas, regalos grupales, Secret Santa;\n• intercambio público y gestión de acceso;\n• activar y proporcionar funciones de pago del servicio;\n• procesar solicitudes de soporte;\n• garantizar la seguridad del servicio, diagnóstico de errores y prevención de abusos;\n• prevención de abusos e investigación de fraude;\n• cumplimiento de la legislación aplicable.',
         '4. Transmisión de datos a terceros',
         '4.1. Los datos pueden compartirse con terceros solo en la medida necesaria para el funcionamiento del servicio, incluyendo:\n• Telegram como plataforma de interacción del usuario con el servicio;\n• proveedores de hosting e infraestructura;\n• servicios utilizados para el soporte técnico del producto, registro, monitoreo y procesamiento de compras digitales dentro de Telegram.',
         '4.2. El servicio no vende datos personales de los usuarios a terceros.',
@@ -1131,9 +1131,9 @@ const LEGAL_DOCS: LegalDocDef[] = [
         '1.2. يتم إدارة الخدمة بواسطة شخص طبيعي.',
         '1.3. للاستفسارات حول الخدمة ومعالجة البيانات والدعم، يمكن للمستخدم التواصل عبر:\nhttps://t.me/Wish_Support',
         '2. ما هي البيانات التي قد تتم معالجتها',
-        '2.1. قد تتم معالجة بيانات المستخدم التالية كجزء من الخدمة:\n• معرّفات Telegram، بما في ذلك معرّف مستخدم Telegram واسم المستخدم والاسم المعروض؛\n• بيانات الملف الشخصي وإعدادات الخدمة، بما في ذلك لغة الواجهة وتفضيلات العرض وتفضيلات المستخدم الأخرى؛\n• البيانات التي يضيفها المستخدم بشكل مستقل إلى الخدمة، بما في ذلك أسماء قوائم الأمنيات وبطاقات الأمنيات والروابط والأوصاف والتعليقات والحالات والمواد الأخرى؛\n• البيانات التقنية للتفاعل، بما في ذلك أوقات الطلبات ومعلومات الأخطاء وسجلات الخدمة وعناوين IP ومعلومات الجلسة؛\n• البيانات المتعلقة بالوصول إلى الميزات المدفوعة، بما في ذلك حالة الدفع ومدة الوصول ومعرّفات المعاملات وحالات الدفع؛\n• المعلومات التي يقدمها المستخدم عند الاتصال بالدعم.',
+        '2.1. قد تتم معالجة بيانات المستخدم التالية كجزء من الخدمة:\n• معرّفات Telegram، بما في ذلك معرّف مستخدم Telegram واسم المستخدم والاسم المعروض؛\n• بيانات الملف الشخصي وإعدادات الخدمة، بما في ذلك لغة الواجهة وتفضيلات العرض وتفضيلات المستخدم الأخرى؛\n• بيانات الواجهة والملف الشخصي: المقاسات والعلامات التجارية والتفضيلات؛\n• تفضيلات «لا تُهدِ»؛\n• البيانات التي يضيفها المستخدم بشكل مستقل إلى الخدمة، بما في ذلك أسماء قوائم الأمنيات وبطاقات الأمنيات والروابط والأوصاف والتعليقات والحالات والمواد الأخرى؛\n• بيانات الهدايا الجماعية: معلومات المنظم ومساهمات المشاركين والرسائل؛\n• روابط المجموعات المنسقة؛\n• بيانات الحجوزات، بما في ذلك الحجوزات السرية؛\n• بيانات حملات Secret Santa؛\n• بيانات ملاحظات الهدايا (Gift Notes)؛\n• بيانات التقويم؛\n• البيانات التقنية للتفاعل، بما في ذلك أوقات الطلبات ومعلومات الأخطاء وسجلات الخدمة وعناوين IP ومعلومات الجلسة؛\n• البيانات المتعلقة بالوصول إلى الميزات المدفوعة، بما في ذلك حالة الدفع ومدة الوصول ومعرّفات المعاملات وحالات الدفع؛\n• المعلومات التي يقدمها المستخدم عند الاتصال بالدعم.',
         '3. أغراض معالجة البيانات',
-        '3.1. تتم معالجة البيانات للأغراض التالية:\n• توفير وصول المستخدم إلى وظائف الخدمة؛\n• إنشاء وتخزين وعرض ومزامنة قوائم أمنيات المستخدم والبيانات ذات الصلة؛\n• تفعيل وتوفير ميزات الخدمة المدفوعة؛\n• معالجة طلبات الدعم؛\n• ضمان أمان الخدمة وتشخيص الأخطاء ومنع إساءة الاستخدام؛\n• الامتثال للتشريعات المعمول بها.',
+        '3.1. تتم معالجة البيانات للأغراض التالية:\n• توفير وصول المستخدم إلى وظائف الخدمة؛\n• إنشاء وتخزين وعرض ومزامنة قوائم أمنيات المستخدم والبيانات ذات الصلة؛\n• تنسيق الهدايا: الحجوزات والهدايا الجماعية وSecret Santa؛\n• المشاركة العامة وإدارة الوصول؛\n• تفعيل وتوفير ميزات الخدمة المدفوعة؛\n• معالجة طلبات الدعم؛\n• ضمان أمان الخدمة وتشخيص الأخطاء ومنع إساءة الاستخدام؛\n• منع إساءة الاستخدام والتحقيق في الاحتيال؛\n• الامتثال للتشريعات المعمول بها.',
         '4. مشاركة البيانات مع أطراف ثالثة',
         '4.1. قد تتم مشاركة البيانات مع أطراف ثالثة فقط بالقدر اللازم لعمل الخدمة، بما في ذلك:\n• Telegram كمنصة تفاعل المستخدم مع الخدمة؛\n• مزودي الاستضافة والبنية التحتية؛\n• الخدمات المستخدمة للدعم التقني للمنتج والتسجيل والمراقبة ومعالجة المشتريات الرقمية داخل Telegram.',
         '4.2. لا تبيع الخدمة البيانات الشخصية للمستخدمين لأطراف ثالثة.',
@@ -1150,8 +1150,8 @@ const LEGAL_DOCS: LegalDocDef[] = [
   {
     id: 'terms',
     icon: '📄',
-    version: '1.0',
-    effectiveDate: '03.04.2026',
+    version: '2.0',
+    effectiveDate: '30.04.2026',
     title: {
       ru: 'Пользовательское соглашение',
       en: 'Terms of Use',
@@ -1189,6 +1189,23 @@ const LEGAL_DOCS: LegalDocDef[] = [
         '8. Изменение Соглашения',
         '8.1. Актуальная редакция Соглашения размещается в разделе «Юридическая информация» сервиса WishBot.',
         '8.2. Продолжение использования сервиса после публикации новой редакции означает принятие обновленного Соглашения, если иное не предусмотрено применимым законодательством.',
+        '9. Бронирования',
+        '9.1. Бронирование подарка в сервисе является информационным статусом и не представляет собой договор, обязательство приобрести подарок или гарантию его покупки.',
+        '9.2. Сервис не несёт ответственности за то, что пользователь, забронировавший подарок, фактически его не приобрёл.',
+        '10. Совместный подарок',
+        '10.1. Функция совместного подарка предоставляет инструмент координации сбора средств на подарок. WishBot не является банком, платёжным агентом, оператором электронных денежных средств или escrow-сервисом.',
+        '10.2. WishBot не принимает, не хранит и не распределяет денежные средства участников совместного подарка. Все переводы происходят вне сервиса — напрямую между участниками и организатором.',
+        '10.3. Организатор несёт ответственность за корректность реквизитов, коммуникацию с участниками, приобретение подарка и возвраты средств.',
+        '10.4. Сервис не гарантирует сбор целевой суммы, приобретение подарка или возврат средств участникам.',
+        '11. Публичные ссылки',
+        '11.1. Любой человек, получивший публичную ссылку на вишлист, профиль или подборку, может видеть доступный по ней контент в рамках настроек приватности.',
+        '11.2. Пользователь самостоятельно отвечает за распространение ссылок.',
+        '11.3. Отзыв ссылки делает дальнейший доступ по ней недействительным, но не может удалить информацию, которую получатель уже увидел, сохранил или переслал.',
+        '12. Ограничение ответственности',
+        '12.1. Сервис предоставляется на условиях «как есть» (as is) в пределах, допускаемых применимым законодательством.',
+        '12.2. Сервис не несёт ответственности за действия или бездействие пользователей, включая невыполнение договорённостей между дарителями, получателями, организаторами и участниками совместных подарков.',
+        '12.3. Сервис не отвечает за потери, связанные с неверными ссылками, устаревшими ценами, ошибочными данными импорта, отменой бронирований или техническими сбоями внешних платформ.',
+        '12.4. Сервис не гарантирует доставку уведомлений в определённый срок. Уведомления доставляются через Telegram и зависят от работоспособности сторонних платформ.',
       ].join('\n\n'),
       en: [
         'These Terms of Use govern the conditions for using the WishBot service, available through the Telegram bot, Telegram Mini App, and associated web pages.',
@@ -1218,6 +1235,23 @@ const LEGAL_DOCS: LegalDocDef[] = [
         '8. Changes to the Agreement',
         '8.1. The current version of the Agreement is available in the "Legal Information" section of the WishBot service.',
         '8.2. Continued use of the service after publication of a new version constitutes acceptance of the updated Agreement, unless otherwise provided by applicable legislation.',
+        '9. Reservations',
+        '9.1. Reserving a gift in the service is an informational status and does not constitute a contract, an obligation to purchase the gift, or a guarantee of its purchase.',
+        '9.2. The service is not responsible for a user who reserved a gift but did not actually purchase it.',
+        '10. Group Gift',
+        '10.1. The group gift feature provides a tool for coordinating gift fundraising. WishBot is not a bank, payment agent, electronic money operator, or escrow service.',
+        '10.2. WishBot does not accept, store, or distribute monetary funds of group gift participants. All transfers occur outside the service — directly between participants and the organizer.',
+        '10.3. The organizer is responsible for the accuracy of payment details, communication with participants, purchasing the gift, and processing refunds.',
+        '10.4. The service does not guarantee collection of the target amount, purchase of the gift, or refunds to participants.',
+        '11. Public Links',
+        '11.1. Anyone who receives a public link to a wishlist, profile, or curated selection can view the content available through it within the privacy settings.',
+        '11.2. The user is solely responsible for distributing links.',
+        '11.3. Revoking a link invalidates future access through it but cannot delete information that the recipient has already viewed, saved, or forwarded.',
+        '12. Limitation of Liability',
+        '12.1. The service is provided on an "as is" basis to the extent permitted by applicable law.',
+        '12.2. The service is not liable for the actions or inactions of users, including failure to fulfill agreements between givers, recipients, organizers, and group gift participants.',
+        '12.3. The service is not responsible for losses related to incorrect links, outdated prices, erroneous import data, cancelled reservations, or technical failures of external platforms.',
+        '12.4. The service does not guarantee delivery of notifications within a specific timeframe. Notifications are delivered via Telegram and depend on the availability of third-party platforms.',
       ].join('\n\n'),
       'zh-CN': [
         '本使用条款规定了使用 WishBot 服务的条件。WishBot 服务可通过 Telegram 机器人、Telegram Mini App 及相关网页访问。',
@@ -1247,6 +1281,23 @@ const LEGAL_DOCS: LegalDocDef[] = [
         '8. 协议变更',
         '8.1. 本协议的最新版本可在 WishBot 服务的「法律信息」栏目中查阅。',
         '8.2. 在新版本发布后继续使用服务即表示接受更新后的协议，除非适用法律另有规定。',
+        '9. 预订',
+        '9.1. 在服务中预订礼物是一种信息状态，不构成合同、购买礼物的义务或购买保证。',
+        '9.2. 对于预订了礼物但实际未购买的用户，本服务不承担责任。',
+        '10. 拼单礼物',
+        '10.1. 拼单礼物功能提供了协调礼物集资的工具。WishBot 不是银行、支付代理、电子货币运营商或托管服务。',
+        '10.2. WishBot 不接收、不存储也不分配拼单礼物参与者的资金。所有转账在服务之外进行——直接在参与者和组织者之间完成。',
+        '10.3. 组织者负责支付信息的准确性、与参与者的沟通、礼物的购买和退款处理。',
+        '10.4. 本服务不保证达到目标金额、购买礼物或向参与者退款。',
+        '11. 公开链接',
+        '11.1. 任何获得心愿单、个人资料或精选合集公开链接的人，可以在隐私设置范围内查看通过该链接可访问的内容。',
+        '11.2. 用户对链接的传播自行负责。',
+        '11.3. 撤销链接会使通过该链接的后续访问无效，但无法删除接收者已查看、保存或转发的信息。',
+        '12. 责任限制',
+        '12.1. 在适用法律允许的范围内，本服务按「现状」(as is) 提供。',
+        '12.2. 本服务不对用户的行为或不作为承担责任，包括送礼者、收礼者、组织者和拼单礼物参与者之间未履行的约定。',
+        '12.3. 本服务不对因错误链接、过时价格、错误的导入数据、取消预订或外部平台技术故障造成的损失负责。',
+        '12.4. 本服务不保证在特定时间内送达通知。通知通过 Telegram 发送，取决于第三方平台的可用性。',
       ].join('\n\n'),
       hi: [
         'यह उपयोग की शर्तें WishBot सेवा के उपयोग की शर्तों को नियंत्रित करती हैं। WishBot सेवा Telegram बॉट, Telegram Mini App और संबंधित वेब पृष्ठों के माध्यम से उपलब्ध है।',
@@ -1276,6 +1327,23 @@ const LEGAL_DOCS: LegalDocDef[] = [
         '8. समझौते में परिवर्तन',
         '8.1. समझौते का वर्तमान संस्करण WishBot सेवा के «कानूनी जानकारी» अनुभाग में उपलब्ध है।',
         '8.2. नए संस्करण के प्रकाशन के बाद सेवा का निरंतर उपयोग अद्यतन समझौते की स्वीकृति को दर्शाता है, जब तक कि लागू कानून द्वारा अन्यथा प्रदान न किया गया हो।',
+        '9. आरक्षण',
+        '9.1. सेवा में उपहार का आरक्षण एक सूचनात्मक स्थिति है और यह अनुबंध, उपहार खरीदने का दायित्व या खरीद की गारंटी नहीं है।',
+        '9.2. जिस उपयोगकर्ता ने उपहार आरक्षित किया लेकिन वास्तव में नहीं खरीदा, उसके लिए सेवा जिम्मेदार नहीं है।',
+        '10. सामूहिक उपहार',
+        '10.1. सामूहिक उपहार सुविधा उपहार के लिए धन एकत्रित करने का समन्वय उपकरण प्रदान करती है। WishBot बैंक, भुगतान एजेंट, इलेक्ट्रॉनिक मनी ऑपरेटर या एस्क्रो सेवा नहीं है।',
+        '10.2. WishBot सामूहिक उपहार प्रतिभागियों की धनराशि स्वीकार, संग्रहीत या वितरित नहीं करता। सभी स्थानांतरण सेवा के बाहर होते हैं — सीधे प्रतिभागियों और आयोजक के बीच।',
+        '10.3. आयोजक भुगतान विवरण की सटीकता, प्रतिभागियों के साथ संवाद, उपहार की खरीद और रिफंड प्रक्रिया के लिए जिम्मेदार है।',
+        '10.4. सेवा लक्ष्य राशि के संग्रह, उपहार की खरीद या प्रतिभागियों को रिफंड की गारंटी नहीं देती।',
+        '11. सार्वजनिक लिंक',
+        '11.1. जो कोई भी विशलिस्ट, प्रोफ़ाइल या क्यूरेटेड संग्रह का सार्वजनिक लिंक प्राप्त करता है, वह गोपनीयता सेटिंग्स के भीतर उसके माध्यम से उपलब्ध सामग्री देख सकता है।',
+        '11.2. लिंक वितरित करने के लिए उपयोगकर्ता स्वयं जिम्मेदार है।',
+        '11.3. लिंक रद्द करने से उसके माध्यम से भविष्य की पहुंच अमान्य हो जाती है, लेकिन प्राप्तकर्ता द्वारा पहले से देखी, सहेजी या अग्रेषित की गई जानकारी को हटाया नहीं जा सकता।',
+        '12. दायित्व की सीमा',
+        '12.1. लागू कानून द्वारा अनुमत सीमा तक सेवा «जैसी है» (as is) आधार पर प्रदान की जाती है।',
+        '12.2. सेवा उपयोगकर्ताओं के कार्यों या निष्क्रियता के लिए उत्तरदायी नहीं है, जिसमें दाताओं, प्राप्तकर्ताओं, आयोजकों और सामूहिक उपहार प्रतिभागियों के बीच समझौतों को पूरा करने में विफलता शामिल है।',
+        '12.3. सेवा गलत लिंक, पुरानी कीमतों, गलत आयात डेटा, आरक्षण रद्दीकरण या बाहरी प्लेटफ़ॉर्म की तकनीकी विफलताओं से संबंधित हानियों के लिए जिम्मेदार नहीं है।',
+        '12.4. सेवा किसी विशिष्ट समय सीमा के भीतर सूचनाओं की डिलीवरी की गारंटी नहीं देती। सूचनाएं Telegram के माध्यम से वितरित की जाती हैं और तृतीय-पक्ष प्लेटफ़ॉर्म की उपलब्धता पर निर्भर करती हैं।',
       ].join('\n\n'),
       es: [
         'Estos Términos de Uso regulan las condiciones de uso del servicio WishBot, disponible a través del bot de Telegram, Telegram Mini App y las páginas web asociadas.',
@@ -1305,6 +1373,23 @@ const LEGAL_DOCS: LegalDocDef[] = [
         '8. Cambios en el Acuerdo',
         '8.1. La versión actual del Acuerdo está disponible en la sección «Información legal» del servicio WishBot.',
         '8.2. El uso continuado del servicio después de la publicación de una nueva versión constituye la aceptación del Acuerdo actualizado, salvo que la legislación aplicable disponga lo contrario.',
+        '9. Reservas',
+        '9.1. La reserva de un regalo en el servicio es un estado informativo y no constituye un contrato, una obligación de comprar el regalo ni una garantía de su compra.',
+        '9.2. El servicio no es responsable de que un usuario que reservó un regalo no lo haya comprado realmente.',
+        '10. Regalo grupal',
+        '10.1. La función de regalo grupal proporciona una herramienta para coordinar la recaudación de fondos para un regalo. WishBot no es un banco, agente de pagos, operador de dinero electrónico ni servicio de custodia (escrow).',
+        '10.2. WishBot no acepta, almacena ni distribuye fondos de los participantes del regalo grupal. Todas las transferencias se realizan fuera del servicio, directamente entre los participantes y el organizador.',
+        '10.3. El organizador es responsable de la exactitud de los datos de pago, la comunicación con los participantes, la compra del regalo y los reembolsos.',
+        '10.4. El servicio no garantiza la recaudación del monto objetivo, la compra del regalo ni los reembolsos a los participantes.',
+        '11. Enlaces públicos',
+        '11.1. Cualquier persona que reciba un enlace público a una lista de deseos, perfil o selección curada puede ver el contenido disponible a través de él dentro de la configuración de privacidad.',
+        '11.2. El usuario es el único responsable de la distribución de los enlaces.',
+        '11.3. La revocación de un enlace invalida el acceso futuro a través de él, pero no puede eliminar la información que el destinatario ya ha visto, guardado o reenviado.',
+        '12. Limitación de responsabilidad',
+        '12.1. El servicio se proporciona «tal cual» (as is) en la medida permitida por la legislación aplicable.',
+        '12.2. El servicio no es responsable de las acciones o inacciones de los usuarios, incluido el incumplimiento de acuerdos entre obsequiantes, destinatarios, organizadores y participantes de regalos grupales.',
+        '12.3. El servicio no es responsable de las pérdidas relacionadas con enlaces incorrectos, precios desactualizados, datos de importación erróneos, cancelación de reservas o fallos técnicos de plataformas externas.',
+        '12.4. El servicio no garantiza la entrega de notificaciones en un plazo determinado. Las notificaciones se entregan a través de Telegram y dependen de la disponibilidad de plataformas de terceros.',
       ].join('\n\n'),
       ar: [
         'تحكم شروط الاستخدام هذه شروط استخدام خدمة WishBot المتاحة عبر بوت Telegram وتطبيق Telegram Mini App وصفحات الويب المرتبطة.',
@@ -1334,14 +1419,31 @@ const LEGAL_DOCS: LegalDocDef[] = [
         '8. تغييرات الاتفاقية',
         '8.1. يتوفر الإصدار الحالي من الاتفاقية في قسم «المعلومات القانونية» في خدمة WishBot.',
         '8.2. يعتبر الاستمرار في استخدام الخدمة بعد نشر إصدار جديد بمثابة قبول للاتفاقية المحدثة، ما لم ينص التشريع المعمول به على خلاف ذلك.',
+        '9. الحجوزات',
+        '9.1. حجز هدية في الخدمة هو حالة إعلامية ولا يشكل عقداً أو التزاماً بشراء الهدية أو ضماناً لشرائها.',
+        '9.2. الخدمة غير مسؤولة عن مستخدم حجز هدية لكنه لم يشترها فعلياً.',
+        '10. الهدية الجماعية',
+        '10.1. توفر ميزة الهدية الجماعية أداة لتنسيق جمع التبرعات لشراء هدية. WishBot ليس بنكاً أو وكيل دفع أو مشغل أموال إلكترونية أو خدمة ضمان (escrow).',
+        '10.2. لا يقبل WishBot أو يخزن أو يوزع الأموال النقدية للمشاركين في الهدية الجماعية. تتم جميع التحويلات خارج الخدمة — مباشرة بين المشاركين والمنظم.',
+        '10.3. المنظم مسؤول عن دقة تفاصيل الدفع والتواصل مع المشاركين وشراء الهدية ومعالجة المبالغ المستردة.',
+        '10.4. لا تضمن الخدمة جمع المبلغ المستهدف أو شراء الهدية أو استرداد الأموال للمشاركين.',
+        '11. الروابط العامة',
+        '11.1. يمكن لأي شخص يتلقى رابطاً عاماً لقائمة أمنيات أو ملف شخصي أو مجموعة منسقة عرض المحتوى المتاح من خلاله ضمن إعدادات الخصوصية.',
+        '11.2. المستخدم وحده المسؤول عن توزيع الروابط.',
+        '11.3. إلغاء الرابط يبطل الوصول المستقبلي من خلاله لكنه لا يمكنه حذف المعلومات التي شاهدها المستلم بالفعل أو حفظها أو أعاد توجيهها.',
+        '12. تحديد المسؤولية',
+        '12.1. يتم تقديم الخدمة على أساس «كما هي» (as is) بالقدر الذي يسمح به القانون المعمول به.',
+        '12.2. الخدمة غير مسؤولة عن تصرفات أو تقاعس المستخدمين، بما في ذلك عدم الوفاء بالاتفاقيات بين المهدين والمستلمين والمنظمين والمشاركين في الهدايا الجماعية.',
+        '12.3. الخدمة غير مسؤولة عن الخسائر المتعلقة بالروابط غير الصحيحة أو الأسعار القديمة أو بيانات الاستيراد الخاطئة أو إلغاء الحجوزات أو الأعطال التقنية للمنصات الخارجية.',
+        '12.4. لا تضمن الخدمة تسليم الإشعارات خلال إطار زمني محدد. يتم تسليم الإشعارات عبر Telegram وتعتمد على توفر منصات الأطراف الثالثة.',
       ].join('\n\n'),
     },
   },
   {
     id: 'pro-terms',
     icon: '⭐',
-    version: '1.0',
-    effectiveDate: '03.04.2026',
+    version: '2.0',
+    effectiveDate: '30.04.2026',
     title: {
       ru: 'Условия Pro и покупок',
       en: 'Pro & Purchase Terms',
@@ -1369,6 +1471,12 @@ const LEGAL_DOCS: LegalDocDef[] = [
         '5. Изменение платных функций',
         '5.1. Администратор вправе изменять состав, параметры и стоимость платных функций в будущем.',
         '5.2. Такие изменения не должны лишать пользователя уже оплаченного и активированного доступа на оплаченный период, если иное прямо не вытекает из характера соответствующей функции.',
+        '6. Тарифы и механика оплаты',
+        '6.1. Ежемесячная подписка PRO: 100 XTR/месяц, автоматическое продление каждые 30 дней через механизм подписок Telegram.',
+        '6.2. Годовая подписка PRO: 800 XTR, разовая покупка на 365 дней, без автоматического продления.',
+        '6.3. Дополнения (Add-ons): разовые покупки, предоставляющие доступ к отдельным функциям или расширяющие лимиты.',
+        '6.4. Отмена подписки прекращает будущие списания. Доступ к оплаченным функциям сохраняется до конца текущего оплаченного периода.',
+        '6.5. Возвраты регулируются правилами платформы Telegram и политикой сервиса.',
       ].join('\n\n'),
       en: [
         'This document governs the provision of paid features of the WishBot service, including Pro access and other digital purchases made within Telegram.',
@@ -1388,6 +1496,12 @@ const LEGAL_DOCS: LegalDocDef[] = [
         '5. Changes to Paid Features',
         '5.1. The administrator may change the composition, parameters, and pricing of paid features in the future.',
         '5.2. Such changes shall not deprive the user of already paid and activated access for the paid period, unless otherwise directly implied by the nature of the respective feature.',
+        '6. Pricing and Payment Mechanics',
+        '6.1. Monthly PRO subscription: 100 XTR/month, auto-renewing every 30 days via the Telegram subscription mechanism.',
+        '6.2. Yearly PRO subscription: 800 XTR, one-time purchase for 365 days, no auto-renewal.',
+        '6.3. Add-ons: one-time purchases providing access to individual features or expanding limits.',
+        '6.4. Cancellation of the subscription stops future charges. Access to paid features is retained until the end of the current paid period.',
+        '6.5. Refunds are governed by Telegram platform rules and the service policy.',
       ].join('\n\n'),
       'zh-CN': [
         '本文档规定了 WishBot 服务付费功能的提供方式，包括 Pro 访问权限和在 Telegram 内进行的其他数字购买。',
@@ -1407,6 +1521,12 @@ const LEGAL_DOCS: LegalDocDef[] = [
         '5. 付费功能变更',
         '5.1. 管理员可在未来变更付费功能的组成、参数和定价。',
         '5.2. 此类变更不应剥夺用户在已付费期间内已支付和激活的访问权限，除非相关功能的性质另有明确规定。',
+        '6. 价格与支付机制',
+        '6.1. 月度 PRO 订阅：100 XTR/月，通过 Telegram 订阅机制每 30 天自动续订。',
+        '6.2. 年度 PRO 订阅：800 XTR，一次性购买 365 天，无自动续订。',
+        '6.3. 附加功能（Add-ons）：一次性购买，提供对单个功能的访问或扩展限制。',
+        '6.4. 取消订阅将停止未来扣费。在当前已付费期间结束前，可继续使用付费功能。',
+        '6.5. 退款受 Telegram 平台规则和服务政策约束。',
       ].join('\n\n'),
       hi: [
         'यह दस्तावेज़ WishBot सेवा की सशुल्क सुविधाओं के प्रावधानों को नियंत्रित करता है, जिसमें Pro पहुंच और Telegram के भीतर की गई अन्य डिजिटल खरीदारी शामिल हैं।',
@@ -1426,6 +1546,12 @@ const LEGAL_DOCS: LegalDocDef[] = [
         '5. सशुल्क सुविधाओं में परिवर्तन',
         '5.1. प्रशासक भविष्य में सशुल्क सुविधाओं की संरचना, मापदंडों और मूल्य निर्धारण को बदल सकता है।',
         '5.2. ऐसे परिवर्तन उपयोगकर्ता को भुगतान अवधि के लिए पहले से भुगतान की गई और सक्रिय पहुंच से वंचित नहीं करेंगे, जब तक कि संबंधित सुविधा की प्रकृति से स्पष्ट रूप से अन्यथा निहित न हो।',
+        '6. मूल्य और भुगतान तंत्र',
+        '6.1. मासिक PRO सदस्यता: 100 XTR/माह, Telegram सदस्यता तंत्र के माध्यम से हर 30 दिनों में स्वचालित नवीनीकरण।',
+        '6.2. वार्षिक PRO सदस्यता: 800 XTR, 365 दिनों के लिए एकमुश्त खरीद, कोई स्वचालित नवीनीकरण नहीं।',
+        '6.3. ऐड-ऑन: एकमुश्त खरीद जो व्यक्तिगत सुविधाओं तक पहुंच या सीमाओं का विस्तार प्रदान करती हैं।',
+        '6.4. सदस्यता रद्द करने से भविष्य के शुल्क बंद हो जाते हैं। वर्तमान भुगतान अवधि के अंत तक सशुल्क सुविधाओं तक पहुंच बनी रहती है।',
+        '6.5. रिफंड Telegram प्लेटफ़ॉर्म नियमों और सेवा नीति द्वारा शासित होते हैं।',
       ].join('\n\n'),
       es: [
         'Este documento regula la prestación de funciones de pago del servicio WishBot, incluido el acceso Pro y otras compras digitales realizadas dentro de Telegram.',
@@ -1445,6 +1571,12 @@ const LEGAL_DOCS: LegalDocDef[] = [
         '5. Cambios en las funciones de pago',
         '5.1. El administrador puede cambiar la composición, los parámetros y los precios de las funciones de pago en el futuro.',
         '5.2. Tales cambios no privarán al usuario del acceso ya pagado y activado durante el período pagado, a menos que la naturaleza de la función respectiva implique directamente lo contrario.',
+        '6. Tarifas y mecánica de pago',
+        '6.1. Suscripción PRO mensual: 100 XTR/mes, renovación automática cada 30 días a través del mecanismo de suscripciones de Telegram.',
+        '6.2. Suscripción PRO anual: 800 XTR, compra única por 365 días, sin renovación automática.',
+        '6.3. Complementos (Add-ons): compras únicas que proporcionan acceso a funciones individuales o amplían los límites.',
+        '6.4. La cancelación de la suscripción detiene los cargos futuros. El acceso a las funciones de pago se mantiene hasta el final del período pagado actual.',
+        '6.5. Los reembolsos se rigen por las reglas de la plataforma Telegram y la política del servicio.',
       ].join('\n\n'),
       ar: [
         'ينظم هذا المستند تقديم الميزات المدفوعة لخدمة WishBot، بما في ذلك الوصول إلى Pro والمشتريات الرقمية الأخرى التي تتم داخل Telegram.',
@@ -1464,6 +1596,12 @@ const LEGAL_DOCS: LegalDocDef[] = [
         '5. تغييرات الميزات المدفوعة',
         '5.1. يحق للمسؤول تغيير تكوين ومعايير وتسعير الميزات المدفوعة في المستقبل.',
         '5.2. لن تحرم هذه التغييرات المستخدم من الوصول المدفوع والمفعّل بالفعل خلال الفترة المدفوعة، ما لم تقتضِ طبيعة الميزة المعنية خلاف ذلك صراحةً.',
+        '6. الأسعار وآلية الدفع',
+        '6.1. اشتراك PRO الشهري: 100 XTR/شهر، تجديد تلقائي كل 30 يوماً عبر آلية اشتراكات Telegram.',
+        '6.2. اشتراك PRO السنوي: 800 XTR، شراء لمرة واحدة لمدة 365 يوماً، بدون تجديد تلقائي.',
+        '6.3. الإضافات (Add-ons): مشتريات لمرة واحدة توفر الوصول إلى ميزات فردية أو توسع الحدود.',
+        '6.4. إلغاء الاشتراك يوقف الرسوم المستقبلية. يتم الاحتفاظ بالوصول إلى الميزات المدفوعة حتى نهاية الفترة المدفوعة الحالية.',
+        '6.5. تخضع المبالغ المستردة لقواعد منصة Telegram وسياسة الخدمة.',
       ].join('\n\n'),
     },
   },
@@ -20193,12 +20331,23 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           FAQ
           ══════════════════════════════════════════════ */}
       {screen === 'faq' && (() => {
-        const FAQ_COUNT = 14;
-        const faqItems = Array.from({ length: FAQ_COUNT }, (_, i) => ({
-          id: i + 1,
-          q: t(`faq_q${i + 1}` as any, locale),
-          a: t(`faq_a${i + 1}` as any, locale),
-        }));
+        const FAQ_SECTIONS: { titleKey: string; icon: string; items: number[] }[] = [
+          { titleKey: 'faq_sec_about', icon: '📱', items: [1] },
+          { titleKey: 'faq_sec_plans', icon: '⭐', items: [2, 15, 16, 17, 18, 19, 14] },
+          { titleKey: 'faq_sec_payments', icon: '💎', items: [20, 21, 22, 12, 23] },
+          { titleKey: 'faq_sec_reservations', icon: '🎁', items: [3, 4, 5, 24, 25] },
+          { titleKey: 'faq_sec_secret_res', icon: '🤫', items: [26, 27, 28] },
+          { titleKey: 'faq_sec_smart_res', icon: '⏱', items: [29, 30, 31] },
+          { titleKey: 'faq_sec_group_gift', icon: '👥', items: [32, 33, 34, 35] },
+          { titleKey: 'faq_sec_notes_dontgift', icon: '📝', items: [7, 36, 37] },
+          { titleKey: 'faq_sec_showcase', icon: '✨', items: [38, 39, 40] },
+          { titleKey: 'faq_sec_links', icon: '🔗', items: [9, 10, 41, 42] },
+          { titleKey: 'faq_sec_comments', icon: '💬', items: [6, 8, 43] },
+          { titleKey: 'faq_sec_santa', icon: '🎅', items: [44, 45] },
+          { titleKey: 'faq_sec_archive', icon: '🗄', items: [11, 46, 47] },
+          { titleKey: 'faq_sec_support', icon: '🛟', items: [13, 48] },
+          { titleKey: 'faq_sec_upcoming', icon: '🚧', items: [49, 50] },
+        ];
 
         return (
           <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
@@ -20210,45 +20359,60 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {t('faq_subtitle', locale)}
             </p>
 
-            {/* Accordion */}
-            <div style={{ background: C.card, borderRadius: 16, overflow: 'hidden' }}>
-              {faqItems.map((item, idx) => {
-                const isOpen = faqOpenId === item.id;
-                return (
-                  <div key={item.id}>
-                    {idx > 0 && <div style={{ borderTop: `1px solid ${C.border}`, margin: '0 16px' }} />}
-                    <div
-                      onClick={() => setFaqOpenId(isOpen ? null : item.id)}
-                      style={{
-                        display: 'flex', alignItems: 'flex-start', gap: 12,
-                        padding: '14px 16px', cursor: 'pointer',
-                        transition: 'background 0.15s',
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: C.text, lineHeight: 1.4 }}>
-                          {item.q}
-                        </div>
-                        {isOpen && (
-                          <div style={{
-                            fontSize: 13, color: C.textSec, lineHeight: 1.55, marginTop: 8,
-                            whiteSpace: 'pre-line',
-                            animation: 'fadeIn 0.2s ease',
-                          }}>
-                            {item.a}
-                          </div>
-                        )}
-                      </div>
-                      <span style={{
-                        fontSize: 18, color: C.textMuted, lineHeight: 1, flexShrink: 0,
-                        transform: isOpen ? 'rotate(90deg)' : 'none',
-                        transition: 'transform 0.2s ease',
-                        marginTop: 1,
-                      }}>›</span>
-                    </div>
+            {/* Sectioned Accordion */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {FAQ_SECTIONS.map((sec) => (
+                <div key={sec.titleKey} style={{ background: C.card, borderRadius: 16, overflow: 'hidden' }}>
+                  {/* Section header */}
+                  <div style={{
+                    padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 8,
+                    borderBottom: `1px solid ${C.border}`,
+                  }}>
+                    <span style={{ fontSize: 16 }}>{sec.icon}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.text, letterSpacing: '-0.01em' }}>
+                      {t(sec.titleKey as any, locale)}
+                    </span>
                   </div>
-                );
-              })}
+                  {/* Questions */}
+                  {sec.items.map((qNum, idx) => {
+                    const isOpen = faqOpenId === qNum;
+                    return (
+                      <div key={qNum}>
+                        {idx > 0 && <div style={{ borderTop: `1px solid ${C.border}`, margin: '0 16px' }} />}
+                        <div
+                          onClick={() => setFaqOpenId(isOpen ? null : qNum)}
+                          style={{
+                            display: 'flex', alignItems: 'flex-start', gap: 12,
+                            padding: '14px 16px', cursor: 'pointer',
+                            transition: 'background 0.15s',
+                          }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: C.text, lineHeight: 1.4 }}>
+                              {t(`faq_q${qNum}` as any, locale)}
+                            </div>
+                            {isOpen && (
+                              <div style={{
+                                fontSize: 13, color: C.textSec, lineHeight: 1.55, marginTop: 8,
+                                whiteSpace: 'pre-line',
+                                animation: 'fadeIn 0.2s ease',
+                              }}>
+                                {t(`faq_a${qNum}` as any, locale)}
+                              </div>
+                            )}
+                          </div>
+                          <span style={{
+                            fontSize: 18, color: C.textMuted, lineHeight: 1, flexShrink: 0,
+                            transform: isOpen ? 'rotate(90deg)' : 'none',
+                            transition: 'transform 0.2s ease',
+                            marginTop: 1,
+                          }}>›</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
 
             {/* Support CTA */}
