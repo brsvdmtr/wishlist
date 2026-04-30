@@ -5,6 +5,86 @@ New entries go at the top.
 
 ---
 
+## 2026-04-30 — Фото идеи к событию календаря не загружается + каретка уезжает в поле цены
+
+### Ошибка
+1. **Фото исчезает.** В календаре, при добавлении идеи к событию с
+   прикреплённым фото, серверная idea создавалась без `imageUrl`.
+   Тост-ошибки нет, фронт молча пропускает. Корень — в
+   `tgFetch` (`apps/web/app/miniapp/MiniApp.tsx`): он жёстко выставлял
+   `'Content-Type': 'application/json'` для **всех** запросов, включая
+   те, где `body` это `FormData`. Браузер не может выставить
+   `multipart/form-data; boundary=...` поверх явно заданного Content-Type,
+   поэтому multer на сервере получал тело как JSON и не видел поля
+   `photo`. Запрос проходил с 200, фото никуда не сохранялось.
+
+2. **Каретка уезжает.** В форме «Добавить идею» при тапе на инпут «цена»
+   мигающая каретка отрисовывалась ниже самого инпута (где-то под
+   формой). Соседнее текстовое поле «текст идеи» работало нормально.
+   Корень — у поля «текст» был `onFocus`-хендлер с
+   `formRef.current?.scrollIntoView({ block: 'center' })` через 300 мс
+   (после открытия клавиатуры в Telegram WebView), а у инпута цены такого
+   хендлера не было. В Telegram WebView при открытии нативной клавиатуры
+   viewport сдвигается, но WebKit не пересчитывает позицию каретки до
+   следующего layout-события — `scrollIntoView` это событие триггерит.
+
+**Root cause:**
+- Bug 1: «глобальный default-header» в обёртке fetch без проверки типа
+  body. Эта ошибка системная — каждый будущий multipart-загрузчик через
+  `tgFetch` сломался бы тем же способом.
+- Bug 2: копипаста хендлеров между инпутами с пропущенным одним полем.
+  Обходной приём WebKit (scroll-on-focus) применяется на 1 поле из 4 в
+  одной форме.
+
+### Урок
+1. **Обёртки над fetch не должны жёстко задавать `Content-Type`** —
+   браузер сам выставит правильный, если body это `FormData`, `Blob` или
+   `URLSearchParams`. Default-заголовок имеет смысл только для JSON-body.
+   Безопасный паттерн:
+   ```ts
+   headers: {
+     ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+     ...
+   }
+   ```
+2. **Telegram WebView caret-displacement** — известное поведение iOS
+   WKWebView: после открытия нативной клавиатуры каретка остаётся в
+   старом visual layout, пока не произойдёт scroll/layout-pass.
+   Лечится `scrollIntoView` через ~300 мс на `onFocus` (300 мс — это
+   время анимации поднятия клавиатуры). Этот паттерн **должен быть на
+   каждом** интерактивном инпуте формы, а не выборочно.
+
+### Правило
+- Любая обёртка над `fetch` должна проверять `body instanceof FormData`
+  (и желательно `Blob`/`URLSearchParams`) и **не** заполнять
+  Content-Type в этих случаях.
+- Если в форме хоть один инпут получает scroll-on-focus как обход
+  WebKit-бага — этот же хендлер должен стоять на **всех** инпутах формы.
+  Не «там, где заметили баг», а превентивно.
+- При добавлении нового инпута в существующую форму — копировать набор
+  обработчиков целиком (focus, blur, scroll-fix), не выборочно.
+
+### Лучший код
+```tsx
+// apps/web/app/miniapp/MiniApp.tsx — tgFetch
+headers: {
+  ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+  ...(initDataRef.current ? { 'X-TG-INIT-DATA': initDataRef.current } : {}),
+  ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+  ...(init?.headers as Record<string, string> | undefined),
+},
+
+// CalendarDetail.tsx — price input (теперь как у text input)
+<input
+  value={price} onChange={e => setPrice(e.target.value)}
+  inputMode="numeric"
+  onFocus={() => { setTimeout(() => formRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300); }}
+  ...
+/>
+```
+
+---
+
 ## 2026-04-30 — `getOrCreateProfile` race-condition 500 (повтор)
 
 ### Ошибка

@@ -684,6 +684,7 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
               value={price} onChange={e => setPrice(e.target.value)}
               placeholder={ct('cal_idea_price_placeholder', locale)}
               inputMode="numeric"
+              onFocus={() => { setTimeout(() => formRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300); }}
               style={{
                 flex: 2, boxSizing: 'border-box',
                 background: 'var(--wb-card)', border: '1px solid var(--wb-border)',

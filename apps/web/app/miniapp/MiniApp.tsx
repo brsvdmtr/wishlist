@@ -805,6 +805,14 @@ const inputStyle: React.CSSProperties = {
 type ReleaseNote = { id: string; date: string; items: { ru: string; en: string }[] };
 const RELEASE_NOTES: ReleaseNote[] = [
   {
+    id: '2026-04-30',
+    date: '30.04.2026',
+    items: [
+      { ru: '📷 Фото к идее события теперь действительно загружается и показывается в карточке (раньше прикреплённый файл уходил «в никуда» из-за ошибки в заголовках запроса)', en: '📷 Idea photos on calendar events now actually upload and render in the card (the attached file used to silently disappear due to a bad request header)' },
+      { ru: '⌨️ Поле «цена» при добавлении идеи к событию: курсор больше не «убегает» вниз при тапе — теперь мигает строго в инпуте, на который поставил фокус', en: '⌨️ Calendar idea price field: the caret no longer drifts off-screen on tap — it now stays in the input you focused' },
+    ],
+  },
+  {
     id: '2026-04-27',
     date: '27.04.2026',
     items: [
@@ -5554,7 +5562,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         signal: controller.signal,
         credentials: 'omit',
         headers: {
-          'Content-Type': 'application/json',
+          ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
           ...(initDataRef.current ? { 'X-TG-INIT-DATA': initDataRef.current } : {}),
           ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
           ...(init?.headers as Record<string, string> | undefined),
