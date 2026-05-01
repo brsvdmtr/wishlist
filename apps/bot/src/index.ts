@@ -1,6 +1,15 @@
-// NOTE: IPv6-first was removed — Docker SNAT breaks long-poll connections to
-// Telegram while IPv4 currently works fine. If RKN blocks IPv4 again, re-add
-// dns.setDefaultResultOrder('ipv6first') AND fix Docker IPv6 NAT first.
+// IPv6-first DNS for outbound — Timeweb VPS periodically loses IPv4 reach to
+// Telegram DC2 (149.154.166.110) while IPv6 (2001:67c:4e8:f004::9) stays up.
+// Docker IPv6 SNAT (host route /opt/wishlist/ops/docker-ipv6-snat.sh, systemd
+// unit docker-ipv6-snat.service) is required for this to work — without it,
+// container outbound IPv6 is NAT'd from a deprecated source and packets drop.
+// 2026-05-01 incident: RKN-blocked IPv4 + flaky default-order Happy Eyeballs
+// caused getMe / sendMessage to hang ~7 s before falling back to IPv6, which
+// broke the hint flow. Setting ipv6first removes the wasted IPv4 attempt.
+//
+// Must be the first effect — runs before dotenv, telegraf, fetch.
+import dns from 'node:dns';
+dns.setDefaultResultOrder('ipv6first');
 
 import dotenv from 'dotenv';
 import { Telegraf, Markup, TelegramError } from 'telegraf';
