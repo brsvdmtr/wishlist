@@ -1529,6 +1529,37 @@ if (!token) {
       return;
     }
 
+    // ─── Atomic claim ──────────────────────────────────────────────────────
+    // Telegraf processes updates sequentially within one bot.launch instance,
+    // but Telegram itself can deliver the same users_shared event twice (long
+    // polling retry, client double-fire on rapid keyboard tap, transport
+    // quirks). Without an atomic claim BOTH events race past the SENT lookup
+    // above, both run the delivery loop, and the second sendMessage to the
+    // same recipient gets ok=false from Telegram (rate-limit / dedup) → the
+    // second event posts "Не удалось отправить напрямую: 1" + fallback even
+    // though the first message was actually delivered (sentCount=1 then
+    // overwritten to sentCount=0,pendingCount=1 by the loser's update).
+    //
+    // Observed: 2026-05-01 17:22 hint cmon6l3ms — single API hint POST,
+    // single keyboard sent, but two summary replies in sender chat and DB
+    // ended up with sentCount=0,pendingCount=1.
+    //
+    // Fix: flip status SENT → DELIVERED in one row-level UPDATE. Only the
+    // first event's claim returns count=1; all later events get count=0 and
+    // silent-return. The recipient-side sendMessage runs at most once per
+    // hint, so the sender sees one summary and one decision.
+    const claim = await prisma.hint.updateMany({
+      where: { id: hint.id, status: 'SENT' },
+      data: { status: 'DELIVERED', deliveredAt: new Date() },
+    });
+    if (claim.count === 0) {
+      logger.info(
+        { hintId: hint.id, senderTgId, requestId: shared.request_id },
+        'users_shared: hint already claimed by concurrent event, skipping',
+      );
+      return;
+    }
+
     // Resolve owner name for the hint message
     const owner = await prisma.user.findUnique({
       where: { id: hint.item.wishlist.ownerId },
@@ -1551,8 +1582,28 @@ if (!token) {
     let directSent = 0;
     let pendingCount = 0;
 
+    // Intra-event recipient dedup. shared.users could legitimately contain
+    // the same user_id twice if the picker fires multiple chips for one
+    // contact, or if the user accidentally tapped the same person twice.
+    // Without dedup, the second sendMessage to the same chat_id usually
+    // returns ok=false (TG dedup/rate-limit), inflating pendingCount and
+    // triggering a fallback that shouldn't apply.
+    const seenRecipients = new Set<string>();
+
+    logger.info(
+      {
+        hintId: hint.id,
+        senderTgId,
+        requestId: shared.request_id,
+        selectedCount: shared.users.length,
+      },
+      'users_shared: starting delivery',
+    );
+
     for (const u of shared.users) {
       const recipientTgId = String(u.user_id);
+      if (seenRecipients.has(recipientTgId)) continue;
+      seenRecipients.add(recipientTgId);
       // Skip self-send
       if (recipientTgId === senderTgId) continue;
       // Skip if recipient is the owner themselves (edge case)
@@ -1562,7 +1613,17 @@ if (!token) {
       const recipientLocale: Locale = 'en';
       const hintText = t('bot_hint_msg', recipientLocale, { owner: ownerName, title: hint.item.title, shortName: shortName.toLowerCase() });
 
+      // Look up whether we already know this recipient's chat (just for log
+      // breadcrumb — sendMessage works for any user_id who has /start-ed
+      // the bot at any point in their lifetime).
+      const knownRecipient = await prisma.user.findUnique({
+        where: { telegramId: recipientTgId },
+        select: { telegramChatId: true },
+      }).catch(() => null);
+
       // Try direct bot delivery
+      let directOk = false;
+      let tgDescription: string | null = null;
       try {
         const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
           method: 'POST',
@@ -1577,7 +1638,9 @@ if (!token) {
             },
           }),
         });
-        const data = await resp.json() as { ok: boolean };
+        const data = await resp.json() as { ok: boolean; description?: string };
+        directOk = data.ok;
+        tgDescription = data.description ?? null;
         if (data.ok) {
           directSent++;
           // Ensure recipient in DB
@@ -1589,18 +1652,42 @@ if (!token) {
         } else {
           pendingCount++;
         }
-      } catch {
+      } catch (err) {
         pendingCount++;
+        tgDescription = err instanceof Error ? err.message : String(err);
       }
+
+      logger.info(
+        {
+          hintId: hint.id,
+          recipientTgId,
+          hasKnownChatId: !!knownRecipient?.telegramChatId,
+          ok: directOk,
+          tgDescription,
+        },
+        'users_shared: recipient processed',
+      );
     }
 
-    // Save delivery results to Hint record (for mini app polling)
+    // Status was already set to DELIVERED in the atomic claim above; only
+    // refresh sentCount/pendingCount with the loop's actual results.
     await prisma.hint.update({
       where: { id: hint.id },
-      data: { status: 'DELIVERED', sentCount: directSent, pendingCount, deliveredAt: new Date() },
+      data: { sentCount: directSent, pendingCount },
     }).catch((err) => {
-      logger.error({ err, hintId: hint.id }, 'failed to update hint delivery status');
+      logger.error({ err, hintId: hint.id }, 'failed to update hint delivery counts');
     });
+
+    logger.info(
+      {
+        hintId: hint.id,
+        senderTgId,
+        directSent,
+        pendingCount,
+        uniqueRecipients: seenRecipients.size,
+      },
+      'users_shared: delivery complete',
+    );
 
     // Summary to sender (uses sender's locale)
     const parts: string[] = [];
