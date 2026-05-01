@@ -8202,10 +8202,21 @@ tgRouter.post(
       },
     });
 
-    // 7. Send contact picker to sender's bot chat via request_users keyboard
+    // 7. Send contact picker to sender's bot chat via request_users keyboard.
+    //    sendTgBotMessage already does timeout (6 s) + 1 retry. If it still
+    //    returns false, the picker did NOT land in the user's bot chat — the
+    //    hint row is orphaned. Roll it back to CANCELLED so:
+    //      a) the bot's "most recent SENT hint within 30 min" lookup in the
+    //         users_shared handler doesn't accidentally pick it up later, and
+    //      b) the Mini App gets a real 502 instead of a misleading 200, so
+    //         the user sees a "Telegram isn't responding" toast and can retry
+    //         instead of clicking "hint friends" three times in a row.
+    //    Observed root cause for this rollback path: 2026-05-01 hint flow
+    //    stuck for ~7 s when Telegram API briefly stopped responding;
+    //    pre-fix the API claimed success, the keyboard was never delivered.
     const senderChatId = user.telegramChatId;
+    const locale = getRequestLocale(req);
     if (senderChatId) {
-      const locale = getRequestLocale(req);
       const sent = await sendTgBotMessage(
         senderChatId,
         t('api_hint_picker_msg', locale, { title: item.title }),
@@ -8219,9 +8230,27 @@ tgRouter.post(
           is_persistent: true,
         },
       );
-      if (!sent) logger.error({ senderChatId }, 'hint: failed to send contact picker to chat');
+      if (!sent) {
+        logger.error({ senderChatId, hintId: hint.id }, 'hint: failed to send contact picker to chat');
+        await prisma.hint
+          .update({ where: { id: hint.id }, data: { status: 'CANCELLED' } })
+          .catch((err) => logger.error({ err, hintId: hint.id }, 'hint: failed to mark orphan as cancelled'));
+        trackEvent('error:hint_picker_send_failed', user.id, { itemId: id, hintId: hint.id, reason: 'tg_unreachable' });
+        return res.status(502).json({
+          error: 'tg_unreachable',
+          message: t('api_hint_tg_unreachable', locale),
+        });
+      }
     } else {
-      logger.error({ userId: user.id }, 'hint: no telegramChatId for user');
+      logger.error({ userId: user.id, hintId: hint.id }, 'hint: no telegramChatId for user');
+      await prisma.hint
+        .update({ where: { id: hint.id }, data: { status: 'CANCELLED' } })
+        .catch((err) => logger.error({ err, hintId: hint.id }, 'hint: failed to mark orphan as cancelled'));
+      trackEvent('error:hint_picker_send_failed', user.id, { itemId: id, hintId: hint.id, reason: 'no_chat_id' });
+      return res.status(502).json({
+        error: 'tg_unreachable',
+        message: t('api_hint_tg_unreachable', locale),
+      });
     }
 
     trackEvent('hint_created', user.id);

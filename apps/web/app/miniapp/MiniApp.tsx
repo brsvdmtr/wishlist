@@ -7280,7 +7280,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     if (planInfo.code === 'FREE') { showUpsell('hints'); return; }
     setHintLoading(true);
     try {
-      const res = await tgFetch(`/tg/items/${item.id}/hint`, { method: 'POST' });
+      // 15 s ceiling: server-side sendTgBotMessage now does 6 s timeout + 1
+      // retry + 0.5 s backoff (~12.5 s worst case) before returning 502.
+      // Default 5 s here would race the server retry and abort while the
+      // hint is still being delivered — the exact failure mode users hit
+      // on 2026-05-01 (3 picker keyboards in 34 s, 2 orphans).
+      const res = await tgFetch(`/tg/items/${item.id}/hint`, { method: 'POST', timeoutMs: 15000 });
       if (!res.ok) {
         if (res.status === 402) { showUpsell('hints'); return; }
         if (res.status === 403) {
@@ -7314,10 +7319,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           try { window.Telegram?.WebApp?.close?.(); } catch { /* ok */ }
         }, 300);
       }, 100);
+    } catch {
+      // Network failure / client-side timeout abort — make sure user sees a
+      // toast instead of a silently-stuck loading state.
+      pushToast(t('comments_send_error', locale), 'error');
     } finally {
       setHintLoading(false);
     }
-  }, [hintLoading, hintClosing, planInfo, tgFetch, pushToast, showUpsell]);
+  }, [hintLoading, hintClosing, planInfo, tgFetch, pushToast, showUpsell, locale, botUsername]);
 
   const handleSaveDescription = useCallback(async () => {
     if (!viewingItem) return;
