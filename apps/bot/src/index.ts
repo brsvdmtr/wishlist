@@ -1626,40 +1626,61 @@ if (!token) {
         select: { telegramChatId: true },
       }).catch(() => null);
 
-      // Try direct bot delivery
+      // Try direct bot delivery — retry on network failure to ride out the
+      // VPS↔Telegram path flaps (RKN-blocked IPv4 + deprecated IPv6 source
+      // currently give ~40-60% success per attempt). 3 attempts × 5 s gives
+      // ~92% expected success vs 40% with one shot. Telegram-side rejections
+      // (data.ok === false) are NOT retried — those are deterministic.
       let directOk = false;
       let tgDescription: string | null = null;
-      try {
-        const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: u.user_id,
-            text: hintText,
-            reply_markup: {
-              inline_keyboard: [[
-                { text: t('bot_hint_view_btn', recipientLocale), web_app: { url: `${MINI_APP_URL}?startapp=${hint.item.wishlist.slug}__item_${hint.item.id}` } },
-              ]],
-            },
-          }),
-        });
-        const data = await resp.json() as { ok: boolean; description?: string };
-        directOk = data.ok;
-        tgDescription = data.description ?? null;
-        if (data.ok) {
-          directSent++;
-          // Ensure recipient in DB
-          await prisma.user.upsert({
-            where: { telegramId: recipientTgId },
-            update: { telegramChatId: recipientTgId },
-            create: { telegramId: recipientTgId, telegramChatId: recipientTgId },
-          }).catch(() => {});
-        } else {
+      const sendBody = JSON.stringify({
+        chat_id: u.user_id,
+        text: hintText,
+        reply_markup: {
+          inline_keyboard: [[
+            { text: t('bot_hint_view_btn', recipientLocale), web_app: { url: `${MINI_APP_URL}?startapp=${hint.item.wishlist.slug}__item_${hint.item.id}` } },
+          ]],
+        },
+      });
+      const SEND_TIMEOUT_MS = 5000;
+      const SEND_MAX_ATTEMPTS = 3;
+      let attemptError: string | null = null;
+      for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt++) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
+        try {
+          const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: sendBody,
+            signal: controller.signal,
+          });
+          clearTimeout(timer);
+          const data = await resp.json() as { ok: boolean; description?: string };
+          directOk = data.ok;
+          tgDescription = data.description ?? null;
+          if (data.ok) {
+            directSent++;
+            await prisma.user.upsert({
+              where: { telegramId: recipientTgId },
+              update: { telegramChatId: recipientTgId },
+              create: { telegramId: recipientTgId, telegramChatId: recipientTgId },
+            }).catch(() => {});
+          } else {
+            pendingCount++;
+          }
+          attemptError = null;
+          break;
+        } catch (err) {
+          clearTimeout(timer);
+          attemptError = err instanceof Error ? err.message : String(err);
+          if (attempt < SEND_MAX_ATTEMPTS) {
+            await new Promise((r) => setTimeout(r, 500));
+            continue;
+          }
           pendingCount++;
+          tgDescription = attemptError;
         }
-      } catch (err) {
-        pendingCount++;
-        tgDescription = err instanceof Error ? err.message : String(err);
       }
 
       logger.info(
