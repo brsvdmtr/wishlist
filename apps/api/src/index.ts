@@ -1,17 +1,15 @@
-import dns from 'node:dns';
-// Prefer IPv6 for Telegram API — Timeweb VPS periodically loses IPv4 connectivity
-// to Telegram DC2 (149.154.166.110) while IPv6 stays up.
-dns.setDefaultResultOrder('ipv6first');
+// Bootstrap order matters and is enforced by file naming:
+//   1. dns      — sets ipv6first BEFORE any module opens a socket
+//   2. env      — populates process.env from .env BEFORE any module reads it
+//   3. sentry   — opt-in error tracking init, depends on env
+// Side-effect-only imports; do not reorder.
+import './bootstrap/dns';
+import './bootstrap/env';
+import './bootstrap/sentry';
 
-import cors from 'cors';
-import dotenv from 'dotenv';
 import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
-import multer from 'multer';
-import sharp from 'sharp';
-import fs from 'node:fs';
-import path from 'node:path';
 import crypto from 'node:crypto';
 import { z } from 'zod';
 import {
@@ -40,36 +38,42 @@ import {
   startIdempotencyCleanupJob,
   IDEMPOTENCY_BILLING_TTL_MINUTES,
 } from './security';
-import pinoHttp from 'pino-http';
 import { parseUrl, validateUrl } from './url-parser.js';
 import { getOrCreateProfile } from './profile.js';
 import { t, detectLocale, normalizeLocale, resolveEffectiveLocale, pluralize, type Locale, type LanguageMode, type LanguageSettings, getOnboardingMeta, type OnboardingMeta, type OnboardingVariant, type AcquisitionPath, type CatalogTemplate, getCatalogForSegment, deriveMarketBucket, isSupportedImportRegion, type MarketBucket, MARKET_BUCKET_LABELS, ANALYTICS_EVENTS } from '@wishlist/shared';
 
-// Prefer app-local .env when running from repo root (pnpm dev),
-// but also support running from within apps/api (pnpm -C apps/api dev).
-const envCandidates = [
-  path.resolve(__dirname, '../.env'),
-  path.resolve(__dirname, '../../..', '.env'),
-];
-for (const p of envCandidates) {
-  if (fs.existsSync(p)) {
-    dotenv.config({ path: p });
-    break;
-  }
-}
-
-// Sentry/GlitchTip error tracking (opt-in)
+// Sentry namespace stays imported here so the error handler and the
+// uncaughtException / unhandledRejection handlers further down can call
+// Sentry.captureException. Init itself happens in ./bootstrap/sentry.
 import * as Sentry from '@sentry/node';
-if (process.env.GLITCHTIP_DSN) {
-  Sentry.init({
-    dsn: process.env.GLITCHTIP_DSN,
-    environment: process.env.GLITCHTIP_ENVIRONMENT || process.env.NODE_ENV || 'production',
-    release: process.env.APP_RELEASE || 'unknown',
-  });
-}
+
+import { corsMiddleware } from './middleware/cors';
+import { requestLogger } from './middleware/requestLogger';
+import { registerHealthRoutes } from './health/health.routes';
+import { upload } from './uploads/upload.config';
+import { processImage } from './uploads/imageProcessor';
+import { deleteUploadFile } from './uploads/uploadCleanup';
+import { registerUploads } from './uploads/registerUploads';
+
+import { asyncHandler } from './lib/asyncHandler';
+import { zodError } from './lib/http';
+import { secureCompare } from './lib/crypto';
+import { getRequestLocale } from './lib/locale';
+import { escapeTgHtml } from './telegram/html';
+import { sendTgNotification, sendTgBotMessage } from './telegram/botApi';
+import { createTgInvoiceLink } from './telegram/invoiceLink';
+import { buildCommentReplyDeepLink } from './telegram/deepLinks';
+import { sendAdminAlert } from './notifications/adminAlerts';
+import { queueCommentNotification, queueReplyAuthorNotification } from './notifications/commentNotificationQueue';
+import { generateUniqueSlug } from './wishlists/slug';
+import { generateUniqueShareToken } from './wishlists/shareToken';
+
+import { PLACEMENT_ORDER_BY } from './placements/orderBy';
+import { ensureItemPlacement } from './placements/ensureItemPlacement';
+import { countActivePlacementsInWishlist } from './placements/countActivePlacementsInWishlist';
+import { relocateItemPrimary } from './placements/relocateItemPrimary';
 
 const PORT = Number(process.env.PORT ?? 3001);
-const WEB_ORIGIN = (process.env.WEB_ORIGIN ?? '').trim() || 'http://localhost:3000';
 
 const app = express();
 
@@ -78,156 +82,20 @@ const app = express();
 // and rate-limits incorrectly. Also silences ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
 app.set('trust proxy', 1);
 
-app.use(
-  cors({
-    origin: (origin, cb) => {
-      // Allow non-browser requests (curl, server-to-server).
-      if (!origin) return cb(null, true);
-      if (origin === WEB_ORIGIN) return cb(null, true);
-      // Reject cleanly (no CORS headers) instead of throwing — throwing bubbled
-      // to the express error middleware as `level:50 "unhandled express error"`
-      // which looked like a real crash in log audits. A plain reject gives the
-      // browser the same net effect (blocked request) without the alarm.
-      // Log once per reject so we can actually identify who's probing.
-      logger.warn({ rejectedOrigin: origin }, 'CORS reject');
-      return cb(null, false);
-    },
-    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-    // Idempotency-Key allows the Mini App to declare retry safety on POST/PATCH/DELETE.
-    // Without it in allowedHeaders, browsers strip the header on preflight and
-    // the security layer never sees it.
-    allowedHeaders: ['Content-Type', 'X-ADMIN-KEY', 'X-TG-INIT-DATA', 'X-TG-DEV', 'X-INTERNAL-KEY', 'Idempotency-Key'],
-  }),
-);
+// Middleware order MUST stay: cors → express.json → requestLogger → /uploads
+// → /health → maintenance gate → routers → error handler. See docs/BACKEND_MAP.md
+// § "Middleware Chain". The infrastructure pieces have moved into modules
+// under ./middleware, ./uploads, ./health — the order here is unchanged.
+app.use(corsMiddleware);
 app.use(express.json());
-app.use(pinoHttp({
-  logger,
-  autoLogging: {
-    ignore: (req) => req.url === '/api/health' || req.url === '/api/health/deep',
-  },
-  customProps: (req) => ({
-    requestId: req.id,
-  }),
-  genReqId: () => crypto.randomUUID(),
-}));
+app.use(requestLogger);
 
-// ─── File uploads ─────────────────────────────────────────────────────────────
-const UPLOAD_DIR = (process.env.UPLOAD_DIR ?? '').trim() || path.join(process.cwd(), 'uploads');
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+// /uploads static handler (30-day immutable cache).
+registerUploads(app);
 
-const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
-
-// Use memory storage so sharp can process buffer directly (no temp files).
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 30 * 1024 * 1024 }, // 30 MB
-  fileFilter: (_req, file, cb) => {
-    if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
-      return cb(new Error('Unsupported file type. Use JPEG, PNG, WebP, or GIF.'));
-    }
-    cb(null, true);
-  },
-});
-
-/**
- * Process uploaded image with sharp:
- * - Auto-rotate based on EXIF orientation
- * - Strip all EXIF/metadata (privacy)
- * - Resize to fit within maxDim (preserving aspect ratio)
- * - Convert to JPEG (best browser + Telegram compatibility)
- * - Quality 80 → targets 100-300KB for typical photos
- *
- * Returns: { filename, filepath, sizeBytes, width, height }
- */
-async function processImage(
-  buffer: Buffer,
-  opts: { maxDim: number; quality?: number; suffix?: string },
-): Promise<{ filename: string; filepath: string; sizeBytes: number; width: number; height: number }> {
-  const id = crypto.randomUUID();
-  const suffix = opts.suffix ?? 'full';
-  const filename = `${id}-${suffix}.jpg`;
-  const filepath = path.join(UPLOAD_DIR, filename);
-
-  const result = await sharp(buffer)
-    .rotate() // auto-rotate from EXIF
-    .resize(opts.maxDim, opts.maxDim, { fit: 'inside', withoutEnlargement: true })
-    .jpeg({ quality: opts.quality ?? 80, mozjpeg: true })
-    .toFile(filepath);
-
-  return {
-    filename,
-    filepath,
-    sizeBytes: result.size,
-    width: result.width,
-    height: result.height,
-  };
-}
-
-/** Delete a local upload file. Silently ignores missing files and non-local URLs. */
-function deleteUploadFile(imageUrl: string | null): void {
-  if (!imageUrl) return;
-  // Only delete files we own (relative /api/uploads/ paths or bare filenames).
-  // External URLs (http/https) are left untouched.
-  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) return;
-  const filename = path.basename(imageUrl); // strips any leading /api/uploads/ etc.
-  if (!filename || filename.includes('..') || filename.includes('/')) return;
-  const filepath = path.join(UPLOAD_DIR, filename);
-  fs.unlink(filepath, () => {}); // best-effort
-  // Also try to delete the thumbnail variant
-  const thumbName = filename.replace('-full.jpg', '-thumb.jpg');
-  if (thumbName !== filename) {
-    fs.unlink(path.join(UPLOAD_DIR, thumbName), () => {});
-  }
-}
-
-// Serve uploaded files as static assets at /uploads/*
-// In production: nginx /api/* → port 3001, so GET /api/uploads/x → /uploads/x here.
-app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '30d', immutable: true }));
-// ──────────────────────────────────────────────────────────────────────────────
-
-app.get('/health', (_req, res) => {
-  const maintenance = (process.env.MAINTENANCE_MODE ?? '').toLowerCase() === 'true';
-  res.json({ ok: !maintenance, maintenance, release: process.env.APP_RELEASE ?? 'unknown' });
-});
-
-// ─── Deep health check ────────────────────────────────────────────────────────
-app.get('/health/deep', asyncHandler(async (_req, res) => {
-  const checks: Record<string, unknown> = {};
-  let ok = true;
-
-  // DB check
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    checks.db = 'ok';
-  } catch (err) {
-    checks.db = { error: String(err) };
-    ok = false;
-  }
-
-  // Bot heartbeat check (stale if > 120 s)
-  try {
-    const hb = await prisma.serviceHeartbeat.findUnique({ where: { serviceName: 'bot' } });
-    if (!hb) {
-      checks.bot = 'no_heartbeat';
-      ok = false;
-    } else {
-      const ageSec = (Date.now() - hb.updatedAt.getTime()) / 1000;
-      if (ageSec > 120) {
-        checks.bot = { stale: true, ageSec: Math.round(ageSec) };
-        ok = false;
-      } else {
-        checks.bot = { ok: true, ageSec: Math.round(ageSec) };
-      }
-    }
-  } catch (err) {
-    checks.bot = { error: String(err) };
-    ok = false;
-  }
-
-  checks.version = process.env.npm_package_version ?? 'unknown';
-
-  return res.status(ok ? 200 : 503).json({ ok, checks });
-}));
+// /health (liveness) and /health/deep (DB + bot heartbeat readiness).
+// Both intentionally bypass auth and the /tg+/public maintenance gate.
+registerHealthRoutes(app);
 
 const publicRouter = express.Router();
 const privateRouter = express.Router();
@@ -273,13 +141,6 @@ const actorBodySchema = z.object({
   actorHash: z.string().uuid(),
 });
 
-/** Timing-safe string comparison via SHA-256 digests to prevent timing attacks. */
-function secureCompare(a: string, b: string): boolean {
-  const aHash = crypto.createHash('sha256').update(a).digest();
-  const bHash = crypto.createHash('sha256').update(b).digest();
-  return crypto.timingSafeEqual(aHash, bHash);
-}
-
 /** Best-effort: resolve user's first_name from Telegram Bot API, cache in DB. */
 async function resolveUserFirstName(user: { id: string; firstName: string | null; telegramChatId: string | null }, locale: Locale = 'ru'): Promise<string> {
   if (user.firstName) return user.firstName;
@@ -304,12 +165,6 @@ async function resolveUserFirstName(user: { id: string; firstName: string | null
   return fallback;
 }
 
-/** Detect locale from Telegram user's language_code on the request. */
-function getRequestLocale(req: Request): Locale {
-  const langCode = req.tgUser?.language_code;
-  return detectLocale(langCode);
-}
-
 /** Cancel all active hints for an item (called when item leaves AVAILABLE state). */
 async function cancelItemHints(itemId: string): Promise<void> {
   try {
@@ -318,205 +173,6 @@ async function cancelItemHints(itemId: string): Promise<void> {
       data: { status: 'CANCELLED' },
     });
   } catch { /* best-effort */ }
-}
-
-/** Escape user-controlled strings for safe use inside Telegram HTML parse_mode.
- * Telegram HTML is tag-based (`<b>`, `<i>`, `<blockquote>`), so the only chars that need
- * escaping in interpolated values are `&`, `<`, `>` — no quote escaping needed.
- */
-function escapeTgHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-/** Best-effort Telegram notification. Fire-and-forget – never throws. */
-async function sendTgNotification(chatId: string, text: string): Promise<void> {
-  const token = process.env.BOT_TOKEN;
-  if (!token || !chatId) return;
-  try {
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
-    });
-  } catch {
-    // best-effort, don't fail the main operation
-  }
-}
-
-/** Send a Telegram message with optional reply markup. Returns true on success. */
-async function sendTgBotMessage(chatId: string, text: string, replyMarkup?: Record<string, unknown>): Promise<boolean> {
-  const token = process.env.BOT_TOKEN;
-  if (!token || !chatId) return false;
-  try {
-    const payload: Record<string, unknown> = { chat_id: chatId, text, parse_mode: 'HTML' };
-    if (replyMarkup) payload.reply_markup = replyMarkup;
-    const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await resp.json() as { ok: boolean; description?: string };
-    if (!data.ok) logger.error({ description: data.description, chatId }, 'sendTgBotMessage Telegram API error');
-    return data.ok;
-  } catch (err) {
-    logger.error({ err }, 'sendTgBotMessage exception');
-    return false;
-  }
-}
-
-
-/**
- * Create a Telegram Stars invoice link. Wraps the raw TG API call with a
- * single retry on network failure (timeout / DNS / IPv4 block) so a
- * transient blip doesn't surface as an unhandled 500 in a billing handler.
- *
- * Returns a discriminated union so callers can distinguish:
- *   - ok=true              → use .url
- *   - ok=false, retryable  → network problem, suggest retry (503)
- *   - ok=false, !retryable → Telegram rejected (invalid payload/etc), 502
- *
- * Observed root cause: 2026-04-20 unhandled 500 on /tg/billing/pro/checkout
- * from `fetch failed: Connect Timeout Error` on the TG API. The whole
- * request was lost — user saw a plain 500 instead of a retry hint.
- */
-type InvoiceLinkResult =
-  | { ok: true; url: string }
-  | { ok: false; retryable: boolean; description?: string };
-
-async function createTgInvoiceLink(
-  botToken: string,
-  invoiceBody: Record<string, unknown>,
-): Promise<InvoiceLinkResult> {
-  const url = `https://api.telegram.org/bot${botToken}/createInvoiceLink`;
-  const payload = JSON.stringify(invoiceBody);
-  let lastError: string | undefined;
-
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      const tgRes = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: payload,
-      });
-      const data = (await tgRes.json()) as { ok: boolean; result?: string; description?: string };
-      if (data.ok && data.result) return { ok: true, url: data.result };
-      // Telegram returned a structured rejection — not retryable (invalid payload,
-      // blocked bot, etc). Surface description so caller can log + toast.
-      return { ok: false, retryable: false, description: data.description };
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err);
-      if (attempt < 2) {
-        // Small backoff before the retry attempt.
-        await new Promise((r) => setTimeout(r, 500));
-        continue;
-      }
-    }
-  }
-
-  logger.warn({ err: lastError }, 'createTgInvoiceLink network failure after retry');
-  return { ok: false, retryable: true, description: lastError };
-}
-
-/** Send alert to all ADMIN_ALERT_CHAT_IDS. Best-effort, never throws. */
-async function sendAdminAlert(text: string): Promise<void> {
-  const token = process.env.BOT_TOKEN;
-  const chatIds = (process.env.ADMIN_ALERT_CHAT_IDS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-  if (!token || chatIds.length === 0) return;
-  await Promise.allSettled(
-    chatIds.map((chatId) =>
-      fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
-      }),
-    ),
-  );
-}
-
-// Notification batching (30s debounce per item+recipient)
-type PendingEntry = {
-  chatId: string;
-  itemTitle: string;
-  count: number;
-  lastReplyMarkup?: Record<string, unknown>;
-  timer: ReturnType<typeof setTimeout>;
-};
-const pendingNotifications = new Map<string, PendingEntry>();
-
-/**
- * Queue a comment notification.
- * First notification for a given (item, recipient) key is sent immediately with optional inline keyboard.
- * Subsequent comments within 30s are batched into a single summary notification.
- * The batch summary carries the LATEST reply markup (pointing at the most recent comment) so
- * users can still tap "Reply" — otherwise 2+ comments in 30s would land without a CTA.
- */
-function queueCommentNotification(
-  key: string,
-  chatId: string,
-  itemTitle: string,
-  text: string,
-  replyMarkup?: Record<string, unknown>,
-) {
-  const existing = pendingNotifications.get(key);
-  if (existing) {
-    existing.count++;
-    // Refresh CTA to point at the most recent comment (used when batch timer fires)
-    if (replyMarkup) existing.lastReplyMarkup = replyMarkup;
-    return;
-  }
-
-  // Send first notification immediately (with inline keyboard if provided)
-  if (replyMarkup) void sendTgBotMessage(chatId, text, replyMarkup);
-  else void sendTgNotification(chatId, text);
-
-  const entry: PendingEntry = {
-    chatId,
-    itemTitle,
-    count: 0,
-    lastReplyMarkup: replyMarkup,
-    timer: setTimeout(() => {
-      const e = pendingNotifications.get(key);
-      pendingNotifications.delete(key);
-      if (!e || e.count === 0) return;
-      const notifLocale: Locale = 'ru'; // notifications use Russian as default
-      const word = pluralize(e.count, 'новый комментарий', 'новых комментария', 'новых комментариев', notifLocale);
-      const batchText = t('notif_batch_comments', notifLocale, {
-        count: e.count, word, title: escapeTgHtml(e.itemTitle),
-      });
-      // Include latest CTA so the user can tap "Reply" from the batch summary too
-      if (e.lastReplyMarkup) void sendTgBotMessage(e.chatId, batchText, e.lastReplyMarkup);
-      else void sendTgNotification(e.chatId, batchText);
-    }, 30_000),
-  };
-  pendingNotifications.set(key, entry);
-}
-
-// Reply-author notification dedupe (30s per parentCommentId+recipient)
-const pendingReplyNotifications = new Map<string, { timer: ReturnType<typeof setTimeout> }>();
-
-/**
- * Send a "someone replied to your comment" notification with 30s dedupe.
- * Uses same-shape dedupe as comment notifications but a separate namespace — if the same parent
- * receives multiple replies in 30s from the same responder, only the first fires a notification.
- */
-function queueReplyAuthorNotification(
-  parentCommentId: string,
-  recipientUserId: string,
-  chatId: string,
-  text: string,
-  replyMarkup: Record<string, unknown>,
-) {
-  const key = `reply:${parentCommentId}:${recipientUserId}`;
-  if (pendingReplyNotifications.has(key)) return; // dedupe within window
-  void sendTgBotMessage(chatId, text, replyMarkup);
-  const timer = setTimeout(() => { pendingReplyNotifications.delete(key); }, 30_000);
-  pendingReplyNotifications.set(key, { timer });
-}
-
-/** Build the mini app deep link URL for opening a specific comment in reply mode. */
-function buildCommentReplyDeepLink(itemId: string, commentId: string): string {
-  const miniAppUrl = process.env.MINI_APP_URL ?? (process.env.WEB_ORIGIN ? `${process.env.WEB_ORIGIN}/miniapp` : 'https://wishlistik.ru/miniapp');
-  return `${miniAppUrl}?startapp=crpl_${encodeURIComponent(itemId)}__c_${encodeURIComponent(commentId)}`;
 }
 
 /**
@@ -620,51 +276,6 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
   return next();
 }
 
-function asyncHandler(
-  fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>,
-) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    void Promise.resolve(fn(req, res, next)).catch(next);
-  };
-}
-
-function zodError(res: Response, error: z.ZodError) {
-  return res.status(400).json({ error: 'Validation error', issues: error.issues });
-}
-
-function slugify(input: string) {
-  const base = input
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
-  return base || 'list';
-}
-
-function randomSuffix(len = 6) {
-  return crypto.randomBytes(Math.ceil(len)).toString('base64url').slice(0, len);
-}
-
-async function generateUniqueSlug(title: string) {
-  const base = slugify(title).slice(0, 24);
-  for (let i = 0; i < 10; i++) {
-    const candidate = `${base}-${randomSuffix(6)}`;
-    const existing = await prisma.wishlist.findUnique({ where: { slug: candidate } });
-    if (!existing) return candidate;
-  }
-  return `${base}-${crypto.randomUUID().slice(0, 8)}`;
-}
-
-async function generateUniqueShareToken(): Promise<string> {
-  for (let i = 0; i < 10; i++) {
-    const token = crypto.randomBytes(9).toString('base64url'); // 12-char URL-safe token
-    const existing = await prisma.wishlist.findUnique({ where: { shareToken: token } });
-    if (!existing) return token;
-  }
-  return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
-}
-
 // generateUniqueSupportId + getOrCreateProfile live in ./profile so they can
 // be unit-tested in isolation (race-condition repro for P2002 on userId).
 
@@ -692,139 +303,11 @@ async function getSystemUser() {
  * @param opts.categoryId  Category in target wishlist (null → default category resolved here)
  */
 /**
- * Prisma orderBy for placement-based item reads — mirrors ITEM_ORDER_BY but
- * resolves priority/createdAt from the related Item and position from the
- * placement (so reordering within a wishlist doesn't affect sibling placements).
- */
-const PLACEMENT_ORDER_BY = [
-  { item: { priority: 'desc' as const } },
-  { position: 'asc' as const },
-  { item: { createdAt: 'desc' as const } },
-  { item: { id: 'desc' as const } },
-];
-
-async function ensureItemPlacement(
-  tx: Pick<typeof prisma, 'wishlistItemPlacement' | 'wishlistCategory' | 'item'>,
-  opts: { wishlistId: string; itemId: string; position?: number; categoryId?: string | null },
-): Promise<{ id: string; wishlistId: string; itemId: string; position: number; categoryId: string | null }> {
-  // Resolve default category if not provided
-  let categoryId = opts.categoryId ?? null;
-  if (categoryId === null) {
-    const def = await tx.wishlistCategory.findFirst({
-      where: { wishlistId: opts.wishlistId, isDefault: true },
-      select: { id: true },
-    });
-    categoryId = def?.id ?? null;
-  }
-
-  // Resolve position if not provided: max(position) + 1 across active items in wishlist
-  let position = opts.position;
-  if (position === undefined) {
-    const maxPos = await tx.wishlistItemPlacement.aggregate({
-      where: { wishlistId: opts.wishlistId },
-      _max: { position: true },
-    });
-    position = (maxPos._max.position ?? -1) + 1;
-  }
-
-  // Upsert placement — unique (wishlistId, itemId)
-  return tx.wishlistItemPlacement.upsert({
-    where: { wishlistId_itemId: { wishlistId: opts.wishlistId, itemId: opts.itemId } },
-    create: { wishlistId: opts.wishlistId, itemId: opts.itemId, position, categoryId },
-    update: {}, // don't overwrite if already exists
-    select: { id: true, wishlistId: true, itemId: true, position: true, categoryId: true },
-  });
-}
-
-/**
  * Count how many wishlists an item is currently placed in.
  * Used to render "🔗 В N" badges and to guard the "remove last placement" flow.
  */
 async function countItemPlacements(itemId: string): Promise<number> {
   return prisma.wishlistItemPlacement.count({ where: { itemId } });
-}
-
-/**
- * Count active-status placements in a wishlist — authoritative capacity source.
- * Shared wishes count against every host wishlist. Use this instead of
- * `prisma.item.count({ wishlistId })` so capacity is enforced correctly when
- * secondary placements exist (their primary Item.wishlistId lives elsewhere).
- */
-async function countActivePlacementsInWishlist(wishlistId: string): Promise<number> {
-  return prisma.wishlistItemPlacement.count({
-    where: { wishlistId, item: { status: { in: [...ACTIVE_STATUSES] } } },
-  });
-}
-
-/**
- * Move an item's "primary" placement from one wishlist to another.
- *
- * Semantics (used by /items/:id/move, bulk-move, transfer-items):
- *   - Source placement (on item.wishlistId) is removed.
- *   - Target placement is created (or kept if it already exists — i.e. item was
- *     already shared into target, in which case this is effectively "remove from source").
- *   - Item.wishlistId / position / categoryId are updated to the target so legacy
- *     reads stay consistent with an existing placement.
- *   - Other placements (shared into unrelated wishlists) are untouched.
- *
- * Returns { moved: true } on success. Callers should guard capacity and ownership
- * before invoking. Runs in a single transaction.
- */
-async function relocateItemPrimary(
-  itemId: string,
-  sourceWishlistId: string,
-  targetWishlistId: string,
-): Promise<void> {
-  if (sourceWishlistId === targetWishlistId) return;
-
-  // Resolve target default category + append position once outside the tx
-  // (read path doesn't need to observe them atomically).
-  const [targetDefaultCat, maxPosAgg] = await Promise.all([
-    prisma.wishlistCategory.findFirst({
-      where: { wishlistId: targetWishlistId, isDefault: true },
-      select: { id: true },
-    }),
-    prisma.wishlistItemPlacement.aggregate({
-      where: { wishlistId: targetWishlistId },
-      _max: { position: true },
-    }),
-  ]);
-  const targetCategoryId = targetDefaultCat?.id ?? null;
-  const targetPosition = (maxPosAgg._max.position ?? -1) + 1;
-
-  await prisma.$transaction(async (tx) => {
-    // 1) Remove source placement if present (may already be absent for legacy rows)
-    await tx.wishlistItemPlacement.deleteMany({
-      where: { wishlistId: sourceWishlistId, itemId },
-    });
-
-    // 2) Ensure target placement exists. If already there (item was shared into target),
-    // keep existing position/category — don't disturb the user's ordering in target.
-    await tx.wishlistItemPlacement.upsert({
-      where: { wishlistId_itemId: { wishlistId: targetWishlistId, itemId } },
-      create: {
-        wishlistId: targetWishlistId,
-        itemId,
-        position: targetPosition,
-        categoryId: targetCategoryId,
-      },
-      update: {},
-    });
-
-    // 3) Sync legacy Item columns to the new primary so non-migrated reads stay consistent.
-    const primary = await tx.wishlistItemPlacement.findUnique({
-      where: { wishlistId_itemId: { wishlistId: targetWishlistId, itemId } },
-      select: { position: true, categoryId: true },
-    });
-    await tx.item.update({
-      where: { id: itemId },
-      data: {
-        wishlistId: targetWishlistId,
-        position: primary?.position ?? targetPosition,
-        categoryId: primary?.categoryId ?? targetCategoryId,
-      },
-    });
-  });
 }
 
 /**
