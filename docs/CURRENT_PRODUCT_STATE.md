@@ -2,7 +2,7 @@
 
 Production feature inventory for the Wishlist Telegram Mini App.
 
-**Last updated:** 2026-04-30
+**Last updated:** 2026-05-02
 
 ---
 
@@ -19,6 +19,8 @@ Production feature inventory for the Wishlist Telegram Mini App.
 - **Secret Santa** campaigns
 - **Support tickets** from within the app
 - **Item Placements** — share a single wish across multiple wishlists via WishlistItemPlacement junction table
+- **Events Calendar v2.1** — Personal calendar of gift-giving occasions: birthdays, anniversaries, holidays, custom events. Holiday import (per-country master list, dedup'd by `(ownerUserId, holidayKey)`), friend-birthday import (with `linkedUserId` so deletes cascade SetNull), per-occasion reminders (`offsetDays` + `timeOfDay`), in-app inbox, "today-context" banner, year-recap of completed events with `actualGiftText`/`thankYouNote`. Idea cards support emoji, link, price, photo, note. Soft-linked to wishlists / Santa campaigns / friends for cross-feature navigation. Server-persisted 4-step onboarding (`User.calendarOnboardingSeenAt`) so devices don't re-show the flow
+- **Wishlist Emoji** — User-pickable emoji on each wishlist (single-grapheme + emoji-only validation; auto-pick from title hash when unset). Picker with quick-pick grid + "Свой" custom-emoji input
 
 ## Monetization
 
@@ -40,7 +42,7 @@ See also: `docs/MONETIZATION.md`
 
 ## Scale
 
-- **67 Prisma models**, **35 enums**
+- **73 Prisma models**, **36 enums**
 - **59 screens** in the Mini App
 - **14 add-on SKUs**
 
@@ -68,6 +70,7 @@ See also: `docs/MONETIZATION.md`
 - `MAINTENANCE_MODE` — blocks `/tg/*` and `/public/*` endpoints
 - `MARKETPLACE_PARSER_DISABLED` — disables URL import parsing
 - **Maintenance Recovery Notifications** — automated system that notifies users who saw a maintenance screen after service recovers. Uses MaintenanceIncident/MaintenanceExposure models, sends recovery messages with "Open bot" CTA
+- **API Security Layer (Wave 1 P0, shipped 2026-04-29)** — Idempotency-Key middleware + per-category rate limits + IP throttle for state-changing routes. Soft-require: critical routes log `api.idem_missing_on_critical_endpoint` rather than 400, so cached Mini App versions aren't bricked. Multipart endpoints opt out of replay (lock-only). Env kill switches: `SECURITY_IDEMPOTENCY_ENABLED`, `SECURITY_RATE_LIMIT_ENABLED`, `SECURITY_IP_THROTTLE_ENABLED`. See [docs/API_SECURITY.md](API_SECURITY.md)
 
 ## Analytics
 
@@ -80,7 +83,10 @@ See also: `docs/MONETIZATION.md`
 - **FloatingNav** — Persistent Instagram-like bottom navigation bar globally replacing the outer home tab bar. Tabs: Home / Archive / Profile / Reservations
 - **Yearly PRO Plan** — 800 XTR one-time purchase extends PRO by 365 days (~33% savings vs monthly). Monthly/yearly toggle on paywall. Bot sends DM renewal reminders at 7 days and 1 day before expiry
 - **Appearance Customisation** (PRO) — Theme (dark/black) and accent colour (violet/blue/pink/green). Persisted on `User.themePreference` / `User.accentPreference`. Served in `GET /tg/me/plan` as `appearance`. FREE locked to dark+violet
-- **Calendar Screen** — New UI scaffold (W30). Backend not yet connected
+- **API Security Layer (Wave 1 P0)** — Idempotency keys, per-category rate limits (18 categories), IP throttle for state-changing endpoints. Critical routes use soft-require (log only). Multipart endpoints opt out of replay. New `IdempotencyKey` model, `IdempotencyStatus` enum
+- **Wishlist Emoji** — User-pickable emoji on each wishlist (single-grapheme + emoji-only validation). Picker with quick-pick grid + "Свой" custom-emoji input. Falls back to hash-derived auto-pick from title when unset
+- **Bot Network Resilience** — Bot heartbeat watchdog, error-noise filters, lifecycle dead-air alarm, bot startup-noise silencer (4 follow-ups)
+- **Profile race-safe upsert** — replaced fragile `upsert` with `create + catch P2002`, eliminating concurrent profile-creation race
 - **Showcase** — PRO premium public profile page with cover photo, bio, pinned wishlists, preferences (clothing/shoe/ring sizes, body measurements, brand preferences). New screens: showcase-editor, showcase-preview
 - **Profile Subscriptions** — Follow other users' public profiles/showcases (PRO)
 - **Curated Selections ("часть вишлиста")** — Share a selected subset of wish items via a temporary link (PRO). Guests can subscribe to curated selections

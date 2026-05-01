@@ -1,6 +1,6 @@
 # WishBoard — User Flows
 
-> Source of truth for all user journeys. Last updated: 2026-04-17 · Branch: main
+> Source of truth for all user journeys. Last updated: 2026-05-02 · Branch: main
 >
 > This document reflects the product as implemented, not aspirational features.
 
@@ -43,6 +43,7 @@
 33. [Referral Program](#flow-33-referral-program)
 34. [Item Placements (cross-wishlist)](#flow-34-item-placements-cross-wishlist)
 35. [Birthday Reminders](#flow-35-birthday-reminders)
+36. [Events Calendar v2.1](#flow-36-events-calendar-v21)
 
 ---
 
@@ -1287,3 +1288,69 @@ Each delivery is a `BirthdayReminderDelivery` row with unique `(birthdayUserId, 
 - **Feb-29 birthday in non-leap year:** mapped to Feb-28.
 
 See `docs/SETTINGS_AND_PRIVACY.md` § Birthday reminders, `docs/MONETIZATION.md` § 16a, `docs/BACKEND_MAP.md` § 13 (cron), `docs/DATA_MODEL.md` (`BirthdayReminderDelivery`, `BirthdayReminderMute`).
+
+---
+
+## Flow 36: Events Calendar v2.1
+
+**Shipped 2026-04-28** (commit `e9980b2`). Personal calendar of gift-giving occasions, layered on top of the Gift Notes notebook. Free feature; no paywall on core surfaces (paywall polish from `df01d53` covers narrow Pro extensions only).
+
+### First launch
+
+1. User opens the **Calendar** screen for the first time. The Mini App calls `GET /tg/calendar/today-context` and `GET /tg/gift-occasions`.
+2. If `User.calendarOnboardingSeenAt` is `null`, the Mini App shows a **4-step onboarding** (intro / occasions / reminders / import). User dismisses or finishes.
+3. Mini App calls `POST /tg/calendar/onboarding-seen` → server sets `User.calendarOnboardingSeenAt = now()`. Different devices share the dismissal (was localStorage-only before, which made every fresh client re-run the flow — see `commit a7723e4` and the earlier `feedback_explicit_optin_after_data` memory).
+
+### Today-context banner
+
+4. Calendar home shows a "today-context" banner from `GET /tg/calendar/today-context`: today's date, count of upcoming events, today's events array, holiday today (if any), pending reminders. `daysUntil` is computed from UTC midnight to avoid an off-by-one bug at MSK boundary (`commit 05df77f`).
+
+### Creating an occasion
+
+5. User taps **+** → create wizard opens with type chooser (Birthday / Anniversary / Holiday / Other).
+6. Custom emoji picker (quick-pick + "Свой" custom-input with autofocus). Single-grapheme + emoji-only validation.
+7. Date picker: separate **day / month / year sheets** (`commit 1ef1afb`).
+8. Optional fields: time (`HH:mm`), location, budget (min / max + currency), note.
+9. Save → `POST /tg/gift-occasions` with `source: 'USER'`.
+
+### Importing holidays
+
+10. User opens "Import holidays" sheet → Mini App calls `GET /tg/calendar/holidays?country=XX` (default: derived from user locale). Server resolves localized holiday name from the `Holiday` row.
+11. User selects holidays → `POST /tg/calendar/import-holidays` with `{ holidayKeys: [...] }`. Server creates `GiftOccasion` rows with `source: 'IMPORTED_HOLIDAY'` + `holidayKey` + `country`. The unique `(ownerUserId, holidayKey)` constraint silently dedups re-imports.
+
+### Importing friend birthdays
+
+12. User opens "Import friend birthdays" → Mini App calls `GET /tg/calendar/friends-bdays`. Server returns connected/subscribed users with `birthday` set, honouring `profileVisibility` and `hideYear`.
+13. User selects friends → `POST /tg/calendar/import-friends-bdays`. Server creates `GiftOccasion` rows with `source: 'IMPORTED_FRIEND'` and `linkedUserId` populated. If the linked user later deletes their account, `linkedUserId` becomes `null` (SetNull) but the occasion is preserved.
+
+### Adding ideas
+
+14. Open occasion detail → expandable idea cards (`commit 2ad5cb7`).
+15. Add idea → `POST /tg/gift-occasions/:id/ideas`. Body may include `imageUrl` (set later via `POST /tg/gift-occasion-ideas/:ideaId/photo` multipart upload — lock-only for idempotency, no replay).
+16. Each idea has: text, link, price, currency, note, and optional image.
+
+### Reminders
+
+17. User toggles reminders on an occasion → `POST /tg/gift-occasions/:id/reminders` with `{ offsetDays, timeOfDay?, enabled? }`. Default `timeOfDay: "10:00"` MSK.
+18. Server derives a unique `episodeKey` from `(occasionId, occurrenceDate, offsetDays)` so re-runs of the scheduler dedup automatically.
+19. When a reminder fires (cron), the bot DMs the user *and* writes a `CalendarInboxEntry`.
+
+### Inbox
+
+20. Inbox icon shows unread count from `GET /tg/calendar/inbox`. User taps an entry → `POST /tg/calendar/inbox/:id/read`. "Mark all read" → `POST /tg/calendar/inbox/read-all`.
+
+### Marking DONE / Year-Recap
+
+21. User marks an event as DONE → `POST /tg/gift-occasions/:id/complete`. Body may include Year-Recap fields: `actualGiftText`, `actualGiftAmount`, `actualGiftCurrency`, `thankYouNote`, `thankYouAt`.
+22. Year-Recap UI (`GET /tg/calendar/year-recap`) aggregates the past year's completed occasions and surfaces gift-history + thank-you notes.
+
+### Edge cases
+
+- **`daysUntil`** normalized to UTC midnight, fixing the today/tomorrow off-by-one (`commit 05df77f`, `commit 645d462` changelog entry).
+- **Soft links** (`linkedUserId` / `linkedWishlistId` / `linkedSantaId`) are SetNull on delete — occasions outlive the entities they referenced.
+- **Holiday dedup**: `(ownerUserId, holidayKey)` unique — re-importing the same set is idempotent.
+- **Multipart upload (idea photo)** opts out of idempotency replay — the row is stored lock-only.
+- **TabBar clearance** ensured for FloatingNav (`commit aab3e3b`).
+- **Onboarding glyph quality / settings width / copy polish** across rounds 1–3 of bug-fix sweeps (`commit ea6b568`, `6212217`, `f610963`).
+
+See `docs/DATA_MODEL.md` (`GiftOccasion`, `GiftOccasionIdea`, `GiftOccasionReminder`, `Holiday`, `CalendarInboxEntry`), `docs/API_REFERENCE.md` § Events Calendar v2.1.

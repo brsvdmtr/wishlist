@@ -1,6 +1,6 @@
 # API_REFERENCE.md — Complete Endpoint Reference
 
-> Last updated: 2026-04-17. Verified from `apps/api/src/index.ts` (~14,800 lines, 180+ route handlers).
+> Last updated: 2026-05-02. Verified from `apps/api/src/index.ts` (~21,300 lines, 220+ route handlers).
 
 ---
 
@@ -37,6 +37,20 @@ Uploads are served as static files at `/api/uploads/<filename>`.
 | `internalImportLimiter` | 60 s | 30 req | `POST /internal/import-url` |
 | `promoLimiter` | 60 s | 5 req/user | `POST /tg/promo/apply` |
 | `onboardingImportLimiter` | 60 s | 3 req/user | `POST /tg/onboarding/try-import` |
+
+**Wave 1 P0 security layer (since 2026-04-29):** all state-changing `/tg/*` routes are also subject to a per-category rate limiter (18 categories defined in `apps/api/src/security/rateLimits.ts`) plus an IP throttle. Source: `apps/api/src/security/`. Env kill switches: `SECURITY_RATE_LIMIT_ENABLED`, `SECURITY_IP_THROTTLE_ENABLED`.
+
+### Idempotency-Key (since 2026-04-29)
+
+All state-changing `/tg/*` routes accept an `Idempotency-Key` header. The middleware:
+
+- **On replay (matching `requestHash`)** — returns the stored `responseStatus` and `responseBody` without re-running the handler.
+- **On hash mismatch** — returns **409 Conflict**.
+- **Critical routes** (billing, account-deleting) use `critical: true`. The header is **soft-required**: missing keys log `api.idem_missing_on_critical_endpoint` rather than 400, so cached Mini App versions aren't bricked.
+- **Multipart endpoints** (uploads) opt out of replay and are stored lock-only.
+- Storage row TTL is 24 h (default) or 7 d (billing). Purged by an in-process cleanup job once `expiresAt` passes.
+
+Action-key naming convention: `domain.verb` for singletons (`wishlist.create`); `domain.verb:${entityId}` for entity-scoped actions; sorted-IDs join for bulk operations. See [docs/API_SECURITY.md](API_SECURITY.md) for the full contract. Env kill switch: `SECURITY_IDEMPOTENCY_ENABLED`.
 
 ---
 
@@ -282,22 +296,62 @@ Allows users to specify items they don't want to receive as gifts. Visible on pu
 
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
-| GET | `/tg/gift-occasions` | Owner (GN) | List occasions sorted by upcoming date. Includes `ideasCount`, `nextDate`, `daysUntil` |
-| POST | `/tg/gift-occasions` | Owner (GN) | Create occasion. Body: `{ title, type?, personName?, eventDate?, recurrence?, note? }`. Types: BIRTHDAY, ANNIVERSARY, HOLIDAY, OTHER |
-| GET | `/tg/gift-occasions/:id` | Owner (GN) | Get occasion with ideas |
-| PATCH | `/tg/gift-occasions/:id` | Owner (GN) | Update occasion fields |
-| DELETE | `/tg/gift-occasions/:id` | Owner (GN) | Hard-delete occasion (cascades to ideas) |
+| GET | `/tg/gift-occasions` | Owner (GN) | List occasions sorted by upcoming date. Includes `ideasCount`, `nextDate`, `daysUntil` (computed from UTC midnight to avoid off-by-one). v2.1 also returns `emoji`, `eventTime`, `location`, `budgetMin/Max/Currency`, `source`, `linkedUserId`, `linkedWishlistId`, `linkedSantaId` |
+| POST | `/tg/gift-occasions` | Owner (GN) | Create occasion. Body: `{ title, type?, personName?, eventDate?, recurrence?, note?, emoji?, eventTime?, location?, budgetMin?, budgetMax?, budgetCurrency?, source?, holidayKey?, country?, linkedUserId?, linkedWishlistId?, linkedSantaId? }`. Types: BIRTHDAY, ANNIVERSARY, HOLIDAY, OTHER. `source` defaults to `USER` |
+| GET | `/tg/gift-occasions/:id` | Owner (GN) | Get occasion with ideas, reminders, and resolved linked refs |
+| PATCH | `/tg/gift-occasions/:id` | Owner (GN) | Update occasion fields. Accepts the same v2.1 fields as POST |
+| DELETE | `/tg/gift-occasions/:id` | Owner (GN) | Hard-delete occasion (cascades to ideas + reminders) |
 | POST | `/tg/gift-occasions/:id/archive` | Owner (GN) | Archive occasion |
-| POST | `/tg/gift-occasions/:id/complete` | Owner (GN) | Mark occasion as DONE |
+| POST | `/tg/gift-occasions/:id/complete` | Owner (GN) | Mark occasion as DONE. Body may include Year-Recap fields: `{ actualGiftText?, actualGiftAmount?, actualGiftCurrency?, thankYouNote?, thankYouAt? }` |
 
 **Ideas CRUD:**
 
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
-| POST | `/tg/gift-occasions/:id/ideas` | Owner (GN) | Add idea. Body: `{ text, link?, price?, currency?, note? }` |
-| PATCH | `/tg/gift-occasion-ideas/:ideaId` | Owner (GN) | Update idea |
+| POST | `/tg/gift-occasions/:id/ideas` | Owner (GN) | Add idea. Body: `{ text, link?, price?, currency?, note?, imageUrl? }` |
+| PATCH | `/tg/gift-occasion-ideas/:ideaId` | Owner (GN) | Update idea (same body shape as POST) |
 | DELETE | `/tg/gift-occasion-ideas/:ideaId` | Owner (GN) | Soft-delete idea (status=ARCHIVED) |
 | POST | `/tg/gift-occasion-ideas/:ideaId/complete` | Owner (GN) | Mark idea as DONE |
+| POST | `/tg/gift-occasion-ideas/:ideaId/photo` | Owner (GN) | **v2.1** — Multipart upload, sets `GiftOccasionIdea.imageUrl`. Multipart endpoints are lock-only for idempotency (no replay) |
+| DELETE | `/tg/gift-occasion-ideas/:ideaId/photo` | Owner (GN) | **v2.1** — Clear `imageUrl` |
+
+### Events Calendar v2.1
+
+Personal calendar of gift-giving occasions. Builds on Gift Occasions; adds reminders, holiday/friend-birthday import, in-app inbox, today-context banner, and year-recap. Source: `apps/api/src/index.ts`. Shipped 2026-04-28 (commit e9980b2).
+
+**Reminders (per-occasion):**
+
+| Method | Path | Who | Description |
+|--------|------|-----|-------------|
+| GET | `/tg/gift-occasions/:id/reminders` | Owner | List reminders. Returns `{ reminders: [{ id, offsetDays, timeOfDay, enabled, scheduledFor, sentAt, delivered }] }` |
+| POST | `/tg/gift-occasions/:id/reminders` | Owner | Create reminder. Body: `{ offsetDays, timeOfDay?, enabled? }`. Default `timeOfDay: "10:00"` MSK, default `enabled: true`. Server derives `episodeKey` from `(occasionId, occurrenceDate, offsetDays)` |
+| PATCH | `/tg/gift-occasions/:id/reminders/:rid` | Owner | Update `offsetDays` / `timeOfDay` / `enabled` |
+| DELETE | `/tg/gift-occasions/:id/reminders/:rid` | Owner | Delete reminder |
+
+**Calendar feeds & holidays:**
+
+| Method | Path | Who | Description |
+|--------|------|-----|-------------|
+| GET | `/tg/calendar/holidays` | Auth user | List available holidays. Optional `?country=XX` override (default: derived from user locale). Returns `{ holidays: [{ key, country, month, day, emoji, category, name, ordinal }] }` (name resolved server-side from the user's locale) |
+| POST | `/tg/calendar/import-holidays` | Auth user | Bulk-import selected holidays as `GiftOccasion` rows with `source: 'IMPORTED_HOLIDAY'`. Body: `{ holidayKeys: string[] }`. Dedups via unique `(ownerUserId, holidayKey)` — re-imports are no-ops |
+| GET | `/tg/calendar/friends-bdays` | Auth user | Friend birthdays available for import. Pulls from connected/subscribed users with `birthday` set and visibility honoured. Returns `{ friends: [{ userId, displayName, avatarThumbUrl, birthday, hideYear }] }` |
+| POST | `/tg/calendar/import-friends-bdays` | Auth user | Bulk-import selected friend birthdays as `GiftOccasion` rows with `source: 'IMPORTED_FRIEND'` and `linkedUserId` set. Body: `{ userIds: string[] }` |
+
+**Inbox:**
+
+| Method | Path | Who | Description |
+|--------|------|-----|-------------|
+| GET | `/tg/calendar/inbox` | Auth user | List recent inbox entries: `{ inbox: [{ id, type, emoji, title, body, occasionId?, readAt, createdAt }] }` |
+| POST | `/tg/calendar/inbox/read-all` | Auth user | Mark all inbox entries as read |
+| POST | `/tg/calendar/inbox/:id/read` | Auth user | Mark a single entry as read |
+
+**Onboarding & misc:**
+
+| Method | Path | Who | Description |
+|--------|------|-----|-------------|
+| GET | `/tg/calendar/today-context` | Auth user | "What's happening today" payload: today's date, upcoming-events count, today's events, holiday today (if any), pending reminders. Used by the Calendar home banner |
+| POST | `/tg/calendar/onboarding-seen` | Auth user | Sets `User.calendarOnboardingSeenAt = now()`. Persisted server-side so different devices share the dismissal |
+| GET | `/tg/calendar/year-recap` | Auth user | Past year's completed occasions with `actualGiftText` / `thankYouNote` aggregations for the Year-Recap UI |
 
 ### Birthday Reminders
 

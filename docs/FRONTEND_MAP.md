@@ -1,6 +1,6 @@
 # FRONTEND_MAP.md — Frontend Architecture
 
-> Date: 2026-04-30. Verified from source code.
+> Date: 2026-05-02. Verified from source code.
 
 ---
 
@@ -244,7 +244,7 @@ Additional screens accessible from the settings area.
 
 | # | Screen | Description |
 |---|--------|-------------|
-| 59 | `calendar` | Calendar view scaffold (v2.1 UI-only; backend API not yet connected as of 2026-04-24) |
+| 59 | `calendar` | **Events Calendar v2.1** — full feature: occasions, holidays import, friend-birthdays import, per-occasion reminders, in-app inbox, today-context banner, year-recap, expandable idea cards with photo upload, custom-emoji + date picker (day/month/year sheets), 4-step onboarding (server-persisted via `User.calendarOnboardingSeenAt`). Backend wired to `/tg/calendar/*` and `/tg/gift-occasions/*` routes |
 
 ---
 
@@ -346,6 +346,18 @@ Buttons: `borderRadius: 16` (v2.1, was 12), `fontSize: 15`, `fontWeight: 600`, `
 ### FloatingNav
 
 `FloatingNav` (from `@wishlist/ui`) was adopted globally in W47. It provides an Instagram-like persistent bottom navigation bar across all main screens. Replaces the outer 3-tab segmented control that was previously shown only on the home screen (W69). Navigation tabs: Home (🏠), Archive (📦), Profile (👤), Reservations (🎁).
+
+### Wave 4 primitives (provisional)
+
+The Wave 4 sweep (April–May 2026) extracted 5 additional primitives into `packages/ui/src/`, all status `provisional` per [docs/design-system/COMPONENT_REGISTRY.md](design-system/COMPONENT_REGISTRY.md):
+
+- `PageTitle` — page-level title block with optional subtitle
+- `PickerRow` — settings-style row for picker fields (label + selected value + chevron)
+- `SettingsList` — grouped settings list container with section dividers
+- `TabBar` — local-tab segmented control (distinct from global `FloatingNav`)
+- `TextField` — token-driven text input with label / hint / error states
+
+In the same wave, every `btnPrimary` / `btnGhost` / `btnSecondary` spread-style button was migrated to `<Button>` from `@wishlist/ui`, and the legacy `C` color constants were swept across remaining screens to CSS custom properties (~330 sites). Result: `pnpm ui:audit` raw-value count fell monotonically across the wave.
 
 ---
 

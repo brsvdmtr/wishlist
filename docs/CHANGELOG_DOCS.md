@@ -4,6 +4,40 @@
 
 ---
 
+## 2026-05-02 — Weekly Documentation Update
+
+**6 docs updated** to reflect ~50 commits since the 2026-04-24 weekly update (the 2026-04-30 entry covered Birthday Reminders only):
+
+- **CURRENT_PRODUCT_STATE.md** — Added **Events Calendar v2.1** and **Wishlist Emoji** to Core Features. Added **API Security Layer (Wave 1 P0)** to Operational Toggles. Updated model count `67 → 73`, enum count `35 → 36`. Replaced the "Calendar Screen scaffold" Recently Shipped bullet (now in Core) with API Security, Wishlist Emoji, Bot Network Resilience, Profile race-safe upsert
+- **DATA_MODEL.md** — Updated counts to 73 models / 36 enums. Added enum `IdempotencyStatus`. Added 4 new models: `GiftOccasionReminder`, `Holiday`, `CalendarInboxEntry`, `IdempotencyKey`. Updated `GiftOccasion` with v2.1 enrichment fields (emoji, eventTime, location, budget min/max/currency, source, holidayKey, country, three soft-link FKs, five Year-Recap fields). Updated `GiftOccasionIdea` with `imageUrl`. Added `Wishlist.emoji` and `User.calendarOnboardingSeenAt` fields plus the new calendar relations on User
+- **API_REFERENCE.md** — Updated header to reflect ~21,300 lines / 220+ handlers. Added Idempotency-Key contract block under Rate Limiters. Updated GiftOccasion CRUD body shapes with all v2.1 fields. Added new **Events Calendar v2.1** subsection: 4 reminder routes, 2 idea-photo routes, 4 calendar-feed/holiday routes, 3 inbox routes, 3 onboarding/year-recap routes (16 new endpoints total)
+- **FRONTEND_MAP.md** — Bumped header date. Promoted screen #59 (`calendar`) from "scaffold, backend not connected" to "full feature". Added a new **Wave 4 primitives (provisional)** subsection documenting `PageTitle`, `PickerRow`, `SettingsList`, `TabBar`, `TextField` and the `btnPrimary`/`btnGhost`/`btnSecondary` migration to `<Button>`
+- **USER_FLOWS.md** — Bumped header date. Added flow 36: **Events Calendar v2.1**, covering first-launch onboarding, today-context banner, occasion creation (custom emoji + day/month/year date sheets), holiday import (with `(ownerUserId, holidayKey)` dedup), friend-birthday import (with `linkedUserId` SetNull semantics), idea cards with photo upload (multipart lock-only), reminder lifecycle, inbox, mark-DONE/Year-Recap, and edge cases (UTC-midnight `daysUntil`, soft-link SetNull, multipart idempotency)
+- **CHANGELOG_DOCS.md** — this entry
+
+**Key shipped features (commits since 2026-04-24):**
+
+- **Events Calendar v2.1** (`e9980b2` + many polish commits) — full feature with backend; holiday & friend-bday import, reminders, inbox, year-recap, expandable idea cards with photos
+- **API Security Layer Wave 1 P0** (`cd77290`) — Idempotency keys, per-category rate limits (18 categories), IP throttle. Soft-require on critical routes. Multipart routes lock-only. Three env kill switches (`SECURITY_*_ENABLED`)
+- **Wishlist Emoji** (`ec952da`, `77b2713`, `f07351d`) — User-pickable emoji on each wishlist with single-grapheme + emoji-only validation
+- **Wave 4 UI primitive adoption** (~30 commits) — 5 new primitives extracted to `packages/ui/`; ~330 raw-color sites migrated to CSS custom properties; all `btnPrimary`/`btnGhost`/`btnSecondary` spread props swapped for `<Button>`
+- **Bot Network Resilience** (`3851c4b`, `a496fb0`) — heartbeat watchdog, error-noise filters, lifecycle dead-air alarm, startup-noise silencer
+- **Profile race-safe upsert** (`788b3a1`) — replaced fragile `upsert` with `create + catch P2002`
+- **Calendar polish** — round 1 (`ea6b568`), round 2 (`6212217`), round 3 (`f610963`), photo upload + price caret (`c420661`), expandable cards + keyboard scroll (`2ad5cb7`), `daysUntil` UTC fix (`05df77f`), explicit `lineHeight` on idea inputs (`a7723e4`)
+- **Birthday Reminders polish** (`3a10c2a`, `ef4c707`) — post-review critical fixes + commenters/skip-reasons/conversions audit (already documented 2026-04-30)
+- **HeroCard + StickyCTAFade primitives** (`516e775`) and CSS-vars Phase 3 migration (`d46f9e9`, `f5c0bbf`)
+
+**Migrations applied this window:**
+- `20260427000000_add_wishlist_emoji`
+- `20260428000000_add_events_calendar_v2`
+- `20260428000001_seed_holidays_v1`
+- `20260429000000_add_idempotency_keys`
+- `20260430000000_add_idea_image_url`
+- `20260430010000_add_calendar_onboarding_seen`
+- `20260430020000_add_birthday_reminders` (covered in 2026-04-30 entry)
+
+---
+
 ## 2026-04-30 — Birthday Reminders Feature Documentation
 
 **10 docs updated** to reflect the newly-shipped Birthday Reminders feature (bot-driven social notifications + self-reminders to update wishlist):

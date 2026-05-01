@@ -1,8 +1,8 @@
 # Data Model — Wishlist Telegram Mini App
 
-_Last updated: 2026-04-24_
+_Last updated: 2026-05-02_
 
-> **67 models, 35 enums** (PostgreSQL 16, managed by Prisma ORM)
+> **73 models, 36 enums** (PostgreSQL 16, managed by Prisma ORM)
 
 ---
 
@@ -379,6 +379,15 @@ State of a PRO days reward granted to an inviter.
 | `GRANTED` | Reward granted            |
 | `REVOKED` | Reward revoked by admin   |
 
+### `IdempotencyStatus`
+Lifecycle state of an `IdempotencyKey` row. Used by the API security layer (Wave 1 P0, shipped 2026-04-29).
+
+| Value        | Meaning                                                                                                    |
+|--------------|------------------------------------------------------------------------------------------------------------|
+| `processing` | Handler is running (or crashed before completion); guarded by `lockedUntil`                                |
+| `completed`  | Handler finished; replay returns the stored response                                                       |
+| `failed`     | Handler returned 5xx; same key may retry once `lockedUntil` expires                                        |
+
 ---
 
 ## Models
@@ -401,6 +410,7 @@ A registered user, identified primarily by their Telegram account.
 | `welcomeSent`        | Boolean   | Yes      | `true`     | Tracks whether the welcome /start message was delivered              |
 | `themePreference`    | String    | Yes      | `"dark"`   | v2.1 appearance: `"dark"` \| `"black"`. PRO unlocks `"black"`; FREE is always `"dark"` |
 | `accentPreference`   | String    | Yes      | `"violet"` | v2.1 appearance: `"violet"` \| `"blue"` \| `"pink"` \| `"green"`. PRO unlocks non-violet accents |
+| `calendarOnboardingSeenAt` | DateTime | No  | —          | Set once when the user dismisses or finishes the Events Calendar v2.1 4-step onboarding. Persisted server-side so the same account doesn't re-run onboarding on a fresh device (was localStorage-only before) |
 
 **Relations:**
 - `wishlists[]` → `Wishlist` (owned wishlists)
@@ -424,6 +434,9 @@ A registered user, identified primarily by their Telegram account.
 - `lifecycleTouches[]` → `LifecycleTouch`
 - `giftOccasions[]` → `GiftOccasion`
 - `giftOccasionIdeas[]` → `GiftOccasionIdea`
+- `giftOccasionReminders[]` → `GiftOccasionReminder` (Events Calendar v2.1 reminders this user owns)
+- `linkedGiftOccasions[]` → `GiftOccasion` (occasions where this user is `linkedUser` — e.g. imported friend birthdays)
+- `calendarInbox[]` → `CalendarInboxEntry` (Events Calendar v2.1 inbox)
 - `groupGiftsOrganized[]` → `GroupGift` (group gifts organized by this user)
 - `groupGiftParticipations[]` → `GroupGiftParticipant` (group gift participations)
 - `groupGiftMessages[]` → `GroupGiftMessage` (messages sent in group gifts)
@@ -512,6 +525,7 @@ An ordered collection of wish items owned by a user.
 | `shareToken`         | String                | No       | —            | Unique random token for share links (distinct from slug)                       |
 | `ownerId`            | String                | Yes      | —            | FK → `User`                                                                    |
 | `title`              | String                | Yes      | —            |                                                                                |
+| `emoji`              | String                | No       | —            | Optional user-chosen emoji shown next to the title in the hero card. When null, the UI falls back to a hash-derived auto-pick from title (single-grapheme + emoji-only validation enforced server-side) |
 | `description`        | String                | No       | —            |                                                                                |
 | `deadline`           | DateTime              | No       | —            | Optional date the wishlist is relevant until (e.g. birthday)                  |
 | `archivedAt`         | DateTime              | No       | —            | Set when the wishlist is archived; `null` means active                         |
@@ -1010,48 +1024,147 @@ Tracks per-user, per-key, per-version onboarding state. Supports multiple onboar
 ---
 
 ### `GiftOccasion`
-A gift-giving occasion in a user's personal gift notebook.
+A gift-giving occasion in a user's personal gift notebook (and, since 2026-04-28, the unit of the Events Calendar v2.1 feature).
 
-| Field         | Type     | Required | Default    | Notes                                              |
-|---------------|----------|----------|------------|----------------------------------------------------|
-| `id`          | String   | Yes      | cuid       |                                                    |
-| `ownerUserId` | String   | Yes      | --         | FK -> `User`                                       |
-| `title`       | String   | Yes      | --         |                                                    |
-| `type`        | String   | Yes      | `"OTHER"`  | `BIRTHDAY`, `ANNIVERSARY`, `HOLIDAY`, `OTHER`      |
-| `personName`  | String   | No       | --         | Free text, no linked user requirement              |
-| `eventDate`   | Date     | No       | --         |                                                    |
-| `recurrence`  | String   | Yes      | `"NONE"`   | `NONE`, `YEARLY`, `MONTHLY`                        |
-| `note`        | String   | No       | --         |                                                    |
-| `status`      | String   | Yes      | `"ACTIVE"` | `ACTIVE`, `DONE`, `ARCHIVED`                       |
-| `archivedAt`  | DateTime | No       | --         |                                                    |
-| `completedAt` | DateTime | No       | --         |                                                    |
-| `createdAt`   | DateTime | Yes      | now        |                                                    |
-| `updatedAt`   | DateTime | Yes      | auto       |                                                    |
+| Field                | Type     | Required | Default    | Notes                                                                    |
+|----------------------|----------|----------|------------|--------------------------------------------------------------------------|
+| `id`                 | String   | Yes      | cuid       |                                                                          |
+| `ownerUserId`        | String   | Yes      | --         | FK -> `User`                                                             |
+| `title`              | String   | Yes      | --         |                                                                          |
+| `type`               | String   | Yes      | `"OTHER"`  | `BIRTHDAY`, `ANNIVERSARY`, `HOLIDAY`, `OTHER`                            |
+| `personName`         | String   | No       | --         | Free text, no linked user requirement                                    |
+| `eventDate`          | Date     | No       | --         |                                                                          |
+| `recurrence`         | String   | Yes      | `"NONE"`   | `NONE`, `YEARLY`, `MONTHLY`                                              |
+| `note`               | String   | No       | --         |                                                                          |
+| `status`             | String   | Yes      | `"ACTIVE"` | `ACTIVE`, `DONE`, `ARCHIVED`                                             |
+| `emoji`              | String   | No       | --         | v2.1 — Optional emoji for the event card (custom or quick-pick)          |
+| `eventTime`          | String   | No       | --         | v2.1 — `"HH:mm"` 24h                                                     |
+| `location`           | String   | No       | --         | v2.1                                                                     |
+| `budgetMin`          | Int      | No       | --         | v2.1                                                                     |
+| `budgetMax`          | Int      | No       | --         | v2.1                                                                     |
+| `budgetCurrency`     | String   | No       | --         | v2.1                                                                     |
+| `source`             | String   | Yes      | `"USER"`   | v2.1 — `USER` \| `IMPORTED_FRIEND` \| `IMPORTED_HOLIDAY`. Drives import dedup + UI labels |
+| `holidayKey`         | String   | No       | --         | v2.1 — when `source = IMPORTED_HOLIDAY`, FK-by-key into `Holiday.key`    |
+| `country`            | String   | No       | --         | v2.1 — ISO 3166-1 alpha-2 for imported holidays                          |
+| `linkedUserId`       | String   | No       | --         | v2.1 — Soft FK -> `User`. SetNull on delete                              |
+| `linkedWishlistId`   | String   | No       | --         | v2.1 — Soft FK -> `Wishlist`. SetNull on delete                          |
+| `linkedSantaId`      | String   | No       | --         | v2.1 — Soft FK -> `SantaCampaign`. SetNull on delete                     |
+| `actualGiftText`     | String   | No       | --         | v2.1 Year-Recap — filled when user marks event DONE                      |
+| `actualGiftAmount`   | Int      | No       | --         | v2.1 Year-Recap                                                          |
+| `actualGiftCurrency` | String   | No       | --         | v2.1 Year-Recap                                                          |
+| `thankYouNote`       | String   | No       | --         | v2.1 Year-Recap                                                          |
+| `thankYouAt`         | DateTime | No       | --         | v2.1 Year-Recap                                                          |
+| `archivedAt`         | DateTime | No       | --         |                                                                          |
+| `completedAt`        | DateTime | No       | --         |                                                                          |
+| `createdAt`          | DateTime | Yes      | now        |                                                                          |
+| `updatedAt`          | DateTime | Yes      | auto       |                                                                          |
 
 **Relations:**
-- `owner` -> `User`
+- `owner` -> `User` (Cascade)
+- `linkedUser` -> `User?` (SetNull) — for `IMPORTED_FRIEND` rows
+- `linkedWishlist` -> `Wishlist?` (SetNull)
+- `linkedSanta` -> `SantaCampaign?` (SetNull)
 - `ideas[]` -> `GiftOccasionIdea`
+- `reminders[]` -> `GiftOccasionReminder`
+- `inboxEntries[]` -> `CalendarInboxEntry`
+
+**Indexes:** `(ownerUserId)`, `(ownerUserId, status)`, `(ownerUserId, eventDate)`, `(linkedUserId)`, `(linkedWishlistId)`, `(linkedSantaId)`.
+
+**Unique constraint:** `(ownerUserId, holidayKey)` — prevents the same user importing the same holiday twice.
 
 ---
 
 ### `GiftOccasionIdea`
 A gift idea within an occasion.
 
-| Field         | Type     | Required | Default    | Notes                          |
-|---------------|----------|----------|------------|--------------------------------|
-| `id`          | String   | Yes      | cuid       |                                |
-| `occasionId`  | String   | Yes      | --         | FK -> `GiftOccasion`           |
-| `ownerUserId` | String   | Yes      | --         | FK -> `User`                   |
-| `text`        | String   | Yes      | --         |                                |
-| `link`        | String   | No       | --         |                                |
-| `price`       | Int      | No       | --         |                                |
-| `currency`    | String   | No       | --         |                                |
-| `note`        | String   | No       | --         |                                |
-| `status`      | String   | Yes      | `"ACTIVE"` | `ACTIVE`, `DONE`, `ARCHIVED`   |
-| `archivedAt`  | DateTime | No       | --         |                                |
-| `completedAt` | DateTime | No       | --         |                                |
-| `createdAt`   | DateTime | Yes      | now        |                                |
-| `updatedAt`   | DateTime | Yes      | auto       |                                |
+| Field         | Type     | Required | Default    | Notes                                                                |
+|---------------|----------|----------|------------|----------------------------------------------------------------------|
+| `id`          | String   | Yes      | cuid       |                                                                      |
+| `occasionId`  | String   | Yes      | --         | FK -> `GiftOccasion`                                                 |
+| `ownerUserId` | String   | Yes      | --         | FK -> `User`                                                         |
+| `text`        | String   | Yes      | --         |                                                                      |
+| `link`        | String   | No       | --         |                                                                      |
+| `price`       | Int      | No       | --         |                                                                      |
+| `currency`    | String   | No       | --         |                                                                      |
+| `note`        | String   | No       | --         |                                                                      |
+| `imageUrl`    | String   | No       | --         | v2.1 — set via `POST /tg/gift-occasion-ideas/:ideaId/photo`          |
+| `status`      | String   | Yes      | `"ACTIVE"` | `ACTIVE`, `DONE`, `ARCHIVED`                                         |
+| `archivedAt`  | DateTime | No       | --         |                                                                      |
+| `completedAt` | DateTime | No       | --         |                                                                      |
+| `createdAt`   | DateTime | Yes      | now        |                                                                      |
+| `updatedAt`   | DateTime | Yes      | auto       |                                                                      |
+
+---
+
+### `GiftOccasionReminder`
+A per-occasion reminder fire (Events Calendar v2.1). The scheduler computes `scheduledFor` from `(occasion.eventDate, offsetDays, timeOfDay)` in MSK and a unique `episodeKey` is derived from `(occasionId, occurrenceDate, offsetDays)` to dedup against re-runs.
+
+| Field          | Type     | Required | Default   | Notes                                                          |
+|----------------|----------|----------|-----------|----------------------------------------------------------------|
+| `id`           | String   | Yes      | cuid      |                                                                |
+| `occasionId`   | String   | Yes      | --        | FK -> `GiftOccasion` (Cascade on delete)                       |
+| `ownerUserId`  | String   | Yes      | --        | FK -> `User` (Cascade)                                         |
+| `offsetDays`   | Int      | Yes      | --        | Days before event (negative offsets = before; 0 = day-of)      |
+| `timeOfDay`    | String   | Yes      | `"10:00"` | `HH:mm` in MSK                                                 |
+| `enabled`      | Boolean  | Yes      | `true`    |                                                                |
+| `scheduledFor` | DateTime | No       | --        | Next fire time computed by scheduler                           |
+| `sentAt`       | DateTime | No       | --        |                                                                |
+| `delivered`    | Boolean  | Yes      | `false`   |                                                                |
+| `episodeKey`   | String   | Yes      | --        | Unique dedup key per occurrence                                |
+| `createdAt`    | DateTime | Yes      | now       |                                                                |
+| `updatedAt`    | DateTime | Yes      | auto      |                                                                |
+
+**Relations:** `occasion` -> `GiftOccasion`, `owner` -> `User`.
+
+**Indexes:** `(occasionId)`, `(ownerUserId)`, `(scheduledFor, sentAt, enabled)`.
+
+**Unique constraint:** `episodeKey`.
+
+---
+
+### `Holiday`
+Master list of holidays available for import into the Events Calendar. Seeded from `20260428000001_seed_holidays_v1`.
+
+| Field      | Type     | Required | Default      | Notes                                                  |
+|------------|----------|----------|--------------|--------------------------------------------------------|
+| `id`       | String   | Yes      | cuid         |                                                        |
+| `country`  | String   | Yes      | --           | ISO 3166-1 alpha-2                                     |
+| `month`    | Int      | Yes      | --           | 1–12                                                   |
+| `day`      | Int      | Yes      | --           | 1–31                                                   |
+| `key`      | String   | Yes      | --           | Unique stable identifier (e.g. `"RU:01-01:new_year"`)  |
+| `emoji`    | String   | Yes      | --           |                                                        |
+| `category` | String   | Yes      | `"NATIONAL"` |                                                        |
+| `nameRu`   | String   | No       | --           | Localized name                                         |
+| `nameEn`   | String   | No       | --           |                                                        |
+| `nameZhCn` | String   | No       | --           |                                                        |
+| `nameHi`   | String   | No       | --           |                                                        |
+| `nameEs`   | String   | No       | --           |                                                        |
+| `nameAr`   | String   | No       | --           |                                                        |
+| `ordinal`  | Int      | Yes      | `0`          | Sort order within a date                               |
+| `createdAt`| DateTime | Yes      | now          |                                                        |
+| `updatedAt`| DateTime | Yes      | auto         |                                                        |
+
+**Indexes:** `(country)`, `(country, month, day)`. **Unique:** `key`.
+
+---
+
+### `CalendarInboxEntry`
+In-app inbox aggregating Events Calendar notifications (reminders fired, holidays added, year-recap availability, etc.).
+
+| Field          | Type     | Required | Default | Notes                                            |
+|----------------|----------|----------|---------|--------------------------------------------------|
+| `id`           | String   | Yes      | cuid    |                                                  |
+| `ownerUserId`  | String   | Yes      | --      | FK -> `User` (Cascade)                           |
+| `occasionId`   | String   | No       | --      | FK -> `GiftOccasion` (SetNull on delete)         |
+| `type`         | String   | Yes      | --      | Inbox entry kind                                 |
+| `emoji`        | String   | Yes      | --      |                                                  |
+| `title`        | String   | Yes      | --      |                                                  |
+| `body`         | String   | No       | --      |                                                  |
+| `readAt`       | DateTime | No       | --      |                                                  |
+| `archivedAt`   | DateTime | No       | --      |                                                  |
+| `createdAt`    | DateTime | Yes      | now     |                                                  |
+
+**Indexes:** `(ownerUserId, readAt)`, `(ownerUserId, createdAt)`, `(occasionId)`.
 
 ---
 
@@ -1370,6 +1483,38 @@ Key fields: `userId` (FK → `User`), `attributionId` (nullable FK → `Referral
 Singleton configuration row (`id = "default"`) controlling all referral program parameters. All referral logic reads from this record.
 
 Key fields: `enabled` (default `false`), `rewardDaysInviter` (default `30`), `qualificationWindowDays` (default `14`), `monthlyRewardCap` (default `3`), `yearlyRewardCap` (default `12`), `fraudAutoRejectThreshold` (default `80`), fraud signal weights (JSONB), entry point toggles, notification toggles, `rolloutPercent` (default `10`).
+
+---
+
+### `IdempotencyKey`
+Idempotency-Key store for state-changing API routes (Wave 1 P0, shipped 2026-04-29). One row per `(key + actorKey + method + path)` tuple. On replay, the stored response is returned when `requestHash` matches; on hash mismatch the API returns **409**. Rows are TTL'd (default 24 h, billing endpoints 7 d) and purged by an in-process cleanup job once `expiresAt` passes.
+
+`path` holds the route pattern (e.g. `/tg/wishlists/:id/items`), not the literal URL. Literal IDs and query params are folded into `requestHash` so two reservations of different items can't collide on the same key. `responseBody` is capped at ~64 KB; oversized responses are stored with `body = null` and `responseTruncated = true`. Multipart endpoints opt out of replay and are stored the same way (lock-only).
+
+Cross-link: see [docs/API_SECURITY.md](API_SECURITY.md) for the full security contract.
+
+| Field               | Type               | Required | Default | Notes                                                                                          |
+|---------------------|--------------------|----------|---------|------------------------------------------------------------------------------------------------|
+| `id`                | String             | Yes      | cuid    |                                                                                                |
+| `key`               | String             | Yes      | --      | The header value (hashed before storage / log)                                                 |
+| `userId`            | String             | No       | --      |                                                                                                |
+| `actorHash`         | String             | No       | --      | Logical actor identity (tgActorHash UUID); null for unauth callers                             |
+| `actorKey`          | String             | Yes      | --      | Dedup key — never null. Equals `actorHash` for auth, `ip:<hash>` for unauth                     |
+| `method`            | String             | Yes      | --      | HTTP verb                                                                                       |
+| `path`              | String             | Yes      | --      | Route pattern (e.g. `/tg/wishlists/:id/items`)                                                 |
+| `requestHash`       | String             | Yes      | --      | Hash of body + literal IDs + query                                                             |
+| `responseStatus`    | Int                | No       | --      |                                                                                                |
+| `responseBody`      | Json               | No       | --      | Capped ~64 KB; null when truncated or for multipart                                            |
+| `responseTruncated` | Boolean            | Yes      | `false` |                                                                                                |
+| `status`            | IdempotencyStatus  | Yes      | --      | `processing` / `completed` / `failed`                                                          |
+| `lockedUntil`       | DateTime           | No       | --      | When the in-flight lock expires (used for `processing` rows)                                   |
+| `createdAt`         | DateTime           | Yes      | now     |                                                                                                |
+| `updatedAt`         | DateTime           | Yes      | auto    |                                                                                                |
+| `expiresAt`         | DateTime           | Yes      | --      | TTL — purged by in-process cleanup job                                                          |
+
+**Unique constraint:** `(key, actorKey, method, path)`.
+
+**Indexes:** `(expiresAt)`, `(actorHash, createdAt)`.
 
 ---
 
