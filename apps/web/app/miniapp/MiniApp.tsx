@@ -5023,6 +5023,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [secretDetailOrigin, setSecretDetailOrigin] = useState<'my-reservations' | 'guest-item-detail' | null>(null);
   // Fullscreen image lightbox (opened from secret-reservation-detail photo tap)
   const [secretPhotoOpen, setSecretPhotoOpen] = useState(false);
+  // Fullscreen image lightbox for the regular wish-item detail screens
+  // (owner / reserver / guest). Tap on the hero photo opens it; back / tap
+  // outside / the explicit close button dismisses it. Reads viewingItem.imageUrl
+  // directly so a single overlay covers all three rendering branches.
+  const [itemPhotoOpen, setItemPhotoOpen] = useState(false);
 
   // Home hub tab navigation
   const [homeTab, setHomeTab] = useState<HomeTab>('wishlists');
@@ -7714,6 +7719,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     // screen-level back navigation runs. This matches user expectation that
     // "back" dismisses the topmost UI layer, not the whole screen.
     if (secretPhotoOpen) { setSecretPhotoOpen(false); return; }
+    if (itemPhotoOpen) { setItemPhotoOpen(false); return; }
     if (secretConfirmItem) { setSecretConfirmItem(null); return; }
     if (secretCancelItem) { setSecretCancelItem(null); return; }
     if (secretPromoteItem) { setSecretPromoteItem(null); return; }
@@ -14674,6 +14680,45 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       })()}
 
       {/* ══════════════════════════════════════════════
+          ITEM DETAIL — FULLSCREEN PHOTO LIGHTBOX
+          Single overlay covers all three item-detail render branches
+          (owner / reserver / guest) — they all read viewingItem.imageUrl,
+          so opening from any of them lands here. Tap outside / × button /
+          Telegram back button all dismiss (back wired in handleBack).
+          Visual shape mirrors the secret-reservation lightbox above.
+          ══════════════════════════════════════════════ */}
+      {itemPhotoOpen && viewingItem?.imageUrl && (
+        <div
+          onClick={() => setItemPhotoOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 300,
+            background: 'rgba(0,0,0,0.92)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 20,
+            animation: 'fadeIn 0.2s ease',
+          }}
+        >
+          <img
+            src={viewingItem.imageUrl}
+            alt=""
+            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 12 }}
+          />
+          <button
+            onClick={(e) => { e.stopPropagation(); setItemPhotoOpen(false); }}
+            aria-label={t('sr_photo_close', locale)}
+            style={{
+              position: 'absolute', top: 'calc(20px + env(safe-area-inset-top))', right: 20,
+              width: 40, height: 40, borderRadius: '50%',
+              background: 'rgba(255,255,255,0.15)', color: '#fff',
+              border: 'none', fontSize: 22, lineHeight: 1, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+            }}
+          >×</button>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════
           SECRET RESERVATION PAYWALL
           ══════════════════════════════════════════════ */}
       {screen === 'secret-reservation-paywall' && (() => {
@@ -15468,7 +15513,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           {/* v2.1 Hero image — larger fallback emoji + accent-soft gradient */}
           <div style={{ position: 'relative' }}>
             {viewingItem.imageUrl ? (
-              <img src={viewingItem.imageUrl} alt="" style={{ width: '100%', aspectRatio: '16/10', objectFit: 'cover', display: 'block', background: 'var(--wb-surface)' }} />
+              <img
+                src={viewingItem.imageUrl}
+                alt=""
+                onClick={() => setItemPhotoOpen(true)}
+                style={{ width: '100%', aspectRatio: '16/10', objectFit: 'cover', display: 'block', background: 'var(--wb-surface)', cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
+              />
             ) : (
               <div style={{
                 width: '100%', aspectRatio: '16/8',
@@ -15769,7 +15819,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           {/* Hero image */}
           <div style={{ padding: '16px 16px 0' }}>
             {viewingItem.imageUrl ? (
-              <img src={viewingItem.imageUrl} alt="" style={{ width: '100%', height: 230, objectFit: 'cover', borderRadius: 20, display: 'block', background: C.surface }} />
+              <img
+                src={viewingItem.imageUrl}
+                alt=""
+                onClick={() => setItemPhotoOpen(true)}
+                style={{ width: '100%', height: 230, objectFit: 'cover', borderRadius: 20, display: 'block', background: C.surface, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
+              />
             ) : (
               <div style={{ width: '100%', height: 180, borderRadius: 20, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 56 }}>
                 {getEmoji(viewingItem.title)}
@@ -16093,7 +16148,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           {/* Hero image */}
           <div style={{ padding: '16px 16px 0' }}>
             {viewingItem.imageUrl ? (
-              <img src={viewingItem.imageUrl} alt="" style={{ width: '100%', height: 230, objectFit: 'cover', borderRadius: 20, display: 'block', background: C.surface }} />
+              <img
+                src={viewingItem.imageUrl}
+                alt=""
+                onClick={() => setItemPhotoOpen(true)}
+                style={{ width: '100%', height: 230, objectFit: 'cover', borderRadius: 20, display: 'block', background: C.surface, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
+              />
             ) : (
               <div style={{ width: '100%', height: 180, borderRadius: 20, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 56 }}>
                 {getEmoji(viewingItem.title)}
