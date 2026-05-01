@@ -1496,6 +1496,30 @@ if (!token) {
     });
 
     if (!hint) {
+      // Telegram occasionally fires users_shared twice for one user-side
+      // action (rapid re-tap of the request_users keyboard, or a transport
+      // retry on the client). The first event marks the hint DELIVERED;
+      // the second arrives with no SENT hint left and used to error out
+      // with "Активный намёк не найден" in the sender's chat — confusing
+      // because the first message already confirmed delivery.
+      //
+      // Detect the duplicate: a hint from this sender DELIVERED in the last
+      // 60 s means we just processed the first event. Silently swallow.
+      const recentlyDelivered = await prisma.hint.findFirst({
+        where: {
+          senderUserId: sender.id,
+          status: 'DELIVERED',
+          deliveredAt: { gte: new Date(Date.now() - 60_000) },
+        },
+        select: { id: true },
+      });
+      if (recentlyDelivered) {
+        logger.info(
+          { senderId: sender.id, hintId: recentlyDelivered.id },
+          'users_shared: ignoring duplicate event for recently delivered hint',
+        );
+        return;
+      }
       await ctx.reply(t('bot_users_shared_no_hint', locale), Markup.removeKeyboard());
       return;
     }
@@ -1586,11 +1610,15 @@ if (!token) {
 
     await ctx.reply(parts.join('\n'), Markup.removeKeyboard());
 
-    // Fallback for pending: send deep link template
+    // Fallback for pending: explanation message + a separate forwardable
+    // template the sender can long-press → forward to the friend manually.
+    // Two-message structure replaces the previous single message that
+    // confusingly mixed instructions and the link in one body.
     if (pendingCount > 0) {
       const botInfo = await bot.telegram.getMe();
       const deepLink = `https://t.me/${botInfo.username}?start=hint_${hint.item.id}`;
-      await ctx.reply(t('bot_fallback_msg', locale, { link: deepLink }));
+      await ctx.reply(t('bot_fallback_msg', locale));
+      await ctx.reply(t('bot_fallback_forward_template', locale, { link: deepLink }));
     }
   });
 

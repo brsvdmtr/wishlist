@@ -1007,10 +1007,12 @@ const ru: Dict = {
   bot_users_shared_no_hint: 'Активный намёк не найден. Создай новый в приложении.',
   bot_users_shared_reserved: 'Это желание уже забронировано — намёк больше не нужен 🎁',
   bot_sent_count: '✅ Отправлено напрямую: {{n}}',
-  bot_pending_count: '⏳ Не удалось отправить: {{n}} (нет диалога с ботом)',
+  bot_pending_count: '⏳ Не удалось отправить напрямую: {{n}}',
   bot_no_recipients: 'Не выбран ни один получатель.',
   bot_fallback_msg:
-    'Некоторые друзья ещё не начали диалог с ботом.\n\nОтправь им эту ссылку — когда они откроют её, бот покажет намёк:\n{{link}}',
+    'Не смог отправить намёк напрямую: у этих друзей ещё нет диалога с ботом. Перешли им сообщение ниже вручную — когда они откроют ссылку, бот пришлёт намёк.',
+  bot_fallback_forward_template:
+    '🎁 Идея подарка для тебя!\n\nОткрой ссылку — бот пришлёт детали:\n{{link}}',
   bot_pro_activated:
     '🎉 PRO подключен!\n\n✅ 10 вишлистов\n✅ 100 желаний в каждом\n✅ Комментарии и импорт по ссылке\n\nДействует до {{date}}',
   bot_pro_activated_yearly:
@@ -3723,10 +3725,12 @@ const en: Dict = {
   bot_users_shared_no_hint: 'No active hint found. Create a new one in the app.',
   bot_users_shared_reserved: 'This wish is already reserved — no hint needed 🎁',
   bot_sent_count: '✅ Sent directly: {{n}}',
-  bot_pending_count: "⏳ Failed to send: {{n}} (no chat with bot)",
+  bot_pending_count: '⏳ Failed to send directly: {{n}}',
   bot_no_recipients: 'No recipients selected.',
+  bot_fallback_forward_template:
+    "🎁 Gift idea for you!\n\nOpen the link — the bot will send the details:\n{{link}}",
   bot_fallback_msg:
-    "Some friends haven't started a chat with the bot yet.\n\nSend them this link — when they open it, the bot will show the hint:\n{{link}}",
+    "Couldn't deliver the hint directly: these friends haven't started a chat with the bot yet. Forward the message below to them manually — when they open the link, the bot will deliver the hint.",
   bot_pro_activated:
     '🎉 PRO activated!\n\n✅ 10 wishlists\n✅ 100 wishes each\n✅ Comments and import by link\n\nActive until {{date}}',
   bot_pro_activated_yearly:
