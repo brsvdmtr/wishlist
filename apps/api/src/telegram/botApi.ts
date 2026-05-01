@@ -39,13 +39,24 @@ export async function sendTgNotification(chatId: string, text: string): Promise<
   }
 }
 
+export type SendTgBotMessageOpts = {
+  /** Per-attempt timeout in ms (default 6000). */
+  timeoutMs?: number;
+  /** Total attempts including the first try (default 2 = first + 1 retry). */
+  maxAttempts?: number;
+};
+
 export async function sendTgBotMessage(
   chatId: string,
   text: string,
   replyMarkup?: Record<string, unknown>,
+  opts?: SendTgBotMessageOpts,
 ): Promise<boolean> {
   const token = process.env.BOT_TOKEN;
   if (!token || !chatId) return false;
+
+  const timeoutMs = opts?.timeoutMs ?? TG_FETCH_TIMEOUT_MS;
+  const maxAttempts = opts?.maxAttempts ?? 2;
 
   const payload: Record<string, unknown> = { chat_id: chatId, text, parse_mode: 'HTML' };
   if (replyMarkup) payload.reply_markup = replyMarkup;
@@ -53,9 +64,9 @@ export async function sendTgBotMessage(
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
 
   let lastError: unknown;
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TG_FETCH_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const resp = await fetch(url, {
         method: 'POST',
@@ -76,7 +87,7 @@ export async function sendTgBotMessage(
     } catch (err) {
       clearTimeout(timer);
       lastError = err;
-      if (attempt < 2) {
+      if (attempt < maxAttempts) {
         // Small backoff before retry. Mirrors createTgInvoiceLink semantics.
         await new Promise((r) => setTimeout(r, 500));
         continue;

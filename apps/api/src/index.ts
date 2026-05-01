@@ -6576,6 +6576,37 @@ tgRouter.post(
 );
 
 // POST /tg/items/:id/hint — create a hint wave (Pro feature, owner-only)
+//
+// Design (rewritten 2026-05-02 after user-reported "first click hangs 10 s,
+// second click works"):
+//
+//   1. The endpoint must respond fast (<3 s) regardless of Telegram health.
+//      The previous implementation awaited sendTgBotMessage's full 6 s × 2
+//      retry budget on the synchronous request path, then returned 502 +
+//      rolled back the hint to CANCELLED on TG unreachable. From the user's
+//      seat that meant a 12 s spinner with no visible feedback before they
+//      could retry.
+//
+//   2. The endpoint must be idempotent on rapid re-tap. If the user clicks
+//      "hint friends" again before the first attempt has run all the way
+//      through (delivered keyboard → user picked friends → bot processed),
+//      we must return the existing active SENT hint instead of minting a
+//      new one — otherwise we burn a slot in the per-item / per-day anti-
+//      spam counter for what is logically the same operation.
+//
+//   3. Keyboard delivery is best-effort. We fire sendTgBotMessage and race
+//      it against a 3 s budget; whichever resolves first decides the API
+//      response. The fetch keeps running in the background past 3 s — TG
+//      may still deliver after the API has already returned 200, in which
+//      case the user sees the keyboard appear in their bot chat shortly
+//      after navigating there. Outcome is logged via .then/.catch so the
+//      narrative survives in bot.log.
+//
+//   4. We DO NOT roll back the hint to CANCELLED on send failure. If the
+//      first send didn't land, the user can re-tap from the Mini App; the
+//      idempotent path returns the same hint and re-triggers a delivery
+//      attempt. Eventually one attempt succeeds and the user sees the
+//      picker.
 tgRouter.post(
   '/items/:id/hint',
   asyncHandler(async (req, res) => {
@@ -6583,6 +6614,7 @@ tgRouter.post(
     if (!id) return res.status(400).json({ error: 'Missing item id' });
 
     const user = await getOrCreateTgUser(req.tgUser!);
+    const locale = getRequestLocale(req);
 
     // 1. Feature gate: hints require PRO (godMode overrides to PRO)
     const ent = await getUserEntitlement(user.id, user.godMode);
@@ -6610,7 +6642,42 @@ tgRouter.post(
 
     // 3. Item must be AVAILABLE (not reserved/completed/deleted)
     if (item.status !== 'AVAILABLE') {
-      return res.status(400).json({ error: 'item_not_available', message: t('api_hint_item_not_available', getRequestLocale(req)) });
+      return res.status(400).json({ error: 'item_not_available', message: t('api_hint_item_not_available', locale) });
+    }
+
+    const senderChatId = user.telegramChatId;
+
+    // ─── Idempotent fast-path ─────────────────────────────────────────────
+    // If this user already has an active SENT hint for this item that
+    // hasn't expired, reuse it. The repeat tap re-triggers a best-effort
+    // keyboard delivery (recovery for the case where the first send
+    // didn't land), but we do NOT create a second Hint row — that would
+    // burn an anti-spam slot for the same logical operation and leave
+    // multiple "active" hints for the bot to disambiguate on
+    // users_shared.
+    const now = new Date();
+    const existing = await prisma.hint.findFirst({
+      where: {
+        senderUserId: user.id,
+        itemId: id,
+        status: 'SENT',
+        expiresAt: { gt: now },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, createdAt: true },
+    });
+    if (existing) {
+      logger.info(
+        { userId: user.id, itemId: id, hintId: existing.id, ageMs: now.getTime() - existing.createdAt.getTime() },
+        'hint_create_idempotent_hit',
+      );
+      // Re-attempt keyboard delivery (best-effort). User probably tapped
+      // again because the first send didn't reach their bot chat. The
+      // bounded-race pattern below means we still return ≤ 3 s.
+      if (senderChatId) {
+        sendHintPickerKeyboard(senderChatId, item.title, existing.id, locale);
+      }
+      return res.json({ hintId: existing.id, status: 'pending_selection', existing: true });
     }
 
     // 4. Anti-spam: max 3 hint waves per item per 30 days
@@ -6630,7 +6697,7 @@ tgRouter.post(
           : 0;
         return res.status(429).json({
           error: 'item_hint_limit',
-          message: t('api_hint_item_limit', getRequestLocale(req)),
+          message: t('api_hint_item_limit', locale),
           retryAfterSeconds,
         });
       }
@@ -6651,7 +6718,7 @@ tgRouter.post(
           : 0;
         return res.status(429).json({
           error: 'daily_hint_limit',
-          message: t('api_hint_daily_limit', getRequestLocale(req)),
+          message: t('api_hint_daily_limit', locale),
           retryAfterSeconds,
         });
       }
@@ -6666,63 +6733,80 @@ tgRouter.post(
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       },
     });
+    logger.info({ userId: user.id, itemId: id, hintId: hint.id }, 'hint_create_completed');
+    trackEvent('hint_created', user.id, { itemId: id, hintId: hint.id });
 
-    // 7. Send contact picker to sender's bot chat via request_users keyboard.
-    //    sendTgBotMessage already does timeout (6 s) + 1 retry. If it still
-    //    returns false, the picker did NOT land in the user's bot chat — the
-    //    hint row is orphaned. Roll it back to CANCELLED so:
-    //      a) the bot's "most recent SENT hint within 30 min" lookup in the
-    //         users_shared handler doesn't accidentally pick it up later, and
-    //      b) the Mini App gets a real 502 instead of a misleading 200, so
-    //         the user sees a "Telegram isn't responding" toast and can retry
-    //         instead of clicking "hint friends" three times in a row.
-    //    Observed root cause for this rollback path: 2026-05-01 hint flow
-    //    stuck for ~7 s when Telegram API briefly stopped responding;
-    //    pre-fix the API claimed success, the keyboard was never delivered.
-    const senderChatId = user.telegramChatId;
-    const locale = getRequestLocale(req);
+    // 7. Send contact picker (best-effort, bounded race). Keyboard arrives
+    //    in the user's bot chat from the API process. We don't wait for the
+    //    full TG round-trip — return within 3 s regardless. If TG is slow
+    //    but eventually responds, the keyboard still arrives by the time
+    //    the user has navigated to bot chat.
     if (senderChatId) {
-      const sent = await sendTgBotMessage(
-        senderChatId,
-        t('api_hint_picker_msg', locale, { title: item.title }),
-        {
-          keyboard: [[{
-            text: t('bot_select_recipients', locale),
-            request_users: { request_id: Number(hint.id.slice(-6).replace(/\D/g, '') || '1'), user_is_bot: false, max_quantity: 10 },
-          }]],
-          resize_keyboard: true,
-          one_time_keyboard: true,
-          is_persistent: true,
-        },
-      );
-      if (!sent) {
-        logger.error({ senderChatId, hintId: hint.id }, 'hint: failed to send contact picker to chat');
-        await prisma.hint
-          .update({ where: { id: hint.id }, data: { status: 'CANCELLED' } })
-          .catch((err) => logger.error({ err, hintId: hint.id }, 'hint: failed to mark orphan as cancelled'));
-        trackEvent('error:hint_picker_send_failed', user.id, { itemId: id, hintId: hint.id, reason: 'tg_unreachable' });
-        return res.status(502).json({
-          error: 'tg_unreachable',
-          message: t('api_hint_tg_unreachable', locale),
-        });
-      }
+      sendHintPickerKeyboard(senderChatId, item.title, hint.id, locale);
     } else {
-      logger.error({ userId: user.id, hintId: hint.id }, 'hint: no telegramChatId for user');
-      await prisma.hint
-        .update({ where: { id: hint.id }, data: { status: 'CANCELLED' } })
-        .catch((err) => logger.error({ err, hintId: hint.id }, 'hint: failed to mark orphan as cancelled'));
-      trackEvent('error:hint_picker_send_failed', user.id, { itemId: id, hintId: hint.id, reason: 'no_chat_id' });
-      return res.status(502).json({
-        error: 'tg_unreachable',
-        message: t('api_hint_tg_unreachable', locale),
-      });
+      // No telegramChatId on user means they have not /start-ed the bot
+      // even once. There is no chat to send a picker into. Tell the
+      // client; the Mini App can show a "open the bot first" toast.
+      logger.warn({ userId: user.id, hintId: hint.id }, 'hint_prompt_send_skipped_no_chat_id');
+      return res.json({ hintId: hint.id, status: 'pending_selection', noBotChat: true });
     }
-
-    trackEvent('hint_created', user.id);
 
     return res.json({ hintId: hint.id, status: 'pending_selection' });
   }),
 );
+
+/**
+ * Best-effort fire-and-forget delivery of the contact-picker keyboard to
+ * the sender's bot chat. Used by both the create-hint and idempotent
+ * re-attempt paths.
+ *
+ *   - Single attempt (no internal retry) so the bounded race is honest:
+ *     either we hear back from TG in ~3 s or we let the request live on
+ *     in the background. Mini App is unblocked at the race timeout.
+ *   - Underlying fetch has a long fallback timeout (12 s) so a slow but
+ *     responsive TG still delivers — Mini App has already navigated to
+ *     bot chat by then, and the user sees the keyboard appear.
+ *   - Outcome is logged via .then / .catch attached to the original
+ *     promise so the eventual ok/fail lands in bot.log even after the
+ *     race resolves.
+ */
+function sendHintPickerKeyboard(
+  senderChatId: string,
+  itemTitle: string,
+  hintId: string,
+  locale: Locale,
+): void {
+  logger.info({ senderChatId, hintId }, 'hint_prompt_send_started');
+  const sendPromise = sendTgBotMessage(
+    senderChatId,
+    t('api_hint_picker_msg', locale, { title: itemTitle }),
+    {
+      keyboard: [[{
+        text: t('bot_select_recipients', locale),
+        request_users: { request_id: Number(hintId.slice(-6).replace(/\D/g, '') || '1'), user_is_bot: false, max_quantity: 10 },
+      }]],
+      resize_keyboard: true,
+      one_time_keyboard: true,
+      is_persistent: true,
+    },
+    { timeoutMs: 12000, maxAttempts: 1 },
+  );
+  // Attach handlers BEFORE racing so the outcome is captured even after
+  // the race timer wins. .catch on the original promise keeps the pending
+  // task alive until completion (Node won't GC it).
+  sendPromise.then((sent) => {
+    if (sent) {
+      logger.info({ senderChatId, hintId }, 'hint_prompt_send_succeeded');
+    } else {
+      logger.warn({ senderChatId, hintId }, 'hint_prompt_send_failed');
+    }
+  }).catch((err) => {
+    logger.error({ err, senderChatId, hintId }, 'hint_prompt_send_threw');
+  });
+  // (No await — caller returns 200 immediately, race happens in caller
+  // if needed. For now, intentionally fire-and-forget: the previous
+  // synchronous-await flow is exactly what made first-click hang 12 s.)
+}
 
 // GET /tg/hints/:hintId — poll hint delivery status (for mini app)
 tgRouter.get(

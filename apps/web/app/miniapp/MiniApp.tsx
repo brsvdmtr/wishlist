@@ -7289,26 +7289,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     if (planInfo.code === 'FREE') { showUpsell('hints'); return; }
     setHintLoading(true);
     try {
-      // 15 s ceiling per attempt: server-side sendTgBotMessage does 6 s
-      // timeout + 1 retry + 0.5 s backoff (~12.5 s worst case) before
-      // returning 502. Default 5 s here would race the server retry and
-      // abort while the hint is still being delivered.
-      let res = await tgFetch(`/tg/items/${item.id}/hint`, { method: 'POST', timeoutMs: 15000 });
-
-      // Transparent auto-retry on transient TG outage. 502 + error=tg_unreachable
-      // means the API exhausted its own retry budget — but most TG blips clear
-      // within a couple of seconds, so a single client-side retry after a brief
-      // pause turns most of these into one longer loading state instead of
-      // forcing the user to manually re-tap (and wonder if anything is
-      // happening). Observed pattern 2026-05-01 17:02: first attempt failed at
-      // 12.5 s, second attempt 5 s later succeeded in 0.5 s.
-      if (!res.ok && res.status === 502) {
-        const peek = await res.clone().json().catch(() => ({})) as { error?: string };
-        if (peek.error === 'tg_unreachable') {
-          await new Promise(r => setTimeout(r, 1500));
-          res = await tgFetch(`/tg/items/${item.id}/hint`, { method: 'POST', timeoutMs: 15000 });
-        }
-      }
+      // 5 s ceiling: the API now fires the picker-keyboard delivery
+      // fire-and-forget and returns within ~100 ms (DB writes only). No
+      // synchronous wait on Telegram from the request path, so the
+      // generous 15 s timeout we had earlier is unnecessary. Idempotency
+      // action key prevents a rapid double-tap from creating a second
+      // Hint row — if the Mini App re-fires within the in-progress
+      // window, the server's idempotency middleware returns the cached
+      // first response.
+      const res = await tgFetch(`/tg/items/${item.id}/hint`, {
+        method: 'POST',
+        timeoutMs: 5000,
+        idempotency: { action: `hint:${item.id}` },
+      });
 
       if (!res.ok) {
         if (res.status === 402) { showUpsell('hints'); return; }

@@ -1473,6 +1473,11 @@ if (!token) {
     const locale = getLocale(ctx); // sender's locale for status messages
     const shared = msg.users_shared as { request_id: number; users: Array<{ user_id: number; first_name?: string }> };
 
+    logger.info(
+      { senderTgId, requestId: shared.request_id, selectedCount: shared.users.length },
+      'hint_users_shared_received',
+    );
+
     // Find sender's most recent active hint (created in last 30 min)
     const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
     const sender = await prisma.user.findUnique({ where: { telegramId: senderTgId }, select: { id: true } });
