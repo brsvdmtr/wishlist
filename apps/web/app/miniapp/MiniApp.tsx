@@ -5648,7 +5648,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const pushToast = useCallback((message: string, kind: Toast['kind']) => {
     const toast: Toast = { id: crypto.randomUUID(), message, kind };
     setToasts((prev) => [toast, ...prev].slice(0, 3));
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toast.id)), 2800);
+    // Errors stay on screen longer — they often carry recovery instructions
+    // (retry hints, rate-limit countdowns) that users need a beat to read.
+    // Info/success at 2.8s; errors at 4.5s.
+    const ttl = kind === 'error' ? 4500 : 2800;
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toast.id)), ttl);
   }, []);
 
   // Auto-grow textareas using useLayoutEffect (fires before paint, synchronous).
@@ -7285,12 +7289,27 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     if (planInfo.code === 'FREE') { showUpsell('hints'); return; }
     setHintLoading(true);
     try {
-      // 15 s ceiling: server-side sendTgBotMessage now does 6 s timeout + 1
-      // retry + 0.5 s backoff (~12.5 s worst case) before returning 502.
-      // Default 5 s here would race the server retry and abort while the
-      // hint is still being delivered — the exact failure mode users hit
-      // on 2026-05-01 (3 picker keyboards in 34 s, 2 orphans).
-      const res = await tgFetch(`/tg/items/${item.id}/hint`, { method: 'POST', timeoutMs: 15000 });
+      // 15 s ceiling per attempt: server-side sendTgBotMessage does 6 s
+      // timeout + 1 retry + 0.5 s backoff (~12.5 s worst case) before
+      // returning 502. Default 5 s here would race the server retry and
+      // abort while the hint is still being delivered.
+      let res = await tgFetch(`/tg/items/${item.id}/hint`, { method: 'POST', timeoutMs: 15000 });
+
+      // Transparent auto-retry on transient TG outage. 502 + error=tg_unreachable
+      // means the API exhausted its own retry budget — but most TG blips clear
+      // within a couple of seconds, so a single client-side retry after a brief
+      // pause turns most of these into one longer loading state instead of
+      // forcing the user to manually re-tap (and wonder if anything is
+      // happening). Observed pattern 2026-05-01 17:02: first attempt failed at
+      // 12.5 s, second attempt 5 s later succeeded in 0.5 s.
+      if (!res.ok && res.status === 502) {
+        const peek = await res.clone().json().catch(() => ({})) as { error?: string };
+        if (peek.error === 'tg_unreachable') {
+          await new Promise(r => setTimeout(r, 1500));
+          res = await tgFetch(`/tg/items/${item.id}/hint`, { method: 'POST', timeoutMs: 15000 });
+        }
+      }
+
       if (!res.ok) {
         if (res.status === 402) { showUpsell('hints'); return; }
         if (res.status === 403) {
@@ -7302,6 +7321,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           message?: string;
           retryAfterSeconds?: number;
         };
+        // Tactile error feedback in addition to the toast — Telegram clients
+        // often surface this even when the visual toast is missed.
+        try { tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred?.('error'); } catch { /* ok */ }
         if (res.status === 429 && json.retryAfterSeconds != null) {
           const msg = (json.message || t('hint_limit_exhausted', locale)) + ' ' + formatRetryAfter(json.retryAfterSeconds, locale);
           pushToast(msg, 'error');
@@ -15776,7 +15798,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   </div>
                   <div style={{ fontSize: 11, color: C.textMuted, marginTop: 1 }}>{t('item_detail_hint_sub', locale)}</div>
                 </div>
-                <span style={{ color: C.textMuted }}>›</span>
+                <span style={{ color: C.textMuted }}>{hintLoading ? '⏳' : '›'}</span>
               </div>
             )}
           </div>
@@ -16008,7 +16030,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   </div>
                   <div style={{ fontSize: 12, color: C.textMuted }}>{t('hint_subtitle', locale)}</div>
                 </div>
-                <span style={{ fontSize: 16, color: C.textMuted }}>›</span>
+                <span style={{ fontSize: 16, color: C.textMuted }}>{hintLoading ? '⏳' : '›'}</span>
               </div>
             )}
             {viewingItem.status === 'reserved' && (
