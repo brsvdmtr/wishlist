@@ -37,6 +37,24 @@ if (process.env.GLITCHTIP_DSN) {
 const token = process.env.BOT_TOKEN;
 const MINI_APP_URL = process.env.MINI_APP_URL ?? 'https://example.com/miniapp';
 
+// (#1) Bot startup — first line we expect in logs after every container
+// boot. If this is missing, the process never reached this point (Node
+// crashed during imports / dotenv) OR the logger transport is broken.
+// Either case is actionable from this single line.
+logger.info(
+  {
+    nodeVersion: process.version,
+    pid: process.pid,
+    nodeEnv: process.env.NODE_ENV ?? 'development',
+    release: process.env.APP_RELEASE ?? 'unknown',
+    tokenPresent: !!token,
+    logFilePath: process.env.LOG_FILE_PATH ?? null,
+    httpsProxy: process.env.HTTPS_PROXY || process.env.https_proxy || null,
+    miniAppUrl: MINI_APP_URL,
+  },
+  'bot process startup',
+);
+
 /** Send alert to all ADMIN_ALERT_CHAT_IDS. Best-effort, never throws. */
 async function sendAdminAlert(text: string): Promise<void> {
   if (!token) return;
@@ -1645,9 +1663,25 @@ if (!token) {
       const SEND_TIMEOUT_MS = 5000;
       const SEND_MAX_ATTEMPTS = 3;
       let attemptError: string | null = null;
+      let lastHttpStatus: number | null = null;
+      let tgErrorCode: number | null = null;
+      let networkErrCode: string | null = null;
       for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt++) {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
+        // (#5) Per-attempt log — emitted before the fetch so a hung attempt
+        // is visible while it's hung, not only after timeout.
+        const attemptStart = Date.now();
+        logger.info(
+          {
+            hintId: hint.id,
+            recipientTgId,
+            attempt,
+            maxAttempts: SEND_MAX_ATTEMPTS,
+            timeoutMs: SEND_TIMEOUT_MS,
+          },
+          'hint send attempt',
+        );
         try {
           const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
             method: 'POST',
@@ -1656,9 +1690,27 @@ if (!token) {
             signal: controller.signal,
           });
           clearTimeout(timer);
-          const data = await resp.json() as { ok: boolean; description?: string };
+          lastHttpStatus = resp.status;
+          const data = await resp.json() as { ok: boolean; description?: string; error_code?: number };
           directOk = data.ok;
           tgDescription = data.description ?? null;
+          tgErrorCode = data.error_code ?? null;
+          // (#8) Telegram response — http status + ok/error_code/description.
+          // Logged for both success and structured rejection so we can audit
+          // what TG actually said.
+          logger.info(
+            {
+              hintId: hint.id,
+              recipientTgId,
+              attempt,
+              httpStatus: lastHttpStatus,
+              ok: data.ok,
+              tgErrorCode,
+              tgDescription,
+              elapsedMs: Date.now() - attemptStart,
+            },
+            data.ok ? 'hint send attempt: telegram accepted' : 'hint send attempt: telegram rejected',
+          );
           if (data.ok) {
             directSent++;
             await prisma.user.upsert({
@@ -1674,8 +1726,38 @@ if (!token) {
         } catch (err) {
           clearTimeout(timer);
           attemptError = err instanceof Error ? err.message : String(err);
+          networkErrCode = err instanceof Error && 'code' in err ? String((err as { code?: unknown }).code ?? '') || null : null;
+          // (#8) Network-level error — captured without HTTP status (the
+          // request never got a response). errCode is the OS errno surfaced
+          // by undici (ETIMEDOUT, ECONNRESET, ENOTFOUND, etc).
+          logger.warn(
+            {
+              hintId: hint.id,
+              recipientTgId,
+              attempt,
+              maxAttempts: SEND_MAX_ATTEMPTS,
+              errMessage: attemptError,
+              errCode: networkErrCode,
+              elapsedMs: Date.now() - attemptStart,
+            },
+            'hint send attempt: network failure',
+          );
           if (attempt < SEND_MAX_ATTEMPTS) {
-            await new Promise((r) => setTimeout(r, 500));
+            // (#6) Retry-reason — explicit log so we can see *why* we're
+            // retrying separately from the per-attempt failure above.
+            const backoffMs = 500;
+            logger.info(
+              {
+                hintId: hint.id,
+                recipientTgId,
+                fromAttempt: attempt,
+                toAttempt: attempt + 1,
+                retryReason: networkErrCode ?? 'network_failure',
+                backoffMs,
+              },
+              'hint send: retrying',
+            );
+            await new Promise((r) => setTimeout(r, backoffMs));
             continue;
           }
           pendingCount++;
@@ -1683,13 +1765,19 @@ if (!token) {
         }
       }
 
+      // (#7) Final per-recipient outcome — kept for back-compat with any
+      // dashboard that already keys off this msg. Augmented with HTTP/TG
+      // codes captured during the loop.
       logger.info(
         {
           hintId: hint.id,
           recipientTgId,
           hasKnownChatId: !!knownRecipient?.telegramChatId,
           ok: directOk,
+          httpStatus: lastHttpStatus,
+          tgErrorCode,
           tgDescription,
+          networkErrCode,
         },
         'users_shared: recipient processed',
       );
@@ -2041,6 +2129,14 @@ if (!token) {
       // after getMe() but never clears it. Without this, startupCheck may fire
       // on a stale value before polling is actually active.
       (bot as any).botInfo = undefined;
+      // (#2) getMe is the FIRST thing Telegraf does inside bot.launch().
+      // We log the attempt start here so we can see "we're trying" even
+      // when the call hangs at the network layer with no error yet.
+      const launchStart = Date.now();
+      logger.info(
+        { attempt: launchAttempt, maxAttempts: MAX_LAUNCH_ATTEMPTS },
+        'bot launch attempt (getMe pending)',
+      );
       try {
         await bot.launch();
         // launch() resolves when polling stops (SIGTERM/SIGINT)
@@ -2051,10 +2147,25 @@ if (!token) {
 
         const transient = isTransientError(err);
         const canRetry = transient && launchAttempt < MAX_LAUNCH_ATTEMPTS;
+        const errCode = err instanceof Error && 'code' in err ? String((err as { code?: unknown }).code ?? '') || null : null;
+        const errMessage = err instanceof Error ? err.message : String(err);
 
         if (canRetry) {
           const delay = Math.min(1000 * Math.pow(2, launchAttempt - 1), 60_000);
-          logger.warn({ err, attempt: launchAttempt, nextRetryMs: delay }, 'bot launch failed, retrying');
+          // (#2) getMe failure (transient) — surfaces err code (ETIMEDOUT,
+          // ECONNRESET, EAI_AGAIN, …) and elapsed so we can see whether the
+          // call hung the full connect timeout or failed fast.
+          logger.warn(
+            {
+              err,
+              errCode,
+              errMessage,
+              attempt: launchAttempt,
+              nextRetryMs: delay,
+              elapsedMs: Date.now() - launchStart,
+            },
+            'bot launch failed, retrying (getMe failed)',
+          );
           pauseHeartbeat();
           if (launchAttempt === 1) {
             void sendAdminAlert(`⚠️ <b>Bot launch failed</b> (attempt ${launchAttempt}, retrying in ${delay / 1000}s)\n${String(err)}`);
@@ -2062,7 +2173,10 @@ if (!token) {
           await new Promise((r) => setTimeout(r, delay));
         } else {
           // Fatal or exhausted retries — exit and let Docker restart
-          logger.fatal({ err, attempt: launchAttempt, transient }, 'failed to start');
+          logger.fatal(
+            { err, errCode, errMessage, attempt: launchAttempt, transient, elapsedMs: Date.now() - launchStart },
+            'failed to start (getMe exhausted)',
+          );
           if (process.env.GLITCHTIP_DSN && err instanceof Error) Sentry.captureException(err);
           pauseHeartbeat();
           setTimeout(() => process.exit(1), 15_000).unref();
@@ -2146,7 +2260,17 @@ if (!token) {
     if (bot.botInfo) {
       clearInterval(startupCheck);
       resumeHeartbeat();
-      logger.info({ attempt: launchAttempt }, 'bot polling active');
+      // (#2) getMe success — Telegraf sets botInfo only after getMe resolves,
+      // so this is our proof that getMe succeeded. Include id+username so a
+      // grep on this line confirms which bot account is running.
+      logger.info(
+        {
+          attempt: launchAttempt,
+          botId: bot.botInfo.id,
+          botUsername: bot.botInfo.username,
+        },
+        'bot polling active (getMe ok)',
+      );
       void sendAdminAlert(`🟢 <b>Bot started</b>${launchAttempt > 1 ? ` (after ${launchAttempt} attempts)` : ''}\nEnv: ${process.env.NODE_ENV ?? 'development'}`);
       // Deliver any pending welcome messages from previous failed /start attempts
       void deliverPendingWelcomes();
