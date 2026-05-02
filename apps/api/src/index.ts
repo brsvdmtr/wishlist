@@ -6647,20 +6647,48 @@ tgRouter.post(
 
     const senderChatId = user.telegramChatId;
 
-    // ─── Idempotent fast-path ─────────────────────────────────────────────
-    // If this user already has an active SENT hint for this item that
-    // hasn't expired, reuse it. The repeat tap re-triggers a best-effort
-    // keyboard delivery (recovery for the case where the first send
-    // didn't land), but we do NOT create a second Hint row — that would
-    // burn an anti-spam slot for the same logical operation and leave
-    // multiple "active" hints for the bot to disambiguate on
-    // users_shared.
+    // ─── Stale-SENT cleanup + idempotent fast-path ───────────────────────
+    // The bot's `users_shared` handler looks for the sender's most-recent
+    // SENT hint within a 30-min window (apps/bot/src/index.ts) — anything
+    // older shows "Активный намёк не найден". Without aligning the API
+    // window, an abandoned hint from hours ago becomes the idempotent
+    // match and the bot rejects friend-selection from the freshly-issued
+    // keyboard. Concrete repro: 2026-05-02 07:36 hint created and abandoned
+    // → 2026-05-02 17:36 user re-taps → API returns the 10-hour-old hint
+    // → bot replies "Активный намёк не найден" because it's outside the
+    // 30-min window.
+    //
+    // Fix: any SENT hint older than the bot's window is dead (the keyboard
+    // for it has long since been replaced). Mark them CANCELLED so they
+    // also stop counting against the per-item / per-day anti-spam quotas.
+    // Then the idempotent match runs over only the fresh window, and a
+    // re-tap after 30 min creates a brand-new hint that the bot can find.
     const now = new Date();
+    const HINT_LOOKUP_WINDOW_MS = 30 * 60 * 1000;
+    const lookupWindowStart = new Date(now.getTime() - HINT_LOOKUP_WINDOW_MS);
+
+    const stale = await prisma.hint.updateMany({
+      where: {
+        senderUserId: user.id,
+        itemId: id,
+        status: 'SENT',
+        createdAt: { lt: lookupWindowStart },
+      },
+      data: { status: 'CANCELLED' },
+    });
+    if (stale.count > 0) {
+      logger.info(
+        { userId: user.id, itemId: id, cancelledCount: stale.count },
+        'hint_create_cancelled_stale_sent',
+      );
+    }
+
     const existing = await prisma.hint.findFirst({
       where: {
         senderUserId: user.id,
         itemId: id,
         status: 'SENT',
+        createdAt: { gte: lookupWindowStart },
         expiresAt: { gt: now },
       },
       orderBy: { createdAt: 'desc' },
