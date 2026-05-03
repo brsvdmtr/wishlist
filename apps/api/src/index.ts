@@ -84,6 +84,7 @@ import { registerTelemetryRouter } from './routes/telemetry.routes';
 import { registerAnalyticsRouter } from './routes/analytics.routes';
 import { registerMaintenanceRouter } from './routes/maintenance.routes';
 import { registerImportRouter } from './routes/import.routes';
+import { registerBirthdayRemindersRouter } from './routes/birthday-reminders.routes';
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -7036,334 +7037,6 @@ tgRouter.get(
 // ═══════════════════════════════════════════════════════════════════════════
 
 
-// GET /tg/birthday-reminders/muted — list of muted users
-tgRouter.get('/birthday-reminders/muted', asyncHandler(async (req, res) => {
-  const user = await getOrCreateTgUser(req.tgUser!);
-  const mutes = await prisma.birthdayReminderMute.findMany({
-    where: { userId: user.id },
-    orderBy: { createdAt: 'desc' },
-    take: 100,
-    include: {
-      mutedUser: {
-        select: { id: true, firstName: true, profile: { select: { displayName: true, username: true, avatarThumbUrl: true } } },
-      },
-    },
-  });
-  return res.json({
-    muted: mutes.map(m => ({
-      userId: m.mutedBirthdayUserId,
-      displayName: m.mutedUser.profile?.displayName ?? m.mutedUser.firstName ?? m.mutedUser.profile?.username ?? null,
-      username: m.mutedUser.profile?.username ?? null,
-      avatarThumbUrl: m.mutedUser.profile?.avatarThumbUrl ?? null,
-      mutedAt: m.createdAt.toISOString(),
-    })),
-  });
-}));
-
-// POST /tg/birthday-reminders/mute — body: { deliveryId? | mutedUserId? }
-//   Mutes either by delivery context (resolves birthdayUserId) or directly.
-tgRouter.post('/birthday-reminders/mute', asyncHandler(async (req, res) => {
-  const parsed = z.object({
-    deliveryId: z.string().min(1).max(64).optional(),
-    mutedUserId: z.string().min(1).max(64).optional(),
-  }).refine(d => d.deliveryId || d.mutedUserId, { message: 'either deliveryId or mutedUserId is required' }).safeParse(req.body);
-  if (!parsed.success) return zodError(res, parsed.error);
-
-  const user = await getOrCreateTgUser(req.tgUser!);
-  let mutedUserId = parsed.data.mutedUserId ?? null;
-  if (!mutedUserId && parsed.data.deliveryId) {
-    const d = await prisma.birthdayReminderDelivery.findUnique({
-      where: { id: parsed.data.deliveryId },
-      select: { recipientUserId: true, birthdayUserId: true },
-    });
-    if (!d) return res.status(404).json({ error: 'delivery_not_found' });
-    if (d.recipientUserId !== user.id) return res.status(403).json({ error: 'forbidden' });
-    mutedUserId = d.birthdayUserId;
-  }
-  if (!mutedUserId) return res.status(400).json({ error: 'no_target' });
-  if (mutedUserId === user.id) return res.status(400).json({ error: 'cannot_mute_self' });
-
-  await prisma.birthdayReminderMute.upsert({
-    where: { userId_mutedBirthdayUserId: { userId: user.id, mutedBirthdayUserId: mutedUserId } },
-    update: {},
-    create: { userId: user.id, mutedBirthdayUserId: mutedUserId },
-  });
-
-  // Lookup display name for response
-  const target = await prisma.user.findUnique({
-    where: { id: mutedUserId },
-    select: { firstName: true, profile: { select: { displayName: true, username: true } } },
-  });
-  const displayName = target?.profile?.displayName ?? target?.firstName ?? target?.profile?.username ?? null;
-  trackEvent('birthday.mute_added', user.id, { mutedUserId });
-  return res.json({ ok: true, mutedUserId, displayName });
-}));
-
-// DELETE /tg/birthday-reminders/mute/:userId — unmute
-tgRouter.delete('/birthday-reminders/mute/:userId', asyncHandler(async (req, res) => {
-  const user = await getOrCreateTgUser(req.tgUser!);
-  const userId = req.params.userId;
-  if (!userId) return res.status(400).json({ error: 'missing_user_id' });
-  await prisma.birthdayReminderMute.deleteMany({
-    where: { userId: user.id, mutedBirthdayUserId: userId },
-  });
-  trackEvent('birthday.mute_removed', user.id, { mutedUserId: userId });
-  return res.json({ ok: true });
-}));
-
-// GET /tg/birthday-reminders/resolve/:deliveryId — Mini App boot resolves
-//   deep-link target + sets clickedAt for attribution.
-tgRouter.get('/birthday-reminders/resolve/:deliveryId', asyncHandler(async (req, res) => {
-  const user = await getOrCreateTgUser(req.tgUser!);
-  const id = req.params.deliveryId;
-  if (!id) return res.status(400).json({ error: 'missing_delivery_id' });
-  const d = await prisma.birthdayReminderDelivery.findUnique({
-    where: { id },
-    select: {
-      id: true, birthdayUserId: true, recipientUserId: true, reminderKind: true,
-      targetType: true, targetId: true, occurrenceKey: true, sentAt: true, clickedAt: true,
-      birthdayUser: {
-        select: {
-          id: true, firstName: true,
-          profile: { select: { displayName: true, username: true, avatarThumbUrl: true, birthday: true, hideYear: true, birthdayCustomMessage: true } },
-        },
-      },
-    },
-  });
-  if (!d) return res.status(404).json({ error: 'delivery_not_found' });
-  if (d.recipientUserId !== user.id) return res.status(403).json({ error: 'forbidden' });
-
-  if (!d.clickedAt) {
-    await prisma.birthdayReminderDelivery.update({
-      where: { id: d.id },
-      data: { clickedAt: new Date() },
-    });
-    trackEvent('birthday.bot_cta_clicked', user.id, { kind: d.reminderKind, targetType: d.targetType });
-  }
-
-  // Re-resolve target at click-time so a deleted/private wishlist falls back gracefully
-  let liveTargetType: string | null = d.targetType;
-  let liveTargetId: string | null = d.targetId;
-  let targetUnavailable = false;
-  if (d.targetType === 'wishlist' && d.targetId) {
-    const wl = await prisma.wishlist.findUnique({
-      where: { slug: d.targetId },
-      select: { id: true, slug: true, ownerId: true, archivedAt: true, visibility: true },
-    });
-    const stillOk = wl && wl.ownerId === d.birthdayUserId && wl.archivedAt === null
-      && (wl.visibility === 'PUBLIC_PROFILE' || wl.visibility === 'LINK_ONLY');
-    if (!stillOk) {
-      targetUnavailable = true;
-      liveTargetType = 'profile';
-      liveTargetId = d.birthdayUser.profile?.username ?? null;
-    }
-  }
-
-  const days = daysUntilNextBirthday(d.birthdayUser.profile?.birthday ?? null, new Date());
-  const displayName = pickBirthdayDisplayName({
-    displayName: d.birthdayUser.profile?.displayName ?? null,
-    username: d.birthdayUser.profile?.username ?? null,
-    firstName: d.birthdayUser.firstName,
-  });
-
-  return res.json({
-    deliveryId: d.id,
-    reminderKind: d.reminderKind,
-    targetType: liveTargetType,
-    targetId: liveTargetId,
-    originalTargetType: d.targetType,
-    targetUnavailable,
-    occurrenceKey: d.occurrenceKey,
-    isOwner: d.reminderKind.startsWith('owner_'),
-    birthdayUser: {
-      userId: d.birthdayUserId,
-      displayName,
-      username: d.birthdayUser.profile?.username ?? null,
-      avatarThumbUrl: d.birthdayUser.profile?.avatarThumbUrl ?? null,
-      hideYear: d.birthdayUser.profile?.hideYear ?? false,
-      customMessage: d.birthdayUser.profile?.birthdayCustomMessage ?? null,
-    },
-    daysUntil: days,
-  });
-}));
-
-// GET /tg/admin/birthday-reminders/metrics — God Mode dashboard
-tgRouter.get('/admin/birthday-reminders/metrics', asyncHandler(async (req, res) => {
-  const user = await getOrCreateTgUser(req.tgUser!);
-  if (!user.godMode) return res.status(403).json({ error: 'Forbidden' });
-
-  const day = 24 * 3600_000;
-  const now = new Date();
-  const sinceDay = new Date(now.getTime() - day);
-
-  // Readiness metrics
-  const usersWithBirthday = await prisma.userProfile.count({ where: { birthday: { not: null } } });
-  const usersWithFriendRemindersEnabled = await prisma.userProfile.count({
-    where: { birthday: { not: null }, birthdayFriendReminders: true },
-  });
-  const usersWithPublicBirthdayProfile = await prisma.userProfile.count({
-    where: { birthday: { not: null }, birthdayFriendReminders: true, profileVisibility: { not: 'NOBODY' } },
-  });
-  const usersWithPrimaryWishlist = await prisma.userProfile.count({
-    where: { birthday: { not: null }, birthdayPrimaryWishlistId: { not: null } },
-  });
-  const usersWithPublicWishlistRaw = await prisma.wishlist.findMany({
-    where: { archivedAt: null, visibility: { in: ['PUBLIC_PROFILE', 'LINK_ONLY'] } },
-    distinct: ['ownerId'], select: { ownerId: true },
-  });
-  const usersWithPublicWishlist = usersWithPublicWishlistRaw.length;
-  const usersWithActivePublicItemsRaw = await prisma.item.findMany({
-    where: { status: 'AVAILABLE', wishlist: { archivedAt: null, visibility: { in: ['PUBLIC_PROFILE', 'LINK_ONLY'] } } },
-    distinct: ['wishlistId'],
-    select: { wishlist: { select: { ownerId: true } } },
-  });
-  const ownersWithActiveItems = new Set(usersWithActivePublicItemsRaw.map(i => i.wishlist.ownerId));
-  const usersWithActivePublicItems = ownersWithActiveItems.size;
-
-  // Delivery metrics — last 24h
-  const deliveriesByStatus = await prisma.birthdayReminderDelivery.groupBy({
-    by: ['status'],
-    _count: { _all: true },
-    where: { createdAt: { gte: sinceDay } },
-  });
-  const deliveriesByKind = await prisma.birthdayReminderDelivery.groupBy({
-    by: ['reminderKind'],
-    _count: { _all: true },
-    where: { createdAt: { gte: sinceDay } },
-  });
-  const deliveriesBySkipReason = await prisma.birthdayReminderDelivery.groupBy({
-    by: ['skipReason'],
-    _count: { _all: true },
-    where: { createdAt: { gte: sinceDay }, status: 'skipped' },
-  });
-  const deliveriesByFailureReason = await prisma.birthdayReminderDelivery.groupBy({
-    by: ['failureReason'],
-    _count: { _all: true },
-    where: { createdAt: { gte: sinceDay }, status: 'failed' },
-  });
-  const sentCount = deliveriesByStatus.find(d => d.status === 'sent')?._count._all ?? 0;
-  const clickedCount = await prisma.birthdayReminderDelivery.count({
-    where: { sentAt: { gte: sinceDay }, clickedAt: { not: null } },
-  });
-
-  // Mute metrics
-  const totalMutes = await prisma.birthdayReminderMute.count();
-  const mutes24h = await prisma.birthdayReminderMute.count({ where: { createdAt: { gte: sinceDay } } });
-
-  // Heartbeat
-  const hb = await prisma.serviceHeartbeat.findUnique({ where: { serviceName: 'birthday_reminders' } });
-
-  // Stuck pending deliveries
-  const stuckPending = await prisma.birthdayReminderDelivery.count({
-    where: {
-      OR: [
-        { status: 'pending', createdAt: { lt: new Date(now.getTime() - 2 * 3600_000) } },
-        { status: 'deferred', deferredUntil: { lt: now } },
-      ],
-    },
-  });
-
-  // ─── Conversion metrics ─────────────────────────────────────────────────
-  // Counts AnalyticsEvent rows where Mini App fired the canonical birthday.*
-  // mirror events. The mirrors are emitted by `trackBirthdayAttributedEvent`
-  // ONLY when the user is in a `br_<deliveryId>` deeplink session, so each
-  // count reflects birthday-deeplink → action conversion.
-  const countAttributedEvent = async (event: string): Promise<number> => {
-    return prisma.analyticsEvent.count({
-      where: { event, createdAt: { gte: sinceDay } },
-    });
-  };
-  const [
-    convFriendReservation,
-    convFriendSecretReservation,
-    convFriendItemOpened,
-    convFriendWishlistOpened,
-    convFriendProfileSubscribed,
-    convFriendGiftCompleted,
-  ] = await Promise.all([
-    countAttributedEvent('birthday.item_reserved'),
-    countAttributedEvent('birthday.secret_reservation_clicked'),
-    countAttributedEvent('birthday.item_opened'),
-    countAttributedEvent('birthday.public_wishlist_opened'),
-    countAttributedEvent('birthday.subscribe_clicked'),
-    countAttributedEvent('birthday.gift_completed'),
-  ]);
-
-  // Owner-flow conversion metrics — count birthday.* mirror events filtered to
-  // owner_* reminderKind via JSON props. Prisma's JSON path filtering needs
-  // raw SQL because the mirror events are emitted by the Mini App where we
-  // don't yet differentiate owner vs friend in the canonical event name.
-  // Approximate: owner conversion = events where birthdayReminderKind LIKE 'owner_%'.
-  const ownerConversionRows = await prisma.$queryRaw<Array<{ event: string; count: bigint }>>`
-    SELECT event, COUNT(*)::bigint AS count
-    FROM "AnalyticsEvent"
-    WHERE event IN ('birthday.gift_completed', 'wishlist_created', 'wish_created')
-      AND "createdAt" >= ${sinceDay}
-      AND props->>'birthdayReminderKind' LIKE 'owner_%'
-    GROUP BY event
-  `.catch(() => [] as Array<{ event: string; count: bigint }>);
-  const ownerConversionByEvent = Object.fromEntries(
-    ownerConversionRows.map(r => [r.event, Number(r.count)]),
-  );
-
-  // Pro-conversion from birthday context — paywall_converted events whose
-  // `from`/`source` prop indicates birthday_reminders_advanced context.
-  const proConversionFromBirthday = await prisma.analyticsEvent.count({
-    where: {
-      event: 'birthday.paywall_converted',
-      createdAt: { gte: sinceDay },
-    },
-  });
-
-  return res.json({
-    enabled: BIRTHDAY_REMINDERS_ENABLED,
-    readiness: {
-      usersWithBirthday,
-      usersWithFriendRemindersEnabled,
-      usersWithPublicBirthdayProfile,
-      usersWithPublicWishlist,
-      usersWithActivePublicItems,
-      usersWithPrimaryWishlist,
-    },
-    deliveries24h: {
-      total: deliveriesByStatus.reduce((sum, d) => sum + d._count._all, 0),
-      byStatus: Object.fromEntries(deliveriesByStatus.map(d => [d.status, d._count._all])),
-      byKind: Object.fromEntries(deliveriesByKind.map(d => [d.reminderKind, d._count._all])),
-      bySkipReason: Object.fromEntries(deliveriesBySkipReason.filter(d => d.skipReason).map(d => [d.skipReason!, d._count._all])),
-      byFailureReason: Object.fromEntries(deliveriesByFailureReason.filter(d => d.failureReason).map(d => [d.failureReason!, d._count._all])),
-    },
-    engagement24h: {
-      sent: sentCount,
-      clicked: clickedCount,
-      ctrPercent: sentCount > 0 ? Math.round((clickedCount / sentCount) * 1000) / 10 : 0,
-    },
-    conversions24h: {
-      // Friend-reminder funnel (recipient receives DM → opens Mini App → acts)
-      friendReminderToReservation: convFriendReservation,
-      friendReminderToSecretReservation: convFriendSecretReservation,
-      friendReminderToItemOpened: convFriendItemOpened,
-      friendReminderToWishlistOpened: convFriendWishlistOpened,
-      friendReminderToProfileSubscribed: convFriendProfileSubscribed,
-      // Owner-reminder funnel (owner receives DM → updates wishlist)
-      ownerReminderToItemAdded: ownerConversionByEvent['wish_created'] ?? 0,
-      ownerReminderToWishlistMadePublic: ownerConversionByEvent['wishlist_created'] ?? 0,
-      ownerReminderToGiftCompleted: ownerConversionByEvent['birthday.gift_completed'] ?? 0,
-      // Pro funnel (paywall shown → upgraded)
-      proConversionFromBirthdayContext: proConversionFromBirthday,
-    },
-    mutes: { total: totalMutes, last24h: mutes24h },
-    scheduler: {
-      lastRun: hb?.updatedAt?.toISOString() ?? null,
-      lastMetadata: hb?.metadata ? (() => { try { return JSON.parse(hb.metadata!); } catch { return null; } })() : null,
-      stuckPending,
-    },
-    alerts: {
-      schedulerStale: hb ? (now.getTime() - hb.updatedAt.getTime()) > 26 * 3600_000 : true,
-      stuckPendingHigh: stuckPending > 20,
-      noSendsDespiteCandidates: usersWithFriendRemindersEnabled > 0 && sentCount === 0,
-    },
-  });
-}));
 
 // ─── PRO Showcase endpoints ─────────────────────────────────────────────────
 
@@ -13754,6 +13427,32 @@ async function resolveBirthdayLocale(userId: string): Promise<Locale> {
 function pickBirthdayDisplayName(p: { displayName: string | null; username: string | null; firstName?: string | null }): string {
   return (p.displayName?.trim() || p.username?.trim() || p.firstName?.trim() || 'WishBoard') as string;
 }
+
+// ─── /tg/birthday-reminders/* + /tg/admin/birthday-reminders/metrics
+//     sub-router (P5e split) ───────────────────────────────────────────────
+// Wired here (rather than at the top alongside meRouter/refRouter/supportRouter)
+// because the factory call closes over BIRTHDAY_REMINDERS_ENABLED — a `const`
+// declared a few lines above this block. Earlier wiring would TDZ-error.
+// Function helpers (daysUntilNextBirthday, pickBirthdayDisplayName) are
+// hoisted, but the const is not, so we keep all five deps resolved here for
+// a single, easy-to-read block. Mount order at runtime:
+//   protectTgRoute() chain (incl. /birthday-reminders/mute idempotency)
+//     -> meRouter -> refRouter -> supportRouter -> P5c batch
+//     -> app.use('/tg', tgRouter)            ← already mounted at line ~12200
+//     -> tgRouter.use(birthdayRemindersRouter)   ← this block (post-mount,
+//                                                  valid: Router stack
+//                                                  remains mutable until
+//                                                  app.listen())
+//     -> app.listen(PORT)
+// Helpers stay in index.ts; the scheduler/job code below uses them directly.
+const birthdayRemindersRouter = registerBirthdayRemindersRouter({
+  getOrCreateTgUser,
+  trackEvent,
+  BIRTHDAY_REMINDERS_ENABLED,
+  daysUntilNextBirthday,
+  pickBirthdayDisplayName,
+});
+tgRouter.use(birthdayRemindersRouter);
 
 /** Russian/Hindi etc plural for "day". */
 function birthdayDayWord(days: number, locale: Locale): string {
