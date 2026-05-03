@@ -1006,7 +1006,8 @@ const ru: Dict = {
   bot_users_shared_no_profile: 'Не удалось найти профиль. Открой приложение и попробуй снова.',
   bot_users_shared_no_hint: 'Активный намёк не найден. Создай новый в приложении.',
   bot_users_shared_reserved: 'Это желание уже забронировано — намёк больше не нужен 🎁',
-  bot_sent_count: '✅ Отправлено напрямую: {{n}}',
+  bot_sent_count:
+    '✅ Готово, я отправил намёк {{n}} {{contactWord}}.\n\nНе переживай: я написал от своего имени, они не узнают, что намёк был от тебя.',
   bot_pending_count: '⏳ Не удалось отправить напрямую: {{n}}',
   bot_no_recipients: 'Не выбран ни один получатель.',
   bot_fallback_msg:
@@ -3724,7 +3725,8 @@ const en: Dict = {
   bot_users_shared_no_profile: 'Could not find your profile. Open the app and try again.',
   bot_users_shared_no_hint: 'No active hint found. Create a new one in the app.',
   bot_users_shared_reserved: 'This wish is already reserved — no hint needed 🎁',
-  bot_sent_count: '✅ Sent directly: {{n}}',
+  bot_sent_count:
+    "✅ Done, I sent the hint to {{n}} {{contactWord}}.\n\nDon't worry: I sent it as WishBot, so they won't know it came from you.",
   bot_pending_count: '⏳ Failed to send directly: {{n}}',
   bot_no_recipients: 'No recipients selected.',
   bot_fallback_forward_template:
@@ -7205,7 +7207,8 @@ const zhCN: Dict = {
   bot_santa_invite_msg: '🎅 {{owner}}邀请你加入"{{title}}"！\n点击下方按钮参与。',
   bot_santa_join_btn: '加入',
   bot_select_recipients: '👥 选择接收者',
-  bot_sent_count: '✅ 直接发送：{{n}}',
+  bot_sent_count:
+    '✅ 完成，我已把提示发送给 {{n}} {{contactWord}}。\n\n别担心：我是以 WishBot 的名义发送的，他们不会知道提示来自你。',
   bot_users_shared_no_hint: '没有活跃提示。在应用中新建一个。',
   bot_users_shared_no_profile: '找不到你的个人资料。打开应用重试。',
   bot_users_shared_reserved: '此愿望已被预定——无需提示 🎁',
@@ -9178,7 +9181,8 @@ const hi: Dict = {
   bot_santa_invite_msg: '🎅 {{owner}} आपको "{{title}}" में आमंत्रित करता है!\nशामिल होने के लिए नीचे बटन दबाएँ।',
   bot_santa_join_btn: 'शामिल हों',
   bot_select_recipients: '👥 प्राप्तकर्ता चुनें',
-  bot_sent_count: '✅ सीधे भेजे: {{n}}',
+  bot_sent_count:
+    '✅ हो गया, मैंने {{n}} {{contactWord}} को हिंट भेज दिया है।\n\nचिंता न करें: मैंने इसे WishBot की ओर से भेजा है, उन्हें पता नहीं चलेगा कि हिंट आपकी ओर से था।',
   bot_users_shared_no_hint: 'कोई सक्रिय हिंट नहीं। ऐप में नया बनाएँ।',
   bot_users_shared_no_profile: 'प्रोफ़ाइल नहीं मिली। ऐप खोलें और पुनः प्रयास करें।',
   bot_users_shared_reserved: 'यह इच्छा पहले से बुक है — हिंट की ज़रूरत नहीं 🎁',
@@ -11152,7 +11156,8 @@ const es: Dict = {
   bot_santa_invite_msg: '🎅 ¡{{owner}} te invita a "{{title}}"!\nToca el botón para participar.',
   bot_santa_join_btn: 'Unirse',
   bot_select_recipients: '👥 Seleccionar destinatarios',
-  bot_sent_count: '✅ Enviados directamente: {{n}}',
+  bot_sent_count:
+    '✅ Listo, envié la pista a {{n}} {{contactWord}}.\n\nNo te preocupes: la envié como WishBot, así que no sabrán que venía de ti.',
   bot_users_shared_no_hint: 'No hay pista activa. Crea una nueva en la app.',
   bot_users_shared_no_profile: 'No se encontró tu perfil. Abre la app e intenta de nuevo.',
   bot_users_shared_reserved: 'Este deseo ya está reservado — no necesita pista 🎁',
@@ -13126,7 +13131,8 @@ const ar: Dict = {
   bot_santa_invite_msg: '🎅 {{owner}} يدعوك للانضمام إلى "{{title}}"!\nاضغط الزر أدناه للمشاركة.',
   bot_santa_join_btn: 'انضم',
   bot_select_recipients: '👥 اختر المستلمين',
-  bot_sent_count: '✅ أُرسل مباشرة: {{n}}',
+  bot_sent_count:
+    '✅ تم، أرسلت التلميح إلى {{n}} {{contactWord}}.\n\nلا تقلق: أرسلته باسم WishBot، ولن يعرفوا أن التلميح كان منك.',
   bot_users_shared_no_hint: 'لا تلميح نشط. أنشئ واحداً في التطبيق.',
   bot_users_shared_no_profile: 'لم يُعثر على ملفك. افتح التطبيق وحاول مجدداً.',
   bot_users_shared_reserved: 'هذه الأمنية محجوزة — لا حاجة للتلميح 🎁',

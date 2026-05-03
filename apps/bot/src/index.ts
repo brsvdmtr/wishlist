@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import https from 'node:https';
 import path from 'node:path';
 import { prisma, resolveReferralCode, tryCreateAttribution, markFirstBotStart, loadReferralConfig } from '@wishlist/db';
-import { t, detectLocale, resolveEffectiveLocale, type Locale } from '@wishlist/shared';
+import { t, pluralize, detectLocale, resolveEffectiveLocale, type Locale } from '@wishlist/shared';
 import logger from './logger';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
@@ -111,6 +111,22 @@ if (!token) {
   });
 
   const getLocale = (ctx: any): Locale => detectLocale(ctx.from?.language_code);
+  const getHintContactWord = (n: number, locale: Locale): string => {
+    switch (locale) {
+      case 'ru':
+        return pluralize(n, 'контакту', 'контактам', 'контактам', locale);
+      case 'en':
+        return pluralize(n, 'contact', 'contacts', 'contacts', locale);
+      case 'zh-CN':
+        return '位联系人';
+      case 'hi':
+        return pluralize(n, 'संपर्क', 'संपर्कों', 'संपर्कों', locale);
+      case 'es':
+        return pluralize(n, 'contacto', 'contactos', 'contactos', locale);
+      case 'ar':
+        return pluralize(n, 'جهة اتصال', 'جهات اتصال', 'جهات اتصال', locale);
+    }
+  };
   const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:3001';
 
 
@@ -1792,7 +1808,10 @@ if (!token) {
 
     // Summary to sender (uses sender's locale)
     const parts: string[] = [];
-    if (directSent > 0) parts.push(t('bot_sent_count', locale, { n: directSent }));
+    if (directSent > 0) {
+      const contactWord = getHintContactWord(directSent, locale);
+      parts.push(t('bot_sent_count', locale, { n: directSent, contactWord }));
+    }
     if (pendingCount > 0) parts.push(t('bot_pending_count', locale, { n: pendingCount }));
     if (parts.length === 0) parts.push(t('bot_no_recipients', locale));
 
