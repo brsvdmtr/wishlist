@@ -8,7 +8,7 @@
 | Domain | wishlistik.ru |
 | Repository | https://github.com/brsvdmtr/wishlist.git |
 | Branch | main |
-| Server | Timeweb VPS, SSH: `root@wishlistik.ru` |
+| Server | Vultr VPS, SSH: `root@199.247.24.125` |
 | SSH Key | `~/.ssh/timeweb_wishlist` |
 | Stack | Node 20, TypeScript, Express, Next.js 14, React 18, Telegraf, PostgreSQL 16, Prisma 5.18, Docker |
 | Package Manager | pnpm 10.15.0 |
@@ -78,9 +78,9 @@ WishBoard lets Telegram users create wishlists and share them with friends. Frie
 | Tags/categories | Backend only (no Mini App UI) |
 | Public web view (`/w/:slug`) | Exists but secondary |
 | Admin panel | Functional |
-| CI/CD | Not implemented |
-| Monitoring | Not implemented |
-| Automated backups | Not implemented |
+| CI/CD | GitHub Actions deploy/admin-ops to Vultr |
+| Monitoring | Watchdog cron + GitHub Actions health-check |
+| Automated backups | Vultr local archive + Selectel/S3 upload |
 
 ---
 
@@ -195,26 +195,12 @@ docker cp /path/to/uploads/. $(docker compose -f docker-compose.prod.yml ps -q a
 
 ---
 
-## What To Back Up RIGHT NOW
+## Production Backup Command
 
 ```bash
-# Run on server:
-mkdir -p /opt/backup
-
-# 1. Database
-docker compose -f docker-compose.prod.yml exec -T postgres \
-  pg_dump -U wishlist wishlist > /opt/backup/db_$(date +%Y%m%d).sql
-
-# 2. Uploads
-docker cp $(docker compose -f docker-compose.prod.yml ps -q api):/data/uploads \
-  /opt/backup/uploads_$(date +%Y%m%d)
-
-# 3. Environment
-cp /opt/wishlist/.env /opt/backup/env_$(date +%Y%m%d)
-
-# 4. Nginx config
-cp /etc/nginx/sites-enabled/wishlistik.ru /opt/backup/nginx_$(date +%Y%m%d)
-
-# 5. Copy backups off server
-scp -i ~/.ssh/timeweb_wishlist -r root@wishlistik.ru:/opt/backup ./backup_$(date +%Y%m%d)
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
+cd /opt/wishlist
+/opt/wishlist/ops/backup.sh
+ls -lht /opt/backups/wishlist/ | head
+rclone ls wishlist-s3:wishlist-backups/ | tail -5
 ```

@@ -26,6 +26,7 @@ services:
     stop_grace_period: 30s
     environment:
       NODE_ENV: production
+      DNS_RESULT_ORDER: ${DNS_RESULT_ORDER:-ipv4first}
       DATABASE_URL: ${DATABASE_URL}
       PORT: 3001
       WEB_ORIGIN: ${WEB_ORIGIN}
@@ -70,7 +71,7 @@ services:
     networks:
       - wishlist-network
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
 
   web:
     build:
@@ -94,7 +95,7 @@ services:
       api:
         condition: service_started
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     networks:
       - wishlist-network
 

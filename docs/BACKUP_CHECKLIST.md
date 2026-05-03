@@ -1,5 +1,8 @@
 # BACKUP_CHECKLIST.md — Полный чеклист бэкапов WishBoard
 
+> Updated 2026-05-03: production runs on Vultr `199.247.24.125`; daily local
+> backups and Selectel/S3 upload are configured and manually verified.
+
 ---
 
 ## 1. Исходный код
@@ -25,26 +28,24 @@ git push origin main
 
 | Что | Где хранится | Способ бэкапа | Статус |
 |-----|-------------|---------------|--------|
-| Все данные (users, wishlists, items, comments, reservations) | Docker volume `wishlist-prod_wishlist_pg_data` | `pg_dump` | НЕТ АВТОБЭКАПА |
+| Все данные (users, wishlists, items, comments, reservations) | Docker volume `wishlist-prod_wishlist_pg_data` | `ops/backup.sh` (`pg_dump --format=custom`) | OK |
 | Схема БД (Prisma) | `packages/db/prisma/schema.prisma` | В git | OK |
 | Миграции | `packages/db/prisma/migrations/` | В git | OK |
 
 **Ручной бэкап:**
 ```bash
-# На сервере:
-docker compose -f docker-compose.prod.yml exec -T postgres \
-  pg_dump -U wishlist -d wishlist \
-  > /opt/backup/db_$(date +%Y%m%d_%H%M%S).sql
+# На Vultr:
+cd /opt/wishlist
+/opt/wishlist/ops/backup.sh
 
-# Размер проверить:
-ls -lh /opt/backup/db_*.sql
+# Проверить архив и checksum:
+ls -lht /opt/backups/wishlist/ | head
+cd /opt/backups/wishlist && sha256sum -c wishlist_YYYYMMDD_HHMMSS.tar.gz.sha256
 ```
 
 **Автоматизация (cron):**
 ```bash
-# Добавить в crontab (crontab -e):
-0 3 * * * cd /opt/wishlist && docker compose -f docker-compose.prod.yml exec -T postgres pg_dump -U wishlist -d wishlist | gzip > /opt/backup/db_$(date +\%Y\%m\%d).sql.gz 2>/dev/null
-# Каждый день в 3:00
+0 3 * * * /opt/wishlist/ops/backup.sh >> /var/log/wishlist-backup.log 2>&1
 ```
 
 ---
@@ -53,22 +54,19 @@ ls -lh /opt/backup/db_*.sql
 
 | Что | Где хранится | Способ бэкапа | Статус |
 |-----|-------------|---------------|--------|
-| Оригиналы фото (JPEG, сжатые Sharp) | Docker volume `wishlist-prod_wishlist_uploads` | `docker cp` | НЕТ АВТОБЭКАПА |
-| Тамбнейлы | Тот же volume | `docker cp` | НЕТ АВТОБЭКАПА |
+| Оригиналы фото (JPEG, сжатые Sharp) | Docker volume `wishlist-prod_wishlist_uploads` | `ops/backup.sh` (`uploads.tar`) | OK |
+| Тамбнейлы | Тот же volume | `ops/backup.sh` (`uploads.tar`) | OK |
 
 **Ручной бэкап:**
 ```bash
-mkdir -p /opt/backup/uploads_$(date +%Y%m%d)
-docker cp $(docker compose -f docker-compose.prod.yml ps -q api):/data/uploads/. /opt/backup/uploads_$(date +%Y%m%d)/
-
-# Размер:
-du -sh /opt/backup/uploads_*/
+cd /opt/wishlist
+/opt/wishlist/ops/backup.sh
+tar -tf /opt/backups/wishlist/wishlist_YYYYMMDD_HHMMSS.tar.gz | grep uploads.tar
 ```
 
 **Автоматизация (cron):**
 ```bash
-0 4 * * 0 tar czf /opt/backup/uploads_$(date +\%Y\%m\%d).tar.gz -C /opt/backup/uploads_latest . 2>/dev/null
-# Каждое воскресенье в 4:00
+0 3 * * * /opt/wishlist/ops/backup.sh >> /var/log/wishlist-backup.log 2>&1
 ```
 
 ---
@@ -77,7 +75,7 @@ du -sh /opt/backup/uploads_*/
 
 | Что | Где хранится | Способ бэкапа | Статус |
 |-----|-------------|---------------|--------|
-| `.env` (production) | `/opt/wishlist/.env` на сервере | Ручное копирование | КРИТИЧНО |
+| `.env` (production) | `/opt/wishlist/.env` на Vultr | Входит в `ops/backup.sh` archive as `dot-env` | OK |
 | `.env.example` (шаблон) | В git | Автоматически | OK |
 | `BOT_TOKEN` | `.env` + @BotFather в Telegram | Сохранить в менеджер паролей | КРИТИЧНО |
 | `ADMIN_KEY` | `.env` | Сохранить в менеджер паролей | КРИТИЧНО |
@@ -87,7 +85,7 @@ du -sh /opt/backup/uploads_*/
 **Действие:**
 ```bash
 # Скопировать .env на локальную машину:
-scp -i ~/.ssh/timeweb_wishlist root@wishlistik.ru:/opt/wishlist/.env ./backup_env_$(date +%Y%m%d)
+scp -i ~/.ssh/timeweb_wishlist root@199.247.24.125:/opt/wishlist/.env ./backup_env_$(date +%Y%m%d)
 
 # Или зашифровать на сервере:
 gpg --symmetric --cipher-algo AES256 /opt/wishlist/.env
@@ -141,7 +139,7 @@ certbot renew --dry-run
 
 | Что | Где хранится | Способ бэкапа | Статус |
 |-----|-------------|---------------|--------|
-| Домен `wishlistik.ru` | Регистратор (Timeweb?) | Записать логин/пароль от панели | КРИТИЧНО |
+| Домен `wishlistik.ru` | Регистратор/DNS-панель | Записать логин/пароль от панели | КРИТИЧНО |
 | DNS A-запись | Панель регистратора | IP сервера -> документировать | Рекомендуется |
 | SSL-сертификат | Let's Encrypt (certbot) | Авто-обновление каждые 90 дней | ПРОВЕРИТЬ |
 | SSH-ключ для сервера | `~/.ssh/timeweb_wishlist` | Должен быть на локальной машине | OK |
@@ -172,10 +170,8 @@ certbot renew --dry-run
 
 **Процедура деплоя (документирована):**
 ```bash
-ssh -i ~/.ssh/timeweb_wishlist root@wishlistik.ru
-cd /opt/wishlist
-git pull origin main
-docker compose -f docker-compose.prod.yml up -d --build
+git push origin main
+gh workflow run admin-ops.yml -R brsvdmtr/wishlist -f action=health-check
 ```
 
 ---
@@ -184,10 +180,9 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 | Частота | Что | Команда |
 |---------|-----|---------|
-| Ежедневно 03:00 | База данных | `pg_dump` -> `/opt/backup/` |
-| Еженедельно вс 04:00 | Фото/uploads | `docker cp` -> `/opt/backup/` |
-| После каждого деплоя | .env | `cp` -> `/opt/backup/` |
-| Ежемесячно | Всё -> локальная машина | `scp -r /opt/backup/` |
+| Ежедневно 03:00 | База + uploads + `.env` | `/opt/wishlist/ops/backup.sh` -> `/opt/backups/wishlist/` + Selectel/S3 |
+| Еженедельно вс 04:00 | Docker cleanup | `docker system prune -af --filter "until=168h"` |
+| Ежемесячно | Restore drill | Скачать архив из Selectel и восстановить в тестовую БД |
 | Ежемесячно | SSL проверка | `certbot renew --dry-run` |
 
 ---
@@ -198,13 +193,10 @@ docker compose -f docker-compose.prod.yml up -d --build
 # Запустить на сервере для проверки всего:
 echo "=== Backup Status ==="
 echo "DB backups:"
-ls -lht /opt/backup/db_* 2>/dev/null | head -3 || echo "  NO DB BACKUPS!"
+ls -lht /opt/backups/wishlist/wishlist_*.tar.gz | head -3 || echo "  NO LOCAL BACKUPS!"
 echo ""
-echo "Upload backups:"
-ls -lht /opt/backup/uploads_* 2>/dev/null | head -3 || echo "  NO UPLOAD BACKUPS!"
-echo ""
-echo "Env backups:"
-ls -lht /opt/backup/env_* 2>/dev/null | head -3 || echo "  NO ENV BACKUPS!"
+echo "Selectel backups:"
+rclone ls wishlist-s3:wishlist-backups/ | tail -5 || echo "  NO REMOTE BACKUPS!"
 echo ""
 echo "SSL expiry:"
 echo | openssl s_client -servername wishlistik.ru -connect wishlistik.ru:443 2>/dev/null | openssl x509 -noout -enddate

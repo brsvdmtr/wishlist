@@ -1,27 +1,35 @@
 # Deployment Runbook
 
-> Last updated: 2026-04-02
+> Last updated: 2026-05-03
 
 ## Standard Deploy
 
+Production runs on the Vultr Amsterdam VPS `199.247.24.125`. The standard path
+is GitHub Actions, not a local SSH deploy:
+
 ```bash
-ssh timeweb
-cd /opt/wishlist
-git pull origin main
+# Auto-deploy after merging/pushing main
+git push origin main
 
-# Deploy one service
-./ops/deploy.sh bot
-./ops/deploy.sh api
-./ops/deploy.sh web
-
-# Deploy multiple
-./ops/deploy.sh api web
-
-# Deploy everything
-./ops/deploy.sh all
+# Manual redeploy without a code change
+gh workflow run deploy.yml -R brsvdmtr/wishlist
 ```
 
-The deploy script handles: build, restart, health checks, maintenance mode, and success recording.
+The deploy workflow SSHes to `/opt/wishlist` on the Vultr server, pulls `main`,
+detects changed services, rebuilds only what changed, restarts those services,
+and runs the basic production health checks.
+
+Manual SSH deploy is a fallback only:
+
+```bash
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
+cd /opt/wishlist
+git fetch origin main
+git reset --hard origin/main
+docker compose -f docker-compose.prod.yml build --memory 768m api bot web
+docker compose -f docker-compose.prod.yml up -d api bot web
+curl -fsS http://127.0.0.1:3001/health
+```
 
 ---
 
@@ -93,10 +101,11 @@ After every deploy, manually verify:
 
 ## Rules
 
-- **Always use `./ops/deploy.sh`**, not raw `docker compose up -d --build`
-- Deploy only what changed: `./ops/deploy.sh bot`, not `./ops/deploy.sh all`
-- Never skip the smoke test after deploy
-- If health checks fail after deploy, rollback: `./ops/rollback.sh <service>`
+- Prefer GitHub Actions deploys. They are audit-logged and use repo secrets.
+- Deploy only what changed. The workflow does this automatically from the diff.
+- Never skip the smoke test after deploy.
+- If health checks fail after deploy, rollback with `./ops/rollback.sh <service>`
+  from `/opt/wishlist` on the Vultr server.
 
 ---
 

@@ -1,12 +1,12 @@
 name: Admin Ops
 
-# Manual operations on the Wishlist prod VPS — trigger from the Actions
+# Manual operations on the WishBoard prod Vultr VPS — trigger from the Actions
 # tab (or `gh workflow run admin-ops.yml -f action=<...>`). Designed for
-# situations where the developer IP is edge-firewalled and can't SSH,
-# but any ops action works fine here even when SSH works.
+# situations where the developer IP cannot SSH directly, but any ops action
+# also works fine when SSH works.
 #
 # Why a workflow instead of one-off curl? Actions runners have a stable,
-# non-blocked IP pool into the VPS, and every run is audit-logged — so
+# broad IP pool into the VPS, and every run is audit-logged — so
 # "delete test user" or "run SQL" leaves a trace with who/when/what.
 #
 # SECURITY: only repo admins can workflow_dispatch. The shell/SQL actions

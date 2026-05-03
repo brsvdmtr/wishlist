@@ -443,7 +443,7 @@ SECURITY_IDEMPOTENCY_ENABLED=false
 Then restart the API container:
 
 ```bash
-ssh timeweb 'cd /opt/wishlist && docker compose restart api'
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125 'cd /opt/wishlist && docker compose restart api'
 ```
 
 Each switch is independent — disable just the one causing pain.
@@ -452,19 +452,19 @@ Each switch is independent — disable just the one causing pain.
 
 ```bash
 # All rate-limit hits in the last hour
-ssh timeweb 'jq -c "select(.event == \"api.rate_limited\")" \
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125 'jq -c "select(.event == \"api.rate_limited\")" \
   /opt/wishlist/logs/api/api.log.$(date -u +%Y-%m-%d) | tail -50'
 
 # Idempotency conflicts (likely client bugs)
-ssh timeweb 'jq -c "select(.event == \"api.idempotency_conflict\")" \
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125 'jq -c "select(.event == \"api.idempotency_conflict\")" \
   /opt/wishlist/logs/api/api.log.$(date -u +%Y-%m-%d)'
 
 # IP throttling events
-ssh timeweb 'jq -c "select(.event == \"api.ip_throttled\")" \
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125 'jq -c "select(.event == \"api.ip_throttled\")" \
   /opt/wishlist/logs/api/api.log.$(date -u +%Y-%m-%d)'
 
 # Critical endpoints called without a key (adoption monitor)
-ssh timeweb 'jq -c "select(.event == \"api.idem_missing_on_critical_endpoint\")" \
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125 'jq -c "select(.event == \"api.idem_missing_on_critical_endpoint\")" \
   /opt/wishlist/logs/api/api.log.$(date -u +%Y-%m-%d) | wc -l'
 ```
 
@@ -487,15 +487,15 @@ within a few seconds is usually:
 
 ```bash
 # Last cleanup run + how many it deleted
-ssh timeweb 'jq -c "select(.event == \"api.idempotency_cleanup_completed\")" \
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125 'jq -c "select(.event == \"api.idempotency_cleanup_completed\")" \
   /opt/wishlist/logs/api/api.log.$(date -u +%Y-%m-%d) | tail -3'
 
 # Row count by status (sanity check)
-ssh timeweb 'docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist -c \
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125 'docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist -c \
   "SELECT status, COUNT(*) FROM \"IdempotencyKey\" GROUP BY status;"'
 
 # Are there overdue rows? (cleanup should have purged these)
-ssh timeweb 'docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist -c \
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125 'docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist -c \
   "SELECT COUNT(*) FROM \"IdempotencyKey\" WHERE \"expiresAt\" < NOW();"'
 ```
 
@@ -505,7 +505,7 @@ ssh timeweb 'docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist -
    support ticket or asking them to read it from frontend dev tools).
 2. Grep events:
    ```bash
-   ssh timeweb 'jq -c "select(.actorHash == \"<hash>\")" \
+   ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125 'jq -c "select(.actorHash == \"<hash>\")" \
      /opt/wishlist/logs/api/api.log.$(date -u +%Y-%m-%d) | head -50'
    ```
 3. Look at the sequence — `api.rate_limited` clusters, `api.idempotency_*`
@@ -539,19 +539,19 @@ ssh timeweb 'docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist -
 
 ```bash
 # 1. Migrations applied
-ssh timeweb 'docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist -c \
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125 'docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist -c \
   "SELECT migration_name FROM _prisma_migrations \
    WHERE finished_at IS NULL AND rolled_back_at IS NULL;"'
 
 # 2. API health
-ssh timeweb 'curl -s http://localhost:3001/health'
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125 'curl -s http://localhost:3001/health'
 
 # 3. New table is reachable
-ssh timeweb 'docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist -c \
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125 'docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist -c \
   "SELECT COUNT(*) FROM \"IdempotencyKey\";"'
 
 # 4. Cleanup job started
-ssh timeweb 'docker logs wishlist-prod-api-1 2>&1 | grep idempotency_cleanup | tail -3'
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125 'docker logs wishlist-prod-api-1 2>&1 | grep idempotency_cleanup | tail -3'
 ```
 
 ### Observation window — **24 to 48 hours** before deciding on Wave 2

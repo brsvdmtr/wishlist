@@ -1,5 +1,5 @@
 # KNOWN_GAPS_AND_RISKS — Risks, Weak Points & Missing Items
-> Last updated: 2026-04-02 · Branch: main
+> Last updated: 2026-05-03 · Branch: main
 
 ---
 
@@ -10,11 +10,11 @@
 - **Impact**: Server down = total outage
 - **Mitigation**: Regular backups, documented recovery procedure
 
-### 2. No Automated Backups
-- **Risk**: Database and uploads have no scheduled backup
-- **Impact**: Hardware failure = total data loss
-- **Mitigation needed**: Cron job for pg_dump + upload directory backup to external storage
-- **Priority**: CRITICAL
+### 2. Backup Pipeline Regression
+- **Risk**: Scheduled backup or Selectel/S3 upload silently stops working
+- **Impact**: Hardware failure could lose data since the last valid archive
+- **Current mitigation**: Vultr cron runs `/opt/wishlist/ops/backup.sh` daily at 03:00 UTC; local archive and Selectel/S3 upload were manually verified on 2026-05-03
+- **Priority**: HIGH
 
 ### 3. Production .env Not in Version Control
 - **Risk**: .env file only exists on server
@@ -247,13 +247,13 @@
 
 ## MISSING FOR SAFE RECOVERY
 
-### Must Be Backed Up Externally NOW
+### Backed Up Externally
 
 | Artifact | Location | Backup Method |
 |----------|----------|---------------|
-| .env file | `/opt/wishlist/.env` | `scp` to local machine |
-| Database dump | PostgreSQL container | `pg_dump` to file |
-| Upload files | Docker volume `wishlist_uploads` | `docker cp` to host |
+| .env file | `/opt/wishlist/.env` | Included as `dot-env` in `/opt/wishlist/ops/backup.sh` archive |
+| Database dump | PostgreSQL container | `pg_dump --format=custom` via `/opt/wishlist/ops/backup.sh` |
+| Upload files | Docker volume `wishlist-prod_wishlist_uploads` | `uploads.tar` via `/opt/wishlist/ops/backup.sh` |
 | Nginx config | `/etc/nginx/sites-enabled/wishlistik.ru` (may change to wishlistik.ru) | Already in docs |
 | SSH key | `~/.ssh/timeweb_wishlist` | Should already be local |
 | Bot Token | In .env and @BotFather | Save to password manager |
@@ -263,10 +263,10 @@
 
 | Artifact | Priority | Notes |
 |----------|----------|-------|
-| Automated daily DB backup | CRITICAL | cron + pg_dump + offsite |
-| Automated upload backup | HIGH | cron + tar + offsite |
+| Automated daily DB backup | DONE | Vultr cron + local archive + Selectel/S3 |
+| Automated upload backup | DONE | Same archive, `uploads.tar` |
 | .env template with comments | DONE | Full `.env.example` in repo root |
-| Health check monitoring | HIGH | UptimeRobot or similar |
+| Health check monitoring | DONE | `ops/watchdog/health-watchdog.mjs` cron + GitHub Actions health-check |
 | SSL renewal verification | HIGH | `certbot renew --dry-run` |
 
 ---

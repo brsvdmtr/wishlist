@@ -1,6 +1,6 @@
 # Disaster Recovery Runbook
 
-> Last updated: 2026-04-02
+> Last updated: 2026-05-03
 
 ## Backup Overview
 
@@ -9,7 +9,7 @@
 | pg_dump (custom format) | `/opt/backups/wishlist/` | 14 days local | Daily 03:00 UTC |
 | uploads archive | same archive | same | same |
 | .env snapshot | same archive | same | same |
-| S3 copy | `RCLONE_REMOTE` (when configured) | 30 days remote | same |
+| Selectel/S3 copy | `RCLONE_REMOTE` (`wishlist-s3:wishlist-backups`) | 30 days remote | same |
 
 Archive format: `wishlist_YYYYMMDD_HHMMSS.tar.gz` + `.sha256` checksum.
 
@@ -161,10 +161,10 @@ rclone config
 # Choose: n (new remote)
 # Name: wishlist-s3
 # Type: s3
-# Provider: (your provider — Timeweb, Yandex Cloud, etc.)
+# Provider: S3-compatible storage
 # Access key: (from provider dashboard)
 # Secret key: (from provider dashboard)
-# Endpoint: (provider-specific, e.g., s3.timeweb.cloud)
+# Endpoint: Selectel S3 endpoint
 # Region: (provider-specific)
 ```
 
@@ -191,11 +191,35 @@ rclone ls wishlist-s3:wishlist-backups/
 ### Verify cron
 
 ```bash
-# Check that cron loads .env (or set RCLONE_REMOTE in crontab)
+# Check that cron is installed on the Vultr server
 crontab -l
 # Should show:
-# 0 3 * * * RCLONE_REMOTE=wishlist-s3:wishlist-backups /opt/wishlist/ops/backup.sh >> /var/log/wishlist-backup.log 2>&1
+# 0 3 * * * /opt/wishlist/ops/backup.sh >> /var/log/wishlist-backup.log 2>&1
 ```
+
+---
+
+## Migration Verification (2026-05-03)
+
+Performed production migration from the old Russian VPS to Vultr Amsterdam.
+Final backup was restored on Vultr and the backup pipeline was tested again from
+the new server.
+
+| Check | Result |
+|-------|--------|
+| Production host | Vultr `199.247.24.125` |
+| DNS `wishlistik.ru` / `www` | `199.247.24.125` |
+| Final DB restore | ✓ |
+| Users count | 369 |
+| Failed Prisma migrations | 0 |
+| Uploads restored | 80 files |
+| API health | ✓ `ok:true` |
+| Web `/miniapp` | ✓ 200 |
+| Bot polling | ✓ `getMe ok` |
+| Bot heartbeat | ✓ fresh |
+| GitHub Actions `admin-ops health-check` | ✓ |
+| Local backup on Vultr | ✓ `/opt/backups/wishlist/wishlist_20260503_144939.tar.gz` |
+| Selectel/S3 backup upload from Vultr | ✓ remote size verified |
 
 ---
 

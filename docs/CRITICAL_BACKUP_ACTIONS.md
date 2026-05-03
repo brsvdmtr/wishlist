@@ -1,5 +1,9 @@
 # CRITICAL_BACKUP_ACTIONS.md — 10 немедленных действий для защиты проекта
 
+> Updated 2026-05-03: this is now an emergency/manual fallback checklist.
+> Normal production backups run on Vultr via `/opt/wishlist/ops/backup.sh` and
+> upload to Selectel/S3. See `docs/DISASTER_RECOVERY.md`.
+
 **Приоритет: выполнить СЕЙЧАС, пока сервер работает.**
 
 ---
@@ -10,7 +14,7 @@
 **Время:** 1 минута.
 
 ```bash
-ssh -i ~/.ssh/timeweb_wishlist root@wishlistik.ru
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
 
 mkdir -p /opt/backup
 cd /opt/wishlist
@@ -32,7 +36,7 @@ ls -lh /opt/backup/db_*.sql
 ```bash
 # С локальной машины:
 scp -i ~/.ssh/timeweb_wishlist \
-  root@wishlistik.ru:/opt/wishlist/.env \
+  root@199.247.24.125:/opt/wishlist/.env \
   ~/backup_wishboard_env_$(date +%Y%m%d)
 
 # Или на сервере:
@@ -49,7 +53,7 @@ cp /opt/wishlist/.env /opt/backup/env_$(date +%Y%m%d)
 **Время:** 1-5 минут (зависит от объёма).
 
 ```bash
-ssh -i ~/.ssh/timeweb_wishlist root@wishlistik.ru
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
 
 mkdir -p /opt/backup/uploads_$(date +%Y%m%d)
 cd /opt/wishlist
@@ -73,7 +77,7 @@ du -sh /opt/backup/uploads_$(date +%Y%m%d)/
 mkdir -p ~/wishboard_backup_$(date +%Y%m%d)
 
 scp -i ~/.ssh/timeweb_wishlist -r \
-  root@wishlistik.ru:/opt/backup/ \
+  root@199.247.24.125:/opt/backup/ \
   ~/wishboard_backup_$(date +%Y%m%d)/
 
 # Проверить:
@@ -88,7 +92,7 @@ ls -la ~/wishboard_backup_$(date +%Y%m%d)/
 **Время:** 30 секунд.
 
 ```bash
-ssh -i ~/.ssh/timeweb_wishlist root@wishlistik.ru
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
 
 # Проверить дату истечения:
 echo | openssl s_client -servername wishlistik.ru -connect wishlistik.ru:443 2>/dev/null \
@@ -111,7 +115,7 @@ systemctl status certbot.timer
 **Время:** 1 минута.
 
 ```bash
-ssh -i ~/.ssh/timeweb_wishlist root@wishlistik.ru
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
 
 cd /opt/wishlist
 git status
@@ -136,7 +140,7 @@ dig wishlistik.ru +short
 nslookup wishlistik.ru
 
 # Записать результат в менеджер паролей или заметки:
-# Сервер Timeweb VPS: XX.XX.XX.XX
+# Сервер Vultr VPS: XX.XX.XX.XX
 ```
 
 ---
@@ -147,7 +151,7 @@ nslookup wishlistik.ru
 **Время:** 30 секунд.
 
 ```bash
-ssh -i ~/.ssh/timeweb_wishlist root@wishlistik.ru
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
 
 cp /etc/nginx/sites-enabled/wishlistik.ru /opt/backup/nginx_$(date +%Y%m%d)
 ```
@@ -162,7 +166,7 @@ cp /etc/nginx/sites-enabled/wishlistik.ru /opt/backup/nginx_$(date +%Y%m%d)
 **Время:** 2 минуты.
 
 ```bash
-ssh -i ~/.ssh/timeweb_wishlist root@wishlistik.ru
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
 
 # Создать скрипт бэкапа:
 cat > /opt/backup/backup.sh << 'EOF'
@@ -209,7 +213,7 @@ curl -s -o /dev/null -w "%{http_code}" https://wishlistik.ru/miniapp
 # Ожидается: 200
 
 # Docker:
-ssh -i ~/.ssh/timeweb_wishlist root@wishlistik.ru \
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125 \
   "docker compose -f /opt/wishlist/docker-compose.prod.yml ps"
 # Ожидается: все 4 сервиса running/healthy
 

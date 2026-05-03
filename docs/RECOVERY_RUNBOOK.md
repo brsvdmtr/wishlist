@@ -1,12 +1,12 @@
 # RECOVERY_RUNBOOK.md - Step-by-Step Disaster Recovery
 
-> Last updated: 2026-04-02 · Branch: main
+> Last updated: 2026-05-03 · Branch: main
 
 ## Prerequisites
 
 Before starting recovery, ensure you have:
 
-- [ ] SSH access to server (`ssh -i ~/.ssh/timeweb_wishlist root@wishlistik.ru`)
+- [ ] SSH access to server (`ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125`)
 - [ ] Git repository access (https://github.com/brsvdmtr/wishlist.git)
 - [ ] Production `.env` file (see template below)
 - [ ] Telegram Bot Token
@@ -189,7 +189,7 @@ docker compose -f docker-compose.prod.yml logs --tail 20 web
 ### 4.1 If Restoring from SQL Dump
 ```bash
 # Copy dump to server
-scp backup.sql root@wishlistik.ru:/tmp/
+scp backup.sql root@199.247.24.125:/tmp/
 
 # Restore (use docker compose exec to avoid hardcoded container names)
 docker compose -f docker-compose.prod.yml exec -T postgres \
@@ -358,25 +358,18 @@ docker exec wishlist-prod-api-1 ls -la /data/uploads/
 
 ---
 
-## Backup Commands (Run Periodically)
+## Backup Commands
 
-### Database Backup
+The scheduled production backup on Vultr covers database, uploads, and `.env`
+in one archive, then uploads the archive to Selectel/S3.
+
 ```bash
-docker compose -f docker-compose.prod.yml exec -T postgres \
-  pg_dump -U wishlist wishlist > /opt/backup/wishlist_$(date +%Y%m%d_%H%M%S).sql
+cd /opt/wishlist
+/opt/wishlist/ops/backup.sh
+ls -lht /opt/backups/wishlist/ | head
+rclone ls wishlist-s3:wishlist-backups/ | tail -5
 ```
 
-### Upload Files Backup
-```bash
-# Find api container name first, then docker cp:
-docker cp $(docker compose -f docker-compose.prod.yml ps -q api):/data/uploads \
-  /opt/backup/uploads_$(date +%Y%m%d)
-```
-
-### .env Backup
-```bash
-cp /opt/wishlist/.env /opt/backup/env_$(date +%Y%m%d)
-```
 
 ---
 
@@ -558,5 +551,5 @@ docker compose -f docker-compose.prod.yml down          # Stop all
 docker compose -f docker-compose.prod.yml exec postgres psql -U wishlist -d wishlist  # SQL shell
 
 # === EMERGENCY BACKUP ===
-docker compose -f docker-compose.prod.yml exec -T postgres pg_dump -U wishlist wishlist > /opt/backup/emergency_$(date +%Y%m%d_%H%M%S).sql
+/opt/wishlist/ops/backup.sh
 ```

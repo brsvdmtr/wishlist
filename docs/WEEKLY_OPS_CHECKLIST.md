@@ -5,7 +5,7 @@
 ## On the server
 
 ```bash
-ssh timeweb
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
 ```
 
 ### 1. Health
@@ -30,7 +30,7 @@ Expected: all 4 containers `Up`, postgres `healthy`.
 rclone ls wishlist-s3:wishlist-backups/ | tail -3
 ```
 
-Expected: backup from last night, size ~1.8MB.
+Expected: backup from last night, current production size around 4.1MB.
 
 ### 4. Local backups
 
@@ -54,7 +54,7 @@ Expected: last run shows "Backup ... complete", upload complete, no errors.
 tail -10 /var/log/watchdog.log
 ```
 
-Expected: recent `[ok]` entries, no `[ALERT]`.
+Expected: recent `all healthy` entries, no alert loop.
 
 ### 7. Disk space
 

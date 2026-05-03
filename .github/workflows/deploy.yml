@@ -1,11 +1,11 @@
-name: Deploy to Timeweb
+name: Deploy to Vultr
 
 # Auto-deploy on push to main — SSHes from GitHub Actions runner into the
 # Wishlist prod VPS and runs git pull + docker rebuild + health check.
-# The runner's IP is outside Timeweb's edge-firewall blocklist (unlike a
-# developer's home IP), so this works even when a dev is SSH-blocked.
+# Production is the Vultr Amsterdam VPS. SSH target is controlled by
+# repo secrets, primarily SSH_HOST.
 #
-# Manual trigger: workflow_dispatch (Actions tab → "Deploy to Timeweb" → Run)
+# Manual trigger: workflow_dispatch (Actions tab → "Deploy to Vultr" → Run)
 # Concurrency: only one deploy at a time; subsequent pushes queue.
 on:
   push:

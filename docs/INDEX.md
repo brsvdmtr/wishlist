@@ -132,13 +132,11 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 ### Deployment
 
 ```bash
-# SSH to server
-ssh -i ~/.ssh/timeweb_wishlist root@wishlistik.ru
+# Standard production deploy
+git push origin main
 
-# Deploy (production branch: main)
-cd /opt/wishlist
-git pull origin main
-docker compose -f docker-compose.prod.yml up -d --build api web bot
+# Manual ops/health-check
+gh workflow run admin-ops.yml -R brsvdmtr/wishlist -f action=health-check
 ```
 
 ### Auth for Local Dev

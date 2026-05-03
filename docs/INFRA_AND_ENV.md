@@ -1,17 +1,18 @@
 # INFRA_AND_ENV — Infrastructure, Environment & Deployment
-> Last updated: 2026-04-02 · Branch: main
+> Last updated: 2026-05-03 · Branch: main
 >
 
 ## Server
 
 | Property | Value |
 |----------|-------|
-| Provider | Timeweb (VPS) |
-| Hostname | wishlistik.ru |
-| SSH | `ssh -i ~/.ssh/timeweb_wishlist root@wishlistik.ru` |
+| Provider | Vultr (Amsterdam VPS) |
+| Hostname | `wishboard-bot-vultr-ams-1` |
+| Public IP | `199.247.24.125` |
+| SSH | `ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125` |
 | Project path | `/opt/wishlist` |
 | OS | Debian 12 (bookworm) |
-| Node.js | 20 (via Docker images) |
+| Node.js | 20 in Docker images; host Node 18 for watchdog cron |
 
 ---
 
@@ -83,8 +84,8 @@ server {
 | Service | Image | Port | Depends On |
 |---------|-------|------|------------|
 | postgres | postgres:16-alpine | internal only | - |
-| api | Dockerfile.api (node:20-bookworm-slim) | 3001:3001 | postgres (healthy) |
-| web | Dockerfile.web (node:20-alpine) | 3000:3000 | api (started) |
+| api | Dockerfile.api (node:20-bookworm-slim) | `127.0.0.1:3001` only | postgres (healthy) |
+| web | Dockerfile.web (node:20-alpine) | `127.0.0.1:3000` only | api (started) |
 | bot | Dockerfile.bot (node:20-bookworm-slim) | none | api (started) |
 
 ### Volumes
@@ -143,6 +144,8 @@ server {
 | WATCHDOG_BASE_URL | watchdog | (required) | Base URL to check, e.g. `https://wishlistik.ru` |
 | WATCHDOG_STATE_FILE | watchdog | /tmp/watchdog-state.json | State file for deduplicating alerts |
 | WATCHDOG_TIMEOUT_MS | watchdog | 8000 | HTTP timeout for watchdog checks |
+| DNS_RESULT_ORDER | api | ipv4first | Node DNS order; Vultr uses IPv4 to Telegram from Docker |
+| RCLONE_REMOTE | backup | wishlist-s3:wishlist-backups | Selectel/S3 backup target |
 
 ### .env.example (root) `VERIFIED_FROM_CONFIG`
 Full template with all variables and comments available in `.env.example` (root of repo).
@@ -181,26 +184,27 @@ pnpm dev:web    # Web on port 3000
 
 ### Production Deployment
 
-> **Always use `ops/deploy.sh`** — never raw `docker compose up -d --build`.
-> The deploy script handles maintenance mode, health checks, heartbeat verification, and success recording.
-> See [DEPLOYMENT_RUNBOOK.md](./DEPLOYMENT_RUNBOOK.md) for the full runbook.
+Use GitHub Actions as the normal deployment path. The `deploy.yml` workflow SSHes
+to the Vultr server from repo secrets and rebuilds only changed services.
 
 ```bash
-# On server:
-ssh timeweb
+# Auto-deploy after merging/pushing main
+git push origin main
+
+# Manual redeploy without a code change
+gh workflow run deploy.yml -R brsvdmtr/wishlist
+```
+
+Manual server deploy is a fallback only:
+
+```bash
+ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
 cd /opt/wishlist
-git pull origin main
-
-# Deploy one service:
-./ops/deploy.sh bot
-./ops/deploy.sh api
-./ops/deploy.sh web
-
-# Deploy multiple:
-./ops/deploy.sh api web
-
-# Deploy everything:
-./ops/deploy.sh all
+git fetch origin main
+git reset --hard origin/main
+docker compose -f docker-compose.prod.yml build --memory 768m api bot web
+docker compose -f docker-compose.prod.yml up -d api bot web
+curl -fsS http://127.0.0.1:3001/health
 ```
 
 **Rollback** (to last successful release):
@@ -344,7 +348,8 @@ crontab -e
 
 **Setup** (one-time):
 ```bash
-scp ops/maintenance/maintenance.html root@wishlistik.ru:/opt/wishlist/ops/maintenance/
+scp -i ~/.ssh/timeweb_wishlist ops/maintenance/maintenance.html \
+  root@199.247.24.125:/opt/wishlist/ops/maintenance/
 ```
 
 Add to `/etc/nginx/sites-enabled/wishlistik.ru` (see `ops/nginx/wishlistik-maintenance.conf.snippet`):
