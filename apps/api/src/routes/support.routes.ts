@@ -77,7 +77,17 @@ export function registerSupportRouter(deps: SupportRouterDeps): Router {
       const userId = ticket.user.id;
       const [wishlistsCount, subscription] = await Promise.all([
         prisma.wishlist.count({ where: { ownerId: userId, type: 'REGULAR' } }),
-        prisma.subscription.findFirst({ where: { userId, status: { not: 'CANCELLED' } }, orderBy: { createdAt: 'desc' }, select: { planCode: true } }),
+        // B1 fix: pick the actually-active subscription. Prior `not: 'CANCELLED'`
+        // also matched EXPIRED legacy rows (e.g. GIFT_CALENDAR), which then beat
+        // a real ACTIVE PRO row by createdAt DESC and surfaced the wrong plan
+        // label in the support header. Status='ACTIVE' + currentPeriodEnd>now
+        // matches "still entitled right now"; orderBy currentPeriodEnd DESC
+        // picks the longest-running active sub if there are multiple.
+        prisma.subscription.findFirst({
+          where: { userId, status: 'ACTIVE', currentPeriodEnd: { gt: new Date() } },
+          orderBy: { currentPeriodEnd: 'desc' },
+          select: { planCode: true },
+        }),
       ]);
   
       return res.json({
@@ -137,10 +147,12 @@ export function registerSupportRouter(deps: SupportRouterDeps): Router {
       }
       const ticketCode = `SUP-${String(nextNum).padStart(4, '0')}`;
   
-      // Snapshot plan
+      // Snapshot plan — B1 fix: see /support/lookup handler above for rationale.
+      // Pick the actually-active sub (status=ACTIVE + currentPeriodEnd in future),
+      // not just "anything except cancelled" (that filter let EXPIRED rows win).
       const sub = await prisma.subscription.findFirst({
-        where: { userId: user.id, status: { not: 'CANCELLED' } },
-        orderBy: { createdAt: 'desc' },
+        where: { userId: user.id, status: 'ACTIVE', currentPeriodEnd: { gt: new Date() } },
+        orderBy: { currentPeriodEnd: 'desc' },
         select: { planCode: true },
       });
       const plan = sub?.planCode ?? 'FREE';
@@ -160,14 +172,19 @@ export function registerSupportRouter(deps: SupportRouterDeps): Router {
       if (SUPPORT_CHAT_ID && BOT_TOKEN) {
         const tgU = req.tgUser!;
         const userTag = tgU.username ? `@${tgU.username}` : `tg:${tgU.id}`;
+        // B2 fix: when source === screen the header repeated the same value on
+        // two lines (e.g. "Source: settings / Screen: settings"). Show Screen
+        // only when it actually adds information.
+        const sourceVal = ctx.source || 'settings';
+        const screenVal = ctx.screen;
         const header = [
           `🆕 <b>[${ticketCode}] Новое обращение (Mini App)</b>`,
           ``,
           `👤 ${tgU.first_name || 'User'} ${userTag}`,
           `🆔 Support ID: <code>${profile.supportId || '—'}</code>`,
           `📊 Plan: ${plan}`,
-          `📍 Source: ${ctx.source || 'settings'}`,
-          `🖥 Screen: ${ctx.screen || '—'}`,
+          `📍 Source: ${sourceVal}`,
+          ...(screenVal && screenVal !== sourceVal ? [`🖥 Screen: ${screenVal}`] : []),
           `🌐 Locale: ${ctx.locale || '—'}`,
           `📱 Platform: ${ctx.platform || '—'}`,
           ``,
