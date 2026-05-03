@@ -559,19 +559,6 @@ if (!token) {
     await handleSupportReply(ctx, replyToMsgId, content);
   }
 
-  // Set the persistent menu button (bottom-left "Wishlist" button)
-  bot.telegram
-    .setChatMenuButton({
-      menuButton: {
-        type: 'web_app',
-        text: 'Wishlist',
-        web_app: { url: MINI_APP_URL },
-      },
-    })
-    .catch((err: unknown) => {
-      logger.error({ err }, 'failed to set menu button');
-    });
-
   const menuButton = {
     type: 'web_app' as const,
     text: 'Wishlist',
@@ -2019,6 +2006,33 @@ if (!token) {
       ('code' in err && typeof (err as any).code === 'number' && (err as any).code >= 500);
   }
 
+  const STARTUP_TG_CONFIG_TIMEOUT_MS = 15_000;
+  type TgCallApiOptions = NonNullable<Parameters<typeof bot.telegram.callApi>[2]>;
+
+  function startupTgApiOptions(): TgCallApiOptions {
+    return {
+      signal: AbortSignal.timeout(STARTUP_TG_CONFIG_TIMEOUT_MS) as TgCallApiOptions['signal'],
+    };
+  }
+
+  function redactTelegramToken(value: string): string {
+    return token ? value.split(token).join('[REDACTED]') : value;
+  }
+
+  function telegramErrorSummary(err: unknown): { errCode: string | null; errMessage: string } {
+    if (!(err instanceof Error)) return { errCode: null, errMessage: redactTelegramToken(String(err)) };
+    const code = (err as { code?: unknown }).code;
+    const errno = (err as { errno?: unknown }).errno;
+    const errCode = typeof code === 'string' && code
+      ? code
+      : typeof errno === 'string' && errno
+        ? errno
+        : typeof code === 'number'
+          ? String(code)
+          : null;
+    return { errCode, errMessage: redactTelegramToken(err.message) };
+  }
+
   // Retry helper for Telegram API calls — exponential backoff on transient errors.
   // `bestEffort: true` downgrades final-failure log level from error→info, used
   // for cosmetic startup calls (setMyCommands/setMyDescription) where a TG-side
@@ -2039,16 +2053,23 @@ if (!token) {
       try {
         return await fn();
       } catch (err: unknown) {
-        if (!isTransientError(err) || attempt === maxAttempts) {
-          if (bestEffort && isTransientError(err)) {
-            logger.info({ err: err instanceof Error ? err.message : String(err), label, attempt }, 'telegram API call failed (best-effort, ignored)');
+        const transient = isTransientError(err);
+        const errSummary = telegramErrorSummary(err);
+        if (!transient || attempt === maxAttempts) {
+          if (bestEffort && transient) {
+            logger.info({ ...errSummary, label, attempt, bestEffort }, 'telegram API call failed (best-effort, ignored)');
           } else {
-            logger.error({ err, label, attempt }, 'telegram API call failed');
+            logger.error({ err, ...errSummary, label, attempt, transient, bestEffort }, 'telegram API call failed');
           }
           return undefined;
         }
         const delay = 1000 * Math.pow(2, attempt - 1); // 1s, 2s, 4s
-        logger.warn({ label, attempt, nextRetryMs: delay }, 'telegram API call failed, retrying');
+        const retryMeta = { ...errSummary, label, attempt, nextRetryMs: delay, transient, bestEffort };
+        if (bestEffort) {
+          logger.info(retryMeta, 'telegram API call failed, retrying');
+        } else {
+          logger.warn(retryMeta, 'telegram API call failed, retrying');
+        }
         await new Promise((r) => setTimeout(r, delay));
       }
     }
@@ -2057,24 +2078,33 @@ if (!token) {
 
   // Set bot commands for default (English) and Russian locales.
   // bestEffort: cosmetic startup config — a transient timeout shouldn't fail-loud.
+  void retryTgApi('setChatMenuButton:default', () =>
+    bot.telegram.callApi('setChatMenuButton', {
+      menu_button: menuButton,
+    }, startupTgApiOptions()),
+    { bestEffort: true },
+  );
+
   void retryTgApi('setMyCommands:en', () =>
-    bot.telegram.setMyCommands([
-      { command: 'start', description: t('bot_cmd_start', 'en') },
-      { command: 'support', description: t('bot_cmd_support', 'en') },
-      { command: 'paysupport', description: t('bot_cmd_paysupport', 'en') },
-    ]),
+    bot.telegram.callApi('setMyCommands', {
+      commands: [
+        { command: 'start', description: t('bot_cmd_start', 'en') },
+        { command: 'support', description: t('bot_cmd_support', 'en') },
+        { command: 'paysupport', description: t('bot_cmd_paysupport', 'en') },
+      ],
+    }, startupTgApiOptions()),
     { bestEffort: true },
   );
 
   void retryTgApi('setMyCommands:ru', () =>
-    bot.telegram.setMyCommands(
-      [
+    bot.telegram.callApi('setMyCommands', {
+      commands: [
         { command: 'start', description: t('bot_cmd_start', 'ru') },
         { command: 'support', description: t('bot_cmd_support', 'ru') },
         { command: 'paysupport', description: t('bot_cmd_paysupport', 'ru') },
       ],
-      { language_code: 'ru' },
-    ),
+      language_code: 'ru',
+    }, startupTgApiOptions()),
     { bestEffort: true },
   );
 
@@ -2093,7 +2123,7 @@ if (!token) {
       bot.telegram.callApi('setMyDescription', {
         description: t('bot_description', locale),
         ...(tgCode ? { language_code: tgCode } : {}),
-      } as Parameters<typeof bot.telegram.callApi>[1]),
+      } as Parameters<typeof bot.telegram.callApi>[1], startupTgApiOptions()),
       { bestEffort: true },
     );
   }
