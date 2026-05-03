@@ -95,6 +95,7 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 | Doc | Status | What it covers |
 |-----|--------|---------------|
 | [INFRA_AND_ENV.md](./INFRA_AND_ENV.md) | primary | Server, Docker, nginx, environment variables, deployment commands, monitoring |
+| [VULTR_MIGRATION_RUNBOOK.md](./VULTR_MIGRATION_RUNBOOK.md) | ops | Completed Vultr migration record, verification, and Timeweb decommission notes |
 | [KNOWN_GAPS_AND_RISKS.md](./KNOWN_GAPS_AND_RISKS.md) | secondary | Critical risks, architecture gaps, security concerns, missing features |
 | [OPERATIONS_RUNBOOK_LIGHT.md](./OPERATIONS_RUNBOOK_LIGHT.md) | ops | Quick prod checks, post-deploy verification, incident triage |
 | [BACKUP_CHECKLIST.md](./BACKUP_CHECKLIST.md) | ops | What must be backed up and how, with cron examples |
