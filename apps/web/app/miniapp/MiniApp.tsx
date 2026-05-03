@@ -7556,10 +7556,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     setAddonCheckoutLoading(true);
     setAddonLoadingSku(skuCode);
     try {
-      // 15 s timeout: addon checkout calls Telegram's createInvoiceLink server-side,
-      // which on prod can take 6-9 s due to IPv6 SNAT routing (RKN-blocks IPv4).
-      // The default 5 s tgFetch timeout caused phantom "не удалось начать оформление"
-      // toasts even when the backend eventually succeeded.
+      // 15 s timeout: addon checkout calls Telegram's createInvoiceLink
+      // server-side. Vultr Amsterdam reaches api.telegram.org in tens of
+      // milliseconds, but the original 5 s budget was set for the Timeweb
+      // era when IPv6 SNAT routing pushed the round-trip to 6-9 s and the
+      // shorter budget produced phantom "не удалось начать оформление"
+      // toasts. The 15 s ceiling is preserved as headroom for any future
+      // upstream slow-path; tighten it only after observing actual prod
+      // p99 latency on the new host.
       const res = await tgFetch('/tg/billing/addon/checkout', {
         method: 'POST',
         body: JSON.stringify({ skuCode, targetId }),

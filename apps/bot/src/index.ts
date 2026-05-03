@@ -1,6 +1,10 @@
-// NOTE: IPv6-first was removed — Docker SNAT breaks long-poll connections to
-// Telegram while IPv4 currently works fine. If RKN blocks IPv4 again, re-add
-// dns.setDefaultResultOrder('ipv6first') AND fix Docker IPv6 NAT first.
+// NOTE: bot uses default DNS order (verbatim). Production runs from Vultr
+// Amsterdam where both IPv4 and IPv6 paths to api.telegram.org are healthy
+// (~30 ms RTT either family), so there's no need for an explicit family
+// preference here. The historical workaround for the Timeweb VPS — where
+// IPv4 was RKN-throttled and the only global IPv6 was deprecated upstream —
+// is preserved in git history (commits 5ac98e8 → 1e9f65d) for reference if
+// the prod target ever moves back inside RU.
 
 import dotenv from 'dotenv';
 import { Telegraf, Markup, TelegramError } from 'telegraf';
