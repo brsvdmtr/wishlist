@@ -1997,6 +1997,7 @@ if (!token) {
   const TRANSIENT_CODE_RE = /^E(TIMEDOUT|CONNRESET|CONNREFUSED|HOSTUNREACH|NETUNREACH|NOTFOUND|AI_AGAIN|PIPE)$/;
   function isTransientError(err: unknown): boolean {
     if (!(err instanceof Error)) return false;
+    if (err.name === 'AbortError') return true;
     const msg = err.message;
     const code = (err as { code?: unknown }).code;
     const errno = (err as { errno?: unknown }).errno;
@@ -2029,7 +2030,9 @@ if (!token) {
         ? errno
         : typeof code === 'number'
           ? String(code)
-          : null;
+          : err.name && err.name !== 'Error'
+            ? err.name
+            : null;
     return { errCode, errMessage: redactTelegramToken(err.message) };
   }
 
