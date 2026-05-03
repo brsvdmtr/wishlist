@@ -25897,17 +25897,25 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 });
                 const data = await res.json();
                 setShowReportProblemSheet(false);
+                // B3 fix: after redirecting the user to the bot chat we
+                // also dismiss the Mini App. openTelegramLink alone leaves
+                // the WebApp visible behind the new chat on iOS (and some
+                // Desktop builds), which is what surfaced during P5d smoke
+                // ("диалог с саппортом открылся, но миниапп остался"). The
+                // explicit close() right after is a no-op on platforms that
+                // already auto-close on openTelegramLink. Optional chaining
+                // makes both calls safe in browser/non-Telegram preview
+                // (window.Telegram?.WebApp is undefined there).
+                const handoffToBotChat = () => {
+                  try { window.Telegram?.WebApp?.openTelegramLink?.(`https://t.me/${botUsername}`); } catch { /* ok */ }
+                  try { window.Telegram?.WebApp?.close?.(); } catch { /* ok */ }
+                };
                 if (res.ok && data.ok) {
                   pushToast(t('report_success', locale, { code: data.ticketCode }), 'success');
-                  // Open bot chat so user can describe the problem
-                  setTimeout(() => {
-                    try { window.Telegram?.WebApp?.openTelegramLink?.(`https://t.me/${botUsername}`); } catch { /* ok */ }
-                  }, 600);
+                  setTimeout(handoffToBotChat, 600);
                 } else if (res.status === 409 && data.ticketCode) {
                   pushToast(t('report_already_open', locale, { code: data.ticketCode }), 'info');
-                  setTimeout(() => {
-                    try { window.Telegram?.WebApp?.openTelegramLink?.(`https://t.me/${botUsername}`); } catch { /* ok */ }
-                  }, 600);
+                  setTimeout(handoffToBotChat, 600);
                 } else {
                   pushToast(t('report_error', locale), 'error');
                 }
