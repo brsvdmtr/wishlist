@@ -12,8 +12,8 @@
 - Selectel/S3 upload через rclone (`wishlist-s3:wishlist-backups`)
 - cron: ежедневно 03:00 UTC (см. [DEPLOYMENT_RUNBOOK.md](./DEPLOYMENT_RUNBOOK.md))
 
-> SSH-ключ к Vultr — `~/.ssh/timeweb_wishlist` (legacy filename, оставлен после
-> миграции, чтобы не ломать существующие скрипты).
+> SSH-доступ к Vultr: `ssh vultr` (алиас в `~/.ssh/config` на
+> `~/.ssh/vultr_wishlist` + `199.247.24.125`).
 
 ---
 
@@ -23,7 +23,7 @@
 **Время:** 1 минута.
 
 ```bash
-ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
+ssh -i ~/.ssh/vultr_wishlist root@199.247.24.125
 
 mkdir -p /opt/backup
 cd /opt/wishlist
@@ -44,7 +44,7 @@ ls -lh /opt/backup/db_*.sql
 
 ```bash
 # С локальной машины:
-scp -i ~/.ssh/timeweb_wishlist \
+scp -i ~/.ssh/vultr_wishlist \
   root@199.247.24.125:/opt/wishlist/.env \
   ~/backup_wishboard_env_$(date +%Y%m%d)
 
@@ -62,7 +62,7 @@ cp /opt/wishlist/.env /opt/backup/env_$(date +%Y%m%d)
 **Время:** 1-5 минут (зависит от объёма).
 
 ```bash
-ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
+ssh -i ~/.ssh/vultr_wishlist root@199.247.24.125
 
 mkdir -p /opt/backup/uploads_$(date +%Y%m%d)
 cd /opt/wishlist
@@ -85,7 +85,7 @@ du -sh /opt/backup/uploads_$(date +%Y%m%d)/
 # С локальной машины:
 mkdir -p ~/wishboard_backup_$(date +%Y%m%d)
 
-scp -i ~/.ssh/timeweb_wishlist -r \
+scp -i ~/.ssh/vultr_wishlist -r \
   root@199.247.24.125:/opt/backup/ \
   ~/wishboard_backup_$(date +%Y%m%d)/
 
@@ -106,7 +106,7 @@ ls -la ~/wishboard_backup_$(date +%Y%m%d)/
 > до середины июля.
 
 ```bash
-ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
+ssh -i ~/.ssh/vultr_wishlist root@199.247.24.125
 
 # Проверить дату истечения:
 echo | openssl s_client -servername wishlistik.ru -connect wishlistik.ru:443 2>/dev/null \
@@ -129,7 +129,7 @@ systemctl is-enabled certbot.timer && systemctl is-active certbot.timer
 **Время:** 1 минута.
 
 ```bash
-ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
+ssh -i ~/.ssh/vultr_wishlist root@199.247.24.125
 
 cd /opt/wishlist
 git status
@@ -165,7 +165,7 @@ nslookup wishlistik.ru
 **Время:** 30 секунд.
 
 ```bash
-ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
+ssh -i ~/.ssh/vultr_wishlist root@199.247.24.125
 
 cp /etc/nginx/sites-enabled/wishlistik.ru /opt/backup/nginx_$(date +%Y%m%d)
 ```
@@ -180,7 +180,7 @@ cp /etc/nginx/sites-enabled/wishlistik.ru /opt/backup/nginx_$(date +%Y%m%d)
 **Время:** 2 минуты.
 
 ```bash
-ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
+ssh -i ~/.ssh/vultr_wishlist root@199.247.24.125
 
 # Создать скрипт бэкапа:
 cat > /opt/backup/backup.sh << 'EOF'
@@ -227,7 +227,7 @@ curl -s -o /dev/null -w "%{http_code}" https://wishlistik.ru/miniapp
 # Ожидается: 200
 
 # Docker:
-ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125 \
+ssh -i ~/.ssh/vultr_wishlist root@199.247.24.125 \
   "docker compose -f /opt/wishlist/docker-compose.prod.yml ps"
 # Ожидается: все 4 сервиса running/healthy
 

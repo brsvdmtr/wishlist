@@ -262,7 +262,7 @@
 | Database dump | PostgreSQL container | `pg_dump --format=custom` via `/opt/wishlist/ops/backup.sh` |
 | Upload files | Docker volume `wishlist-prod_wishlist_uploads` | `uploads.tar` via `/opt/wishlist/ops/backup.sh` |
 | Nginx config | `/etc/nginx/sites-enabled/wishlistik.ru` (may change to wishlistik.ru) | Already in docs |
-| SSH key | `~/.ssh/timeweb_wishlist` | Should already be local |
+| SSH key | `~/.ssh/vultr_wishlist` | Should already be local |
 | Bot Token | In .env and @BotFather | Save to password manager |
 | Admin Key | In .env | Save to password manager |
 

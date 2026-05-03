@@ -6,7 +6,7 @@
 
 Before starting recovery, ensure you have:
 
-- [ ] SSH access to server (`ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125`)
+- [ ] SSH access to server (`ssh -i ~/.ssh/vultr_wishlist root@199.247.24.125`)
 - [ ] Git repository access (https://github.com/brsvdmtr/wishlist.git)
 - [ ] Production `.env` file (see template below)
 - [ ] Telegram Bot Token

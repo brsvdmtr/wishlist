@@ -60,7 +60,7 @@ Verified results on 2026-05-03:
 Manual backup test run on Vultr:
 
 ```bash
-ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
+ssh vultr
 cd /opt/wishlist
 /opt/wishlist/ops/backup.sh
 cd /opt/backups/wishlist
@@ -88,7 +88,7 @@ Production crontab on Vultr:
 Weekly check:
 
 ```bash
-ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
+ssh vultr
 crontab -l
 tail -20 /var/log/wishlist-backup.log
 tail -20 /var/log/watchdog.log

@@ -85,7 +85,7 @@ tar -tf /opt/backups/wishlist/wishlist_YYYYMMDD_HHMMSS.tar.gz | grep uploads.tar
 **Действие:**
 ```bash
 # Скопировать .env на локальную машину:
-scp -i ~/.ssh/timeweb_wishlist root@199.247.24.125:/opt/wishlist/.env ./backup_env_$(date +%Y%m%d)
+scp -i ~/.ssh/vultr_wishlist root@199.247.24.125:/opt/wishlist/.env ./backup_env_$(date +%Y%m%d)
 
 # Или зашифровать на сервере:
 gpg --symmetric --cipher-algo AES256 /opt/wishlist/.env
@@ -142,7 +142,7 @@ certbot renew --dry-run
 | Домен `wishlistik.ru` | Регистратор/DNS-панель | Записать логин/пароль от панели | КРИТИЧНО |
 | DNS A-запись | Панель регистратора | IP сервера -> документировать | Рекомендуется |
 | SSL-сертификат | Let's Encrypt (на момент 2026-05-03 валиден до 2026-07-16) | **Авто-обновление certbot не настроено на Vultr** — установить до ~2026-07-16, см. KNOWN_GAPS #28 | ВНИМАНИЕ |
-| SSH-ключ для сервера | `~/.ssh/timeweb_wishlist` | Должен быть на локальной машине | OK |
+| SSH-ключ для сервера | `~/.ssh/vultr_wishlist` | Должен быть на локальной машине | OK |
 
 **Действие:**
 ```bash

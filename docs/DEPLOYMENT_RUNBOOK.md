@@ -22,7 +22,7 @@ and runs the basic production health checks.
 Manual SSH deploy is a fallback only:
 
 ```bash
-ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
+ssh vultr
 cd /opt/wishlist
 git fetch origin main
 git reset --hard origin/main

@@ -9,7 +9,7 @@
 | Provider | Vultr (Amsterdam VPS) |
 | Hostname | `wishboard-bot-vultr-ams-1` |
 | Public IP | `199.247.24.125` |
-| SSH | `ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125` |
+| SSH | `ssh vultr` (alias in `~/.ssh/config`); equivalent to `ssh -i ~/.ssh/vultr_wishlist root@199.247.24.125` |
 | Project path | `/opt/wishlist` |
 | OS | Debian 12 (bookworm) |
 | Node.js | 20 in Docker images; host Node 18 for watchdog cron |
@@ -198,7 +198,7 @@ gh workflow run deploy.yml -R brsvdmtr/wishlist
 Manual server deploy is a fallback only:
 
 ```bash
-ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
+ssh -i ~/.ssh/vultr_wishlist root@199.247.24.125
 cd /opt/wishlist
 git fetch origin main
 git reset --hard origin/main
@@ -367,7 +367,7 @@ crontab -e
 
 **Setup** (one-time):
 ```bash
-scp -i ~/.ssh/timeweb_wishlist ops/maintenance/maintenance.html \
+scp -i ~/.ssh/vultr_wishlist ops/maintenance/maintenance.html \
   root@199.247.24.125:/opt/wishlist/ops/maintenance/
 ```
 

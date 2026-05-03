@@ -113,8 +113,9 @@ gh run view $RUN -R brsvdmtr/wishlist --log | grep 'out:' | tail -40
 ### 3.3. SSH — ТОЛЬКО fallback
 
 - Сервер: `root@199.247.24.125`, путь `/opt/wishlist`
-- Ключ: `~/.ssh/timeweb_wishlist` (legacy filename, ed25519)
-- Manual deploy: `ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125 "cd /opt/wishlist && git pull origin main && docker compose -f docker-compose.prod.yml up -d --build"`
+- Ключ: `~/.ssh/vultr_wishlist` (ed25519)
+- Локальный SSH-алиас: `Host vultr` в `~/.ssh/config` → `ssh vultr` эквивалентно `ssh -i ~/.ssh/vultr_wishlist root@199.247.24.125`
+- Manual deploy: `ssh vultr "cd /opt/wishlist && git pull origin main && docker compose -f docker-compose.prod.yml up -d --build"`
 
 **Почему не SSH по умолчанию**: GitHub Actions даёт audit trail и единый путь деплоя/ops. SSH остаётся fallback для аварий и ручной диагностики.
 

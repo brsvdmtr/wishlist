@@ -5,7 +5,7 @@
 ## On the server
 
 ```bash
-ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
+ssh vultr
 ```
 
 ### 1. Health

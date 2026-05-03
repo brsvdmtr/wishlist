@@ -9,7 +9,7 @@
 | Repository | https://github.com/brsvdmtr/wishlist.git |
 | Branch | main |
 | Server | Vultr VPS, SSH: `root@199.247.24.125` |
-| SSH Key | `~/.ssh/timeweb_wishlist` |
+| SSH Key | `~/.ssh/vultr_wishlist` |
 | Stack | Node 20, TypeScript, Express, Next.js 14, React 18, Telegraf, PostgreSQL 16, Prisma 5.18, Docker |
 | Package Manager | pnpm 10.15.0 |
 
@@ -219,7 +219,7 @@ For uploads without an archive, copy with `docker cp /path/to/uploads/. $(docker
 ## Production Backup Command
 
 ```bash
-ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
+ssh -i ~/.ssh/vultr_wishlist root@199.247.24.125
 cd /opt/wishlist
 /opt/wishlist/ops/backup.sh
 ls -lht /opt/backups/wishlist/ | head
