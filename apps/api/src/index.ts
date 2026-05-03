@@ -78,6 +78,11 @@ import { registerAdminRouter } from './routes/admin.routes';
 import { registerPublicRouter } from './routes/public.routes';
 import { registerMeRouter } from './routes/me.routes';
 import { registerRefRouter } from './routes/referral.routes';
+import { registerProfilesRouter } from './routes/profiles.routes';
+import { registerTelemetryRouter } from './routes/telemetry.routes';
+import { registerAnalyticsRouter } from './routes/analytics.routes';
+import { registerMaintenanceRouter } from './routes/maintenance.routes';
+import { registerImportRouter } from './routes/import.routes';
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -1739,6 +1744,14 @@ const refRouter = registerRefRouter({
   PRO_PLAN_CODE,
 });
 tgRouter.use(refRouter);
+
+// P5c lightweight batch (profiles / telemetry / analytics / maintenance /
+// import) is wired further below alongside the P4 internal/admin/public
+// routers — placed there because two of its deps (recordMaintenanceExposure,
+// importUrlForUser, DRAFTS_ITEM_LIMIT) are `const`/`async function` declared
+// later in this file and TDZ would error if we mounted the routers up here.
+// Mount order is preserved: meRouter -> refRouter -> P5c batch -> P4 routers,
+// matching the user's "after refRouter" intent.
 
 /**
  * Attribution: when a user visits, mark their most recent lifecycle touch as "returned".
@@ -3720,80 +3733,6 @@ tgRouter.get(
 );
 
 
-// POST /tg/profiles/:username/subscribe — follow a profile
-tgRouter.post(
-  '/profiles/:username/subscribe',
-  asyncHandler(async (req, res) => {
-    const username = (req.params.username ?? '').trim();
-    if (!username) return res.status(400).json({ error: 'Missing username' });
-
-    const user = await getOrCreateTgUser(req.tgUser!);
-
-    const targetProfile = await prisma.userProfile.findFirst({
-      where: { username: { equals: username, mode: 'insensitive' } },
-      select: { userId: true, profileVisibility: true, subscribePolicy: true },
-    });
-    if (!targetProfile) return res.status(404).json({ error: 'Profile not found' });
-    if (targetProfile.userId === user.id) return res.status(400).json({ error: 'Cannot subscribe to your own profile' });
-    if (targetProfile.profileVisibility === 'NOBODY') return res.status(404).json({ error: 'Profile not found' });
-    if (targetProfile.subscribePolicy === 'NOBODY') return res.status(403).json({ error: 'subscriptions_closed' });
-
-    const sub = await prisma.profileSubscription.upsert({
-      where: { subscriberId_targetUserId: { subscriberId: user.id, targetUserId: targetProfile.userId } },
-      update: {},
-      create: { subscriberId: user.id, targetUserId: targetProfile.userId },
-      select: { id: true, targetUserId: true, createdAt: true },
-    });
-
-    return res.json({ subscription: { id: sub.id, targetUserId: sub.targetUserId, createdAt: sub.createdAt.toISOString() } });
-  }),
-);
-
-// DELETE /tg/profiles/:username/subscribe — unfollow a profile
-tgRouter.delete(
-  '/profiles/:username/subscribe',
-  asyncHandler(async (req, res) => {
-    const username = (req.params.username ?? '').trim();
-    if (!username) return res.status(400).json({ error: 'Missing username' });
-
-    const user = await getOrCreateTgUser(req.tgUser!);
-
-    const targetProfile = await prisma.userProfile.findFirst({
-      where: { username: { equals: username, mode: 'insensitive' } },
-      select: { userId: true },
-    });
-    if (!targetProfile) return res.json({ ok: true }); // idempotent
-
-    await prisma.profileSubscription.deleteMany({
-      where: { subscriberId: user.id, targetUserId: targetProfile.userId },
-    });
-    return res.json({ ok: true });
-  }),
-);
-
-// GET /tg/profiles/:username/subscribe — subscription status (for CTA state on public profile)
-tgRouter.get(
-  '/profiles/:username/subscribe',
-  asyncHandler(async (req, res) => {
-    const username = (req.params.username ?? '').trim();
-    if (!username) return res.status(400).json({ error: 'Missing username' });
-
-    const user = await getOrCreateTgUser(req.tgUser!);
-
-    const targetProfile = await prisma.userProfile.findFirst({
-      where: { username: { equals: username, mode: 'insensitive' } },
-      select: { userId: true },
-    });
-    if (!targetProfile) return res.json({ subscribed: false });
-    if (targetProfile.userId === user.id) return res.json({ subscribed: false, isOwn: true });
-
-    const sub = await prisma.profileSubscription.findUnique({
-      where: { subscriberId_targetUserId: { subscriberId: user.id, targetUserId: targetProfile.userId } },
-      select: { id: true },
-    });
-    return res.json({ subscribed: !!sub });
-  }),
-);
 
 // GET /tg/wishlists/:id/items — owner view (no reservation names)
 tgRouter.get(
@@ -6484,80 +6423,6 @@ async function importUrlForUser(
   return { item: mapTgItem(item), wishlistId: draftsWl.id, parseStatus };
 }
 
-// ─── Import URL: TG endpoint ────────────────────────────────────────────────
-
-const importUrlLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  limit: 10,
-  standardHeaders: 'draft-7',
-  legacyHeaders: false,
-  keyGenerator: (req) => req.tgUser ? String(req.tgUser.id) : 'anon',
-  handler: (_req: Request, res: Response) => {
-    const locale = getRequestLocale(_req);
-    res.status(429).json({ error: t('api_import_rate_limit', locale) });
-  },
-  validate: false,
-});
-
-tgRouter.post(
-  '/import-url',
-  importUrlLimiter,
-  asyncHandler(async (req, res) => {
-    const parsed = z.object({
-      url: z.string().min(1).max(2048),
-      note: z.string().max(500).optional(),
-      source: z.string().max(20).optional(),
-    }).safeParse(req.body);
-    if (!parsed.success) return zodError(res, parsed.error);
-
-    // Validate URL first
-    try { validateUrl(parsed.data.url); } catch (err: any) {
-      return res.status(400).json({ error: err.message || 'Invalid URL' });
-    }
-
-    const user = await getOrCreateTgUser(req.tgUser!);
-
-    // Feature gate: import by URL requires PRO
-    const ent = await getUserEntitlement(user.id);
-    if (!ent.plan.features.includes('url_import')) {
-      trackEvent('feature_gate_hit_url_import', user.id);
-      return res.status(402).json({ error: 'Pro feature', feature: 'url_import', planCode: ent.plan.code });
-    }
-
-    let importDomain = '';
-    try { importDomain = new URL(parsed.data.url).hostname.replace(/^www\./, ''); } catch { /* ignore */ }
-
-    trackAnalyticsEvent({
-      event: 'import.started',
-      userId: user.id,
-      props: { domain: importDomain },
-    });
-
-    try {
-      const noCache = req.headers['x-parse-no-cache'] === '1';
-      const result = await importUrlForUser(user.id, parsed.data.url, parsed.data.note, parsed.data.source || 'miniapp', noCache ? { noCache: true } : undefined);
-
-      trackAnalyticsEvent({
-        event: 'import.succeeded',
-        userId: user.id,
-        props: { domain: importDomain, hasPrice: !!result.item.price, hasTitle: !!result.item.title },
-      });
-
-      return res.status(201).json(result);
-    } catch (err: any) {
-      trackAnalyticsEvent({
-        event: 'import.failed',
-        userId: user.id,
-        props: { domain: importDomain, reason: String(err.message ?? 'unknown').slice(0, 200) },
-      });
-
-      if (err.statusCode === 402) {
-        return res.status(402).json({ error: t('api_import_too_many', getRequestLocale(req)), limit: DRAFTS_ITEM_LIMIT });
-      }
-      throw err;
-    }
-  }),
-);
 
 // ─── Move item between wishlists ─────────────────────────────────────────────
 
@@ -12420,142 +12285,7 @@ tgRouter.post('/santa/campaigns/:id/inbound/hint/fulfill', asyncHandler(async (r
   return res.json({ ok: true });
 }));
 
-// ── Telemetry ingestion ─────────────────────────────────
-// Accept events matching known product-area prefixes + a small exact-match list.
-// This keeps a defensive boundary (rejects random junk) while staying resilient to
-// frontend additions: a new event with a known prefix flows through without a backend
-// deploy. Unknown events are dropped per-event — we never reject the whole batch,
-// because Zod all-or-nothing rejection masked ~40 telemetry 400s/day after 2026-04-13.
-const ANALYTICS_EVENT_PREFIXES = [
-  'miniapp.', 'miniapp_',
-  'showcase.', 'public_profile.',
-  'onboarding.', 'onboarding_',
-  'feature_gate_hit_', 'demo_item_',
-  'gift_notes_', 'gift_occasion_',
-  'first_share_prompt_', 'ready_share_prompt_',
-  'group_gift_', 'addon_', 'category_', 'checkout_',
-  'comment_reply_', 'dont_gift_', 'item_',
-  'profile_', 'promo_winback_', 'selection_',
-  'settings_support_', 'subscription_', 'banner_',
-  'wishlist_', 'share_token_',
-  'wish.', 'wishlist.', 'import.', 'reservation.',
-  'guest.', 'bot.', 'payment.', 'share.',
-  'lifecycle_',
-];
-const ANALYTICS_EVENT_EXACT = new Set<string>([
-  'api_server_error', 'pro_cta_clicked', 'error_boundary_triggered',
-]);
-function isAllowedAnalyticsEvent(event: string): boolean {
-  if (event.length === 0 || event.length > 80) return false;
-  if (ANALYTICS_EVENT_EXACT.has(event)) return true;
-  return ANALYTICS_EVENT_PREFIXES.some(p => event.startsWith(p));
-}
 
-const telemetryEventSchema = z.object({
-  event: z.string().min(1).max(80),
-  ts: z.number(),
-  props: z.record(z.unknown()).optional(),
-});
-
-const telemetryBodySchema = z.object({
-  events: z.array(telemetryEventSchema).max(20),
-});
-
-const telemetryLimiter = rateLimit({
-  windowMs: 60_000,
-  max: 5,
-  keyGenerator: (req) => (req as Request & { tgUser?: { id?: number } }).tgUser?.id?.toString() || req.ip || 'unknown',
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: false,
-});
-
-tgRouter.post('/telemetry', telemetryLimiter, asyncHandler(async (req, res) => {
-  const parsed = telemetryBodySchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: 'Invalid telemetry payload', issues: parsed.error.issues });
-  }
-
-  const userId = req.tgUser?.id ? String(req.tgUser.id) : null;
-  const now = Date.now();
-  const oneHourAgo = now - 3_600_000;
-
-  // Per-event filter: drop events that don't match the allowlist rather than
-  // rejecting the whole batch. One unknown event used to 400 the entire request
-  // and caused silent analytics loss on the frontend (catch {} in flushTelemetry).
-  const accepted: typeof parsed.data.events = [];
-  const droppedNames: string[] = [];
-  for (const ev of parsed.data.events) {
-    if (isAllowedAnalyticsEvent(ev.event)) accepted.push(ev);
-    else droppedNames.push(ev.event);
-  }
-  if (droppedNames.length > 0) {
-    logger.debug({ dropped: droppedNames, userId }, 'telemetry: dropped unknown events');
-  }
-
-  const records = accepted.map(ev => {
-    // Clamp timestamp to last hour
-    const ts = Math.max(oneHourAgo, Math.min(now, ev.ts));
-    // Truncate props
-    let props: Record<string, unknown> = ev.props || {};
-    for (const [key, val] of Object.entries(props)) {
-      if (typeof val === 'string' && val.length > 300) {
-        props[key] = val.slice(0, 300) + '...';
-      }
-    }
-    const serialized = JSON.stringify(props);
-    if (serialized.length > 1024) {
-      props = { _truncated: true, event: ev.event };
-    }
-    return {
-      event: ev.event,
-      userId,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      props: props as any,
-      createdAt: new Date(ts),
-    };
-  });
-
-  // Batch insert
-  if (records.length > 0) {
-    await prisma.analyticsEvent.createMany({ data: records });
-  }
-
-  return res.json({ ok: true, accepted: records.length, dropped: droppedNames.length });
-}));
-
-// POST /tg/analytics/attribution — First-touch source attribution.
-// Records firstAcquisitionSource/Medium/Campaign/Ref/At on UserProfile.
-// First-touch only: atomically sets fields only when firstAcquisitionSource IS NULL — never overwrites.
-// Returns { attributed: boolean } — true if this was the first (winning) attribution call.
-tgRouter.post('/analytics/attribution', asyncHandler(async (req, res) => {
-  const user = await getOrCreateTgUser(req.tgUser!);
-
-  const raw = req.body as Record<string, unknown>;
-
-  // Sanitize: allow only alphanumeric, underscore, hyphen; truncate to 64 chars
-  const sanitize = (val: unknown, maxLen = 64): string | null => {
-    if (typeof val !== 'string' || !val.trim()) return null;
-    const clean = val.replace(/[^a-z0-9_\-]/gi, '_').slice(0, maxLen);
-    return clean || null;
-  };
-
-  const source = sanitize(raw.source);
-  if (!source) return res.status(400).json({ error: 'source is required and must be a non-empty string' });
-
-  const updated = await prisma.userProfile.updateMany({
-    where: { userId: user.id, firstAcquisitionSource: null },
-    data: {
-      firstAcquisitionSource: source,
-      firstAcquisitionMedium: sanitize(raw.medium),
-      firstAcquisitionCampaign: sanitize(raw.campaign),
-      firstAcquisitionRef: sanitize(raw.ref),
-      firstAcquisitionAt: new Date(),
-    },
-  });
-
-  return res.json({ attributed: updated.count > 0 });
-}));
 
 // ─── Maintenance: record exposure (must be before maintenance middleware!) ────
 // Find-or-create the current active incident, then upsert an exposure row.
@@ -12602,57 +12332,6 @@ async function recordMaintenanceExposure(userId: string, surface: string, locale
   return incident.id;
 }
 
-// POST /tg/maintenance-exposure — record that the current user saw the maintenance screen.
-// This endpoint is exempted from the maintenance middleware so it works during outages.
-tgRouter.post(
-  '/maintenance-exposure',
-  asyncHandler(async (req, res) => {
-    const user = await getOrCreateTgUser(req.tgUser!);
-    const locale = (req.body?.locale as string) || 'ru';
-    const surface = (req.body?.surface as string) || 'miniapp';
-    const incidentId = await recordMaintenanceExposure(
-      user.id,
-      surface,
-      locale,
-      user.telegramChatId ?? null,
-    );
-    return res.json({ ok: true, incidentId });
-  }),
-);
-
-// POST /tg/maintenance-return — mark user as returned after recovery (lightweight, best-effort)
-tgRouter.post(
-  '/maintenance-return',
-  asyncHandler(async (req, res) => {
-    const user = await getOrCreateTgUser(req.tgUser!);
-    const surface = (req.body?.surface as string) || 'miniapp';
-
-    // Find the most recently recovered incident with unreturned exposure for this user
-    const exposure = await prisma.maintenanceExposure.findFirst({
-      where: {
-        userId: user.id,
-        surface,
-        returnedAt: null,
-        incident: { status: 'recovered', recoveryConfirmedAt: { not: null } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (!exposure) return res.json({ marked: false });
-
-    await prisma.maintenanceExposure.update({
-      where: { id: exposure.id },
-      data: { returnedAt: new Date() },
-    });
-
-    const wasNotified = !!exposure.notifiedAt;
-    trackEvent(wasNotified ? 'maintenance_returned_after_notice' : 'maintenance_returned_without_notice', user.id, {
-      incidentId: exposure.incidentId,
-      ...(wasNotified && exposure.notifiedAt ? { timeFromNoticeSec: Math.round((Date.now() - exposure.notifiedAt.getTime()) / 1000) } : {}),
-    });
-
-    return res.json({ marked: true });
-  }),
-);
 
 // ─── Maintenance mode middleware ──────────────────────────────────────────────
 // When MAINTENANCE_MODE=true, block /tg/* and /public/* with 503 + code=MAINTENANCE.
@@ -12671,6 +12350,44 @@ app.use(['/tg', '/public'], (req: Request, res: Response, next: NextFunction) =>
 // Routers extracted to ./routes/* live as factories so they can close over
 // helpers / schemas still defined in this file. Mount prefixes and
 // middleware order are unchanged.
+//
+// ─── P5c lightweight batch — 5 small isolated /tg/* sub-routers ─────────────
+// Wired here (rather than next to meRouter/refRouter near the top) because
+// two of these routers depend on `const`/`async function` declarations
+// (DRAFTS_ITEM_LIMIT, importUrlForUser, recordMaintenanceExposure) defined
+// later in this file. Mount order is preserved at runtime: tgRouter receives
+// .use() calls in this exact source order so meRouter (line ~1716) and
+// refRouter (~1741) handle requests first, then this P5c batch.
+const profilesRouter = registerProfilesRouter({
+  getOrCreateTgUser,
+});
+tgRouter.use(profilesRouter);
+
+const telemetryRouter = registerTelemetryRouter();
+tgRouter.use(telemetryRouter);
+
+const analyticsRouter = registerAnalyticsRouter({
+  getOrCreateTgUser,
+});
+tgRouter.use(analyticsRouter);
+
+const maintenanceRouter = registerMaintenanceRouter({
+  getOrCreateTgUser,
+  trackEvent,
+  recordMaintenanceExposure,
+});
+tgRouter.use(maintenanceRouter);
+
+const importRouter = registerImportRouter({
+  getOrCreateTgUser,
+  getUserEntitlement,
+  trackEvent,
+  trackAnalyticsEvent,
+  importUrlForUser,
+  DRAFTS_ITEM_LIMIT,
+});
+tgRouter.use(importRouter);
+
 const internalRouter = registerInternalRouter({
   getUserEntitlement,
   importUrlForUser,
