@@ -22,10 +22,10 @@
 |----------|-------|
 | Domain | wishlistik.ru |
 | Alt domain | www.wishlistik.ru (redirected to non-www) |
-| SSL | Let's Encrypt |
+| SSL | Let's Encrypt (issued Apr 17 2026, expires Jul 16 2026) |
 | Certificate | `/etc/letsencrypt/live/wishlistik.ru/fullchain.pem` |
 | Private key | `/etc/letsencrypt/live/wishlistik.ru/privkey.pem` |
-| Auto-renewal | Certbot timer recommended; verify with `certbot renew --dry-run` |
+| Auto-renewal | **NOT YET CONFIGURED ON VULTR** — see [KNOWN_GAPS_AND_RISKS.md](./KNOWN_GAPS_AND_RISKS.md) #28. Action required before ~2026-07-16: `apt-get install certbot python3-certbot-nginx && certbot --nginx -d wishlistik.ru -d www.wishlistik.ru`, then verify `certbot renew --dry-run` and `systemctl is-active certbot.timer`. |
 
 ---
 
@@ -283,11 +283,30 @@ docker compose -f docker-compose.prod.yml exec postgres psql -U wishlist -d wish
 
 ## CI/CD
 
-**Current state**: NO CI/CD pipeline. Manual deployment via SSH + git pull + docker compose.
+**Current state**: GitHub Actions is the primary deploy/ops path. Manual SSH is fallback only.
 
-**Git branch**: Production runs `main` branch.
+| Workflow | Trigger | Purpose |
+|---------|---------|---------|
+| `.github/workflows/deploy.yml` | push to `main` (or manual `workflow_dispatch`) | Selective rebuild on Vultr — only services whose source actually changed; runs basic prod health checks |
+| `.github/workflows/admin-ops.yml` | manual `workflow_dispatch` | Day-to-day ops: `health-check`, `tail-logs`, `watch-logs`, `restart-service`, `run-sql`, `download-file`, `upload-file`, `exec-shell`, `resolve-migration`, `edit-env-var`, referral-specific actions |
+| `.github/workflows/doc-guard.yml` | PR | Documentation-link sanity |
+| `.github/workflows/referral-monitor.yml` | scheduled | Referral funnel monitoring |
+| `.github/workflows/ssh-test.yml` | manual | SSH credential smoke test |
 
-**GAP**: No automated tests in CI, no automated deployment, no staging environment.
+**Production server**: Vultr Amsterdam VPS `199.247.24.125`. Workflow secrets `SSH_HOST`, `SSH_USER`, `SSH_KEY` point at Vultr.
+
+**Standard deploy**: `git push origin main`. Selective rebuild detects changes by path:
+- `apps/api/** | packages/db/** | packages/shared/** | pnpm-lock.yaml | Dockerfile.api` → api
+- `apps/bot/** | packages/db/** | packages/shared/** | pnpm-lock.yaml | Dockerfile.bot` → bot
+- `apps/web/** | packages/shared/** | pnpm-lock.yaml | Dockerfile.web` → web
+- `docker-compose.prod.yml` → all three
+- `.github/**`, docs-only → no rebuild (~3s)
+
+**Post-deploy** (mandatory): `gh workflow run admin-ops.yml -R brsvdmtr/wishlist -f action=health-check` runs the 6-point regression gate (failed migrations / API health / containers / bot heartbeat / lifecycle / error spike).
+
+**Git branch**: Production runs `main`.
+
+**Gaps that remain**: no automated test suite in CI beyond a few unit tests; no staging environment.
 
 ---
 
@@ -331,8 +350,8 @@ Events that trigger alerts:
 ```bash
 # Install cron (runs every 5 minutes):
 crontab -e
-# Add:
-*/5 * * * * /usr/bin/node /opt/wishlist/ops/watchdog/health-watchdog.mjs >> /var/log/wishlist-watchdog.log 2>&1
+# Add (matches the production crontab on Vultr):
+*/5 * * * * /usr/bin/node /opt/wishlist/ops/watchdog/health-watchdog.mjs >> /var/log/watchdog.log 2>&1
 ```
 
 **Required env vars** (in `.env` or exported):

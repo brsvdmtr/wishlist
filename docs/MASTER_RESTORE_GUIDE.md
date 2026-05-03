@@ -52,7 +52,7 @@ WishBoard lets Telegram users create wishlists and share them with friends. Frie
 
 | Property | Value |
 |----------|-------|
-| Audit date | April 2, 2026 |
+| Audit date | May 3, 2026 (Vultr migration close-out) |
 | Audited branch | `main` |
 | Confidence | Most data VERIFIED_FROM_CODE; server-side items marked NEEDS_VERIFICATION |
 
@@ -91,7 +91,7 @@ wishlist/
 ├── apps/
 │   ├── api/                    # Express REST API (port 3001)
 │   │   ├── src/
-│   │   │   ├── index.ts        # ALL backend code (~11,964 lines)
+│   │   │   ├── index.ts        # ALL backend code (large monolith — `wc -l` for current size)
 │   │   │   ├── sort.ts         # Item sorting logic
 │   │   │   ├── sort.test.ts    # Sort unit tests
 │   │   │   └── seed.ts         # Demo data seeder
@@ -101,7 +101,7 @@ wishlist/
 │   │
 │   ├── bot/                    # Telegram Bot (Telegraf)
 │   │   ├── src/
-│   │   │   └── index.ts        # Bot logic (~1000 lines)
+│   │   │   └── index.ts        # Bot logic (medium monolith)
 │   │   ├── package.json
 │   │   ├── tsconfig.json
 │   │   └── tsconfig.build.json
@@ -109,7 +109,7 @@ wishlist/
 │   └── web/                    # Next.js 14 Frontend (port 3000)
 │       ├── app/
 │       │   ├── miniapp/
-│       │   │   └── MiniApp.tsx  # ENTIRE Mini App (~16,663 lines)
+│       │   │   └── MiniApp.tsx  # ENTIRE Mini App (large monolith)
 │       │   ├── admin/           # Admin panel pages
 │       │   ├── w/[slug]/        # Public wishlist pages
 │       │   ├── layout.tsx       # Root layout
@@ -165,33 +165,54 @@ wishlist/
 
 ## Emergency Recovery (TL;DR)
 
-> **Note**: Migrations run automatically on API start (non-fatal). `VERIFIED_FROM_CODE`
-> Container names below assume default compose project. Use `docker compose exec` where possible.
+> **Primary recovery path is the production archive `wishlist_YYYYMMDD_HHMMSS.tar.gz` —
+> see [DISASTER_RECOVERY.md](./DISASTER_RECOVERY.md) Scenario 3 (full server) for the
+> complete walkthrough, including S3 download via rclone. Steps below are the
+> condensed version. Migrations run automatically on API start (non-fatal).** `VERIFIED_FROM_CODE`
 
 ```bash
 # 1. Get code
 git clone https://github.com/brsvdmtr/wishlist.git /opt/wishlist
 cd /opt/wishlist && git checkout main
 
-# 2. Create .env (fill in secrets — full template in .env.example)
-cp .env.example .env && vi .env
+# 2. Pull a backup archive (from S3 or local copy) and verify
+rclone copy wishlist-s3:wishlist-backups/wishlist_YYYYMMDD_HHMMSS.tar.gz /tmp/
+rclone copy wishlist-s3:wishlist-backups/wishlist_YYYYMMDD_HHMMSS.tar.gz.sha256 /tmp/
+cd /tmp && sha256sum -c wishlist_YYYYMMDD_HHMMSS.tar.gz.sha256
+mkdir -p /tmp/restore && tar -xzf wishlist_YYYYMMDD_HHMMSS.tar.gz -C /tmp/restore
 
-# 3. Setup nginx (see INFRA_AND_ENV.md)
+# 3. Restore .env from the archive (or fill from .env.example)
+cp /tmp/restore/dot-env /opt/wishlist/.env
+grep -E '^(DATABASE_URL|BOT_TOKEN|ADMIN_KEY|POSTGRES_PASSWORD)=' /opt/wishlist/.env
 
-# 4. Build & start (migrations run auto on api start)
-docker compose -f docker-compose.prod.yml up -d --build
+# 4. Setup nginx (see INFRA_AND_ENV.md)
 
-# 5. Verify
-curl https://wishlistik.ru/api/health
-# -> {"ok":true}
+# 5. Start postgres first, then run pg_restore
+docker compose -f docker-compose.prod.yml up -d postgres
+sleep 10
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  pg_restore -U wishlist -d wishlist --clean --if-exists < /tmp/restore/db.dump
 
-# 6. Restore DB from backup (if available)
+# 6. Start the rest (api/bot/web), migrations run auto on api start
+docker compose -f docker-compose.prod.yml up -d
+
+# 7. Restore uploads
+UPLOADS_VOL=$(docker volume inspect wishlist-prod_wishlist_uploads -f '{{.Mountpoint}}')
+tar -xf /tmp/restore/uploads.tar -C "$UPLOADS_VOL"
+chown -R 1001:1001 "$UPLOADS_VOL"
+
+# 8. Verify
+curl https://wishlistik.ru/api/health/deep
+# -> {"ok":true,"checks":{"db":"ok","bot":{"ok":true,...},...}}
+```
+
+### Legacy / manual alternative
+If only a hand-rolled `pg_dump --format=plain` SQL file is available (no archive):
+```bash
 docker compose -f docker-compose.prod.yml exec -T postgres \
   psql -U wishlist -d wishlist < backup.sql
-
-# 7. Restore uploads (if available)
-docker cp /path/to/uploads/. $(docker compose -f docker-compose.prod.yml ps -q api):/data/uploads/
 ```
+For uploads without an archive, copy with `docker cp /path/to/uploads/. $(docker compose ... ps -q api):/data/uploads/`.
 
 ---
 

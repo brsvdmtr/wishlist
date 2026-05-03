@@ -1,10 +1,19 @@
-# CRITICAL_BACKUP_ACTIONS.md — 10 немедленных действий для защиты проекта
+# CRITICAL_BACKUP_ACTIONS.md — Аварийный ручной чеклист
 
 > Updated 2026-05-03: this is now an emergency/manual fallback checklist.
 > Normal production backups run on Vultr via `/opt/wishlist/ops/backup.sh` and
-> upload to Selectel/S3. See `docs/DISASTER_RECOVERY.md`.
+> upload to Selectel/S3 — see [DISASTER_RECOVERY.md](./DISASTER_RECOVERY.md).
 
-**Приоритет: выполнить СЕЙЧАС, пока сервер работает.**
+**Когда применять:** при аварийной ручной проверке, перед рискованными
+инфраструктурными работами или при подозрении на сбой backup pipeline.
+В обычном режиме используется регулярный pipeline:
+
+- `/opt/wishlist/ops/backup.sh` → `/opt/backups/wishlist/wishlist_YYYYMMDD_HHMMSS.tar.gz` + `.sha256`
+- Selectel/S3 upload через rclone (`wishlist-s3:wishlist-backups`)
+- cron: ежедневно 03:00 UTC (см. [DEPLOYMENT_RUNBOOK.md](./DEPLOYMENT_RUNBOOK.md))
+
+> SSH-ключ к Vultr — `~/.ssh/timeweb_wishlist` (legacy filename, оставлен после
+> миграции, чтобы не ломать существующие скрипты).
 
 ---
 
@@ -91,6 +100,11 @@ ls -la ~/wishboard_backup_$(date +%Y%m%d)/
 **Риск:** Сертификат истечёт → сайт перестанет открываться → Mini App в Telegram сломается.
 **Время:** 30 секунд.
 
+> **На 2026-05-03**: текущий cert валиден до **2026-07-16**, скопирован со старого
+> Timeweb VPS вместе с миграцией. Авто-обновление certbot **не настроено на Vultr** —
+> см. [KNOWN_GAPS_AND_RISKS.md](./KNOWN_GAPS_AND_RISKS.md) #28. Установить нужно
+> до середины июля.
+
 ```bash
 ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
 
@@ -98,13 +112,13 @@ ssh -i ~/.ssh/timeweb_wishlist root@199.247.24.125
 echo | openssl s_client -servername wishlistik.ru -connect wishlistik.ru:443 2>/dev/null \
   | openssl x509 -noout -enddate
 
-# Проверить автообновление:
-certbot renew --dry-run
+# Установить certbot на Vultr (одноразовое действие до ~2026-07-16):
+apt-get update && apt-get install -y certbot python3-certbot-nginx
+certbot --nginx -d wishlistik.ru -d www.wishlistik.ru
 
-# Если certbot timer не активен:
-systemctl enable certbot.timer
-systemctl start certbot.timer
-systemctl status certbot.timer
+# После установки — проверить автообновление:
+certbot renew --dry-run
+systemctl is-enabled certbot.timer && systemctl is-active certbot.timer
 ```
 
 ---

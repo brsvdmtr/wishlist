@@ -30,7 +30,8 @@ Expected: all 4 containers `Up`, postgres `healthy`.
 rclone ls wishlist-s3:wishlist-backups/ | tail -3
 ```
 
-Expected: backup from last night, current production size around 4.1MB.
+Expected: an archive from the last 24–48 hours, size > 0 and consistent with
+previous backups (small variations are normal as the DB grows).
 
 ### 4. Local backups
 
@@ -38,7 +39,12 @@ Expected: backup from last night, current production size around 4.1MB.
 ls -lht /opt/backups/wishlist/ | head -5
 ```
 
-Expected: daily archives, oldest ~14 days.
+Expected: daily archives, oldest ~14 days. Verify checksum of the latest:
+
+```bash
+cd /opt/backups/wishlist && sha256sum -c $(ls -t wishlist_*.tar.gz.sha256 | head -1)
+# Expected: wishlist_YYYYMMDD_HHMMSS.tar.gz: OK
+```
 
 ### 5. Backup log
 
@@ -94,7 +100,9 @@ Expected: 3 entries (watchdog, backup, docker prune).
 
 ## Monthly (first Monday of month)
 
-- [ ] Run restore drill from Selectel backup (see DISASTER_RECOVERY.md)
+- [ ] Run restore drill from Selectel backup (see [DISASTER_RECOVERY.md](./DISASTER_RECOVERY.md))
+- [ ] Verify `sha256sum -c` on the latest archive in Selectel after `rclone copy`
 - [ ] Check Selectel S3 billing
 - [ ] Review docker image sizes — prune if > 10GB total
 - [ ] Check SSL cert expiry: `echo | openssl s_client -connect wishlistik.ru:443 2>/dev/null | openssl x509 -noout -dates`
+- [ ] Confirm the most recent S3 archive is < 24–48 hours old (catches a silent backup-pipeline regression)

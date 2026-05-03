@@ -1,7 +1,7 @@
 # Documentation Index — WishBoard
 
 > Start here. All documentation for the WishBoard Telegram Mini App project.
-> Last updated: 2026-04-02 · Branch: main
+> Last updated: 2026-05-03 · Branch: main
 
 ---
 
@@ -94,14 +94,17 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 
 | Doc | Status | What it covers |
 |-----|--------|---------------|
-| [INFRA_AND_ENV.md](./INFRA_AND_ENV.md) | primary | Server, Docker, nginx, environment variables, deployment commands, monitoring |
+| [INFRA_AND_ENV.md](./INFRA_AND_ENV.md) | primary | Server (Vultr), Docker, nginx, env vars, deployment commands, monitoring |
+| [DEPLOYMENT_RUNBOOK.md](./DEPLOYMENT_RUNBOOK.md) | ops | Standard deploy via GitHub Actions, rollback, maintenance mode, post-deploy smoke |
 | [VULTR_MIGRATION_RUNBOOK.md](./VULTR_MIGRATION_RUNBOOK.md) | ops | Completed Vultr migration record, verification, and Timeweb decommission notes |
 | [KNOWN_GAPS_AND_RISKS.md](./KNOWN_GAPS_AND_RISKS.md) | secondary | Critical risks, architecture gaps, security concerns, missing features |
 | [OPERATIONS_RUNBOOK_LIGHT.md](./OPERATIONS_RUNBOOK_LIGHT.md) | ops | Quick prod checks, post-deploy verification, incident triage |
+| [WEEKLY_OPS_CHECKLIST.md](./WEEKLY_OPS_CHECKLIST.md) | ops | 5-minute weekly checks: health, containers, backups, watchdog, disk |
 | [BACKUP_CHECKLIST.md](./BACKUP_CHECKLIST.md) | ops | What must be backed up and how, with cron examples |
-| [RECOVERY_RUNBOOK.md](./RECOVERY_RUNBOOK.md) | ops | Step-by-step server recovery procedures |
+| [DISASTER_RECOVERY.md](./DISASTER_RECOVERY.md) | ops | Restore scenarios (DB only, uploads only, full server) using current `.tar.gz` archive format |
+| [RECOVERY_RUNBOOK.md](./RECOVERY_RUNBOOK.md) | ops | Step-by-step server recovery procedures and smoke tests |
 | [MASTER_RESTORE_GUIDE.md](./MASTER_RESTORE_GUIDE.md) | ops | Full restore guide from scratch + doc index |
-| [CRITICAL_BACKUP_ACTIONS.md](./CRITICAL_BACKUP_ACTIONS.md) | ops | Urgent top-10 backup actions checklist |
+| [CRITICAL_BACKUP_ACTIONS.md](./CRITICAL_BACKUP_ACTIONS.md) | ops | Emergency manual backup checklist (fallback only) |
 | [CHANGELOG_DOCS.md](./CHANGELOG_DOCS.md) | secondary | Documentation revision history |
 
 ---
@@ -123,12 +126,14 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 
 | File | Purpose |
 |------|---------|
-| `apps/api/src/index.ts` | Entire Express API (~11,964 lines) |
-| `apps/web/app/miniapp/MiniApp.tsx` | Entire Mini App frontend (~16,663 lines) |
-| `apps/bot/src/index.ts` | Telegram bot (~1,190 lines) |
-| `apps/api/src/url-parser.ts` | URL import pipeline (~1,059 lines) |
+| `apps/api/src/index.ts` | Entire Express API (large monolith) |
+| `apps/web/app/miniapp/MiniApp.tsx` | Entire Mini App frontend (large monolith) |
+| `apps/bot/src/index.ts` | Telegram bot (Telegraf) |
+| `apps/api/src/url-parser.ts` | URL import pipeline |
 | `packages/db/prisma/schema.prisma` | Database schema |
 | `packages/shared/src/i18n.ts` | All UI strings (6 locales: ru, en, zh-CN, hi, es, ar) |
+
+> Exact line counts intentionally omitted — they rotted in earlier docs. Run `wc -l` to get the current size.
 
 ### Deployment
 
@@ -235,6 +240,6 @@ These are known planned features, shown as disabled "Coming soon" placeholders i
 
 ## Documentation Status
 
-All docs last synchronized with code on **2026-04-02**.
+All docs last synchronized with code on **2026-05-03**.
 Branch: `main`
-Production: `wishlistik.ru`
+Production: `wishlistik.ru` on Vultr Amsterdam VPS `199.247.24.125` (migrated from Timeweb on 2026-05-03 — see [VULTR_MIGRATION_RUNBOOK.md](./VULTR_MIGRATION_RUNBOOK.md)).

@@ -89,7 +89,21 @@ Nginx separately serves `maintenance.html` on 502/503/504 — this is automatic 
 
 ## Post-Deploy Smoke Test
 
-After every deploy, manually verify:
+After every deploy:
+
+```bash
+gh workflow run admin-ops.yml -R brsvdmtr/wishlist -f action=health-check
+```
+
+This runs the 6-point regression gate (failed migrations / API health /
+containers / bot heartbeat / lifecycle / error spike). Watch the run with:
+
+```bash
+RUN=$(gh run list -R brsvdmtr/wishlist --workflow=admin-ops.yml --limit=1 --json databaseId --jq '.[0].databaseId')
+gh run watch $RUN -R brsvdmtr/wishlist --exit-status
+```
+
+Then manually verify the user-facing surfaces:
 
 1. `curl https://wishlistik.ru/api/health` → `{"ok":true}`
 2. `curl https://wishlistik.ru/api/health/deep` → all checks green

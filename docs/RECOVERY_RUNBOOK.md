@@ -186,7 +186,52 @@ docker compose -f docker-compose.prod.yml logs --tail 20 web
 
 ## Phase 4: Database Recovery (5-15 min)
 
-### 4.1 If Restoring from SQL Dump
+> **Primary path is the rolling production backup archive.** `ops/backup.sh`
+> writes `wishlist_YYYYMMDD_HHMMSS.tar.gz` to `/opt/backups/wishlist/` and
+> uploads to Selectel/S3 (`wishlist-s3:wishlist-backups`). Each archive
+> contains `db.dump` (`pg_dump --format=custom`), `uploads.tar`, and `dot-env`,
+> with a sibling `.sha256` checksum.
+>
+> See [DISASTER_RECOVERY.md](./DISASTER_RECOVERY.md) for end-to-end DB-only,
+> uploads-only, and full-server scenarios. The steps below are the recovery
+> sub-steps for this runbook.
+
+### 4.1 Restore from production archive (primary)
+```bash
+# 1. Find the archive (local) or pull from S3:
+ls -lht /opt/backups/wishlist/ | head
+# rclone copy wishlist-s3:wishlist-backups/wishlist_YYYYMMDD_HHMMSS.tar.gz /tmp/
+# rclone copy wishlist-s3:wishlist-backups/wishlist_YYYYMMDD_HHMMSS.tar.gz.sha256 /tmp/
+
+# 2. Verify checksum BEFORE restore
+cd /opt/backups/wishlist
+sha256sum -c wishlist_YYYYMMDD_HHMMSS.tar.gz.sha256
+
+# 3. Extract
+mkdir -p /tmp/restore
+tar -xzf wishlist_YYYYMMDD_HHMMSS.tar.gz -C /tmp/restore
+ls /tmp/restore   # expect: db.dump  uploads.tar  dot-env
+
+# 4. Pipe pg_restore through docker compose exec (no hardcoded container name)
+cd /opt/wishlist
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  pg_restore -U wishlist -d wishlist --clean --if-exists < /tmp/restore/db.dump
+
+# 5. Restore uploads (overwrites the volume contents)
+UPLOADS_VOL=$(docker volume inspect wishlist-prod_wishlist_uploads -f '{{.Mountpoint}}')
+tar -xf /tmp/restore/uploads.tar -C "$UPLOADS_VOL"
+chown -R 1001:1001 "$UPLOADS_VOL"
+
+# 6. Restore .env if it was lost (verify critical vars before reusing)
+test -f /opt/wishlist/.env || cp /tmp/restore/dot-env /opt/wishlist/.env
+grep -E '^(DATABASE_URL|BOT_TOKEN|ADMIN_KEY|POSTGRES_PASSWORD)=' /opt/wishlist/.env
+
+# 7. Cleanup
+rm -rf /tmp/restore
+```
+
+### 4.1-legacy Restore from a plain SQL dump (manual alternative)
+Only when an archive is unavailable and you have a hand-rolled `pg_dump --format=plain` file.
 ```bash
 # Copy dump to server
 scp backup.sql root@199.247.24.125:/tmp/
@@ -282,6 +327,23 @@ UPDATE \"Item\" SET \"imageUrl\" = NULL WHERE \"imageUrl\" IS NOT NULL;
 "
 ```
 Users will need to re-upload photos.
+
+---
+
+## ⚠️ Single Bot Polling Instance — MANDATORY
+
+Telegram allows only **one** active long-poll consumer per bot token. Before
+restoring service or starting a parallel test instance:
+
+- Verify the production bot is the only one running for that token
+- If bringing up a recovery server, **stop** the bot service on the old host
+  first (or rotate the token in @BotFather)
+- Symptom of duplicate pollers: the production bot drops `getUpdates` with
+  HTTP 409 `Conflict` (visible in `apps/bot` logs)
+
+```bash
+docker compose -f docker-compose.prod.yml logs --tail 30 bot | grep -iE 'conflict|409|terminated|getUpdates'
+```
 
 ---
 

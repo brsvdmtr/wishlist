@@ -33,14 +33,14 @@
 ## ARCHITECTURE RISKS
 
 ### 5. Monolithic API (Single File)
-- **Risk**: `apps/api/src/index.ts` is ~11,964 lines (verified 2026-04-02) — grew significantly since March 17 (~4100 lines then) due to promo system, lifecycle messaging, public profiles, i18n, credits/billing, and other features
-- **Impact**: Hard to maintain, test, and reason about. File size has nearly tripled.
-- **Note**: Post-monetization + URL import + promo + lifecycle + i18n + credits expansion; works for current scale but becomes fragile as features grow
+- **Risk**: `apps/api/src/index.ts` is a large single-file backend (tens of thousands of lines as of 2026-05-03 — `wc -l` for the current count). Grew due to monetization, URL import, promo, lifecycle, i18n, credits, security layer, and Santa
+- **Impact**: Hard to maintain, test, and reason about
+- **Note**: Works for current scale but becomes fragile as features grow
 
 ### 6. Monolithic Frontend (Single File)
-- **Risk**: `MiniApp.tsx` is ~16,663 lines with 50+ useState hooks (verified 2026-04-02) — grew significantly since March 17 (~6500 lines then)
+- **Risk**: `apps/web/app/miniapp/MiniApp.tsx` is a large single-file frontend (tens of thousands of lines as of 2026-05-03 — `wc -l` for the current count) with many `useState` hooks
 - **Impact**: State management complexity, no code splitting
-- **Note**: Acceptable for Telegram Mini App constraints
+- **Note**: Acceptable for Telegram Mini App constraints, but increasingly painful for review/refactor
 
 ### 7. In-Memory Notification Queue
 - **Risk**: `pendingNotifications` Map is in-memory
@@ -143,13 +143,16 @@
 ## OPERATIONAL GAPS
 
 ### 24. No CI/CD
-- **Impact**: Manual deployment, human error risk
-- **Current process**: SSH -> git pull -> docker compose build/up
+- **Status**: RESOLVED (2026-05-03) — GitHub Actions `deploy.yml` (selective rebuild on push to `main`) + `admin-ops.yml` (health-check, logs, restart, SQL, env edit) target the Vultr production server. SSH stays as fallback only.
 
 ### 25. No Monitoring / Alerting
 - **Impact**: No way to know if services are down unless user reports
-- **Need**: Health check monitoring (even simple uptime ping)
-- **Status**: MITIGATED — Grafana+Loki log aggregation + daily digest added (2026-04-02)
+- **Status**: MITIGATED — multiple layers in place:
+  - Watchdog cron (`*/5 * * * *`) on Vultr running `ops/watchdog/health-watchdog.mjs` against `/api/health/deep`
+  - GitHub Actions `admin-ops.yml -f action=health-check` (6-point regression gate)
+  - Telegram admin alerts via `ADMIN_ALERT_CHAT_IDS` (uncaughtException, unhandledRejection, watchdog DOWN/RECOVERED)
+  - Grafana+Loki log aggregation + daily digest (added 2026-04-02)
+  - Optional GlitchTip/Sentry (`GLITCHTIP_DSN` + `ENABLE_ERROR_TRACKING`)
 
 ### 26. No Error Tracking
 - **Impact**: Errors only visible in docker logs (if you look)
@@ -161,10 +164,14 @@
 - **Impact**: Bad migration requires manual SQL to fix
 - **Mitigation**: Always backup before migration
 
-### 28. SSL Certificate Renewal
-- **Risk**: Let's Encrypt certs expire every 90 days
-- **Gap**: NEEDS VERIFICATION if certbot auto-renewal is configured
-- **Impact**: Site goes down if cert expires
+### 28. SSL Certificate Auto-Renewal NOT Configured on Vultr
+- **Risk**: Let's Encrypt certs expire every 90 days; without auto-renewal the site goes down on expiry
+- **Current state (verified 2026-05-03 via `admin-ops exec-shell`)**:
+  - Cert is valid: `notAfter=Jul 16 23:53:26 2026 GMT` (issued Apr 17, ~73 days runway from migration day)
+  - `which certbot` → not found on Vultr; no `certbot.timer` in `systemctl list-timers`; no certbot entry in cron
+  - The certificate files in `/etc/letsencrypt/live/wishlistik.ru/` were carried over from the old Timeweb host; the renewal hook stayed there
+- **Required action before mid-July 2026**: install certbot on Vultr (`apt-get install certbot python3-certbot-nginx`) and run `certbot --nginx -d wishlistik.ru -d www.wishlistik.ru`, or migrate to `acme.sh` / a comparable renewer. Verify with `certbot renew --dry-run` and confirm `certbot.timer` is `enabled` + `active`.
+- **Severity**: HIGH (not a Timeweb-decommission blocker, but firm deadline ≈ 2026-07-16)
 
 ### 30. Client-Only PRO Gate for Recommended Sort
 - **Risk**: Guest sort "Recommended" is shown as PRO on client, but no server-side enforcement
@@ -200,8 +207,8 @@
 - **Impact**: Discrepancies between payment provider and internal credit balance may go undetected
 - **Severity**: HIGH
 
-### 36. Monolith File Sizes (~12K API + ~17K Frontend in 2 Files)
-- **Risk**: Two files contain virtually all application logic (~11,964 + ~16,663 lines)
+### 36. Monolith File Sizes
+- **Risk**: Two files contain virtually all application logic (`apps/api/src/index.ts` + `apps/web/app/miniapp/MiniApp.tsx`); each is in the tens of thousands of lines as of 2026-05-03 — run `wc -l` for the current count
 - **Impact**: IDE performance, merge conflicts, impossible to assign ownership or review efficiently
 - **Severity**: HIGH
 
@@ -267,7 +274,7 @@
 | Automated upload backup | DONE | Same archive, `uploads.tar` |
 | .env template with comments | DONE | Full `.env.example` in repo root |
 | Health check monitoring | DONE | `ops/watchdog/health-watchdog.mjs` cron + GitHub Actions health-check |
-| SSL renewal verification | HIGH | `certbot renew --dry-run` |
+| SSL renewal on Vultr | HIGH (deadline ~2026-07-16) | certbot not installed; current cert valid until Jul 16 — see risk #28 |
 
 ---
 
@@ -275,16 +282,16 @@
 
 | File | Lines | Why Critical |
 |------|-------|-------------|
-| `apps/api/src/index.ts` | ~11,964 | ENTIRE backend logic |
-| `apps/web/app/miniapp/MiniApp.tsx` | ~16,663 | ENTIRE Mini App frontend |
-| `packages/db/prisma/schema.prisma` | ~1,283 | Database schema (51 models) |
+| `apps/api/src/index.ts` | large monolith | ENTIRE backend logic (Express + Prisma) |
+| `apps/web/app/miniapp/MiniApp.tsx` | large monolith | ENTIRE Mini App frontend |
+| `apps/bot/src/index.ts` | medium monolith | Telegram bot (Telegraf) |
+| `packages/db/prisma/schema.prisma` | varies | Database schema |
 | `packages/db/prisma/migrations/*` | varies | Migration history |
-| `docker-compose.prod.yml` | 91 | Production deployment config |
-| `Dockerfile.api` | 43 | API container build |
-| `Dockerfile.web` | ~50 | Web container build |
-| `Dockerfile.bot` | ~40 | Bot container build |
-| `apps/bot/src/index.ts` | ~1000 | Telegram bot logic |
-| `.env` (on server) | ~20 | ALL secrets and config |
+| `docker-compose.prod.yml` | small | Production deployment config |
+| `Dockerfile.api` / `Dockerfile.web` / `Dockerfile.bot` | small | Container builds |
+| `.env` (on server) | small | ALL secrets and config |
+
+> Exact line counts removed — they decay quickly. Run `wc -l <path>` to check the current size if needed.
 
 ---
 

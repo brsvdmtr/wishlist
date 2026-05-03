@@ -101,7 +101,7 @@ gpg --symmetric --cipher-algo AES256 /opt/wishlist/.env
 | Nginx конфиг | `/etc/nginx/sites-enabled/wishlistik.ru` | Ручное копирование (также в docs) | Документировано |
 | Docker Compose (prod) | `docker-compose.prod.yml` в git | Автоматически | OK |
 | Dockerfiles (3 шт.) | `Dockerfile.api`, `.web`, `.bot` в git | Автоматически | OK |
-| SSL-сертификаты | `/etc/letsencrypt/live/wishlistik.ru/` | Let's Encrypt (авто-обновление certbot) | ПРОВЕРИТЬ |
+| SSL-сертификаты | `/etc/letsencrypt/live/wishlistik.ru/` | Let's Encrypt — текущий cert валиден до 2026-07-16, **certbot ещё не установлен на Vultr** (см. KNOWN_GAPS #28) | ВНИМАНИЕ |
 | Certbot конфиг | `/etc/letsencrypt/` | `tar` целой директории | Рекомендуется |
 
 **Действие:**
@@ -141,7 +141,7 @@ certbot renew --dry-run
 |-----|-------------|---------------|--------|
 | Домен `wishlistik.ru` | Регистратор/DNS-панель | Записать логин/пароль от панели | КРИТИЧНО |
 | DNS A-запись | Панель регистратора | IP сервера -> документировать | Рекомендуется |
-| SSL-сертификат | Let's Encrypt (certbot) | Авто-обновление каждые 90 дней | ПРОВЕРИТЬ |
+| SSL-сертификат | Let's Encrypt (на момент 2026-05-03 валиден до 2026-07-16) | **Авто-обновление certbot не настроено на Vultr** — установить до ~2026-07-16, см. KNOWN_GAPS #28 | ВНИМАНИЕ |
 | SSH-ключ для сервера | `~/.ssh/timeweb_wishlist` | Должен быть на локальной машине | OK |
 
 **Действие:**
@@ -152,9 +152,9 @@ dig wishlistik.ru +short
 # Проверить срок SSL:
 echo | openssl s_client -servername wishlistik.ru -connect wishlistik.ru:443 2>/dev/null | openssl x509 -noout -dates
 
-# Проверить автообновление certbot:
-systemctl status certbot.timer
-certbot renew --dry-run
+# Проверить автообновление certbot (на 2026-05-03 НЕ настроено на Vultr — см. KNOWN_GAPS #28):
+systemctl status certbot.timer 2>&1   # ожидается "Failed to get unit file state" пока не установлен
+certbot renew --dry-run 2>&1          # ожидается "command not found" пока не установлен
 ```
 
 ---
