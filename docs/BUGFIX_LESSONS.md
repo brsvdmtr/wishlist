@@ -5,6 +5,148 @@ New entries go at the top.
 
 ---
 
+## 2026-05-03 — Hints: «Активный намёк не найден» при свежем клике (idempotency-window mismatch + сетевая стена маскировала логический баг недели)
+
+### Ошибка
+Пользователь жмёт «Намекнуть друзьям» в Mini App → бот получает клавиатуру выбора
+контактов → пользователь выбирает контакт → бот отвечает «**Активный намёк не
+найден. Создай новый в приложении.**» И так несколько попыток подряд, повторно
+воспроизводимо.
+
+В БД на момент попытки виден последний `Hint` с `status='SENT'` от **этого же
+пользователя на тот же item**, но `createdAt` 10 часов назад. Свежего hint
+после клика нет. API при этом отвечает Mini App'у `200 OK` с `hintId`.
+
+### Root cause
+**Расхождение «окон» между двумя сервисами**, читающими общий стейт через БД:
+
+- **API** (`apps/api/src/index.ts`, idempotent fast-path в `POST /tg/items/:id/hint`)
+  искал существующий hint по условию `status='SENT' AND expiresAt > now()`.
+  `expiresAt` ставится `now() + 30 дней` при создании → effectively окно
+  идемпотентности **30 дней**. На повторный клик API возвращал тот же 10-часовой
+  `hintId` и заново слал клавиатуру.
+- **Бот** (`apps/bot/src/index.ts`, обработчик `users_shared`) ищет hint по
+  условию `senderUserId=X AND status='SENT' AND createdAt >= now() - 30 минут`,
+  чтобы не подцепить случайный древний абандон. Окно — **30 минут**.
+
+Когда юзер кликал, абандонив, и возвращался через несколько часов, API возвращал
+старый зомби-hint, бот его не находил в своём окне → отвечал «Активный намёк не
+найден». Контракт между двумя сервисами расходился на 3 порядка (30 мин vs 30
+дней).
+
+**Почему этот баг прожил недели в проде, прежде чем мы его опознали:**
+параллельно работала **сетевая стена** Timeweb-VPS → Telegram (RKN-блок IPv4 +
+deprecated upstream IPv6). Каждая попытка hint-flow в проде превращалась в
+`fetch failed: Connect Timeout Error` либо на API-side (отправка клавиатуры),
+либо на bot-side (recipient sendMessage). Все наши «фиксы» в течение нескольких
+сессий — добавление retry с timeout, atomic-claim против дубликатов
+`users_shared`, idempotent fast-path, fire-and-forget keyboard delivery,
+структурные логи — били по симптомам, которые вызывал сетевой шум. Логический
+баг с window-mismatch был **полностью замаскирован**: оба сервиса не доходили
+до своих query настолько часто, что мы не различали «не нашёл из-за окна» от
+«не дошёл из-за сети». Только после переезда инфры на Vultr Amsterdam (TG
+reach ~30 ms) сетевая дисперсия исчезла и баг стал воспроизводиться 1-в-1.
+
+### Урок
+1. **Контракт «producer создаёт состояние / consumer ищет это состояние через
+   БД-очередь» обязан явно совпадать по lookup-критериям с обеих сторон.** Если
+   consumer ограничивает окно по `createdAt >= now() - X`, producer не имеет
+   права через идемпотентность переиспользовать запись старше X. Несовпадение
+   окон = race-условие, которое выглядит как «всё хорошо, кроме бага».
+2. **Сетевая нестабильность маскирует логические баги.** Когда из 100 попыток
+   30 % падает «по сети», у диагноста нет статистической базы отделить «упало
+   потому что логика кривая» от «упало потому что сеть лежит». Любой код-фикс
+   в этих условиях — догадка. Наши 5+ итераций hint-fixes (`491a2ba` /
+   `6c4de80` / `dc5a0af` / `91a1c22` / `fa0b52d`) лечили реальные мелкие
+   проблемы по дороге, но не корень — корень был не в коде, а в контракте,
+   который сеть скрывала.
+3. **`expiresAt` ≠ окно идемпотентности.** Поле «срок жизни» в БД — это
+   garbage-collection / архивация, а не семантика «когда переиспользовать».
+   Идемпотентность строится отдельным узким окном, согласованным с consumer'ом.
+4. **Stale записи блокируют rate-limit slots.** Анти-спам hints (3/item за 30
+   дней, 5/sender за 24 ч) считал `status IN ('SENT', 'DELIVERED')`. Каждый
+   абандонный SENT, оставленный навсегда, занимал слот. На момент починки в
+   проде висело 8 stale-SENT с марта-мая, реально блокирующих item-rate-limit
+   для пользователя, который их даже не помнил.
+
+### Правило
+1. **Pair-test producer/consumer, если они синхронизируются через БД-очередь.**
+   Минимум — `grep`-чек в обоих файлах при ревью PR'а, который меняет хотя бы
+   одну сторону: lookup-where в consumer должен покрывать все записи, которые
+   producer считает «свежими/активными».
+2. **Любое окно идемпотентности дублируется константой с одинаковым именем в
+   обоих файлах** (`HINT_LOOKUP_WINDOW_MS = 30 * 60 * 1000`), либо выносится
+   в общий `packages/shared`. Магических чисел в `findFirst` запрещены — они
+   незаметно расходятся.
+3. **Stale-state cleanup должен быть proactive, не reactive.** Записи,
+   выпавшие из «свежего окна», переводятся в `CANCELLED` при следующем
+   клике/запросе того же пользователя — не «когда-нибудь по cron». Иначе они
+   копятся и блокируют rate-limits.
+4. **Перед мульти-сессионным циклом фиксов одной фичи в проде с сетевыми
+   ошибками — стабилизировать сеть.** Если в логах доминирует
+   `fetch failed: Connect Timeout`, любой код-фикс симптома будет угадыванием.
+   Диагноз сначала, фикс потом.
+
+### Лучший код
+```ts
+// apps/api/src/index.ts — POST /tg/items/:id/hint, fast-path:
+const now = new Date();
+// MUST stay in sync with apps/bot/src/index.ts users_shared handler.
+const HINT_LOOKUP_WINDOW_MS = 30 * 60 * 1000;
+const lookupWindowStart = new Date(now.getTime() - HINT_LOOKUP_WINDOW_MS);
+
+// 1. Proactive stale cleanup: anything outside the consumer's window is dead.
+const stale = await prisma.hint.updateMany({
+  where: {
+    senderUserId: user.id,
+    itemId: id,
+    status: 'SENT',
+    createdAt: { lt: lookupWindowStart },
+  },
+  data: { status: 'CANCELLED' },
+});
+if (stale.count > 0) {
+  logger.info({ userId: user.id, itemId: id, cancelledCount: stale.count },
+    'hint_create_cancelled_stale_sent');
+}
+
+// 2. Idempotency over the SAME window the bot uses.
+const existing = await prisma.hint.findFirst({
+  where: {
+    senderUserId: user.id,
+    itemId: id,
+    status: 'SENT',
+    createdAt: { gte: lookupWindowStart },  // ← must match consumer
+    expiresAt: { gt: now },                  // ← belt-and-braces
+  },
+  orderBy: { createdAt: 'desc' },
+  select: { id: true, createdAt: true },
+});
+```
+
+```ts
+// apps/bot/src/index.ts — users_shared handler:
+const HINT_LOOKUP_WINDOW_MS = 30 * 60 * 1000;
+// MUST stay in sync with apps/api/src/index.ts hint create handler.
+const thirtyMinAgo = new Date(Date.now() - HINT_LOOKUP_WINDOW_MS);
+
+const hint = await prisma.hint.findFirst({
+  where: {
+    senderUserId: sender.id,
+    status: 'SENT',
+    createdAt: { gte: thirtyMinAgo },        // ← matches producer
+  },
+  orderBy: { createdAt: 'desc' },
+  ...
+});
+```
+
+**Commits:**
+- `6574323` fix(hints): cancel stale SENT hints + match bot's 30-min lookup window
+- (network unmasking) infra migration to Vultr Amsterdam — `0e7a9f6` and follow-ups
+
+---
+
 ## 2026-04-30 — Календарь: бейдж «СЕГОДНЯ» вместо «ЗАВТРА» вечером накануне события
 
 ### Ошибка
