@@ -1,7 +1,37 @@
 # Backend Map
 
-**Last updated:** 2026-04-02
+**Last updated:** 2026-05-04
 **Project:** Wishlist Telegram Mini App — `apps/api`
+
+---
+
+## Layering rules (mandatory for new code)
+
+`apps/api/src/index.ts` is a **composition root** — bootstrap, middleware,
+router registration, schedulers, `app.listen`. Nothing else.
+
+New API features go to:
+
+- `routes/<domain>.routes.ts` — HTTP layer, thin handlers (read input,
+  validate, call service, shape response).
+- `services/<domain>.service.ts` — business logic and orchestration.
+- `domain/<domain>/*` — pure rules, state transitions, permissions.
+- `repositories/<domain>.repo.ts` — complex / repeated Prisma queries.
+- `integrations/*` — Telegram, Stars, URL imports, external APIs.
+- `schedulers/*` — cron / interval jobs.
+
+`services/`, `domain/`, `repositories/`, `integrations/`, `schedulers/` are
+**target folders** — create them when the first real file lands; don't
+pre-seed empty directories.
+
+**Forbidden:** new route handlers in `index.ts`, business logic / state
+transitions inline in handlers, dumping-ground router files
+(`misc.routes.ts`, `common.routes.ts`, `new.routes.ts`, `other.routes.ts`,
+`helpers.routes.ts`).
+
+Full contract → [API_ARCHITECTURE_RULES.md](API_ARCHITECTURE_RULES.md).
+Iron-rule summary for agents → [CLAUDE.md](../CLAUDE.md#api-architecture--mandatory-for-new-backend-code).
+Active decomposition handoff → [REFACTOR_API_INDEX_HANDOFF.md](REFACTOR_API_INDEX_HANDOFF.md).
 
 ---
 

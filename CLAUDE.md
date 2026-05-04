@@ -112,6 +112,61 @@ Categories / Hints / Subscriptions are deferred to Wave 2.
 
 ---
 
+## API architecture — MANDATORY for new backend code
+
+`apps/api/src/index.ts` is being decomposed (see
+[docs/REFACTOR_API_INDEX_HANDOFF.md](docs/REFACTOR_API_INDEX_HANDOFF.md)).
+Going forward, `index.ts` is a **composition root** — bootstrap, middleware,
+router registration, schedulers, `app.listen`, process handlers. Nothing else.
+
+Full contract: [docs/API_ARCHITECTURE_RULES.md](docs/API_ARCHITECTURE_RULES.md).
+
+### Iron rules — apply on every PR that adds or modifies API code
+
+- **No new route handlers in `index.ts`.** New endpoints go to
+  `apps/api/src/routes/<domain>.routes.ts`. If the domain doesn't exist yet,
+  create it in this PR.
+- **No business logic in `index.ts`.** No new helpers, Prisma feature queries,
+  Telegram notification flow, billing flow, or state transitions.
+- **Route handlers stay thin** — read params, validate, call a service, shape
+  the response. Soft cap ~80–120 lines. Past that, extract to
+  `services/<domain>.service.ts`.
+- **State transitions** (`Item.status`, `archivedAt`, `Subscription.status`,
+  `SantaCampaign.status`, `Hint.status`, etc.) live in `services/` or
+  `domain/<domain>/`, **not** in route bodies. Don't write
+  `prisma.item.update({ data: { status: 'RESERVED' } })` inside a handler.
+- **Side effects are explicit.** Telegram messages, billing, analytics,
+  external HTTP — extracted to `integrations/`, `notifications/`, or service
+  layer. Not buried inline in handlers.
+- **Schedulers live in `apps/api/src/schedulers/`.** `index.ts` only registers
+  them; route modules never start cron / `setInterval`.
+- **No dumping-ground routers.** `misc.routes.ts`, `common.routes.ts`,
+  `new.routes.ts`, `other.routes.ts`, `helpers.routes.ts` are forbidden.
+  Each router = one named domain.
+- **Every state-changing endpoint** (POST / PATCH / DELETE) explicitly answers
+  idempotency? rate-limit category? analytics event? See
+  [docs/API_SECURITY.md](docs/API_SECURITY.md) and § 5 of the rules doc.
+
+### Pre-implementation checklist
+
+Before writing code for a new API feature, answer all ten — full version in
+[API_ARCHITECTURE_RULES.md § 9](docs/API_ARCHITECTURE_RULES.md#9-pre-implementation-checklist):
+domain · router · service · state transition · Prisma mutation · idempotency ·
+rate limit · side effects · analytics · post-deploy smoke checks.
+
+If you cannot answer all ten, do not start coding.
+
+### Carve-out for target architecture
+
+`services/`, `domain/`, `repositories/`, `integrations/`, `schedulers/` are
+**target folders**. Create a folder the first time a real file lands there;
+don't pre-seed empty directories. Existing folders (`bootstrap/`, `lib/`,
+`middleware/`, `notifications/`, `placements/`, `routes/`, `security/`,
+`telegram/`, `uploads/`, `wishlists/`, `health/`) cover what already exists —
+new layers are added on demand.
+
+---
+
 ## Design system — MANDATORY for all UI work
 
 WishBoard has a formal design system. Before touching any UI code:

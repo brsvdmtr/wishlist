@@ -87,7 +87,7 @@ Uploaded files are stored in a named Docker volume `wishlist_uploads`, mounted a
 
 | Module | Path | Responsibility |
 |---|---|---|
-| `api` | `apps/api/src/index.ts` (~11,964 lines) | Express HTTP server. All business logic: wishlists, items, reservations, comments, hints, subscriptions, billing, profile, settings, URL import, image processing, background jobs, add-on SKU store, promo code system, lifecycle/degradation engine, locale segments analytics, Secret Santa subsystem, gift notes/occasions. |
+| `api` | `apps/api/src/index.ts` + `apps/api/src/routes/*` | Express HTTP server. `index.ts` is the composition root (bootstrap, middleware, router registration, schedulers, `app.listen`); domain routers under `routes/` host endpoints. Active decomposition — see [API_ARCHITECTURE_RULES.md](API_ARCHITECTURE_RULES.md) and [REFACTOR_API_INDEX_HANDOFF.md](REFACTOR_API_INDEX_HANDOFF.md). Business logic spans wishlists, items, reservations, comments, hints, subscriptions, billing, profile, settings, URL import, image processing, background jobs, add-on SKU store, promo code system, lifecycle/degradation engine, locale segments analytics, Secret Santa subsystem, gift notes/occasions. |
 | `api` | `apps/api/src/url-parser.ts` (~1,059 lines) | Multi-strategy product card extractor: Cheerio + Puppeteer, in-memory cache, 7 domain adapters. |
 | `api` | `apps/api/src/browser-network-extractor.ts` | Puppeteer-based XHR/fetch interception for SPA product pages. |
 | `api` | `apps/api/src/sort.ts` | Item sort order logic (side-effect-free, unit-tested). |
@@ -292,8 +292,8 @@ The bot maintains a ForceReply-based support flow. `SupportSession` stores short
 
 ## 17. Key Design Decisions
 
-**Single-file API (`index.ts`, ~11,964 lines)**
-All route handlers, middleware, helpers, and background jobs live in one file. This avoids module boundary complexity at this project scale and keeps cross-cutting concerns (e.g., `sendTgNotification`, `getUserEntitlement`, `processImage`) directly accessible from any handler without import chains.
+**Composition-root API entry (`apps/api/src/index.ts`)**
+Historically `index.ts` held all route handlers, middleware, helpers, and background jobs in one file (~20 k lines at peak). That single-file approach is being retired through a multi-phase decomposition (P1–P5; see [REFACTOR_API_INDEX_HANDOFF.md](REFACTOR_API_INDEX_HANDOFF.md)). Target architecture: `index.ts` is a **composition root** — bootstrap, middleware registration, router registration, scheduler registration, `app.listen`, process handlers. New features land in domain routers under `routes/<domain>.routes.ts` and call into a service / domain / repository / integration / scheduler layer rather than living inline. Iron rules and the pre-implementation checklist: [API_ARCHITECTURE_RULES.md](API_ARCHITECTURE_RULES.md).
 
 **Single-file frontend (`MiniApp.tsx`, ~16,663 lines)**
 The Mini App is a single React component tree with screen state managed as a `screen` discriminated union. This avoids client-side routing inside the Telegram WebApp frame, where standard Next.js navigation would trigger full page reloads and lose Telegram WebApp state.

@@ -249,6 +249,24 @@ After each P5*: deploy, run the post-deploy health check (next section), let the
 
 ---
 
+## After P5 — long-term architecture guardrails
+
+P5 ships the last router split. Once `tgRouter` is decomposed, `index.ts` is a **composition root** and stays one. From that point forward, every new API feature follows the rules in [API_ARCHITECTURE_RULES.md](API_ARCHITECTURE_RULES.md):
+
+- New endpoints land in `routes/<domain>.routes.ts`, never in `index.ts`.
+- Business logic and state transitions move into `services/<domain>.service.ts` and `domain/<domain>/*`. Route handlers stay thin (~80–120 lines is the smell-test cap).
+- Prisma writes that change entity state (`Item.status`, `archivedAt`, `Subscription.status`, `SantaCampaign.status`, `Hint.status`, `*At = now` fields, etc.) live in service / domain layer, never inline in handlers.
+- Side effects (Telegram, billing, analytics, external HTTP) live in `integrations/`, `notifications/`, or service layer. Never silently inside a handler body.
+- Schedulers live in `apps/api/src/schedulers/`; route modules don't start cron or `setInterval`.
+- No dumping-ground routers (`misc`, `common`, `new`, `helpers`, generic `other`). Each router = one named domain.
+- Every new state-changing endpoint explicitly answers idempotency / rate-limit / analytics — see [API_SECURITY.md](API_SECURITY.md) and [API_ARCHITECTURE_RULES.md § 5](API_ARCHITECTURE_RULES.md#5-idempotency-rate-limit-and-analytics-are-explicit-decisions).
+
+The pre-implementation checklist (10 questions) and review checklist live in [API_ARCHITECTURE_RULES.md §§ 9–10](API_ARCHITECTURE_RULES.md#9-pre-implementation-checklist). An iron-rule summary is also in [CLAUDE.md](../CLAUDE.md#api-architecture--mandatory-for-new-backend-code).
+
+Without these guardrails, the decomposition is reversible: a few months of "small additions" in `index.ts` rebuild the monolith. Treat the rules as binding for any post-P5 PR.
+
+---
+
 ## Verification recipe (run after every P5 step)
 
 ```bash
