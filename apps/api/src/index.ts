@@ -88,6 +88,7 @@ import { registerImportRouter } from './routes/import.routes';
 import { registerBirthdayRemindersRouter } from './routes/birthday-reminders.routes';
 import { registerPromoRouter } from './routes/promo.routes';
 import { registerOnboardingRouter } from './routes/onboarding.routes';
+import { registerSelectionsArchiveRouter } from './routes/selections-archive.routes';
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -1832,6 +1833,29 @@ const onboardingRouter = registerOnboardingRouter({
 });
 tgRouter.use(onboardingRouter);
 
+// ─── /tg/selections/* + /tg/archive/* sub-router (P5i split — 8 handlers) ───
+// 6 selections + 2 archive endpoints, all sharing CuratedSelection /
+// CuratedSelectionSubscription / Item tables. The 3 path-scoped idem
+// registrations for selections (DELETE /selections/:id, POST/DELETE
+// /selections/:id/subscribe) stay in index.ts at lines 1655–1657 — they
+// are `tgRouter.all(...)` middleware that fires BEFORE sub-router dispatch.
+//
+// All 3 deps (getOrCreateTgUser, trackEvent, mapTgItem) are hoisted
+// function declarations defined long before this mount point (lines 731,
+// 1287, 1402), so wiring here is TDZ-safe.
+//
+// Out of scope (stay in index.ts under "core wishlist/items routes"):
+//   - POST/GET /tg/wishlists/:id/selections — uses generateUniqueCuratedToken
+//     (also in index.ts) and gates on getEffectiveEntitlements.
+//   - POST /tg/wishlists/:id/{archive,unarchive}, GET /tg/wishlists/:id/archive
+//   - POST /tg/items/bulk-archive
+const selectionsArchiveRouter = registerSelectionsArchiveRouter({
+  getOrCreateTgUser,
+  trackEvent,
+  mapTgItem,
+});
+tgRouter.use(selectionsArchiveRouter);
+
 // P5c lightweight batch (profiles / telemetry / analytics / maintenance /
 // import) is wired further below alongside the P4 internal/admin/public
 // routers — placed there because two of its deps (recordMaintenanceExposure,
@@ -3146,179 +3170,6 @@ tgRouter.get(
         createdAt: s.createdAt,
       })),
     });
-  }),
-);
-
-// DELETE /tg/selections/:id — deactivate a curated selection
-tgRouter.delete(
-  '/selections/:id',
-  asyncHandler(async (req, res) => {
-    const id = req.params.id ?? '';
-    if (!id) return res.status(400).json({ error: 'Missing selection id' });
-
-    const user = await getOrCreateTgUser(req.tgUser!);
-    const selection = await prisma.curatedSelection.findUnique({ where: { id }, select: { ownerId: true } });
-    if (!selection) return res.status(404).json({ error: 'Selection not found' });
-    if (selection.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
-
-    await prisma.curatedSelection.update({ where: { id }, data: { deactivatedAt: new Date() } });
-    trackEvent('selection_deactivated', user.id, { selectionId: id });
-
-    return res.json({ ok: true });
-  }),
-);
-
-// POST /tg/selections/:id/subscribe — subscribe to a curated selection
-tgRouter.post(
-  '/selections/:id/subscribe',
-  asyncHandler(async (req, res) => {
-    const id = req.params.id ?? '';
-    if (!id) return res.status(400).json({ error: 'Missing selection id' });
-
-    const user = await getOrCreateTgUser(req.tgUser!);
-    const selection = await prisma.curatedSelection.findUnique({
-      where: { id },
-      select: { id: true, ownerId: true, deactivatedAt: true, expiresAt: true },
-    });
-    if (!selection) return res.status(404).json({ error: 'Selection not found' });
-    if (selection.ownerId === user.id) return res.status(400).json({ error: 'Cannot subscribe to own selection' });
-    if (selection.deactivatedAt || selection.expiresAt < new Date()) {
-      return res.status(410).json({ error: 'Selection expired' });
-    }
-
-    await prisma.curatedSelectionSubscription.upsert({
-      where: { curatedSelectionId_subscriberId: { curatedSelectionId: id, subscriberId: user.id } },
-      update: {},
-      create: { curatedSelectionId: id, subscriberId: user.id },
-    });
-
-    trackEvent('selection_subscribed', user.id, { selectionId: id });
-    return res.json({ ok: true, subscribed: true });
-  }),
-);
-
-// DELETE /tg/selections/:id/subscribe — unsubscribe from a curated selection
-tgRouter.delete(
-  '/selections/:id/subscribe',
-  asyncHandler(async (req, res) => {
-    const id = req.params.id ?? '';
-    if (!id) return res.status(400).json({ error: 'Missing selection id' });
-
-    const user = await getOrCreateTgUser(req.tgUser!);
-    await prisma.curatedSelectionSubscription.deleteMany({
-      where: { curatedSelectionId: id, subscriberId: user.id },
-    });
-
-    trackEvent('selection_unsubscribed', user.id, { selectionId: id });
-    return res.json({ ok: true, subscribed: false });
-  }),
-);
-
-// GET /tg/selections/:id/subscribe — check subscription status
-tgRouter.get(
-  '/selections/:id/subscribe',
-  asyncHandler(async (req, res) => {
-    const id = req.params.id ?? '';
-    if (!id) return res.status(400).json({ error: 'Missing selection id' });
-
-    const user = await getOrCreateTgUser(req.tgUser!);
-    const sub = await prisma.curatedSelectionSubscription.findUnique({
-      where: { curatedSelectionId_subscriberId: { curatedSelectionId: id, subscriberId: user.id } },
-      select: { id: true },
-    });
-
-    return res.json({ subscribed: !!sub });
-  }),
-);
-
-// GET /tg/selections/by-token/:token — authenticated curated selection view (includes isSubscribed + isOwner)
-tgRouter.get(
-  '/selections/by-token/:token',
-  asyncHandler(async (req, res) => {
-    const token = req.params.token ?? '';
-    if (!token) return res.status(400).json({ error: 'Missing token' });
-
-    const user = await getOrCreateTgUser(req.tgUser!);
-    const selection = await prisma.curatedSelection.findUnique({
-      where: { shareToken: token },
-      select: {
-        id: true, title: true, ownerId: true, expiresAt: true, deactivatedAt: true,
-        owner: { select: { firstName: true, profile: { select: { displayName: true } } } },
-        items: { orderBy: { position: 'asc' }, select: { id: true, title: true, priceText: true, currency: true, imageUrl: true, url: true, description: true, position: true } },
-      },
-    });
-    if (!selection) return res.status(404).json({ error: 'Selection not found' });
-
-    const expired = !!selection.deactivatedAt || selection.expiresAt < new Date();
-    if (expired) {
-      return res.status(410).json({ error: 'expired', expiresAt: selection.expiresAt });
-    }
-
-    const isOwner = selection.ownerId === user.id;
-    let isSubscribed = false;
-    if (!isOwner) {
-      const sub = await prisma.curatedSelectionSubscription.findUnique({
-        where: { curatedSelectionId_subscriberId: { curatedSelectionId: selection.id, subscriberId: user.id } },
-        select: { id: true },
-      });
-      isSubscribed = !!sub;
-    }
-
-    // Track view — fire-and-forget
-    prisma.curatedSelection.update({ where: { shareToken: token }, data: { viewCount: { increment: 1 } } }).catch(() => {});
-    trackEvent('selection_viewed', user.id, { selectionId: selection.id });
-
-    const ownerName = selection.owner.profile?.displayName || selection.owner.firstName || null;
-
-    return res.json({
-      selection: {
-        id: selection.id,
-        title: selection.title,
-        itemCount: selection.items.length,
-        expiresAt: selection.expiresAt,
-        ownerName,
-        isOwner,
-        isSubscribed,
-        items: selection.items,
-      },
-    });
-  }),
-);
-
-// GET /tg/selections/subscribed — list subscribed curated selections
-tgRouter.get(
-  '/selections/subscribed',
-  asyncHandler(async (req, res) => {
-    const user = await getOrCreateTgUser(req.tgUser!);
-    const subs = await prisma.curatedSelectionSubscription.findMany({
-      where: { subscriberId: user.id },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        createdAt: true,
-        curatedSelection: {
-          select: {
-            id: true, shareToken: true, title: true, expiresAt: true,
-            deactivatedAt: true, createdAt: true,
-            owner: { select: { firstName: true, profile: { select: { displayName: true } } } },
-            _count: { select: { items: true } },
-          },
-        },
-      },
-    });
-
-    const selections = subs
-      .filter(s => !s.curatedSelection.deactivatedAt && s.curatedSelection.expiresAt > new Date())
-      .map(s => ({
-        id: s.curatedSelection.id,
-        shareToken: s.curatedSelection.shareToken,
-        title: s.curatedSelection.title,
-        itemCount: s.curatedSelection._count.items,
-        ownerName: s.curatedSelection.owner.profile?.displayName || s.curatedSelection.owner.firstName || null,
-        expiresAt: s.curatedSelection.expiresAt,
-        subscribedAt: s.createdAt,
-      }));
-
-    return res.json({ selections });
   }),
 );
 
@@ -4959,31 +4810,6 @@ tgRouter.post(
   }),
 );
 
-// POST /tg/archive/purge — permanently delete ALL archived items for the current user
-// Two-step confirmation is enforced in the frontend; this endpoint is the final destructive step.
-tgRouter.post(
-  '/archive/purge',
-  asyncHandler(async (req, res) => {
-    const user = await getOrCreateTgUser(req.tgUser!);
-
-    const items = await prisma.item.findMany({
-      where: {
-        status: { in: ['DELETED', 'COMPLETED'] },
-        wishlist: { ownerId: user.id },
-      },
-      select: { id: true },
-    });
-
-    if (items.length === 0) return res.json({ deleted: 0 });
-
-    await prisma.item.deleteMany({
-      where: { id: { in: items.map((i) => i.id) } },
-    });
-
-    return res.json({ deleted: items.length });
-  }),
-);
-
 // PATCH /tg/items/:id — edit item
 tgRouter.patch(
   '/items/:id',
@@ -5302,38 +5128,6 @@ tgRouter.get(
     });
 
     return res.json({ items: items.map(mapTgItem) });
-  }),
-);
-
-// GET /tg/archive — global user archive (ALL DELETED + COMPLETED items across all wishlists)
-tgRouter.get(
-  '/archive',
-  asyncHandler(async (req, res) => {
-    const user = await getOrCreateTgUser(req.tgUser!);
-
-    const items = await prisma.item.findMany({
-      where: {
-        status: { in: ['DELETED', 'COMPLETED'] },
-        wishlist: { ownerId: user.id },
-      },
-      orderBy: [{ updatedAt: 'desc' }],
-      select: {
-        id: true, wishlistId: true, title: true, url: true, priceText: true,
-        currency: true, imageUrl: true, priority: true, position: true,
-        status: true, description: true, sourceUrl: true, sourceDomain: true,
-        importMethod: true,
-        wishlist: { select: { id: true, title: true, archivedAt: true } },
-      },
-    });
-
-    return res.json({
-      items: items.map(({ wishlist, ...item }) => ({
-        ...mapTgItem(item),
-        wishlistTitle: wishlist.title,
-        wishlistId: wishlist.id,
-        wishlistIsArchived: wishlist.archivedAt !== null,
-      })),
-    });
   }),
 );
 
