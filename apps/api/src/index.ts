@@ -93,6 +93,7 @@ import { registerReservationsRouter } from './routes/reservations.routes';
 import { registerCommentsRouter } from './routes/comments.routes';
 import { registerHintsRouter } from './routes/hints.routes';
 import { registerGroupGiftsRouter } from './routes/group-gifts.routes';
+import { registerBillingRouter } from './routes/billing.routes';
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -1843,6 +1844,42 @@ const groupGiftsRouter = registerGroupGiftsRouter({
   GROUP_GIFT_PRICE_XTR,
 });
 tgRouter.use(groupGiftsRouter);
+
+// ─── /tg/billing/* sub-router (P5m — 9 handlers) ──────────────────────────
+// Mounted AFTER the protectTgRoute(...) chain at lines 1568–1575 (the eight
+// billing-category state-changing endpoints). Those `tgRouter.all(...)`
+// middleware fire BEFORE sub-router dispatch, so idem (`category: 'payment'`,
+// 7d TTL, critical=true) and the `payment` rate-limit on the 3 checkout
+// endpoints remain in effect.
+//
+// All billing constants (PRO_PRICE_XTR, PRO_YEARLY_PRICE_XTR,
+// PRO_SUBSCRIPTION_PERIOD, PRO_PLAN_CODE, GIFT_NOTES_PRICE_XTR,
+// GIFT_NOTES_SKU, ONE_TIME_SKUS, ADDON_CAPS) STAY in index.ts — they are
+// shared with the entitlement function, the SKU table itself, the renewal-
+// reminder scheduler, and meRouter. The router uses them via deps so all
+// consumers reference the same authoritative values.
+//
+// Bot side (apps/bot/src/index.ts:1103+) — `pre_checkout_query` and
+// `successful_payment` handlers — owns Subscription activation and
+// UserAddOn creation. Invoice payload formats are byte-identical
+// (pro_monthly|pro_yearly|addon:<sku>|addon:gift_notes_unlock).
+const billingRouter = registerBillingRouter({
+  getOrCreateTgUser,
+  getEffectiveEntitlements,
+  getUserEntitlement,
+  trackEvent,
+  trackAnalyticsEvent,
+  hasReservationPro,
+  PRO_PRICE_XTR,
+  PRO_YEARLY_PRICE_XTR,
+  PRO_SUBSCRIPTION_PERIOD,
+  PRO_PLAN_CODE,
+  GIFT_NOTES_PRICE_XTR,
+  GIFT_NOTES_SKU,
+  ONE_TIME_SKUS,
+  ADDON_CAPS,
+});
+tgRouter.use(billingRouter);
 
 // P5c lightweight batch (profiles / telemetry / analytics / maintenance /
 // import) is wired further below alongside the P4 internal/admin/public
@@ -4906,376 +4943,6 @@ tgRouter.put(
 
 
 
-// POST /tg/billing/pro/checkout — create Stars invoice link
-// Body: { plan?: 'monthly' | 'yearly' } — defaults to monthly for back-compat
-// Monthly = Stars subscription (auto-renews every 30 days).
-// Yearly  = one-time Stars purchase; bot extends currentPeriodEnd by 365 days.
-//           Yearly stacks on top of an existing active subscription (start = max(now, currentEnd)).
-tgRouter.post(
-  '/billing/pro/checkout',
-  asyncHandler(async (req, res) => {
-    const parsed = z.object({
-      plan: z.enum(['monthly', 'yearly']).optional(),
-    }).safeParse(req.body ?? {});
-    const plan = parsed.success && parsed.data.plan ? parsed.data.plan : 'monthly';
-    const isYearly = plan === 'yearly';
-
-    const user = await getOrCreateTgUser(req.tgUser!);
-    const ent = await getUserEntitlement(user.id);
-
-    // Block duplicate monthly signup; allow yearly on top (stacking is expected UX).
-    if (!isYearly && ent.isPro && ent.subscription?.status === 'ACTIVE' && !ent.subscription.cancelAtPeriodEnd && ent.subscription.billingPeriod !== 'yearly') {
-      trackEvent('checkout_already_subscribed', user.id);
-      return res.json({ subscription: ent.subscription, alreadySubscribed: true });
-    }
-
-    const botToken = process.env.BOT_TOKEN;
-    if (!botToken) return res.status(500).json({ error: 'Bot not configured' });
-
-    const checkoutSessionId = crypto.randomUUID();
-    const payloadType = isYearly ? 'pro_yearly' : 'pro_monthly';
-    const payload = `${payloadType}:${req.tgUser!.id}:${checkoutSessionId}`;
-    const price = isYearly ? PRO_YEARLY_PRICE_XTR : PRO_PRICE_XTR;
-    const locale = getRequestLocale(req);
-
-    trackEvent('checkout_started', user.id, { plan });
-
-    const invoiceBody: Record<string, unknown> = {
-      title: isYearly ? t('api_invoice_title_yearly', locale) : 'Wishlist Pro',
-      description: isYearly ? t('api_invoice_desc_yearly', locale) : t('api_invoice_desc', locale),
-      payload,
-      currency: 'XTR',
-      prices: [{
-        label: isYearly ? t('api_invoice_label_yearly', locale) : t('api_invoice_label', locale),
-        amount: price,
-      }],
-    };
-    // Only monthly gets subscription_period — yearly is one-time (TG Stars caps period at 30d).
-    if (!isYearly) {
-      invoiceBody.subscription_period = PRO_SUBSCRIPTION_PERIOD;
-    }
-
-    const tg = await createTgInvoiceLink(botToken, invoiceBody);
-    if (!tg.ok) {
-      if (tg.retryable) {
-        logger.warn({ reason: tg.description, plan }, 'billing createInvoiceLink network failure');
-        trackEvent('checkout_failed', user.id, { reason: 'tg_network_timeout', plan });
-        return res.status(503).json({ error: 'telegram_unavailable' });
-      }
-      logger.error({ description: tg.description, plan }, 'billing createInvoiceLink failed');
-      trackEvent('checkout_failed', user.id, { reason: tg.description, plan });
-      return res.status(502).json({ error: 'Failed to create invoice' });
-    }
-
-    // Save invoice_created event
-    await prisma.paymentEvent.create({
-      data: {
-        userId: user.id,
-        telegramPaymentChargeId: `checkout_${checkoutSessionId}`,
-        invoicePayload: payload,
-        totalAmount: price,
-        currency: 'XTR',
-        eventType: 'invoice_created',
-      },
-    });
-
-    return res.json({ invoiceUrl: tg.url, checkoutSessionId, plan });
-  }),
-);
-
-// POST /tg/billing/pro/sync — verify subscription state after payment (does NOT activate — bot does)
-tgRouter.post(
-  '/billing/pro/sync',
-  asyncHandler(async (req, res) => {
-    const user = await getOrCreateTgUser(req.tgUser!);
-    trackEvent('sync_requested', user.id);
-    const ent = await getEffectiveEntitlements(user.id);
-
-    return res.json({
-      plan: {
-        code: ent.plan.code,
-        wishlists: ent.effectiveWishlistLimit,
-        items: ent.plan.items,
-        subscriptions: ent.effectiveSubscriptionLimit,
-        participants: ent.plan.participants,
-        features: [...ent.plan.features],
-      },
-      subscription: ent.subscription,
-    });
-  }),
-);
-
-// GET /tg/billing/history — payment history
-tgRouter.get(
-  '/billing/history',
-  asyncHandler(async (req, res) => {
-    const user = await getOrCreateTgUser(req.tgUser!);
-    const events = await prisma.paymentEvent.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-      select: { id: true, totalAmount: true, currency: true, eventType: true, createdAt: true },
-    });
-    return res.json({ events });
-  }),
-);
-
-// POST /tg/billing/subscription/cancel — cancel auto-renewal (keeps PRO until period end)
-tgRouter.post(
-  '/billing/subscription/cancel',
-  asyncHandler(async (req, res) => {
-    const user = await getOrCreateTgUser(req.tgUser!);
-    trackEvent('subscription_cancel_requested', user.id);
-
-    const sub = await prisma.subscription.findFirst({
-      where: {
-        userId: user.id,
-        planCode: PRO_PLAN_CODE,
-        status: 'ACTIVE',
-        currentPeriodEnd: { gt: new Date() },
-      },
-    });
-    if (!sub) {
-      return res.status(404).json({ error: 'No active subscription' });
-    }
-
-    const updated = await prisma.subscription.update({
-      where: { id: sub.id },
-      data: { cancelAtPeriodEnd: true, cancelledAt: new Date() },
-    });
-    trackAnalyticsEvent({ event: 'subscription.cancelled', userId: String(req.tgUser!.id) });
-
-    return res.json({
-      subscription: {
-        id: updated.id,
-        status: updated.status,
-        periodEnd: updated.currentPeriodEnd.toISOString(),
-        cancelAtPeriodEnd: updated.cancelAtPeriodEnd,
-        cancelledAt: updated.cancelledAt?.toISOString() ?? null,
-      },
-    });
-  }),
-);
-
-// POST /tg/billing/subscription/reactivate — re-enable auto-renewal if period not expired
-tgRouter.post(
-  '/billing/subscription/reactivate',
-  asyncHandler(async (req, res) => {
-    const user = await getOrCreateTgUser(req.tgUser!);
-    trackEvent('subscription_reactivated', user.id);
-
-    const sub = await prisma.subscription.findFirst({
-      where: {
-        userId: user.id,
-        planCode: PRO_PLAN_CODE,
-        status: 'ACTIVE',
-        cancelAtPeriodEnd: true,
-        currentPeriodEnd: { gt: new Date() },
-      },
-    });
-    if (!sub) {
-      return res.status(404).json({ error: 'No cancelled subscription to reactivate' });
-    }
-
-    const updated = await prisma.subscription.update({
-      where: { id: sub.id },
-      data: { cancelAtPeriodEnd: false, cancelledAt: null },
-    });
-
-    return res.json({
-      subscription: {
-        id: updated.id,
-        status: updated.status,
-        periodEnd: updated.currentPeriodEnd.toISOString(),
-        cancelAtPeriodEnd: updated.cancelAtPeriodEnd,
-        cancelledAt: null,
-      },
-    });
-  }),
-);
-
-// POST /tg/billing/addon/checkout — create Stars invoice for a one-time SKU
-tgRouter.post(
-  '/billing/addon/checkout',
-  asyncHandler(async (req, res) => {
-    const parsed = z.object({
-      skuCode: z.string().min(1),
-      targetId: z.string().optional(), // wishlistId for wishlist-scoped SKUs
-    }).safeParse(req.body);
-    if (!parsed.success) return zodError(res, parsed.error);
-
-    const { skuCode, targetId } = parsed.data;
-    const sku = ONE_TIME_SKUS[skuCode as SkuCode];
-    if (!sku) return res.status(400).json({ error: 'Unknown SKU', code: skuCode });
-
-    const user = await getOrCreateTgUser(req.tgUser!);
-    const ent = await getEffectiveEntitlements(user.id, user.godMode);
-
-    // Validate target for wishlist-scoped SKUs
-    if (sku.targetRequired) {
-      if (!targetId) return res.status(400).json({ error: 'targetId required for this SKU' });
-      const wl = await prisma.wishlist.findUnique({ where: { id: targetId }, select: { ownerId: true } });
-      if (!wl) return res.status(404).json({ error: 'Wishlist not found' });
-      if (wl.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
-    }
-
-    // Cap checks per SKU
-    if (skuCode === 'extra_wishlist_slot') {
-      const existing = ent.addOns.filter(a => a.addonType === 'wishlist_slot').reduce((s, a) => s + a.quantity, 0);
-      const cap = ent.isPro ? ADDON_CAPS.extraWishlistSlots.PRO : ADDON_CAPS.extraWishlistSlots.FREE;
-      if (existing >= cap) return res.status(409).json({ error: 'cap_reached', cap, current: existing });
-    }
-    if (skuCode === 'extra_subscription_slot') {
-      const existing = ent.addOns.filter(a => a.addonType === 'subscription_slot').reduce((s, a) => s + a.quantity, 0);
-      if (existing >= ADDON_CAPS.extraSubscriptionSlots) return res.status(409).json({ error: 'cap_reached', cap: ADDON_CAPS.extraSubscriptionSlots, current: existing });
-    }
-    if (skuCode === 'extra_items_5' && targetId) {
-      const existing = ent.addOns.filter(a => a.addonType === 'item_slot_5' && a.targetId === targetId).length;
-      // wishlist_cap_reached ≠ cap_reached: this is a per-wishlist limit, not a global SKU cap
-      if (existing >= ADDON_CAPS.extraItems5PerWishlist) return res.status(409).json({ error: 'wishlist_cap_reached', cap: ADDON_CAPS.extraItems5PerWishlist, current: existing });
-    }
-    if (skuCode === 'extra_items_15' && targetId) {
-      const existing = ent.addOns.filter(a => a.addonType === 'item_slot_15' && a.targetId === targetId).length;
-      if (existing >= ADDON_CAPS.extraItems15PerWishlist) return res.status(409).json({ error: 'wishlist_cap_reached', cap: ADDON_CAPS.extraItems15PerWishlist, current: existing });
-    }
-    if (skuCode === 'gift_notes_unlock') {
-      if (ent.hasGiftNotes) return res.json({ alreadyUnlocked: true });
-    }
-    if (skuCode === 'reservation_pro_unlock') {
-      const hasIt = ent.addOns.some(a => a.addonType === 'reservation_pro_unlock');
-      if (hasIt || ent.isPro) return res.json({ alreadyUnlocked: true });
-    }
-    if (skuCode === 'group_gift_unlock') {
-      const hasIt = ent.addOns.some(a => a.addonType === 'group_gift_unlock');
-      if (hasIt) return res.json({ alreadyUnlocked: true });
-    }
-    if (skuCode === 'smart_reservations_unlock') {
-      const hasIt = ent.addOns.some(a => a.addonType === 'smart_reservations_unlock' && a.targetId === targetId);
-      if (hasIt || ent.isPro) return res.json({ alreadyUnlocked: true });
-    }
-    if (skuCode === 'secret_reservation_unlock') {
-      if (ent.hasSecretReservations) return res.json({ alreadyUnlocked: true });
-    }
-
-    const botToken = process.env.BOT_TOKEN;
-    if (!botToken) return res.status(500).json({ error: 'Bot not configured' });
-
-    const sessionId = crypto.randomUUID();
-    // Payload format: addon:<skuCode>:<telegramId>:<targetId|_>:<sessionId>
-    const payload = `addon:${skuCode}:${req.tgUser!.id}:${targetId ?? '_'}:${sessionId}`;
-    const locale = getRequestLocale(req);
-
-    const tg = await createTgInvoiceLink(botToken, {
-      title: t(`addon_title_${skuCode}` as any, locale, {}),
-      description: t(`addon_desc_${skuCode}` as any, locale, {}),
-      payload,
-      currency: 'XTR',
-      prices: [{ label: t('api_invoice_label', locale), amount: sku.price }],
-    });
-    if (!tg.ok) {
-      if (tg.retryable) {
-        logger.warn({ reason: tg.description, skuCode }, 'billing addon createInvoiceLink network failure');
-        trackEvent('addon_checkout_failed', user.id, { skuCode, reason: 'tg_network_timeout' });
-        return res.status(503).json({ error: 'telegram_unavailable' });
-      }
-      logger.error({ description: tg.description, skuCode }, 'billing addon createInvoiceLink failed');
-      trackEvent('addon_checkout_failed', user.id, { skuCode, reason: tg.description });
-      return res.status(502).json({ error: 'Failed to create invoice' });
-    }
-
-    // Log invoice_created event
-    await prisma.paymentEvent.create({
-      data: {
-        userId: user.id,
-        telegramPaymentChargeId: `addon_checkout_${sessionId}`,
-        invoicePayload: payload,
-        totalAmount: sku.price,
-        currency: 'XTR',
-        eventType: 'addon_invoice_created',
-      },
-    });
-
-    trackEvent('addon_checkout_started', user.id, { skuCode, targetId });
-    return res.json({ invoiceUrl: tg.url, sessionId });
-  }),
-);
-
-// POST /tg/billing/addon/sync — return current add-ons and credits after purchase
-tgRouter.post(
-  '/billing/addon/sync',
-  asyncHandler(async (req, res) => {
-    const user = await getOrCreateTgUser(req.tgUser!);
-    const ent = await getEffectiveEntitlements(user.id, user.godMode);
-
-    const extraWishlistSlots = ent.addOns.filter(a => a.addonType === 'wishlist_slot').reduce((s, a) => s + a.quantity, 0);
-    const extraSubscriptionSlots = ent.addOns.filter(a => a.addonType === 'subscription_slot').reduce((s, a) => s + a.quantity, 0);
-
-    return res.json({
-      plan: {
-        code: ent.plan.code,
-        wishlists: ent.effectiveWishlistLimit,
-        items: ent.plan.items,
-        subscriptions: ent.effectiveSubscriptionLimit,
-        participants: ent.plan.participants,
-        features: [...ent.plan.features],
-      },
-      addOns: {
-        extraWishlistSlots,
-        extraSubscriptionSlots,
-        seasonalWishlists: [...ent.seasonalWishlists],
-        extraItemsPerWishlist: ent.extraItemsPerWishlist,
-      },
-      credits: {
-        hintCredits: ent.hintCredits,
-        importCredits: ent.importCredits,
-      },
-      reservationPro: hasReservationPro(user, ent.isPro, ent.addOns),
-    });
-  }),
-);
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Gift Notes (Поводы и идеи) — v2: personal gift idea notebook
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// POST /tg/billing/gift-notes/checkout — one-time unlock
-tgRouter.post(
-  '/billing/gift-notes/checkout',
-  asyncHandler(async (req, res) => {
-    const user = await getOrCreateTgUser(req.tgUser!);
-    const ent = await getEffectiveEntitlements(user.id, user.godMode);
-    if (ent.hasGiftNotes) return res.json({ alreadyUnlocked: true });
-    const botToken = process.env.BOT_TOKEN;
-    if (!botToken) return res.status(500).json({ error: 'Bot not configured' });
-    const sessionId = crypto.randomUUID();
-    const payload = `addon:${GIFT_NOTES_SKU}:${req.tgUser!.id}:_:${sessionId}`;
-    trackEvent('gift_notes_checkout_started', user.id);
-    const tg = await createTgInvoiceLink(botToken, {
-      title: 'Gift Notes \uD83C\uDF81',
-      description: 'Gift Notes — forever',
-      payload, currency: 'XTR',
-      prices: [{ label: 'Gift Notes', amount: GIFT_NOTES_PRICE_XTR }],
-    });
-    if (!tg.ok) {
-      trackEvent('gift_notes_checkout_failed', user.id, { reason: tg.retryable ? 'tg_network_timeout' : tg.description });
-      return res.status(tg.retryable ? 503 : 502).json({ error: tg.retryable ? 'telegram_unavailable' : 'Failed to create invoice' });
-    }
-    await prisma.paymentEvent.create({
-      data: { userId: user.id, telegramPaymentChargeId: `gn_checkout_${sessionId}`, invoicePayload: payload, totalAmount: GIFT_NOTES_PRICE_XTR, currency: 'XTR', eventType: 'gift_notes_invoice_created' },
-    });
-    return res.json({ invoiceUrl: tg.url, sessionId });
-  }),
-);
-
-// POST /tg/billing/gift-notes/sync
-tgRouter.post(
-  '/billing/gift-notes/sync',
-  asyncHandler(async (req, res) => {
-    const user = await getOrCreateTgUser(req.tgUser!);
-    const ent = await getEffectiveEntitlements(user.id, user.godMode);
-    return res.json({ giftNotes: ent.giftNotes });
-  }),
-);
 
 // ─── Gift Notes: Occasions CRUD ──────────────────────────────────────────────
 
