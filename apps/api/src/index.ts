@@ -78,6 +78,7 @@ import { registerBillingRouter } from './routes/billing.routes';
 import { registerItemsRouter } from './routes/items.routes';
 import { registerWishlistsRouter } from './routes/wishlists.routes';
 import { registerSantaRouter } from './routes/santa.routes';
+import { startCleanupSchedulers } from './schedulers/cleanup';
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -2742,74 +2743,10 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   return res.status(500).json({ error: 'Internal server error' });
 });
 
-// TTL cleanup for expired comments (runs every hour)
-setInterval(async () => {
-  try {
-    const result = await prisma.comment.deleteMany({
-      where: { scheduledDeleteAt: { lte: new Date() } },
-    });
-    if (result.count > 0) {
-      logger.info({ count: result.count }, 'ttl: cleaned expired comments');
-    }
-  } catch (err) {
-    logger.error({ err }, 'ttl cleanup failed');
-  }
-}, 60 * 60 * 1000);
-
-// TTL cleanup for expired curated selections — delete subscriptions to expired/deactivated selections (hourly)
-setInterval(async () => {
-  try {
-    const result = await prisma.curatedSelectionSubscription.deleteMany({
-      where: {
-        curatedSelection: {
-          OR: [
-            { expiresAt: { lte: new Date() } },
-            { deactivatedAt: { not: null } },
-          ],
-        },
-      },
-    });
-    if (result.count > 0) {
-      logger.info({ count: result.count }, 'ttl: cleaned subscriptions for expired/deactivated curated selections');
-    }
-  } catch (err) {
-    logger.error({ err }, 'curated selection subscription ttl cleanup failed');
-  }
-}, 60 * 60 * 1000);
-
-// Archive purge: hard-delete items past 90-day TTL + cleanup media files (hourly)
-setInterval(async () => {
-  try {
-    const expired = await prisma.item.findMany({
-      where: { purgeAfter: { lte: new Date() } },
-      select: { id: true, imageUrl: true },
-      take: 100, // batch limit — rest picked up next hour
-    });
-    if (expired.length === 0) return;
-
-    logger.info({ count: expired.length }, 'purge: found expired archive items');
-    let deleted = 0, files = 0, errors = 0;
-
-    for (const item of expired) {
-      try {
-        // DB first, files second — orphaned files are harmless, orphaned DB records with broken images are not
-        await prisma.item.delete({ where: { id: item.id } });
-        deleted++;
-        if (item.imageUrl) {
-          deleteUploadFile(item.imageUrl);
-          files++;
-        }
-      } catch (err) {
-        errors++;
-        logger.error({ err, itemId: item.id }, 'purge: item deletion failed');
-      }
-    }
-
-    logger.info({ deleted, files, errors }, 'purge: done');
-  } catch (err) {
-    logger.error({ err }, 'purge job failed');
-  }
-}, 60 * 60 * 1000);
+// Cleanup schedulers (P5r-1): comments TTL, curated selection subscription
+// cleanup, archive purge — extracted to ./schedulers/cleanup.ts. Cadence
+// (60 * 60 * 1000) and log messages preserved byte-identical.
+startCleanupSchedulers({ prisma, logger, deleteUploadFile });
 
 // Subscription expiry: mark overdue subscriptions as EXPIRED (hourly)
 setInterval(async () => {
