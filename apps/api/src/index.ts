@@ -9,7 +9,6 @@ import './bootstrap/sentry';
 
 import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
-import rateLimit from 'express-rate-limit';
 import crypto from 'node:crypto';
 import { z } from 'zod';
 import {
@@ -19,14 +18,8 @@ import {
   markFirstItem,
   tryQualifyAttribution,
   processReward,
-  ensureReferralCode,
   loadReferralConfig,
-  invalidateReferralConfigCache,
-  checkRewardCap,
-  isInRollout,
   sweepExpiredPendingAttributions,
-  REWARD_CAP_MONTHLY_WINDOW_DAYS,
-  REWARD_CAP_YEARLY_WINDOW_DAYS,
 } from '@wishlist/db';
 import logger from './logger';
 import {
@@ -38,9 +31,9 @@ import {
   startIdempotencyCleanupJob,
   IDEMPOTENCY_BILLING_TTL_MINUTES,
 } from './security';
-import { parseUrl, validateUrl } from './url-parser.js';
+import { parseUrl } from './url-parser.js';
 import { getOrCreateProfile } from './profile.js';
-import { t, detectLocale, normalizeLocale, resolveEffectiveLocale, pluralize, type Locale, type LanguageMode, type LanguageSettings, getOnboardingMeta, type OnboardingMeta, type OnboardingVariant, type AcquisitionPath, type CatalogTemplate, getCatalogForSegment, deriveMarketBucket, isSupportedImportRegion, type MarketBucket, MARKET_BUCKET_LABELS, ANALYTICS_EVENTS } from '@wishlist/shared';
+import { t, normalizeLocale, resolveEffectiveLocale, pluralize, type Locale, type LanguageMode, type LanguageSettings, getOnboardingMeta, type OnboardingVariant, deriveMarketBucket, isSupportedImportRegion, ANALYTICS_EVENTS } from '@wishlist/shared';
 
 // Sentry namespace stays imported here so the error handler and the
 // uncaughtException / unhandledRejection handlers further down can call
@@ -51,27 +44,15 @@ import { corsMiddleware } from './middleware/cors';
 import { requestLogger } from './middleware/requestLogger';
 import { registerHealthRoutes } from './health/health.routes';
 import { upload } from './uploads/upload.config';
-import { processImage } from './uploads/imageProcessor';
 import { deleteUploadFile } from './uploads/uploadCleanup';
 import { registerUploads } from './uploads/registerUploads';
 
-import { asyncHandler } from './lib/asyncHandler';
-import { zodError } from './lib/http';
 import { secureCompare } from './lib/crypto';
 import { getRequestLocale } from './lib/locale';
-import { escapeTgHtml } from './telegram/html';
 import { sendTgNotification, sendTgBotMessage } from './telegram/botApi';
-import { createTgInvoiceLink } from './telegram/invoiceLink';
-import { buildCommentReplyDeepLink } from './telegram/deepLinks';
 import { sendAdminAlert } from './notifications/adminAlerts';
-import { queueCommentNotification, queueReplyAuthorNotification } from './notifications/commentNotificationQueue';
-import { generateUniqueSlug } from './wishlists/slug';
-import { generateUniqueShareToken } from './wishlists/shareToken';
 
-import { PLACEMENT_ORDER_BY } from './placements/orderBy';
 import { ensureItemPlacement } from './placements/ensureItemPlacement';
-import { countActivePlacementsInWishlist } from './placements/countActivePlacementsInWishlist';
-import { relocateItemPrimary } from './placements/relocateItemPrimary';
 
 import { registerInternalRouter } from './routes/internal.routes';
 import { registerAdminRouter } from './routes/admin.routes';
@@ -126,7 +107,6 @@ const tgRouter = express.Router();
 // --- Shared helpers
 const ItemStatusSchema = z.enum(['AVAILABLE', 'RESERVED', 'PURCHASED', 'COMPLETED', 'DELETED', 'ARCHIVED']);
 const ACTIVE_STATUSES = ['AVAILABLE', 'RESERVED', 'PURCHASED'] as const;
-const ARCHIVE_VIEW_STATUSES = ['DELETED', 'COMPLETED', 'ARCHIVED'] as const;
 const PrioritySchema = z.enum(['LOW', 'MEDIUM', 'HIGH']);
 
 // Normalize bare domain URLs like "audi.com" → "https://audi.com"
@@ -517,8 +497,6 @@ const ONE_TIME_SKUS = {
   smart_reservations_unlock: { code: 'smart_reservations_unlock', price: 15, type: 'permanent' as const, addonType: 'smart_reservations_unlock' as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0, targetRequired: true },
   secret_reservation_unlock: { code: 'secret_reservation_unlock', price: SECRET_RESERVATION_PRICE_XTR, type: 'permanent' as const, addonType: 'secret_reservation_unlock' as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0, targetRequired: false },
 } as const;
-
-type SkuCode = keyof typeof ONE_TIME_SKUS;
 
 // ─── Add-on caps — prevent add-ons from substituting PRO ────────────────────
 const ADDON_CAPS = {
@@ -976,12 +954,6 @@ async function runReferralProgressHook(
 
 type VariantKey = 'wildberries' | 'goldapple' | 'ozon' | 'yandex_market' | 'amazon' | 'zalando' | 'sephora' | 'apple';
 type MarketSegment = 'ru' | 'global';
-type EntryPoint =
-  | 'first_open'
-  | 'auto_after_first_wishlist'
-  | 'organic_returning_underactivated'
-  | 'forced_rollout_test'
-  | 'manual_cta';
 type CompletionReason =
   | 'demo_converted'
   | 'real_item_created'
@@ -1120,16 +1092,6 @@ const GLOBAL_DEMO_ITEMS: Record<string, DemoItemTemplate> = {
 /** Look up demo template from either pool by variantKey. */
 function getDemoTemplate(variantKey: string): DemoItemTemplate | undefined {
   return (DEMO_ITEMS as Record<string, DemoItemTemplate>)[variantKey] ?? GLOBAL_DEMO_ITEMS[variantKey];
-}
-
-/** Returns true if the item counts as a real (non-demo) item for activation eligibility. */
-function isRealItemForActivation(item: { isDemo: boolean; originType: string; status: string }): boolean {
-  return (
-    !item.isDemo &&
-    item.originType !== 'DEMO' &&
-    item.status !== 'DELETED' &&
-    item.status !== 'ARCHIVED'
-  );
 }
 
 /** Count real items for the given user across all wishlists. */
@@ -4156,7 +4118,6 @@ const BIRTHDAY_RECIPIENT_DAILY_CAP = 3;     // max friend reminders received per
 const BIRTHDAY_BATCH_BIRTHDAY_USERS = 30;   // max birthday users processed per scheduler tick
 const BIRTHDAY_BATCH_RECIPIENTS = 100;      // max recipients per birthday user per tick
 const BIRTHDAY_RETRY_LOOKBACK_HOURS = 24;   // retry pending/deferred records up to this old
-const BIRTHDAY_GRACE_DAYS_AFTER = 3;        // banner stops showing N days after birthday
 
 const BIRTHDAY_REMINDERS_ENABLED = process.env.BIRTHDAY_REMINDERS_ENABLED !== 'false'; // kill-switch
 
@@ -4228,26 +4189,6 @@ function getMskToday(now: Date): { year: number; month: number; day: number; hou
   };
 }
 
-/**
- * Compute the date of birthdayUser's birthday "this year" as it falls in MSK,
- * with leap-year handling: Feb 29 birthdays in non-leap years map to Feb 28.
- *
- * Returns null if `birthday` is null. Returns the date AS A LOCAL-MSK DAY.
- */
-function getThisYearBirthdayMskDate(birthday: Date | null, todayMsk: { year: number }): Date | null {
-  const md = getMskBirthdayDay(birthday);
-  if (!md) return null;
-  let { month, day } = md;
-  // Feb-29 → Feb-28 in non-leap years
-  if (month === 2 && day === 29) {
-    const isLeap = (todayMsk.year % 4 === 0 && todayMsk.year % 100 !== 0) || (todayMsk.year % 400 === 0);
-    if (!isLeap) day = 28;
-  }
-  // Build MSK midnight as UTC date by subtracting offset
-  const utcHourForMskMidnight = -BIRTHDAY_TZ_OFFSET_HOURS; // i.e. UTC 21:00 of prev day
-  return new Date(Date.UTC(todayMsk.year, month - 1, day, utcHourForMskMidnight, 0, 0));
-}
-
 /** Days from MSK today to the next occurrence of this birthday (0..365). */
 function daysUntilNextBirthday(birthday: Date | null, now: Date): number | null {
   const todayMsk = getMskToday(now);
@@ -4302,21 +4243,6 @@ function nextMskMorning(now: Date): Date {
   // Next-day 10:00 MSK = next-day UTC 07:00.
   const nextDayUtcStartMs = Date.UTC(today.year, today.month - 1, today.day) + 86400_000;
   return new Date(nextDayUtcStartMs + (10 - BIRTHDAY_TZ_OFFSET_HOURS) * 3600_000);
-}
-
-/** Locale for a user (effective resolution, not the legacy `language` field). */
-async function resolveBirthdayLocale(userId: string): Promise<Locale> {
-  const profile = await prisma.userProfile.findUnique({
-    where: { userId },
-    select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true },
-  });
-  if (!profile) return 'ru';
-  return resolveEffectiveLocale({
-    languageMode: profile.languageMode as LanguageMode,
-    manualLanguage: profile.manualLanguage,
-    normalizedLocale: profile.normalizedLocale,
-    legacyLanguage: profile.language,
-  } as LanguageSettings);
 }
 
 /** Pick the displayable name for a birthday user. */
