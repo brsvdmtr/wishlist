@@ -5388,6 +5388,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [santaChatInput, setSantaChatInput] = useState('');
   const [santaChatSending, setSantaChatSending] = useState(false);
   const [santaChatIsMuted, setSantaChatIsMuted] = useState(false);
+  // Per-message Idempotency-Key nonce for chat send. Minted on the first
+  // attempt of a specific message; cleared on success so the next message
+  // mints a fresh nonce. On transient failure (5xx, network) the nonce
+  // stays so a retry hits the server's replay/in-progress branch instead
+  // of double-posting.
+  const santaChatSendNonceRef = useRef<string>('');
   // Polls state (Batch 4.2)
   type PollResult = { optionIndex: number; count: number; percentage: number; voters: { displayName: string; emoji: string | null }[] | null };
   type Poll = {
@@ -10784,7 +10790,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const handleUnreserveSantaItem = async (item: SantaReservationItem, onSuccess?: () => void) => {
     setLoading(true);
     try {
-      const res = await tgFetch(`/tg/santa/campaigns/${item.campaignId}/inbound/reserve/${item.id}`, { method: 'DELETE' });
+      const res = await tgFetch(`/tg/santa/campaigns/${item.campaignId}/inbound/reserve/${item.id}`, {
+        method: 'DELETE',
+        idempotency: { action: `santa.inbound.unreserve:${item.campaignId}:${item.id}` },
+      });
       if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return; }
       setSantaReservationItems((prev) => prev.filter((r) => r.id !== item.id));
       setReservationsCount((prev) => Math.max(0, prev - 1));
@@ -11167,7 +11176,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     setSantaWishlistReservingId(itemId);
     try {
       const r = await tgFetch(`/tg/santa/campaigns/${campId}/inbound/reserve`, {
-        method: 'POST', body: JSON.stringify({ itemId }),
+        method: 'POST',
+        body: JSON.stringify({ itemId }),
+        idempotency: { action: `santa.inbound.reserve:${campId}:${itemId}` },
       });
       if (r.ok) {
         const data = await r.json() as { myReservations: { id: string; title: string }[] };
@@ -11194,7 +11205,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     if (!campId) return;
     setSantaWishlistReservingId(itemId);
     try {
-      const r = await tgFetch(`/tg/santa/campaigns/${campId}/inbound/reserve/${itemId}`, { method: 'DELETE' });
+      const r = await tgFetch(`/tg/santa/campaigns/${campId}/inbound/reserve/${itemId}`, {
+        method: 'DELETE',
+        idempotency: { action: `santa.inbound.unreserve:${campId}:${itemId}` },
+      });
       if (r.ok) {
         const data = await r.json() as { myReservations: { id: string; title: string }[] };
         setSantaReceiverWishlist(prev => prev ? {
@@ -18823,7 +18837,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             if (santaTestModeLoading) return;
                             setSantaTestModeLoading(true);
                             try {
-                              const res = await tgFetch('/tg/santa/season/test-mode', { method: 'POST' });
+                              const res = await tgFetch('/tg/santa/season/test-mode', {
+                                method: 'POST',
+                                idempotency: { action: 'santa.admin.test-mode' },
+                              });
                               if (res.ok) {
                                 try { tgRef.current?.WebApp?.HapticFeedback?.impactOccurred?.('light'); } catch {}
                                 await loadSantaSeason();
@@ -26738,7 +26755,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   if (santaCreateDesc.trim()) body.description = santaCreateDesc.trim();
                   if (santaCreateMinBudget) body.minBudget = parseInt(santaCreateMinBudget, 10);
                   if (santaCreateMaxBudget) body.maxBudget = parseInt(santaCreateMaxBudget, 10);
-                  const res = await tgFetch('/tg/santa/campaigns', { method: 'POST', body: JSON.stringify(body) });
+                  const res = await tgFetch('/tg/santa/campaigns', {
+                    method: 'POST',
+                    body: JSON.stringify(body),
+                    idempotency: { action: 'santa.campaign.create' },
+                  });
                   if (res.ok) {
                     const json = await res.json() as { campaign: SantaCampaignSummary };
                     // Open the campaign immediately
@@ -26858,7 +26879,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     variant="primary-gradient"
                     fullWidth
                     onClick={async () => {
-                      const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/open`, { method: 'POST' });
+                      const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/open`, {
+                        method: 'POST',
+                        idempotency: { action: `santa.campaign.open:${camp.id}` },
+                      });
                       if (res.ok) {
                         const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
                         if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
@@ -26874,7 +26898,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     variant="surface"
                     fullWidth
                     onClick={async () => {
-                      const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/lock`, { method: 'POST' });
+                      const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/lock`, {
+                        method: 'POST',
+                        idempotency: { action: `santa.campaign.lock:${camp.id}` },
+                      });
                       if (res.ok) {
                         const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
                         if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
@@ -26958,7 +26985,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       onClick={async () => {
                         if (!confirm(t('santa_draw_confirm_msg', locale, { count: participants.filter(p => p.status === 'JOINED').length }))) return;
                         setSantaDrawLoading(true);
-                        const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/draw`, { method: 'POST' });
+                        const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/draw`, {
+                          method: 'POST',
+                          idempotency: { action: `santa.draw:${camp.id}` },
+                        });
                         setSantaDrawLoading(false);
                         if (res.ok) {
                           const json = await res.json() as { assignmentCount: number };
@@ -27140,6 +27170,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/participants/${p.userId}/role`, {
                             method: 'PATCH',
                             body: JSON.stringify({ role: newRole }),
+                            idempotency: { action: `santa.participant.role:${camp.id}:${p.userId}` },
                           });
                           if (res.ok) {
                             const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
@@ -27352,7 +27383,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
                   const updateStatus = async (status: string) => {
                     if (status === gs) return; // M2: no-op on self-transition — avoids 409 on tapping active button
-                    const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/gift-status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+                    const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/gift-status`, {
+                      method: 'PATCH',
+                      body: JSON.stringify({ status }),
+                      idempotency: { action: `santa.gift-status:${camp.id}` },
+                    });
                     if (res.ok) {
                       const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
                       if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
@@ -27549,7 +27584,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         disabled={santaHintRequestLoading}
                         onClick={async () => {
                           setSantaHintRequestLoading(true);
-                          const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/hints`, { method: 'POST' });
+                          const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/hints`, {
+                            method: 'POST',
+                            idempotency: { action: `santa.hint.request:${camp.id}` },
+                          });
                           if (res.ok) {
                             const data = await res.json() as typeof santaHintRequest;
                             setSantaHintRequest(data);
@@ -27598,7 +27636,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                               onClick={async () => {
                                 setSantaHintRequest(null);
                                 setSantaHintRequestLoading(true);
-                                const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/hints`, { method: 'POST' });
+                                const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/hints`, {
+                                  method: 'POST',
+                                  idempotency: { action: `santa.hint.request:${camp.id}` },
+                                });
                                 if (res.ok) setSantaHintRequest(await res.json() as typeof santaHintRequest);
                                 else pushToast(t('error_generic', locale), 'error');
                                 setSantaHintRequestLoading(false);
@@ -27685,7 +27726,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         <button
                           onClick={async () => {
                             if (!window.confirm(t('santa_inbound_confirm_received_confirm', locale))) return;
-                            const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/confirm-received`, { method: 'POST' });
+                            const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/confirm-received`, {
+                              method: 'POST',
+                              idempotency: { action: `santa.confirm-received:${camp.id}` },
+                            });
                             if (res.ok) {
                               const json = await res.json() as { campaignCompleted: boolean; canReveal: boolean };
                               setSantaInboundStatus(prev => prev ? {
@@ -27903,7 +27947,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <button
                 onClick={async () => {
                   if (!confirm(t('santa_leave_confirm', locale, { title: camp.title }))) return;
-                  const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/leave`, { method: 'POST' });
+                  const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/leave`, {
+                    method: 'POST',
+                    idempotency: { action: `santa.participant.leave:${camp.id}` },
+                  });
                   if (res.ok) {
                     setCurrentSantaCampaign(null);
                     setSantaCampaigns(prev => ({
@@ -27959,6 +28006,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/exit-request`, {
                         method: 'POST',
                         body: JSON.stringify({ reason: santaExitRequestReason.trim() || undefined }),
+                        idempotency: { action: `santa.exit-request.create:${camp.id}` },
                       });
                       if (res.ok) {
                         setSantaExitRequestSheetOpen(false);
@@ -27987,7 +28035,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <button
                 onClick={async () => {
                   if (!confirm(t('santa_campaign_cancel_confirm', locale))) return;
-                  const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/cancel`, { method: 'POST' });
+                  const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/cancel`, {
+                    method: 'POST',
+                    idempotency: { action: `santa.campaign.cancel:${camp.id}` },
+                  });
                   if (res.ok) {
                     const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
                     if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
@@ -28009,7 +28060,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     onClick={async () => {
                       const nextN = (currentRoundNumber ?? 1) + 1;
                       if (!confirm(t('santa_round_start_confirm', locale, { n: String(nextN) }))) return;
-                      const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/rounds`, { method: 'POST' });
+                      const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/rounds`, {
+                        method: 'POST',
+                        idempotency: { action: `santa.round.create:${camp.id}` },
+                      });
                       if (res.ok) {
                         const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
                         if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
@@ -28030,7 +28084,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 <button
                   onClick={async () => {
                     if (!confirm(t('santa_round_complete_confirm', locale))) return;
-                    const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/complete`, { method: 'POST' });
+                    const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/complete`, {
+                      method: 'POST',
+                      idempotency: { action: `santa.complete:${camp.id}` },
+                    });
                     if (res.ok) {
                       const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
                       if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
@@ -28222,6 +28279,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/inbound/hint/fulfill`, {
                       method: 'POST',
                       body: JSON.stringify({ hintId: santaHintInbound.hint.id, selectedItemIds: santaHintPickerSelectedIds }),
+                      idempotency: { action: `santa.hint.fulfill:${camp.id}:${santaHintInbound.hint.id}` },
                     });
                     if (res.ok) {
                       pushToast(t('santa_hint_inbound_submitted', locale), 'success');
@@ -28274,7 +28332,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       key={wl.id}
                       onClick={async () => {
                         setSantaWishlistPickerLoading(true);
-                        const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/wishlist`, { method: 'PATCH', body: JSON.stringify({ wishlistId: wl.id }) });
+                        const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/wishlist`, {
+                          method: 'PATCH',
+                          body: JSON.stringify({ wishlistId: wl.id }),
+                          idempotency: { action: `santa.participant.wishlist:${camp.id}` },
+                        });
                         if (res.ok) {
                           const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
                           if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
@@ -28305,7 +28367,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const isOwner = camp.isOwner;
 
         const vote = async (pollId: string, optionIndex: number) => {
-          const res = await tgFetch(`/tg/santa/campaigns/${campId}/polls/${pollId}/vote`, { method: 'POST', body: JSON.stringify({ optionIndex }) });
+          const res = await tgFetch(`/tg/santa/campaigns/${campId}/polls/${pollId}/vote`, {
+            method: 'POST',
+            body: JSON.stringify({ optionIndex }),
+            idempotency: { action: `santa.poll.vote:${campId}:${pollId}` },
+          });
           if (res.ok) {
             const data = await res.json() as { poll: Poll };
             setSantaPolls(prev => prev.map(p => p.id === pollId ? data.poll : p));
@@ -28316,7 +28382,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         };
 
         const closePoll = async (pollId: string) => {
-          const res = await tgFetch(`/tg/santa/campaigns/${campId}/polls/${pollId}/close`, { method: 'POST' });
+          const res = await tgFetch(`/tg/santa/campaigns/${campId}/polls/${pollId}/close`, {
+            method: 'POST',
+            idempotency: { action: `santa.poll.close:${campId}:${pollId}` },
+          });
           if (res.ok) {
             const data = await res.json() as { poll: Poll };
             setSantaPolls(prev => prev.map(p => p.id === pollId ? data.poll : p));
@@ -28332,6 +28401,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             const res = await tgFetch(`/tg/santa/campaigns/${campId}/polls`, {
               method: 'POST',
               body: JSON.stringify({ question: santaPollCreateQuestion.trim(), options: opts, isAnonymous: santaPollCreateAnonymous }),
+              idempotency: { action: `santa.poll.create:${campId}` },
             });
             if (res.ok) {
               const data = await res.json() as { poll: Poll };
@@ -28516,7 +28586,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           setSantaWishlistReservingId(itemId);
           try {
             const r = await tgFetch(`/tg/santa/campaigns/${camp.id}/inbound/reserve`, {
-              method: 'POST', body: JSON.stringify({ itemId }),
+              method: 'POST',
+              body: JSON.stringify({ itemId }),
+              idempotency: { action: `santa.inbound.reserve:${camp.id}:${itemId}` },
             });
             if (r.ok) {
               const data = await r.json() as { myReservations: { id: string; title: string }[] };
@@ -28547,7 +28619,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           if (isReadOnly) return;
           setSantaWishlistReservingId(itemId);
           try {
-            const r = await tgFetch(`/tg/santa/campaigns/${camp.id}/inbound/reserve/${itemId}`, { method: 'DELETE' });
+            const r = await tgFetch(`/tg/santa/campaigns/${camp.id}/inbound/reserve/${itemId}`, {
+              method: 'DELETE',
+              idempotency: { action: `santa.inbound.unreserve:${camp.id}:${itemId}` },
+            });
             if (r.ok) {
               const data = await r.json() as { myReservations: { id: string; title: string }[] };
               setSantaReceiverWishlist(prev => prev ? {
@@ -28763,9 +28838,22 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           const body = santaChatInput.trim();
           setSantaChatInput('');
           setSantaChatSending(true);
+          // Mint a per-message nonce on the first attempt; reuse it across
+          // retries of the same message so the server can replay instead of
+          // double-posting. Cleared after a successful send so the next
+          // message mints a fresh nonce.
+          if (!santaChatSendNonceRef.current) {
+            santaChatSendNonceRef.current = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+          }
+          const sendNonce = santaChatSendNonceRef.current;
           try {
-            const res = await tgFetch(`/tg/santa/campaigns/${campId}/chat`, { method: 'POST', body: JSON.stringify({ body }) });
+            const res = await tgFetch(`/tg/santa/campaigns/${campId}/chat`, {
+              method: 'POST',
+              body: JSON.stringify({ body }),
+              idempotency: { action: `santa.chat.send:${campId}:${sendNonce}` },
+            });
             if (res.ok) {
+              santaChatSendNonceRef.current = '';
               const data = await res.json() as { message: ChatMessage };
               setSantaChatMessages(prev => [...prev, data.message]);
               // Mark self as read
@@ -28784,7 +28872,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
         const toggleMute = async () => {
           const method = santaChatIsMuted ? 'DELETE' : 'POST';
-          const res = await tgFetch(`/tg/santa/campaigns/${campId}/mute`, { method });
+          const action = santaChatIsMuted ? `santa.unmute:${campId}` : `santa.mute:${campId}`;
+          const res = await tgFetch(`/tg/santa/campaigns/${campId}/mute`, {
+            method,
+            idempotency: { action },
+          });
           if (res.ok) {
             setSantaChatIsMuted(!santaChatIsMuted);
             // update campaign detail isMuted
@@ -28925,6 +29017,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             const res = await tgFetch(`/tg/santa/campaigns/${campId}/exclusions`, {
               method: 'POST',
               body: JSON.stringify({ userId1: santaExclPairA, userId2: santaExclPairB }),
+              idempotency: { action: `santa.exclusion.create:${campId}` },
             });
             if (res.ok) {
               setSantaExclAddPairOpen(false);
@@ -28942,7 +29035,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         };
 
         const deletePair = async (id: string) => {
-          const res = await tgFetch(`/tg/santa/campaigns/${campId}/exclusions/${id}`, { method: 'DELETE' });
+          const res = await tgFetch(`/tg/santa/campaigns/${campId}/exclusions/${id}`, {
+            method: 'DELETE',
+            idempotency: { action: `santa.exclusion.delete:${campId}:${id}` },
+          });
           if (res.ok) {
             setSantaExclPairs(prev => prev.filter(p => p.id !== id));
           } else pushToast(t('error_generic', locale), 'error');
@@ -28955,6 +29051,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             const res = await tgFetch(`/tg/santa/campaigns/${campId}/exclusions/groups`, {
               method: 'POST',
               body: JSON.stringify({ label: santaExclGroupLabel.trim() }),
+              idempotency: { action: `santa.exclusion.group.create:${campId}` },
             });
             if (res.ok) {
               setSantaExclGroupSheetOpen(false);
@@ -28969,7 +29066,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
         const deleteGroup = async (groupId: string, label: string) => {
           if (!confirm(t('santa_excl_delete_group_confirm', locale, { label }))) return;
-          const res = await tgFetch(`/tg/santa/campaigns/${campId}/exclusions/groups/${groupId}`, { method: 'DELETE' });
+          const res = await tgFetch(`/tg/santa/campaigns/${campId}/exclusions/groups/${groupId}`, {
+            method: 'DELETE',
+            idempotency: { action: `santa.exclusion.group.delete:${campId}:${groupId}` },
+          });
           if (res.ok) {
             setSantaExclGroups(prev => prev.filter(g => g.id !== groupId));
           } else pushToast(t('error_generic', locale), 'error');
@@ -28982,6 +29082,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             const res = await tgFetch(`/tg/santa/campaigns/${campId}/exclusions/groups/${santaExclAddMemberGroupId}/members`, {
               method: 'POST',
               body: JSON.stringify({ userId: santaExclAddMemberUserId }),
+              idempotency: { action: `santa.exclusion.group.member.add:${campId}:${santaExclAddMemberGroupId}:${santaExclAddMemberUserId}` },
             });
             if (res.ok) {
               setSantaExclAddMemberGroupId(null);
@@ -28998,7 +29099,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         };
 
         const removeMember = async (groupId: string, userId: string) => {
-          const res = await tgFetch(`/tg/santa/campaigns/${campId}/exclusions/groups/${groupId}/members/${userId}`, { method: 'DELETE' });
+          const res = await tgFetch(`/tg/santa/campaigns/${campId}/exclusions/groups/${groupId}/members/${userId}`, {
+            method: 'DELETE',
+            idempotency: { action: `santa.exclusion.group.member.remove:${campId}:${groupId}:${userId}` },
+          });
           if (res.ok) {
             setSantaExclGroups(prev => prev.map(g => g.id === groupId
               ? { ...g, members: g.members.filter(m => m.userId !== userId) }
@@ -29289,7 +29393,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             <button
                               onClick={async () => {
                                 if (!confirm(`${t('santa_exit_request_approve', locale)} ${reqAlias}?`)) return;
-                                const res = await tgFetch(`/tg/santa/campaigns/${campId}/exit-requests/${req.id}/approve`, { method: 'POST' });
+                                const res = await tgFetch(`/tg/santa/campaigns/${campId}/exit-requests/${req.id}/approve`, {
+                                  method: 'POST',
+                                  idempotency: { action: `santa.exit-request.approve:${campId}:${req.id}` },
+                                });
                                 if (res.ok) {
                                   // Reload summary
                                   const refreshRes = await tgFetch(`/tg/santa/campaigns/${campId}/organizer/summary`);
@@ -29303,7 +29410,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             </button>
                             <button
                               onClick={async () => {
-                                const res = await tgFetch(`/tg/santa/campaigns/${campId}/exit-requests/${req.id}/deny`, { method: 'POST' });
+                                const res = await tgFetch(`/tg/santa/campaigns/${campId}/exit-requests/${req.id}/deny`, {
+                                  method: 'POST',
+                                  idempotency: { action: `santa.exit-request.deny:${campId}:${req.id}` },
+                                });
                                 if (res.ok) {
                                   const refreshRes = await tgFetch(`/tg/santa/campaigns/${campId}/organizer/summary`);
                                   if (refreshRes.ok) setSantaOrganizerSummary(await refreshRes.json() as OrganizerSummary);
@@ -29468,7 +29578,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     if (!santaJoinToken) return;
                     setSantaJoinLoading(true);
                     try {
-                      const res = await tgFetch(`/tg/santa/campaigns/${santaJoinPreview.id}/join`, { method: 'POST' });
+                      const res = await tgFetch(`/tg/santa/campaigns/${santaJoinPreview.id}/join`, {
+                        method: 'POST',
+                        idempotency: { action: `santa.participant.join:${santaJoinPreview.id}` },
+                      });
                       if (res.ok) {
                         setSantaJoinDone(true);
                       } else {
