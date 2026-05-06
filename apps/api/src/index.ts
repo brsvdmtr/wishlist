@@ -82,6 +82,11 @@ import { startCleanupSchedulers } from './schedulers/cleanup';
 import { startBillingSchedulers } from './schedulers/billing';
 import { startReferralSchedulers } from './schedulers/referral';
 import { startSantaSchedulers, runSantaStartupJobs } from './schedulers/santa';
+import {
+  startReservationReminderScheduler,
+  startSmartReservationSchedulers,
+} from './schedulers/reservations';
+import { startEventSchedulers } from './schedulers/events';
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -3301,208 +3306,23 @@ setInterval(async () => {
 // labels preserved byte-identical.
 startSantaSchedulers({ prisma, logger, maybeRunSeasonalEvents });
 
-// ─── Reservation reminder cron (every 15 min) ──────────────────────────────
-setInterval(async () => {
-  try {
-    const now = new Date();
-    const due = await prisma.reservationMeta.findMany({
-      where: { reminderAt: { lte: now }, reminderSent: false, active: true },
-      take: 50,
-      include: {
-        item: {
-          select: {
-            id: true, title: true, priceText: true, currency: true,
-            wishlist: {
-              select: {
-                owner: {
-                  select: {
-                    firstName: true,
-                    profile: { select: { displayName: true } },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-    if (due.length === 0) return;
+// Reservation-reminder scheduler (P5r-4, position 1 of original order)
+// — extracted to ./schedulers/reservations.ts. 15-min cadence; log
+// labels + behavior preserved byte-identical. Smart-res schedulers
+// register AFTER startEventSchedulers below to keep original sequencing.
+startReservationReminderScheduler({ prisma, logger, sendTgBotMessage });
 
-    let sent = 0;
-    for (const meta of due) {
-      const reserver = await prisma.user.findUnique({
-        where: { id: meta.reserverUserId },
-        select: { telegramChatId: true },
-      });
-      if (reserver?.telegramChatId) {
-        const ownerName = meta.item.wishlist.owner.profile?.displayName ?? meta.item.wishlist.owner.firstName ?? '';
-        let text = `🔔 <b>Напоминание о бронировании</b>\n\n<b>${meta.item.title}</b>`;
-        if (meta.item.priceText) text += ` — ${meta.item.priceText}`;
-        text += `\nИз вишлиста <b>${ownerName}</b>`;
-        if (meta.note) text += `\n\n📝 ${meta.note}`;
-        await sendTgBotMessage(reserver.telegramChatId, text, {
-          inline_keyboard: [[
-            { text: '📱 Открыть', url: 'https://t.me/WishBoardBot/app' },
-            { text: '✓ Куплено', callback_data: `res_purchased:${meta.item.id}` },
-          ]],
-        });
-        sent++;
-      }
-
-      // Cycle to the next reminder date if there are more scheduled
-      const allDates = (meta.reminderDates as string[] | null) ?? [];
-      const firedTs = meta.reminderAt?.getTime() ?? 0;
-      const remaining = allDates.filter(d => {
-        const ts = new Date(d).getTime();
-        return ts !== firedTs && ts > now.getTime();
-      });
-      remaining.sort();
-
-      if (remaining.length > 0) {
-        // Set reminderAt to the next nearest date, keep cycling
-        await prisma.reservationMeta.update({
-          where: { id: meta.id },
-          data: { reminderAt: new Date(remaining[0]!), reminderSent: false, reminderDates: remaining },
-        });
-      } else {
-        // All reminders fired — mark as sent, clear dates
-        await prisma.reservationMeta.update({
-          where: { id: meta.id },
-          data: { reminderSent: true, reminderDates: [] },
-        });
-      }
-    }
-    if (sent > 0) logger.info({ count: sent }, 'reservation-reminders: sent reminders');
-  } catch (err) {
-    logger.error({ err }, 'reservation-reminders job failed');
-  }
-}, 15 * 60 * 1000); // every 15 minutes
-
-// ─── Events Calendar reminders cron (every 5 min) ───────────────────────────
-setInterval(async () => {
-  if (!BOT_TOKEN_FOR_DM) return;
-  try {
-    const now = new Date();
-    const due = await prisma.giftOccasionReminder.findMany({
-      where: { scheduledFor: { lte: now, not: null }, sentAt: null, enabled: true },
-      take: 50,
-      include: {
-        occasion: {
-          select: {
-            id: true, title: true, type: true, emoji: true, eventDate: true, recurrence: true,
-            personName: true, eventTime: true, location: true, status: true,
-            linkedUser: { select: { profile: { select: { displayName: true, username: true } }, firstName: true } },
-          },
-        },
-        owner: { select: { id: true, telegramChatId: true, profile: { select: { languageMode: true, manualLanguage: true } } } },
-      },
-    });
-    if (due.length === 0) return;
-
-    let sent = 0;
-    for (const r of due) {
-      if (r.occasion.status === 'ARCHIVED') {
-        await prisma.giftOccasionReminder.update({ where: { id: r.id }, data: { sentAt: new Date(), delivered: false } });
-        continue;
-      }
-      const chatId = r.owner.telegramChatId;
-      const langSettings: LanguageSettings | null = r.owner.profile
-        ? { languageMode: (r.owner.profile.languageMode as LanguageMode) ?? 'auto', manualLanguage: (r.owner.profile.manualLanguage as Locale | null) ?? null }
-        : null;
-      const locale: Locale = resolveEffectiveLocale(langSettings, undefined);
-      const emoji = r.occasion.emoji ?? (r.occasion.type === 'BIRTHDAY' ? '🎂' : r.occasion.type === 'ANNIVERSARY' ? '💍' : r.occasion.type === 'HOLIDAY' ? '🎉' : '📅');
-      const titleText = r.occasion.title;
-      let title: string;
-      let body: string;
-      if (r.offsetDays === 0) {
-        switch (locale) {
-          case 'en': title = `${emoji} Today: ${titleText}`; body = 'Don’t forget to celebrate!'; break;
-          case 'zh-CN': title = `${emoji} 今天：${titleText}`; body = '别忘了庆祝！'; break;
-          case 'hi': title = `${emoji} आज: ${titleText}`; body = 'मनाना न भूलें!'; break;
-          case 'es': title = `${emoji} Hoy: ${titleText}`; body = '¡No olvides celebrar!'; break;
-          case 'ar': title = `${emoji} اليوم: ${titleText}`; body = 'لا تنسَ الاحتفال!'; break;
-          default: title = `${emoji} Сегодня: ${titleText}`; body = 'Не забудьте поздравить!';
-        }
-      } else if (r.offsetDays > 0) {
-        switch (locale) {
-          case 'en': title = `${emoji} ${titleText} — ${r.offsetDays} day(s) ago`; body = 'Was the gift well-received?'; break;
-          case 'zh-CN': title = `${emoji} ${titleText} —— ${r.offsetDays} 天前`; body = '礼物喜欢吗？'; break;
-          case 'hi': title = `${emoji} ${titleText} — ${r.offsetDays} दिन पहले`; body = 'क्या उपहार पसंद आया?'; break;
-          case 'es': title = `${emoji} ${titleText} — hace ${r.offsetDays} día(s)`; body = '¿Le gustó el regalo?'; break;
-          case 'ar': title = `${emoji} ${titleText} — قبل ${r.offsetDays} يوم(أيام)`; body = 'هل أعجب الهدية؟'; break;
-          default: title = `${emoji} ${titleText} — ${r.offsetDays} дн назад`; body = 'Подарок понравился?';
-        }
-      } else {
-        const days = Math.abs(r.offsetDays);
-        switch (locale) {
-          case 'en': title = `${emoji} ${titleText} in ${days} day(s)`; body = days <= 1 ? 'Tomorrow!' : 'Time to pick a gift.'; break;
-          case 'zh-CN': title = `${emoji} ${titleText} 还有 ${days} 天`; body = days <= 1 ? '明天！' : '该挑选礼物了。'; break;
-          case 'hi': title = `${emoji} ${titleText} ${days} दिन में`; body = days <= 1 ? 'कल!' : 'उपहार चुनने का समय।'; break;
-          case 'es': title = `${emoji} ${titleText} en ${days} día(s)`; body = days <= 1 ? '¡Mañana!' : 'Es hora de elegir un regalo.'; break;
-          case 'ar': title = `${emoji} ${titleText} بعد ${days} يوم(أيام)`; body = days <= 1 ? 'غداً!' : 'حان وقت اختيار هدية.'; break;
-          default: title = `${emoji} ${titleText} через ${days} дн.`; body = days <= 1 ? 'Уже завтра!' : 'Время подобрать подарок.';
-        }
-      }
-
-      let delivered = false;
-      if (chatId) {
-        const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const text = `<b>${esc(title)}</b>\n\n${esc(body)}`;
-        delivered = await sendTgBotMessage(chatId, text, {
-          inline_keyboard: [[
-            { text: locale === 'ru' ? '📱 Открыть' : 'Open', url: 'https://t.me/WishBoardBot/app' },
-          ]],
-        });
-        if (delivered) sent++;
-      }
-
-      await prisma.calendarInboxEntry.create({
-        data: {
-          ownerUserId: r.ownerUserId,
-          occasionId: r.occasionId,
-          type: r.offsetDays === 0 ? 'EVENT_TODAY' : 'REMINDER',
-          emoji,
-          title,
-          body,
-        },
-      });
-
-      await prisma.giftOccasionReminder.update({
-        where: { id: r.id },
-        data: { sentAt: now, delivered },
-      });
-
-      if (r.occasion.recurrence !== 'NONE' && r.occasion.eventDate) {
-        const nextOcc = getNextOccurrenceDate(r.occasion.eventDate, r.occasion.recurrence);
-        if (nextOcc && nextOcc.getTime() > now.getTime()) {
-          const nextSched = computeReminderSchedule(nextOcc, 'NONE', r.offsetDays, r.timeOfDay);
-          if (nextSched.getTime() > now.getTime()) {
-            const nextEpisodeKey = buildReminderEpisodeKey(r.occasionId, r.offsetDays, nextSched);
-            try {
-              await prisma.giftOccasionReminder.create({
-                data: {
-                  occasionId: r.occasionId,
-                  ownerUserId: r.ownerUserId,
-                  offsetDays: r.offsetDays,
-                  timeOfDay: r.timeOfDay,
-                  enabled: r.enabled,
-                  scheduledFor: nextSched,
-                  episodeKey: nextEpisodeKey,
-                },
-              });
-            } catch (err: unknown) {
-              const e = err as { code?: string };
-              if (e.code !== 'P2002') throw err;
-            }
-          }
-        }
-      }
-    }
-    if (sent > 0) logger.info({ count: sent }, 'gift-occasion-reminders: sent reminders');
-  } catch (err) {
-    logger.error({ err }, 'gift-occasion-reminders job failed');
-  }
-}, 5 * 60 * 1000);
+// Events Calendar scheduler (P5r-4): gift-occasion reminders (5-min
+// cadence) — extracted to ./schedulers/events.ts. Helpers
+// `getNextOccurrenceDate` / `computeReminderSchedule` /
+// `buildReminderEpisodeKey` STAY in index.ts (also consumed by
+// gift-notes.routes.ts via deps) and are passed through here.
+startEventSchedulers({
+  prisma, logger,
+  sendTgBotMessage,
+  BOT_TOKEN_FOR_DM,
+  getNextOccurrenceDate, computeReminderSchedule, buildReminderEpisodeKey,
+});
 
 // ─── Santa seasonal broadcasts ───────────────────────────────────────────────
 
@@ -3628,116 +3448,17 @@ async function maybeRunSeasonalEvents(): Promise<void> {
 
 // (Santa seasonal events scheduler moved to ./schedulers/santa.ts in P5r-3.)
 
-// ─── Smart Reservations: auto-release cron (every 5 min) ─────────────────────
-setInterval(async () => {
-  try {
-    const now = new Date();
-    const expiredMetas = await prisma.reservationMeta.findMany({
-      where: { isSmartRes: true, active: true, expiresAt: { lte: now } },
-      take: 50,
-      include: {
-        item: {
-          select: {
-            id: true, title: true, status: true, reserverUserId: true, reservationEpoch: true,
-            wishlist: { select: { ownerId: true, owner: { select: { telegramChatId: true } } } },
-          },
-        },
-      },
-    });
-    for (const meta of expiredMetas) {
-      try {
-        if (!meta.active) continue;
-        // Repair: inconsistent state — item not RESERVED but meta still active
-        if (meta.item.status !== 'RESERVED') {
-          console.warn('Smart res auto-release: inconsistent state', { metaId: meta.id, itemId: meta.item.id, itemStatus: meta.item.status });
-          await prisma.reservationMeta.update({
-            where: { id: meta.id },
-            data: { active: false, endedAt: now, endReason: 'inconsistent_state' },
-          });
-          continue;
-        }
-        // Guard: reservation belongs to someone else now
-        if (meta.item.reserverUserId !== meta.reserverUserId) continue;
-
-        await prisma.$transaction(async (tx) => {
-          await tx.item.update({ where: { id: meta.item.id }, data: { status: 'AVAILABLE', reserverUserId: null } });
-          await tx.reservationEvent.create({
-            data: { itemId: meta.item.id, type: 'UNRESERVED', actorHash: SYSTEM_ACTOR_HASH, comment: 'auto_released' },
-          });
-          await tx.comment.create({
-            data: { itemId: meta.item.id, type: 'SYSTEM', text: t('api_system_auto_released', 'ru'), reservationEpoch: meta.item.reservationEpoch },
-          });
-          const ttl = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-          await tx.comment.updateMany({
-            where: { itemId: meta.item.id, scheduledDeleteAt: null },
-            data: { scheduledDeleteAt: ttl },
-          });
-          await tx.reservationMeta.update({
-            where: { id: meta.id },
-            data: { active: false, endedAt: now, endReason: 'auto_released' },
-          });
-        });
-
-        // Notify gifter
-        const reserver = await prisma.user.findUnique({ where: { id: meta.reserverUserId }, select: { telegramChatId: true } });
-        if (reserver?.telegramChatId) {
-          void sendTgNotification(reserver.telegramChatId, t('notif_smart_res_auto_released_gifter', 'ru', { title: meta.item.title }));
-        }
-        // Notify owner
-        const ownerChatId = meta.item.wishlist.owner.telegramChatId;
-        if (ownerChatId) {
-          void sendTgNotification(ownerChatId, t('notif_smart_res_auto_released_owner', 'ru', { title: meta.item.title }));
-        }
-        logger.info({ metaId: meta.id, itemId: meta.item.id }, 'smart-res: auto-released');
-      } catch (err) {
-        logger.error({ err, metaId: meta.id }, 'smart-res: auto-release item failed');
-      }
-    }
-  } catch (err) {
-    logger.error({ err }, 'smart-res: auto-release cron failed');
-  }
-}, 5 * 60 * 1000);
-
-// ─── Smart Reservations: reminder cron (every 15 min) ────────────────────────
-setInterval(async () => {
-  try {
-    const now = new Date();
-    const candidates = await prisma.reservationMeta.findMany({
-      where: { isSmartRes: true, active: true, reminderSent: false, expiresAt: { not: null, gt: now } },
-      take: 50,
-      include: {
-        item: { select: { id: true, title: true } },
-      },
-    });
-    for (const meta of candidates) {
-      try {
-        if (!meta.expiresAt) continue;
-        const leadH = getSmartResLeadHours(meta.smartResTtlHours ?? 72);
-        const windowStart = meta.expiresAt.getTime() - leadH * 3600000;
-        if (now.getTime() < windowStart) continue; // not in reminder window yet
-
-        const reserver = await prisma.user.findUnique({ where: { id: meta.reserverUserId }, select: { telegramChatId: true } });
-        if (!reserver?.telegramChatId) {
-          // No chat ID — mark as sent to avoid retrying
-          await prisma.reservationMeta.update({ where: { id: meta.id }, data: { reminderSent: true } });
-          continue;
-        }
-        const hoursLeft = Math.max(1, Math.round((meta.expiresAt.getTime() - now.getTime()) / 3600000));
-        const delivered = await sendTgNotification(reserver.telegramChatId, t('notif_smart_res_expiring', 'ru', { title: meta.item.title, hours: String(hoursLeft) }))
-          .then(() => true).catch(() => false);
-        if (delivered) {
-          await prisma.reservationMeta.update({ where: { id: meta.id }, data: { reminderSent: true } });
-          logger.info({ metaId: meta.id, itemId: meta.item.id }, 'smart-res: reminder sent');
-        }
-        // On failure: leave reminderSent=false, cron retries next tick
-      } catch (err) {
-        logger.error({ err, metaId: meta.id }, 'smart-res: reminder item failed');
-      }
-    }
-  } catch (err) {
-    logger.error({ err }, 'smart-res: reminder cron failed');
-  }
-}, 15 * 60 * 1000);
+// Smart-res schedulers (P5r-4, positions 3+4 of original order):
+// auto-release (5-min) + reminder (15-min) — extracted to ./schedulers/
+// reservations.ts. Registered AFTER startEventSchedulers above so the
+// pre-extraction ordering (reservation-reminder → events-calendar →
+// smart-res-auto-release → smart-res-reminder) is preserved exactly.
+startSmartReservationSchedulers({
+  prisma, logger,
+  sendTgNotification,
+  getSmartResLeadHours,
+  SYSTEM_ACTOR_HASH,
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // BIRTHDAY REMINDERS — social notifications for own birthday
