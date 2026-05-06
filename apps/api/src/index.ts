@@ -93,6 +93,16 @@ import { startBirthdayRemindersScheduler } from './schedulers/birthday-reminders
 import { createSendLifecycleDM } from './services/lifecycle';
 import { daysUntilNextBirthday, pickBirthdayDisplayName } from './services/birthday-reminders';
 import {
+  TelegramUser,
+  INIT_DATA_MAX_AGE_SECONDS,
+  INIT_DATA_CLOCK_SKEW_SECONDS,
+  validateTelegramInitData,
+  tgActorHash,
+  SYSTEM_ACTOR_HASH,
+  requireTelegramAuth,
+  getOrCreateTgUser,
+} from './services/telegram-auth';
+import {
   PLANS,
   PRO_PRICE_XTR,
   PRO_YEARLY_PRICE_XTR,
@@ -356,91 +366,20 @@ async function reassignPrimaryBeforeWishlistDelete(wishlistId: string): Promise<
 // TELEGRAM MINI APP ENDPOINTS
 // ═══════════════════════════════════════════════════════
 
-type TelegramUser = {
-  id: number;
-  first_name: string;
-  last_name?: string;
-  username?: string;
-  language_code?: string;
-};
-
+// TelegramUser type, INIT_DATA_* constants, validateTelegramInitData,
+// tgActorHash, SYSTEM_ACTOR_HASH, and requireTelegramAuth extracted to
+// ./services/telegram-auth.ts in P5s-2 (Strategy A). They are imported
+// at the top of this file. The Express.Request.tgUser? global type
+// augmentation below stays here so it is loaded with the app entry
+// point and visible to every module that reads `req.tgUser` at compile
+// time (routes/* declare their own structural narrows for the
+// `getOrCreateTgUser` dep contract; the augmentation is what makes
+// `req.tgUser!` usable in those structural types).
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request { tgUser?: TelegramUser; }
   }
-}
-
-/** Max age for Telegram initData auth_date (seconds). Default 24 hours; configurable via INIT_DATA_MAX_AGE_SECONDS. */
-const INIT_DATA_MAX_AGE_SECONDS = Math.max(60, parseInt(process.env.INIT_DATA_MAX_AGE_SECONDS ?? '86400', 10));
-/** Allow minor clock skew (seconds). */
-const INIT_DATA_CLOCK_SKEW_SECONDS = 30;
-
-function validateTelegramInitData(initData: string, botToken: string): { user: TelegramUser } | { reason: string } {
-  try {
-    const params = new URLSearchParams(initData);
-    const hash = params.get('hash');
-    if (!hash) return { reason: 'no_hash' };
-    params.delete('hash');
-    const checkString = [...params.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, v]) => `${k}=${v}`)
-      .join('\n');
-    const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
-    const expectedHash = crypto.createHmac('sha256', secretKey).update(checkString).digest('hex');
-    if (!secureCompare(expectedHash, hash)) return { reason: 'hash_mismatch' };
-
-    // ── auth_date expiry: reject stale or missing auth_date ───────────────
-    const authDateStr = params.get('auth_date');
-    if (!authDateStr) return { reason: 'no_auth_date' };
-    const authDate = Number(authDateStr);
-    if (!Number.isFinite(authDate) || authDate <= 0) return { reason: 'invalid_auth_date' };
-    const nowSec = Math.floor(Date.now() / 1000);
-    if (authDate > nowSec + INIT_DATA_CLOCK_SKEW_SECONDS) return { reason: 'future_auth_date' };
-    if (nowSec - authDate > INIT_DATA_MAX_AGE_SECONDS) return { reason: 'expired' };
-
-    const userStr = params.get('user');
-    if (!userStr) return { reason: 'no_user' };
-    return { user: JSON.parse(userStr) as TelegramUser };
-  } catch {
-    return { reason: 'parse_error' };
-  }
-}
-
-/** Deterministic actor hash for a Telegram user ID. Formatted as UUID (8-4-4-4-12) to pass z.string().uuid(). */
-function tgActorHash(telegramId: number): string {
-  const h = crypto.createHash('sha256').update(`tg_actor:${telegramId}`).digest('hex');
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
-}
-
-const SYSTEM_ACTOR_HASH = '00000000-0000-0000-0000-000000000000';
-
-function requireTelegramAuth(req: Request, res: Response, next: NextFunction) {
-  const botToken = process.env.BOT_TOKEN ?? '';
-  if (!botToken) return res.status(500).json({ error: 'Bot not configured' });
-
-  // Development bypass: X-TG-DEV: <telegram_id>
-  if (process.env.NODE_ENV !== 'production') {
-    const devId = req.get('X-TG-DEV');
-    if (devId) {
-      req.tgUser = { id: Number(devId) || 1, first_name: 'Dev User' };
-      return next();
-    }
-  }
-
-  const initData = req.get('X-TG-INIT-DATA') ?? '';
-  const result = validateTelegramInitData(initData, botToken);
-  if ('reason' in result) {
-    logger.debug({ reason: result.reason, path: req.path, ip: req.ip, initDataLen: initData.length }, 'auth_rejected');
-    // Feed the IP throttle so repeated failures from the same IP get capped
-    // before they reach the validator. Skipped internally if the kill switch
-    // is off; never throws, so this can't break the auth path.
-    recordIpEvent(req, 'auth_rejected');
-    return res.status(401).json({ error: 'Invalid Telegram auth' });
-  }
-
-  req.tgUser = result.user;
-  return next();
 }
 
 // ─── Plan & Entitlement System ──────────────────────────────────────────────
@@ -1067,13 +1006,9 @@ function mapTgItem(item: {
   };
 }
 
-async function getOrCreateTgUser(tgUser: TelegramUser) {
-  return prisma.user.upsert({
-    where: { telegramId: String(tgUser.id) },
-    update: { telegramChatId: String(tgUser.id), firstName: tgUser.first_name || null },
-    create: { telegramId: String(tgUser.id), telegramChatId: String(tgUser.id), firstName: tgUser.first_name || null },
-  });
-}
+// getOrCreateTgUser extracted to ./services/telegram-auth.ts in P5s-2.
+// Imported at the top of this file and continues passing through router
+// factory deps unchanged.
 
 // getOrCreateProfile lives in ./profile (see comment above generateUniqueSupportId).
 
