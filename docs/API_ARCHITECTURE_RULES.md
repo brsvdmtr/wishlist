@@ -1,12 +1,16 @@
 # API Architecture Rules
 
-**Status:** mandatory · **Last updated:** 2026-05-04 · **Owner:** backend
+**Status:** mandatory · **Last updated:** 2026-05-06 (after P5r-6) · **Owner:** backend
 
 These rules are non-negotiable for any change under `apps/api/`. They exist
 because `index.ts` was a ~20 k-line monolith that grew uncontrollably. The
-decomposition (P1–P5; see [REFACTOR_API_INDEX_HANDOFF.md](REFACTOR_API_INDEX_HANDOFF.md))
-is finite. If new features keep landing in `index.ts`, the work is wasted in a
-few months.
+decomposition (P1–P5 + P5r-1..6; see
+[REFACTOR_API_INDEX_HANDOFF.md](REFACTOR_API_INDEX_HANDOFF.md)) **is
+done as of 2026-05-06**: `index.ts` is 3 110 LOC, 0 inline `tg`
+handlers, 0 actual scheduler calls, all 9 cron jobs and the first 2
+cross-scheduler services have been extracted. The follow-up P5s wave
+moves the remaining ~50 helper functions into `services/`. If new
+features keep landing in `index.ts`, the work is wasted in a few months.
 
 If a rule conflicts with a quick fix, the rule wins. Open a discussion before
 bending it.
@@ -97,19 +101,62 @@ A new feature touches some or all of:
 | Integration | `integrations/<vendor>/*` | Telegram, Stars, URL imports, external APIs. |
 | Scheduler | `schedulers/<job>.ts` | Cron / interval jobs. |
 
-### Carve-out: target folders are created on demand
+### Layer status
 
-`services/`, `domain/`, `repositories/`, `integrations/`, `schedulers/` are
-**target** folders. Create the folder the first time a real file lands there.
-**Don't pre-seed empty directories.** The folders that already ship —
-`bootstrap/`, `lib/`, `middleware/`, `notifications/`, `placements/`,
-`routes/`, `security/`, `telegram/`, `uploads/`, `wishlists/`, `health/` —
-cover what already exists. New layers are added on demand, in the same PR
-that needs them.
+`schedulers/` and `services/` are now **real** layers (not future
+carve-outs). As of 2026-05-06:
 
-If a feature needs something that has no fitting layer yet, **create that
-layer in this PR**. Don't fold the logic back into `index.ts` or stuff it
-sideways into a router file.
+- `schedulers/` ships **9 modules** (cleanup, billing, referral, santa,
+  reservations, events, lifecycle, pro-renewal, birthday-reminders) —
+  see [SCHEDULERS.md](SCHEDULERS.md).
+- `services/` ships **2 modules** (lifecycle, birthday-reminders) and
+  has ~10 planned during the P5s wave — see [SERVICES.md](SERVICES.md).
+
+`domain/`, `repositories/`, `integrations/` remain **target** folders —
+create them when the first real file lands; don't pre-seed empty
+directories. Folders that already exist (`bootstrap/`, `lib/`,
+`middleware/`, `notifications/`, `placements/`, `routes/`, `security/`,
+`telegram/`, `uploads/`, `wishlists/`, `health/`, `schedulers/`,
+`services/`) cover what already exists.
+
+If a feature needs something that has no fitting layer yet, **create
+that layer in this PR**. Don't fold the logic back into `index.ts` or
+stuff it sideways into a router file.
+
+### When to extract a helper into `services/`
+
+Pull a helper out of `index.ts` (or out of a router file) into
+`services/<name>.ts` when **any** of the following hold:
+
+- **3+ consumers** across `routes/` and/or `schedulers/` (cross-cutting).
+- **Cross-scheduler** dependency: two or more schedulers need the same
+  factory or pure helper. Putting it in one scheduler module would
+  create a scheduler→scheduler import.
+- **Routes + scheduler share a pure utility** (timezone math,
+  occurrence keys, name picker). Service is the only correct home if
+  both consume it.
+- The helper is otherwise still inline in `index.ts` and the file
+  exceeds the composition-root role.
+
+Single-router helpers stay in the router file or move to
+`services/<domain>.service.ts` only when the **handler size** crosses
+the ~80–120 LOC smell test (see § 3).
+
+### Composition-root target
+
+The end-state for `apps/api/src/index.ts`:
+
+- Bootstrap (`bootstrap/dns`, `bootstrap/env`, `bootstrap/sentry`).
+- Express middleware registration (cors, json body, request logger,
+  error handler, /uploads, /health).
+- Auth-gate registration (`tgRouter.use(...)` chain, `protectTgRoute`
+  entries — these are gate registration, not handlers).
+- Router registration (`tgRouter.use(<domain>Router)`,
+  `app.use('/public', publicRouter)`, etc.).
+- Scheduler registration (`start*Scheduler({ ... })` × 9).
+- `app.listen(...)` + process handlers.
+
+Everything else moves to a layer module.
 
 ---
 
@@ -291,11 +338,15 @@ Cron, `setInterval`, background loops live in:
 apps/api/src/schedulers/*
 ```
 
-`index.ts` only **registers** schedulers. Route modules **never** start them.
+`index.ts` only **registers** schedulers (one
+`start*Scheduler({ ... })` factory call per module). Route modules
+**never** start them.
 
-The four current jobs (Comment TTL cleanup, Archive item purge, Subscription
-expiry, Hint expiry — see [ARCHITECTURE.md § 7](ARCHITECTURE.md#7-background-jobs))
-move into this folder as they are extracted. New jobs land directly in
+As of 2026-05-06 the folder ships **9 modules** covering every
+existing cron job (cleanup, billing, referral, santa, reservations,
+events, lifecycle, pro-renewal, birthday-reminders). Cadences,
+tables, log labels, and monitoring notes for each are in
+[SCHEDULERS.md](SCHEDULERS.md). New jobs land directly in
 `schedulers/`, not anywhere else.
 
 ---
@@ -348,8 +399,10 @@ Before opening / merging the PR:
 
 ## Pointers
 
-- Active refactor handoff: [REFACTOR_API_INDEX_HANDOFF.md](REFACTOR_API_INDEX_HANDOFF.md).
-- Security contract (idempotency / rate limits): [API_SECURITY.md](API_SECURITY.md).
+- Refactor handoff (P1–P5/P5r status, P5s roadmap): [REFACTOR_API_INDEX_HANDOFF.md](REFACTOR_API_INDEX_HANDOFF.md).
+- Schedulers reference (9 modules, cadence, monitoring): [SCHEDULERS.md](SCHEDULERS.md).
+- Services layer (2 existing + ~10 planned): [SERVICES.md](SERVICES.md).
+- Security contract (idempotency / rate limits / Wave-2 status): [API_SECURITY.md](API_SECURITY.md).
 - Architecture overview: [ARCHITECTURE.md](ARCHITECTURE.md).
 - Route inventory: [BACKEND_MAP.md](BACKEND_MAP.md).
 - Iron-rule summary for agents: [CLAUDE.md](../CLAUDE.md#api-architecture--mandatory-for-new-backend-code).

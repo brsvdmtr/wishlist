@@ -1,6 +1,6 @@
 # Backend Map
 
-**Last updated:** 2026-05-04
+**Last updated:** 2026-05-06 (post-P5r-6)
 **Project:** Wishlist Telegram Mini App — `apps/api`
 
 ---
@@ -8,21 +8,25 @@
 ## Layering rules (mandatory for new code)
 
 `apps/api/src/index.ts` is a **composition root** — bootstrap, middleware,
-router registration, schedulers, `app.listen`. Nothing else.
+router registration, schedulers, `app.listen`. Nothing else. As of
+2026-05-06 the file is 3 110 LOC with 0 inline `tg` handlers and 0
+actual scheduler calls; the P1–P5/P5r decomposition is done.
 
 New API features go to:
 
 - `routes/<domain>.routes.ts` — HTTP layer, thin handlers (read input,
   validate, call service, shape response).
-- `services/<domain>.service.ts` — business logic and orchestration.
+- `services/<domain>.service.ts` — business logic and orchestration
+  (live: 2 modules — see [SERVICES.md](SERVICES.md)).
+- `schedulers/<job>.ts` — cron / interval jobs (live: 9 modules — see
+  [SCHEDULERS.md](SCHEDULERS.md)).
 - `domain/<domain>/*` — pure rules, state transitions, permissions.
 - `repositories/<domain>.repo.ts` — complex / repeated Prisma queries.
 - `integrations/*` — Telegram, Stars, URL imports, external APIs.
-- `schedulers/*` — cron / interval jobs.
 
-`services/`, `domain/`, `repositories/`, `integrations/`, `schedulers/` are
-**target folders** — create them when the first real file lands; don't
-pre-seed empty directories.
+`schedulers/` and `services/` are now **real layers**. `domain/`,
+`repositories/`, `integrations/` remain **target folders** — create
+them when the first real file lands; don't pre-seed empty directories.
 
 **Forbidden:** new route handlers in `index.ts`, business logic / state
 transitions inline in handlers, dumping-ground router files
@@ -31,7 +35,7 @@ transitions inline in handlers, dumping-ground router files
 
 Full contract → [API_ARCHITECTURE_RULES.md](API_ARCHITECTURE_RULES.md).
 Iron-rule summary for agents → [CLAUDE.md](../CLAUDE.md#api-architecture--mandatory-for-new-backend-code).
-Active decomposition handoff → [REFACTOR_API_INDEX_HANDOFF.md](REFACTOR_API_INDEX_HANDOFF.md).
+Decomposition handoff → [REFACTOR_API_INDEX_HANDOFF.md](REFACTOR_API_INDEX_HANDOFF.md).
 
 ---
 
@@ -40,18 +44,40 @@ Active decomposition handoff → [REFACTOR_API_INDEX_HANDOFF.md](REFACTOR_API_IN
 ```
 apps/api/
 ├── src/
-│   ├── index.ts                    # Express server, all routes, helpers, background jobs (~11,964 lines, 157+ route handlers)
+│   ├── index.ts                    # Composition root (~3,110 LOC; 0 inline handlers,
+│   │                               # 0 actual scheduler calls; 24 register*Router calls,
+│   │                               # 9 start*Scheduler calls, 91 protectTgRoute entries)
 │   ├── url-parser.ts               # URL product card extraction pipeline (~1,059 lines)
 │   ├── browser-network-extractor.ts # Puppeteer XHR/fetch interception for SPAs
 │   ├── sort.ts                     # Item sort order logic (unit-testable, no side effects)
 │   ├── sort.test.ts                # Unit tests for sort.ts
-│   └── seed.ts                     # DB seed script
+│   ├── seed.ts                     # DB seed script
+│   ├── logger.ts                   # pino logger
+│   ├── trackAnalyticsEvent.ts      # bootstrap-time singleton helper
+│   ├── routes/                     # 24 domain routers (santa, me, wishlists, items,
+│   │                               # reservations, gift-notes, group-gifts, comments,
+│   │                               # billing, referral, hints, promo, support,
+│   │                               # public, internal, admin, onboarding, profiles,
+│   │                               # birthday-reminders, selections-archive, import,
+│   │                               # telemetry, analytics, maintenance)
+│   ├── schedulers/                 # 9 cron modules — see SCHEDULERS.md
+│   ├── services/                   # 2 cross-cutting services — see SERVICES.md
+│   ├── security/                   # Idempotency, rate limits, IP throttle (Wave 1)
+│   ├── lib/                        # asyncHandler, crypto, http (zodError), locale
+│   ├── middleware/                 # cors, requestLogger
+│   ├── telegram/                   # Bot API helpers (sendTgNotification, deepLinks, etc.)
+│   ├── notifications/              # adminAlerts, commentNotificationQueue
+│   ├── placements/                 # Item placement (primary slot) helpers
+│   ├── wishlists/                  # generateUniqueSlug, generateShareToken
+│   ├── uploads/                    # multer config, image processor, cleanup
+│   ├── bootstrap/                  # dns (ipv6first), env, sentry init
+│   └── health/                     # /health and /health/deep routes
 ├── .env.example
 └── package.json
 
 packages/db/
 ├── prisma/
-│   └── schema.prisma               # Canonical data model (51 models, 30 enums)
+│   └── schema.prisma               # Canonical data model (51+ models, 30+ enums)
 └── src/index.ts                    # Prisma client export (@wishlist/db)
 
 packages/shared/
@@ -753,64 +779,24 @@ Seasonal feature available Nov 15 - Feb 15, controlled by `SantaGlobalConfig`.
 
 ## 12. Cron Jobs
 
-All jobs use `setInterval(..., 60 * 60 * 1000)` (hourly). Registered at module load time in `index.ts`.
+All jobs live in `apps/api/src/schedulers/<name>.ts` and are
+registered exactly once from the composition root (`index.ts`) via
+`start*Scheduler({...})` factory calls. **No `setInterval` / `setTimeout`
+scheduler call exists in `index.ts`.** A full operator reference
+(cadence, tables, log labels, monitoring) lives in
+[SCHEDULERS.md](SCHEDULERS.md); summary below.
 
-### 1. Comment TTL cleanup
-Deletes comments that have passed their `scheduledDeleteAt` time. Logs count if any deleted.
-
-### 2. Archive item purge
-Hard-deletes items past their 90-day `purgeAfter` TTL. Processes up to 100 items per run (batch limit). DB record deleted first, then file cleanup (orphaned files are harmless).
-
-### 3. Subscription expiry
-Marks overdue subscriptions as EXPIRED (`status IN (ACTIVE, CANCELLED)` with `currentPeriodEnd <= now`). Revokes PRO entitlement.
-
-### 4. Promo expiry
-Marks ACTIVE promo redemptions past their `expiresAt` as EXPIRED. Starts GRACE_PERIOD degradation for users who lost PRO (no paid subscription either). Creates `DegradationState` with 14-day grace period.
-
-### 5. Degradation archive
-Archives over-limit data after grace period ends. Checks if user regained PRO (restores to NONE if so). Archives newest wishlists beyond FREE limit (2), then newest items beyond FREE limit (20) per remaining wishlist. Sets phase to ARCHIVED with 90-day purge schedule.
-
-### 6. Degradation purge
-Permanently deletes archived data after 90 days. If user regained PRO before purge, restores all archived wishlists and items instead. Sets phase to PURGED on completion.
-
-### 7. Lifecycle / Win-back scheduler
-Scans users for churn (up to 200 per batch, oldest-first). Classifies into segments S1-S4 based on activity patterns. Checks stop conditions (unsubscribed, bought PRO, returned), frequency caps (72h cooldown, 45-day max 5 touches, 60-day promo cooldown), and cadence timing. Sends Telegram DMs with i18n-aware message templates. Optionally offers WISHPRO promo code on eligible touches (S3 touch 3, S4 touches 2-3).
-
-### 8. Santa hint expiry
-Marks PENDING `SantaHintRequest` records past their `expiresAt` as EXPIRED.
-
-### 9. Santa deadline enforcement
-Marks overdue PENDING/BUYING assignments as MISSED_DEADLINE for rounds belonging to ACTIVE campaigns whose `drawAt` has passed. Creates DEADLINE_MISSED notifications (deduplicated). Status is recoverable -- giver can still update.
-
-### 10. Santa deadline warning
-Notifies PENDING/BUYING givers 3-4 days before `drawAt`. Creates DEADLINE_WARNING notifications (deduplicated via `dedupeKey`). Fires once in the 72-96 hour window before deadline.
-
-### 11. Santa seasonal broadcasts
-Checks calendar milestones hourly. Triggers broadcasts on Nov 1 (PROMO: "Secret Santa opening soon") and Feb 1 (CLOSING_SOON: "closes Feb 15"). Deduplication via `SantaSeasonalBroadcastLog` table (unique constraint on year+type). Sends to all users with `telegramChatId`, batch of 25 with 1.2s pause.
-
-### 12. Reservation reminders
-Runs every 15 minutes (`setInterval(..., 15 * 60 * 1000)`). Finds `ReservationMeta` records where `reminderAt <= now`, `reminderSent = false`, `active = true`. For each, sends a Telegram notification to the reserver with item title, price, owner name, and the user's private note (if any). Marks `reminderSent = true` after sending. Processes up to 50 reminders per batch.
-
-### 13. Birthday reminders (`processBirthdayReminders`)
-
-Runs hourly (`setInterval(..., 60 * 60 * 1000)`), plus an initial run 30s after boot. MSK timezone; sends only inside the **9–22 MSK** quiet-hours window. Two-phase per tick:
-
-1. **Retry phase** — picks up stuck `pending` deliveries (created >30 min ago) and `deferred` rows whose `deferredUntil <= now`. Limit **50 per run**.
-2. **Scan phase** — walks `UserProfile` for matches at offsets **[30, 14, 7, 1, 0]** days. For each match, creates and sends a delivery (idempotent via the unique constraint on `BirthdayReminderDelivery`). Owner reminders for `owner_14d` / `owner_7d` only fire when there is a problem to solve (no public wishlist OR no active public items). Day-of (`owner_today`) is a soft congratulations, no urgency CTA.
-
-**Daily cap:** 3 friend reminders per recipient per MSK day. Excess is parked as `status: 'deferred'`, `deferredUntil = next MSK 10:00`. `friend_today` bypasses the cap.
-
-**Audience resolution:**
-- `SUBSCRIBERS` (FREE): `ProfileSubscription` + `WishlistSubscription` on non-`NOBODY` wishlists.
-- `EXTENDED` (PRO): the SUBSCRIBERS set, plus reservers (active `ReservationMeta`) and secret reservers (active `SecretReservation`).
-- Never includes passive views, share-link opens, or profile-view history. Comments are pseudonymous (no `userId` on `Comment`) and explicitly excluded.
-
-**Skip reasons** (mirrored to God Mode dashboard):
-`no_public_wishlist`, `no_active_public_items`, `primary_wishlist_unavailable`, `profile_private`, `birthday_hidden`, `friend_reminders_disabled`, `recipient_opted_out`, `muted`, `no_chat_id`, `bot_blocked`, `daily_cap`, `pro_required`, `self_excluded`, `no_problem_to_solve`.
-
-**Heartbeat:** `ServiceHeartbeat[serviceName='birthday_reminders']` with last-run stats in `metadata`. Feb-29 is mapped to Feb-28 in non-leap years.
-
-**Kill switch:** env `BIRTHDAY_REMINDERS_ENABLED` (default `true`; set to `"false"` to disable the scheduler without code redeploy). See `apps/api/src/index.ts` → `processBirthdayReminders`.
+| Module | Cadence | Purpose |
+|---|---|---|
+| `cleanup.ts` | 60 min | TTL comments + curated selections + archive item purge |
+| `billing.ts` | 60 min | Subscription / promo / degradation expiry + grace → archive → purge |
+| `referral.ts` | 15 min | Expired-attribution sweep |
+| `santa.ts` | 60 min × 4 | Hint expiry + deadline missed + deadline warning + seasonal events. Plus `runSantaStartupJobs()` invoked from `app.listen`. |
+| `reservations.ts` | 15 min + 5 min + 15 min | Reservation reminder + smart-res auto-release + smart-res reminder |
+| `events.ts` | 5 min | Gift-occasion calendar reminders |
+| `lifecycle.ts` | 60 min | Win-back DM (segments S1–S4) + dead-air alarm |
+| `pro-renewal.ts` | 60 min | PRO renewal reminders (7d / 1d milestones) |
+| `birthday-reminders.ts` | 60 min + 30s startup kick | Friend + owner birthday DMs (MSK send window 9–22). Heartbeat in `ServiceHeartbeat['birthday_reminders']`. Kill switch via env `BIRTHDAY_REMINDERS_ENABLED`. |
 
 ---
 

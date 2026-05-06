@@ -1,6 +1,6 @@
 # Architecture
 
-**Date:** 2026-04-02
+**Date:** 2026-05-06 (post-P5r-6 refresh)
 **Project:** Wishlist Telegram Mini App (wishlistik.ru)
 
 ---
@@ -70,14 +70,17 @@ Internet
                 │ Docker network: wishlist-network
      ┌──────────┼──────────────────────┐
      ▼          ▼                      ▼
- api:3001    web:3000         bot (no port exposed)    cron (no port exposed)
-     │                           │                         │
-     └──────────┬────────────────┤─────────────────────────┘
-                ▼                ▼
+ api:3001    web:3000         bot (no port exposed)
+     │                           │
+     └──────────┬────────────────┘
+                ▼
            postgres:5432
+
+(All scheduler / cron jobs run inside the api process —
+ see SCHEDULERS.md.)
 ```
 
-All four services run as Docker containers defined in `docker-compose.prod.yml`. The `api` and `web` services expose ports 3001 and 3000 respectively; Nginx acts as the TLS terminator and reverse proxy. The `bot` container has no exposed port and communicates outbound to the Telegram Bot API and inbound to `api:3001` over the Docker internal network. The `cron` container runs scheduled lifecycle, degradation, and promo-reminder jobs against the database directly.
+All services run as Docker containers defined in `docker-compose.prod.yml`. The `api` and `web` services expose ports 3001 and 3000 respectively; Nginx acts as the TLS terminator and reverse proxy. The `bot` container has no exposed port and communicates outbound to the Telegram Bot API and inbound to `api:3001` over the Docker internal network. **All cron / scheduler jobs run inside the `api` process** (see [SCHEDULERS.md](SCHEDULERS.md)) — there is no separate cron container.
 
 Uploaded files are stored in a named Docker volume `wishlist_uploads`, mounted at `/data/uploads` inside the `api` container and served as static files at `/uploads/*` by the API process itself (with a 30-day immutable cache header). Nginx forwards `/api/uploads/*` to the API.
 
@@ -87,7 +90,7 @@ Uploaded files are stored in a named Docker volume `wishlist_uploads`, mounted a
 
 | Module | Path | Responsibility |
 |---|---|---|
-| `api` | `apps/api/src/index.ts` + `apps/api/src/routes/*` | Express HTTP server. `index.ts` is the composition root (bootstrap, middleware, router registration, schedulers, `app.listen`); domain routers under `routes/` host endpoints. Active decomposition — see [API_ARCHITECTURE_RULES.md](API_ARCHITECTURE_RULES.md) and [REFACTOR_API_INDEX_HANDOFF.md](REFACTOR_API_INDEX_HANDOFF.md). Business logic spans wishlists, items, reservations, comments, hints, subscriptions, billing, profile, settings, URL import, image processing, background jobs, add-on SKU store, promo code system, lifecycle/degradation engine, locale segments analytics, Secret Santa subsystem, gift notes/occasions. |
+| `api` | `apps/api/src/index.ts` + `apps/api/src/routes/*` + `apps/api/src/schedulers/*` + `apps/api/src/services/*` | Express HTTP server. `index.ts` is the composition root (bootstrap, middleware, router registration, scheduler registration, `app.listen`, process handlers; ~3 110 LOC, 0 inline `tg` handlers, 0 actual scheduler calls as of 2026-05-06). 24 domain routers under `routes/` host endpoints; 9 scheduler modules under `schedulers/` run cron jobs (see [SCHEDULERS.md](SCHEDULERS.md)); 2 cross-cutting services under `services/` (see [SERVICES.md](SERVICES.md)). The P1–P5/P5r decomposition is done; the P5s wave moves remaining helpers into `services/`. See [API_ARCHITECTURE_RULES.md](API_ARCHITECTURE_RULES.md) and [REFACTOR_API_INDEX_HANDOFF.md](REFACTOR_API_INDEX_HANDOFF.md). Business logic spans wishlists, items, reservations, comments, hints, subscriptions, billing, profile, settings, URL import, image processing, background jobs, add-on SKU store, promo code system, lifecycle/degradation engine, locale segments analytics, Secret Santa subsystem, gift notes/occasions. |
 | `api` | `apps/api/src/url-parser.ts` (~1,059 lines) | Multi-strategy product card extractor: Cheerio + Puppeteer, in-memory cache, 7 domain adapters. |
 | `api` | `apps/api/src/browser-network-extractor.ts` | Puppeteer-based XHR/fetch interception for SPA product pages. |
 | `api` | `apps/api/src/sort.ts` | Item sort order logic (side-effect-free, unit-tested). |
@@ -144,14 +147,26 @@ For subsequent API calls, the same `X-TG-INIT-DATA` header is sent on every fetc
 
 ## 7. Background Jobs
 
-All jobs run as `setInterval` loops started when the API process boots. Interval: **every 60 minutes**.
+Background jobs are split across **9 scheduler modules** under
+`apps/api/src/schedulers/`, each registered exactly once from
+`index.ts` via a `start*Scheduler({...})` factory. There is no
+separate cron container. Cadences range from 5 minutes
+(`events.ts`, smart-res auto-release) to 15 minutes (`referral.ts`,
+reservation/smart-res reminders) to 60 minutes (everything else).
+Full operator reference — cadence, tables, log labels, monitoring
+notes — in [SCHEDULERS.md](SCHEDULERS.md).
 
-| Job | What it does |
-|---|---|
-| Comment TTL cleanup | Hard-deletes `Comment` rows where `scheduledDeleteAt <= now`. |
-| Archive item purge | Finds `Item` rows where `purgeAfter <= now` (set 90 days after soft-delete). Hard-deletes up to 100 per run; also deletes associated upload files. |
-| Subscription expiry | Updates `Subscription` rows with `status IN (ACTIVE, CANCELLED)` and `currentPeriodEnd <= now` to `status = EXPIRED`. |
-| Hint expiry | Updates `Hint` rows with `status = SENT` and `expiresAt <= now` to `status = EXPIRED`. |
+| Module | Cadence | Purpose |
+|---|---|---|
+| `cleanup.ts` | 60 min | TTL comments + curated selections + archive item purge (90-day TTL on soft-deleted items, batch of 100). |
+| `billing.ts` | 60 min | Subscription / promo / degradation expiry; grace → archive → purge phases of the degradation lifecycle. |
+| `referral.ts` | 15 min | Expired-attribution sweep (`PENDING_ACTIVATION` → `REJECTED` past `windowDeadlineAt`). |
+| `santa.ts` | 60 min × 4 | Hint expiry, deadline missed, deadline warning, seasonal events (Nov 1 PROMO, Feb 1 CLOSING_SOON). Plus `runSantaStartupJobs()` from `app.listen`. |
+| `reservations.ts` | 15 min + 5 min + 15 min | Reservation reminder, smart-res auto-release (revert `Item` to `AVAILABLE` past `expiresAt`), smart-res reminder. |
+| `events.ts` | 5 min | Gift-occasion calendar reminders → Telegram bot DM + `CalendarInboxEntry`. |
+| `lifecycle.ts` | 60 min | Win-back DM (segments S1–S4) with WISHPRO promo. Dead-air alarm at 24-cycle threshold. |
+| `pro-renewal.ts` | 60 min | PRO renewal reminders at 7d / 1d milestones (yearly subs + cancelled monthlies only). |
+| `birthday-reminders.ts` | 60 min + 30s startup kick | Friend + owner birthday DMs (MSK send window 9–22). Heartbeat in `ServiceHeartbeat['birthday_reminders']`. Kill switch via env `BIRTHDAY_REMINDERS_ENABLED`. |
 
 ---
 
@@ -293,7 +308,7 @@ The bot maintains a ForceReply-based support flow. `SupportSession` stores short
 ## 17. Key Design Decisions
 
 **Composition-root API entry (`apps/api/src/index.ts`)**
-Historically `index.ts` held all route handlers, middleware, helpers, and background jobs in one file (~20 k lines at peak). That single-file approach is being retired through a multi-phase decomposition (P1–P5; see [REFACTOR_API_INDEX_HANDOFF.md](REFACTOR_API_INDEX_HANDOFF.md)). Target architecture: `index.ts` is a **composition root** — bootstrap, middleware registration, router registration, scheduler registration, `app.listen`, process handlers. New features land in domain routers under `routes/<domain>.routes.ts` and call into a service / domain / repository / integration / scheduler layer rather than living inline. Iron rules and the pre-implementation checklist: [API_ARCHITECTURE_RULES.md](API_ARCHITECTURE_RULES.md).
+Historically `index.ts` held all route handlers, middleware, helpers, and background jobs in one file (~21 k lines at peak). That single-file approach has been retired: as of 2026-05-06 the file is ~3 110 LOC, has 0 inline `tg` handlers, and 0 actual scheduler calls. The decomposition went through P1–P5 (route extraction) and P5r-1..6 (scheduler extraction) — see [REFACTOR_API_INDEX_HANDOFF.md](REFACTOR_API_INDEX_HANDOFF.md). `index.ts` is now a **composition root** — bootstrap, middleware registration, router registration, scheduler registration, `app.listen`, process handlers. New features land in domain routers under `routes/<domain>.routes.ts` and call into a service / domain / repository / integration / scheduler layer rather than living inline. The follow-up P5s wave moves remaining helper functions into `services/`. Iron rules and the pre-implementation checklist: [API_ARCHITECTURE_RULES.md](API_ARCHITECTURE_RULES.md).
 
 **Single-file frontend (`MiniApp.tsx`, ~16,663 lines)**
 The Mini App is a single React component tree with screen state managed as a `screen` discriminated union. This avoids client-side routing inside the Telegram WebApp frame, where standard Next.js navigation would trigger full page reloads and lose Telegram WebApp state.

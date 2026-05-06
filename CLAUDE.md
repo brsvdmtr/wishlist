@@ -114,10 +114,18 @@ Categories / Hints / Subscriptions are deferred to Wave 2.
 
 ## API architecture — MANDATORY for new backend code
 
-`apps/api/src/index.ts` is being decomposed (see
-[docs/REFACTOR_API_INDEX_HANDOFF.md](docs/REFACTOR_API_INDEX_HANDOFF.md)).
-Going forward, `index.ts` is a **composition root** — bootstrap, middleware,
-router registration, schedulers, `app.listen`, process handlers. Nothing else.
+`apps/api/src/index.ts` **is** a composition root as of 2026-05-06 (P5
+route extraction + P5r-1..6 scheduler extraction done; ~3 110 LOC, 0
+inline `tg` handlers, 0 actual scheduler calls). Bootstrap, middleware,
+router registration, scheduler registration, `app.listen`, process
+handlers. Nothing else. Decomposition history + roadmap:
+[docs/REFACTOR_API_INDEX_HANDOFF.md](docs/REFACTOR_API_INDEX_HANDOFF.md).
+
+Companion docs:
+- [docs/SCHEDULERS.md](docs/SCHEDULERS.md) — operator reference for all
+  9 cron modules (cadence, tables, log labels, monitoring).
+- [docs/SERVICES.md](docs/SERVICES.md) — existing 2 services + planned
+  P5s services (entitlement, telegram-auth, onboarding, etc.).
 
 Full contract: [docs/API_ARCHITECTURE_RULES.md](docs/API_ARCHITECTURE_RULES.md).
 
@@ -156,14 +164,24 @@ rate limit · side effects · analytics · post-deploy smoke checks.
 
 If you cannot answer all ten, do not start coding.
 
-### Carve-out for target architecture
+### Layer status
 
-`services/`, `domain/`, `repositories/`, `integrations/`, `schedulers/` are
-**target folders**. Create a folder the first time a real file lands there;
-don't pre-seed empty directories. Existing folders (`bootstrap/`, `lib/`,
-`middleware/`, `notifications/`, `placements/`, `routes/`, `security/`,
-`telegram/`, `uploads/`, `wishlists/`, `health/`) cover what already exists —
-new layers are added on demand.
+`schedulers/` and `services/` are **real layers**:
+- `schedulers/` — 9 modules (see [docs/SCHEDULERS.md](docs/SCHEDULERS.md)).
+- `services/` — 2 modules live (lifecycle, birthday-reminders) plus
+  ~10 planned during the P5s wave (see [docs/SERVICES.md](docs/SERVICES.md)).
+
+`domain/`, `repositories/`, `integrations/` remain **target folders** —
+create them when the first real file lands; don't pre-seed empty
+directories. Existing folders (`bootstrap/`, `lib/`, `middleware/`,
+`notifications/`, `placements/`, `routes/`, `security/`, `telegram/`,
+`uploads/`, `wishlists/`, `health/`, `schedulers/`, `services/`) cover
+what already exists — new layers are added on demand.
+
+**New backend code MUST NOT go into `index.ts`.** New endpoints land in
+`routes/<domain>.routes.ts`; new cron jobs in `schedulers/<job>.ts`;
+new cross-cutting helpers (3+ consumers, or routes+scheduler share)
+in `services/<name>.ts`.
 
 ---
 

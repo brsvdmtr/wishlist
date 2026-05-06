@@ -2,7 +2,7 @@
 
 Idempotency keys, rate limits, and IP throttling for the Wishlist Mini App.
 
-**Last updated:** 2026-04-27 · **Wave:** 1 (P0)
+**Last updated:** 2026-05-06 · **Wave 1 (P0):** live · **Wave 2:** open (Santa is the largest gap)
 
 ---
 
@@ -168,21 +168,59 @@ Wave 1 covers all P0 state-changing endpoints. ~70 routes, all on `tgRouter`.
 
 ---
 
-## 4. Intentionally not covered (Wave 2 / by-design)
+## 4. Wave-2 status (2026-05-06 audit)
 
-| Group | Why not in Wave 1 |
+Wave 1 (P0) is live and stable. The gap inventory below is the full
+list of state-changing endpoints that **lack** `protectTgRoute`
+coverage as of 2026-05-06 (post-P5r audit). Numbers come from
+counting `\.(post|patch|delete|put)\(` per routes file and
+cross-referencing the 91 `protectTgRoute(...)` entries in
+`apps/api/src/index.ts`.
+
+### Priority order
+
+| Priority | Domain | State-changing endpoints | Risk profile |
+|---|---|---|---|
+| 🔴 **P0** | **Santa** | **42** (campaigns CRUD, draws, exclusions, rounds, gift-status, hints, chat, polls, mute, exit-requests, role changes, admin global-config, season-broadcasts) | Largest single gap. Manipulation of group state, hint-side identity leaks, exit-request abuse. Currently offseason (Nov 15 – Feb 15 calendar) — **ideal rollout window**. Idempotency `critical: true` warranted on draw / complete / cancel / exit-approve. |
+| 🟠 **P1** | Gift-notes / occasions | ~10 (occasions CRUD, ideas CRUD, photo upload/delete, archive, complete) | Photo upload adds storage-exhaustion potential. |
+| 🟠 **P1** | Hints (`hintsRouter.post`) | 1 | Anti-spam concern — needs dedicated rate-limit category. |
+| 🟡 **P2** | Promo (`promoRouter.post /redeem`) | 1 | Idempotency critical — without it, double-spend WISHPRO. |
+| 🟡 **P2** | Profiles (subscribe/unsubscribe direct) | 2 | Subscription state mutation. |
+| 🟡 **P2** | Selections-archive (3 ops not under `/selections/:id/subscribe` which is already covered) | 3 | Archive operations on curated content. |
+| 🟡 **P2** | Comments (`commentsRouter.post/delete` outside `/items/:id/comments` chain) | 2 | Some routes are already covered as `/items/:id/comments` — these direct ones are not. |
+| 🟢 **P3** | Maintenance (dismissal endpoints) | 2 | Telemetry-like, low risk. |
+| 🟢 **P3** | Support | 1 | Single ticket-open endpoint. |
+
+**Total uncovered state-changing endpoints: ~64.**
+
+### Already-protected today
+
+`items` (21), `wishlists` (13), `me` (9), `onboarding` (8), `billing`
+(8), `group-gifts` (7), `selections` (3), `secret-reservations` (3),
+`reservations` (3), `birthday-reminders` (2). 91 entries total.
+
+### Out of Wave-2 scope (by design)
+
+| Group | Why |
 |---|---|
-| Santa campaigns (~30 endpoints) | Wave 2 — too much surface to land in a single rollout |
-| Wishlist categories (CRUD, reorder, bulk-move-category) | Wave 2 |
-| Hints (`POST /items/:id/hint`) | Wave 2 |
-| `/me/subscriptions/:id/read`, `/items/:id/comments/mark-read` | Fire-and-forget read markers — duplicate-safe by design |
-| `/maintenance-{return,exposure}`, `/analytics/attribution`, `/telemetry` | Telemetry — duplicate writes are acceptable / already deduped |
-| `/promo/apply` | Already protected by `promoLimiter` (5/min/user) |
-| `/me/god-mode`, `/santa/season/test-mode` | Admin / debug only |
-| `/gift-occasions/*` (calendar) | Separate feature surface, not P0 |
+| `/me/subscriptions/:id/read`, `/items/:id/comments/mark-read` | Fire-and-forget read markers — duplicate-safe by design. |
+| `/maintenance-{return,exposure}`, `/analytics/attribution`, `/telemetry` | Telemetry — duplicate writes acceptable / already deduped. |
+| `/promo/apply` | Already protected by `promoLimiter` (5/min/user). Not the same as Wave-2 P2 `promoRouter.post /redeem` above. |
+| `/me/god-mode`, `/santa/season/test-mode` | Admin / debug only. |
+| `/admin/*` (X-ADMIN-KEY) | Separate auth chain; `X-ADMIN-KEY` already gates state changes. |
+| `/internal/*` (X-INTERNAL-KEY) | Separate auth chain; bot-only. |
+| `/public/*` reserve / unreserve / purchase | Separate auth model (`actorHash` + rate-limiter); see § 1. |
 
-These will be revisited only after Wave 1 has lived in prod for 24–48 h
-without false-positive 429s or 409s on legitimate flows.
+### Rollout discipline
+
+- Santa Wave-2 should ship as a single PR (single deploy, single
+  monitoring window). 42 endpoints is a lot to add at once, but
+  splitting risks coverage gaps and confusion about which endpoints
+  are protected vs. not.
+- All other Wave-2 priorities (P1, P2, P3) can ship opportunistically
+  as smaller PRs.
+- Each new `protectTgRoute` registration must declare a rate-limit
+  category. New categories require a doc entry in § 5 of this doc.
 
 ---
 
@@ -569,8 +607,9 @@ Watch for:
   72 h, frontend wiring is incomplete somewhere.
 - **`api.ip_throttled`** — expect ~0 from real users. Spikes = scanner.
 
-Only after a clean window decide on Wave 2 (Santa, Categories, Hints,
-Subscriptions). See [`feedback_adoption_wave_pause.md`](https://github.com/anthropics/.../memory) — pause between waves is policy.
+Wave 1 has been live and stable through the P5/P5r refactor cycle; the
+observation window is closed. Wave-2 is now scope-defined (see § 4). See
+`feedback_adoption_wave_pause.md` — pause between waves is policy.
 
 ### Rollback
 
