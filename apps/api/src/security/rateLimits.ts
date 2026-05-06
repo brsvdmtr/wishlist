@@ -36,7 +36,9 @@ export type CategoryName =
   | 'referral.hour'       // 5   / 1h   per actorHash
   | 'referral.day'        // 20  / 1d   per actorHash
   | 'public.share.view'   // 120 / 1m   per ipHash (gentle — real guests)
-  | 'health.deep';        // 10  / 1m   per ipHash (external probes)
+  | 'health.deep'         // 10  / 1m   per ipHash (external probes)
+  | 'santa.draw'          // 3   / 10m  per actorHash (irreversible expensive op; multi-tap guard)
+  | 'santa.admin';        // 10  / 1m   per actorHash (admin/season/global-config — admin gating)
 
 type CategoryConfig = {
   windowMs: number;
@@ -63,6 +65,8 @@ const CATEGORIES: Record<CategoryName, CategoryConfig> = {
   'referral.day':      { windowMs: 24 * 60 * 60 * 1000, limit: 20, keyKind: 'actor' },
   'public.share.view': { windowMs: 60 * 1000,          limit: 120, keyKind: 'ip' },
   'health.deep':       { windowMs: 60 * 1000,          limit: 10,  keyKind: 'ip' },
+  'santa.draw':        { windowMs: 10 * 60 * 1000,     limit: 3,   keyKind: 'actor' },
+  'santa.admin':       { windowMs: 60 * 1000,          limit: 10,  keyKind: 'actor' },
 };
 
 // Cache one limiter instance per category. Counters are per-process; rebuilding

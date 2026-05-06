@@ -1945,15 +1945,111 @@ const wishlistsRouter = registerWishlistsRouter({
 });
 tgRouter.use(wishlistsRouter);
 
+// ─── Santa (Wave 2) — 38 state-changing endpoints ────────────────────────
+// 58 santa handlers total in routes/santa.routes.ts; 19 are GET (read-only,
+// no protection needed) and 39 are state-changing. One state-changing
+// endpoint — POST /santa/campaigns/:id/chat/read — is intentionally NOT
+// protected because it is a fire-and-forget read-cursor upsert,
+// duplicate-safe by design. Same precedent as /me/subscriptions/:id/read
+// (see docs/API_SECURITY.md § 4 "Out of Wave-2 scope (by design)").
+//
+// Registration order: these protectTgRoute entries land BEFORE
+// `tgRouter.use(santaRouter)` below so the gate registration on tgRouter
+// fires before the sub-router's handler dispatch. protectTgRoute uses
+// tgRouter.all() with method-narrowing inside.
+//
+// Critical-flag endpoints (11): irreversible state transitions, mass-DM
+// fan-outs, role/admin actions, terminal decisions. Soft-require —
+// missing Idempotency-Key logs `api.idem_missing_on_critical_endpoint`
+// but never blocks (Mini App will start sending santa-action keys in a
+// follow-up PR; this Wave-2 rollout is back-end-only).
+//
+// 7-day TTL endpoints (2): /santa/admin/season-broadcasts (huge blast
+// radius — DM fan-out to every user with telegramChatId) and
+// /santa/campaigns/:id/draw (irreversible, expensive, retry-resilient).
+// Same shape as billing — long replay window for safety.
+//
+// New rate-limit categories (2): santa.draw (3/10min — multi-tap guard
+// on the most expensive op), santa.admin (10/1min — admin gating).
+// Other santa endpoints accept idempotency-only or reuse comment.minute
+// + comment.hour for the chat-write endpoint.
+
+// Admin / Season / Global Config (3)
+protectTgRoute('POST',  '/santa/season/test-mode',         createRateLimiter('santa.admin'), idem('POST /tg/santa/season/test-mode', { category: 'santa.admin' }));
+protectTgRoute('PATCH', '/santa/admin/global-config',      createRateLimiter('santa.admin'), idem('PATCH /tg/santa/admin/global-config', { category: 'santa.admin' }));
+protectTgRoute('POST',  '/santa/admin/season-broadcasts',  createRateLimiter('santa.admin'), idem('POST /tg/santa/admin/season-broadcasts', { category: 'santa.admin', critical: true, ttlMinutes: 60 * 24 * 7 }));
+
+// Campaign CRUD + state (5)
+protectTgRoute('POST',  '/santa/campaigns',                idem('POST /tg/santa/campaigns', { category: 'santa.campaign' }));
+protectTgRoute('PATCH', '/santa/campaigns/:id',            idem('PATCH /tg/santa/campaigns/:id', { category: 'santa.campaign' }));
+protectTgRoute('POST',  '/santa/campaigns/:id/open',       idem('POST /tg/santa/campaigns/:id/open', { category: 'santa.campaign' }));
+protectTgRoute('POST',  '/santa/campaigns/:id/lock',       idem('POST /tg/santa/campaigns/:id/lock', { category: 'santa.campaign' }));
+protectTgRoute('POST',  '/santa/campaigns/:id/cancel',     idem('POST /tg/santa/campaigns/:id/cancel', { category: 'santa.campaign', critical: true }));
+
+// Draw (1) — irreversible, 7d TTL, dedicated rate limit
+protectTgRoute('POST',  '/santa/campaigns/:id/draw',
+  createRateLimiter('santa.draw'),
+  idem('POST /tg/santa/campaigns/:id/draw', { category: 'santa.draw', critical: true, ttlMinutes: 60 * 24 * 7 }));
+
+// Participants (5)
+protectTgRoute('POST',   '/santa/campaigns/:id/join',                       idem('POST /tg/santa/campaigns/:id/join', { category: 'santa.participant' }));
+protectTgRoute('POST',   '/santa/campaigns/:id/leave',                      idem('POST /tg/santa/campaigns/:id/leave', { category: 'santa.participant' }));
+protectTgRoute('DELETE', '/santa/campaigns/:id/participants/:userId',       idem('DELETE /tg/santa/campaigns/:id/participants/:userId', { category: 'santa.participant', critical: true }));
+protectTgRoute('PATCH',  '/santa/campaigns/:id/wishlist',                   idem('PATCH /tg/santa/campaigns/:id/wishlist', { category: 'santa.participant' }));
+protectTgRoute('PATCH',  '/santa/campaigns/:id/participants/:userId/role',  idem('PATCH /tg/santa/campaigns/:id/participants/:userId/role', { category: 'santa.participant', critical: true }));
+
+// Exclusions (7)
+protectTgRoute('POST',   '/santa/campaigns/:id/exclusions',                                idem('POST /tg/santa/campaigns/:id/exclusions', { category: 'santa.exclusion' }));
+protectTgRoute('DELETE', '/santa/campaigns/:id/exclusions/:exclusionId',                   idem('DELETE /tg/santa/campaigns/:id/exclusions/:exclusionId', { category: 'santa.exclusion' }));
+protectTgRoute('POST',   '/santa/campaigns/:id/exclusions/groups',                         idem('POST /tg/santa/campaigns/:id/exclusions/groups', { category: 'santa.exclusion' }));
+protectTgRoute('PATCH',  '/santa/campaigns/:id/exclusions/groups/:gid',                    idem('PATCH /tg/santa/campaigns/:id/exclusions/groups/:gid', { category: 'santa.exclusion' }));
+protectTgRoute('DELETE', '/santa/campaigns/:id/exclusions/groups/:gid',                    idem('DELETE /tg/santa/campaigns/:id/exclusions/groups/:gid', { category: 'santa.exclusion' }));
+protectTgRoute('POST',   '/santa/campaigns/:id/exclusions/groups/:gid/members',            idem('POST /tg/santa/campaigns/:id/exclusions/groups/:gid/members', { category: 'santa.exclusion' }));
+protectTgRoute('DELETE', '/santa/campaigns/:id/exclusions/groups/:gid/members/:uid',       idem('DELETE /tg/santa/campaigns/:id/exclusions/groups/:gid/members/:uid', { category: 'santa.exclusion' }));
+
+// Rounds / Complete / Status / Confirm (4)
+protectTgRoute('POST',  '/santa/campaigns/:id/rounds',            idem('POST /tg/santa/campaigns/:id/rounds', { category: 'santa.round', critical: true }));
+protectTgRoute('POST',  '/santa/campaigns/:id/complete',          idem('POST /tg/santa/campaigns/:id/complete', { category: 'santa.round', critical: true }));
+protectTgRoute('PATCH', '/santa/campaigns/:id/gift-status',       idem('PATCH /tg/santa/campaigns/:id/gift-status', { category: 'santa.round' }));
+protectTgRoute('POST',  '/santa/campaigns/:id/confirm-received',  idem('POST /tg/santa/campaigns/:id/confirm-received', { category: 'santa.round', critical: true }));
+
+// Inbound Reserve (2) — Santa-specific item claim, distinct from /reservations
+protectTgRoute('POST',   '/santa/campaigns/:id/inbound/reserve',                idem('POST /tg/santa/campaigns/:id/inbound/reserve', { category: 'santa.inbound' }));
+protectTgRoute('DELETE', '/santa/campaigns/:id/inbound/reserve/:itemId',        idem('DELETE /tg/santa/campaigns/:id/inbound/reserve/:itemId', { category: 'santa.inbound' }));
+
+// Hints (2) — anonymous giver→receiver request flow with 48h TTL
+protectTgRoute('POST',  '/santa/campaigns/:id/hints',                idem('POST /tg/santa/campaigns/:id/hints', { category: 'santa.hint' }));
+protectTgRoute('POST',  '/santa/campaigns/:id/inbound/hint/fulfill', idem('POST /tg/santa/campaigns/:id/inbound/hint/fulfill', { category: 'santa.hint' }));
+
+// Chat / Mute (3) — chat-write reuses comment.minute+hour for write rate.
+// NOTE: POST /santa/campaigns/:id/chat/read is intentionally excluded —
+// fire-and-forget read marker, duplicate-safe by design (UPSERT). Same
+// precedent as /me/subscriptions/:id/read.
+protectTgRoute('POST',   '/santa/campaigns/:id/chat',
+  ...combineLimiters('comment.minute', 'comment.hour'),
+  idem('POST /tg/santa/campaigns/:id/chat', { category: 'santa.chat' }));
+protectTgRoute('POST',   '/santa/campaigns/:id/mute',                idem('POST /tg/santa/campaigns/:id/mute', { category: 'santa.chat' }));
+protectTgRoute('DELETE', '/santa/campaigns/:id/mute',                idem('DELETE /tg/santa/campaigns/:id/mute', { category: 'santa.chat' }));
+
+// Polls (3)
+protectTgRoute('POST',  '/santa/campaigns/:id/polls',                  idem('POST /tg/santa/campaigns/:id/polls', { category: 'santa.poll' }));
+protectTgRoute('POST',  '/santa/campaigns/:id/polls/:pollId/vote',     idem('POST /tg/santa/campaigns/:id/polls/:pollId/vote', { category: 'santa.poll' }));
+protectTgRoute('POST',  '/santa/campaigns/:id/polls/:pollId/close',    idem('POST /tg/santa/campaigns/:id/polls/:pollId/close', { category: 'santa.poll', critical: true }));
+
+// Exit Requests (3)
+protectTgRoute('POST',  '/santa/campaigns/:id/exit-request',                                idem('POST /tg/santa/campaigns/:id/exit-request', { category: 'santa.exit-request' }));
+protectTgRoute('POST',  '/santa/campaigns/:id/exit-requests/:requestId/approve',            idem('POST /tg/santa/campaigns/:id/exit-requests/:requestId/approve', { category: 'santa.exit-request', critical: true }));
+protectTgRoute('POST',  '/santa/campaigns/:id/exit-requests/:requestId/deny',               idem('POST /tg/santa/campaigns/:id/exit-requests/:requestId/deny', { category: 'santa.exit-request', critical: true }));
+
 // ─── /tg/santa/* sub-router (P5p — final domain extraction; 58 handlers,
 //     all remaining inline tg routes) ─────────────────────────────────────
 // With this mount, `apps/api/src/index.ts` becomes a true composition root
 // per docs/REFACTOR_API_INDEX_HANDOFF.md — bootstrap, middleware, router
 // registration, schedulers, app.listen, process handlers.
 //
-// Pre-existing security gap: NO `protectTgRoute` entries for Santa routes.
-// Per CLAUDE.md § Security layer, Santa is a Wave-2 deferral. Not addressed
-// in this PR; follow-up will add idempotency middleware + rate limits.
+// Wave-2 security wiring above (38 protectTgRoute entries + 2 new
+// rate-limit categories) closes the pre-existing gap. See
+// docs/API_SECURITY.md § 4.
 //
 // Section 2.A helpers STAY in index.ts (scheduler + startup-hook coupling):
 //   - getSeasonStartYear / getSeasonCalendar / getSantaSeasonInfo /
