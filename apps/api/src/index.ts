@@ -80,6 +80,8 @@ import { registerWishlistsRouter } from './routes/wishlists.routes';
 import { registerSantaRouter } from './routes/santa.routes';
 import { startCleanupSchedulers } from './schedulers/cleanup';
 import { startBillingSchedulers } from './schedulers/billing';
+import { startReferralSchedulers } from './schedulers/referral';
+import { startSantaSchedulers, runSantaStartupJobs } from './schedulers/santa';
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -2755,27 +2757,10 @@ startCleanupSchedulers({ prisma, logger, deleteUploadFile });
 // byte-identical.
 startBillingSchedulers({ prisma, logger, getUserEntitlement, PLANS });
 
-// ─── Referral program: expired-attribution sweeper (every 15 min) ────────────
-// Flips PENDING_ACTIVATION rows past windowDeadlineAt → REJECTED with
-// QUALIFICATION_TIMEOUT. Drains up to SWEEP_BATCH_SIZE × SWEEP_MAX_ITERATIONS
-// per run so a backlog spike is absorbed without ad-hoc scripts. Emits a single
-// aggregated analytics event per run; per-user funnel events are already
-// covered by the attribution/qualified/rewarded events.
-const REFERRAL_SWEEP_INTERVAL_MS = 15 * 60 * 1000;
-setInterval(async () => {
-  try {
-    const result = await sweepExpiredPendingAttributions(prisma);
-    if (result.expired > 0) {
-      logger.info({ expired: result.expired }, '[referral] sweep: expired pending attributions');
-      trackAnalyticsEvent({
-        event: 'referral.qualification_timeout',
-        props: { expired: result.expired, source: 'cron' },
-      });
-    }
-  } catch (err) {
-    logger.error({ err }, '[referral] sweep failed');
-  }
-}, REFERRAL_SWEEP_INTERVAL_MS);
+// Referral schedulers (P5r-3): 15-min expired-attribution sweep —
+// extracted to ./schedulers/referral.ts. Cadence and log labels
+// preserved byte-identical.
+startReferralSchedulers({ prisma, logger, trackAnalyticsEvent, sweepExpiredPendingAttributions });
 
 // ─── Lifecycle / Win-back scheduler (hourly) ─────────────────────────────────
 // Scans users, classifies into segments S1–S4, creates LifecycleTouch records,
@@ -3232,21 +3217,6 @@ setInterval(async () => {
   }
 }, 60 * 60 * 1000); // every hour
 
-// Santa hint expiry: mark PENDING santa hint requests past their TTL as EXPIRED (hourly)
-setInterval(async () => {
-  try {
-    const expired = await prisma.santaHintRequest.updateMany({
-      where: { status: 'PENDING', expiresAt: { lte: new Date() } },
-      data: { status: 'EXPIRED' },
-    });
-    if (expired.count > 0) {
-      logger.info({ count: expired.count }, 'santa-hints: expired hint requests');
-    }
-  } catch (err) {
-    logger.error({ err }, 'santa-hints expiry check failed');
-  }
-}, 60 * 60 * 1000);
-
 // PRO renewal reminders (hourly). Fires at two milestones:
 //   - 7 days before currentPeriodEnd (window 6d–8d)
 //   - 1 day  before currentPeriodEnd (window 12h–36h)
@@ -3323,107 +3293,13 @@ setInterval(async () => {
   }
 }, 60 * 60 * 1000);
 
-// Santa deadline enforcement: mark overdue PENDING/BUYING assignments as MISSED_DEADLINE (hourly)
-// Recoverable: giver can still update their status after missing the deadline.
-setInterval(async () => {
-  try {
-    const now = new Date();
-    // Find rounds belonging to ACTIVE campaigns whose drawAt has passed
-    const overdueRounds = await prisma.santaRound.findMany({
-      where: {
-        campaign: { status: 'ACTIVE', drawAt: { lte: now, not: null } },
-        drawStatus: 'DONE',
-      },
-      select: { id: true, campaignId: true },
-    });
-    if (overdueRounds.length === 0) return;
-
-    let totalMissed = 0;
-    for (const round of overdueRounds) {
-      // Find assignments still in actionable but uncommitted states
-      const overdueAssignments = await prisma.santaAssignment.findMany({
-        where: { roundId: round.id, giftStatus: { in: ['PENDING', 'BUYING'] } },
-        select: { id: true, giver: { select: { userId: true } } },
-      });
-      if (overdueAssignments.length === 0) continue;
-
-      // Bulk update — MISSED_DEADLINE is recoverable (giver can still pick a status)
-      await prisma.santaAssignment.updateMany({
-        where: { id: { in: overdueAssignments.map(a => a.id) } },
-        data: { giftStatus: 'MISSED_DEADLINE' },
-      });
-      totalMissed += overdueAssignments.length;
-
-      // Create DEADLINE_MISSED notifications — batch insert, deduped per assignment
-      await prisma.santaNotification.createMany({
-        data: overdueAssignments.map(a => ({
-          campaignId: round.campaignId,
-          userId: a.giver.userId,
-          type: 'DEADLINE_MISSED' as const,
-          payload: { assignmentId: a.id },
-          dedupeKey: `missed:${a.id}`,   // unique per (user, DEADLINE_MISSED, assignment)
-        })),
-        skipDuplicates: true,
-      }).catch(() => { /* non-fatal */ });
-    }
-
-    if (totalMissed > 0) {
-      logger.info({ count: totalMissed }, 'santa-deadlines: marked assignments as MISSED_DEADLINE');
-    }
-  } catch (err) {
-    logger.error({ err }, 'santa-deadlines missed-deadline job failed');
-  }
-}, 60 * 60 * 1000);
-
-// Santa deadline warning: notify PENDING/BUYING givers ~3 days before drawAt (hourly check)
-// Warning window: between 72h and 96h before drawAt (fires once per ~day, not every hour).
-setInterval(async () => {
-  try {
-    const now = new Date();
-    const warningWindowStart = new Date(now.getTime() + 72 * 60 * 60 * 1000);  // 3 days from now
-    const warningWindowEnd   = new Date(now.getTime() + 96 * 60 * 60 * 1000);  // 4 days from now
-
-    const warningRounds = await prisma.santaRound.findMany({
-      where: {
-        campaign: {
-          status: 'ACTIVE',
-          drawAt: { gte: warningWindowStart, lte: warningWindowEnd },
-        },
-        drawStatus: 'DONE',
-      },
-      select: { id: true, campaignId: true },
-    });
-    if (warningRounds.length === 0) return;
-
-    let totalWarned = 0;
-    for (const round of warningRounds) {
-      const pendingAssignments = await prisma.santaAssignment.findMany({
-        where: { roundId: round.id, giftStatus: { in: ['PENDING', 'BUYING'] } },
-        select: { id: true, giver: { select: { userId: true } } },
-      });
-      if (pendingAssignments.length === 0) continue;
-
-      // Batch insert DEADLINE_WARNING — deduped per assignment via dedupeKey; no findFirst needed
-      const warnResult = await prisma.santaNotification.createMany({
-        data: pendingAssignments.map(a => ({
-          campaignId: round.campaignId,
-          userId: a.giver.userId,
-          type: 'DEADLINE_WARNING' as const,
-          payload: { assignmentId: a.id },
-          dedupeKey: `warn:${a.id}`,    // unique per (user, DEADLINE_WARNING, assignment)
-        })),
-        skipDuplicates: true,
-      }).catch(() => ({ count: 0 }));
-      totalWarned += warnResult.count;
-    }
-
-    if (totalWarned > 0) {
-      logger.info({ count: totalWarned }, 'santa-deadlines: sent DEADLINE_WARNING to givers');
-    }
-  } catch (err) {
-    logger.error({ err }, 'santa-deadlines deadline-warning job failed');
-  }
-}, 60 * 60 * 1000);
+// Santa schedulers (P5r-3): hint expiry + deadline missed + deadline
+// warning + seasonal events wrapper — extracted to ./schedulers/
+// santa.ts. Section 2.A helpers (getSeasonStartYear / getSeasonCalendar
+// / getSantaSeasonInfo / sendSeasonalBroadcast / maybeRunSeasonalEvents
+// / generateSantaAliases / SANTA_*) STAY in index.ts. Cadence and log
+// labels preserved byte-identical.
+startSantaSchedulers({ prisma, logger, maybeRunSeasonalEvents });
 
 // ─── Reservation reminder cron (every 15 min) ──────────────────────────────
 setInterval(async () => {
@@ -3750,9 +3626,7 @@ async function maybeRunSeasonalEvents(): Promise<void> {
   }
 }
 
-// Santa seasonal events: check every hour for calendar milestones (Nov 1, Feb 1).
-// Idempotent — safe to run hourly; each broadcast fires at most once per year via DB dedup.
-setInterval(() => { void maybeRunSeasonalEvents(); }, 60 * 60 * 1000);
+// (Santa seasonal events scheduler moved to ./schedulers/santa.ts in P5r-3.)
 
 // ─── Smart Reservations: auto-release cron (every 5 min) ─────────────────────
 setInterval(async () => {
@@ -5123,55 +4997,10 @@ app.listen(PORT, () => {
   // CLEANUP_JOB_IN_TEST=true) and skipped when SECURITY_CLEANUP_JOB_ENABLED=false.
   startIdempotencyCleanupJob();
 
-  // Ensure SantaGlobalConfig singleton exists.
-  // This is idempotent — upsert preserves the existing santaEnabled value if already set.
-  // If the row doesn't exist yet (fresh DB), it is created with santaEnabled=true (default on).
-  void prisma.santaGlobalConfig.upsert({
-    where:  { id: 'global' },
-    create: { id: 'global', santaEnabled: true },
-    update: {}, // never overwrite an existing setting on startup
-  }).catch(err => {
-    logger.error({ err }, 'startup: SantaGlobalConfig upsert failed');
-  });
-
-  // Backfill: generate aliases for all existing rounds that have none yet.
-  // Idempotent — skipDuplicates; non-blocking; never fails startup.
-  void (async () => {
-    try {
-      const rounds = await prisma.santaRound.findMany({
-        where: {
-          drawStatus: 'DONE',
-          aliases: { none: {} },
-        },
-        select: {
-          id: true,
-          assignments: {
-            select: { giverParticipantId: true, receiverParticipantId: true },
-          },
-        },
-      });
-      for (const round of rounds) {
-        const participantIds = [
-          ...new Set([
-            ...round.assignments.map(a => a.giverParticipantId),
-            ...round.assignments.map(a => a.receiverParticipantId),
-          ]),
-        ];
-        if (participantIds.length === 0) continue;
-        const aliasData = generateSantaAliases(round.id, participantIds);
-        await prisma.santaParticipantAlias.createMany({
-          data: aliasData.map(a => ({ roundId: round.id, ...a })),
-          skipDuplicates: true,
-        });
-        logger.info({ count: aliasData.length, roundId: round.id }, 'startup: backfilled aliases for round');
-      }
-      if (rounds.length > 0) {
-        logger.info({ rounds: rounds.length }, 'startup: Santa alias backfill complete');
-      }
-    } catch (err) {
-      logger.error({ err }, 'startup: Santa alias backfill failed (non-fatal)');
-    }
-  })();
+  // Santa startup jobs (P5r-3): SantaGlobalConfig singleton upsert +
+  // alias backfill loop — extracted to ./schedulers/santa.ts. Both are
+  // fire-and-forget; behavior preserved byte-identical.
+  runSantaStartupJobs({ prisma, logger, generateSantaAliases });
 });
 
 // ─── Uncaught exception / rejection alerts ────────────────────────────────────
