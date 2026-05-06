@@ -79,6 +79,7 @@ import { registerItemsRouter } from './routes/items.routes';
 import { registerWishlistsRouter } from './routes/wishlists.routes';
 import { registerSantaRouter } from './routes/santa.routes';
 import { startCleanupSchedulers } from './schedulers/cleanup';
+import { startBillingSchedulers } from './schedulers/billing';
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -2748,154 +2749,11 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
 // (60 * 60 * 1000) and log messages preserved byte-identical.
 startCleanupSchedulers({ prisma, logger, deleteUploadFile });
 
-// Subscription expiry: mark overdue subscriptions as EXPIRED (hourly)
-setInterval(async () => {
-  try {
-    const expired = await prisma.subscription.updateMany({
-      where: {
-        status: { in: ['ACTIVE', 'CANCELLED'] },
-        currentPeriodEnd: { lte: new Date() },
-      },
-      data: { status: 'EXPIRED' },
-    });
-    if (expired.count > 0) {
-      logger.info({ count: expired.count }, 'billing: expired subscriptions');
-    }
-  } catch (err) {
-    logger.error({ err }, 'billing expiry check failed');
-  }
-}, 60 * 60 * 1000);
-
-// Promo expiry: mark ACTIVE promo redemptions past their expiresAt as EXPIRED (hourly)
-setInterval(async () => {
-  try {
-    const expired = await prisma.promoRedemption.updateMany({
-      where: { status: 'ACTIVE', expiresAt: { lte: new Date() } },
-      data: { status: 'EXPIRED' },
-    });
-    if (expired.count > 0) {
-      logger.info({ count: expired.count }, 'promo: expired promo redemptions');
-      // Start grace period for users who lost PRO (no paid sub either)
-      const expiredRedemptions = await prisma.promoRedemption.findMany({
-        where: { status: 'EXPIRED', expiresAt: { lte: new Date(), gte: new Date(Date.now() - 2 * 60 * 60 * 1000) } },
-        select: { userId: true },
-      });
-      for (const r of expiredRedemptions) {
-        // Only start degradation if user has no active paid sub
-        const sub = await prisma.subscription.findFirst({
-          where: { userId: r.userId, status: { in: ['ACTIVE', 'CANCELLED'] }, currentPeriodEnd: { gt: new Date() } },
-        });
-        if (!sub) {
-          await prisma.degradationState.upsert({
-            where: { userId: r.userId },
-            update: {},  // don't overwrite existing degradation
-            create: {
-              userId: r.userId,
-              phase: 'GRACE_PERIOD',
-              graceEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-            },
-          });
-        }
-      }
-    }
-  } catch (err) {
-    logger.error({ err }, 'promo expiry check failed');
-  }
-}, 60 * 60 * 1000);
-
-// Degradation: archive over-limit data after grace period ends (hourly)
-setInterval(async () => {
-  try {
-    const graceExpired = await prisma.degradationState.findMany({
-      where: { phase: 'GRACE_PERIOD', graceEndsAt: { lte: new Date() } },
-      include: { user: { select: { id: true } } },
-    });
-    for (const ds of graceExpired) {
-      const userId = ds.userId;
-      // Check if user regained PRO
-      const ent = await getUserEntitlement(userId);
-      if (ent.isPro) {
-        await prisma.degradationState.update({ where: { id: ds.id }, data: { phase: 'NONE' } });
-        continue;
-      }
-      // Archive newest wishlists beyond FREE limit
-      const wishlists = await prisma.wishlist.findMany({
-        where: { ownerId: userId, type: 'REGULAR', archivedAt: null },
-        orderBy: { createdAt: 'asc' },
-        select: { id: true },
-      });
-      const overLimitWls = wishlists.slice(PLANS.FREE.wishlists);
-      const archivedWlIds: string[] = [];
-      const archivedItemIds: string[] = [];
-      if (overLimitWls.length > 0) {
-        for (const wl of overLimitWls) {
-          await prisma.wishlist.update({ where: { id: wl.id }, data: { archivedAt: new Date() } });
-          archivedWlIds.push(wl.id);
-        }
-      }
-      // Archive newest items beyond FREE limit in remaining wishlists
-      const remainingWls = wishlists.slice(0, PLANS.FREE.wishlists);
-      for (const wl of remainingWls) {
-        const items = await prisma.item.findMany({
-          where: { wishlistId: wl.id, status: { in: ['AVAILABLE', 'RESERVED'] }, archivedAt: null },
-          orderBy: { createdAt: 'asc' },
-          select: { id: true },
-        });
-        const overLimitItems = items.slice(PLANS.FREE.items);
-        for (const it of overLimitItems) {
-          await prisma.item.update({ where: { id: it.id }, data: { archivedAt: new Date() } });
-          archivedItemIds.push(it.id);
-        }
-      }
-      await prisma.degradationState.update({
-        where: { id: ds.id },
-        data: {
-          phase: (archivedWlIds.length > 0 || archivedItemIds.length > 0) ? 'ARCHIVED' : 'NONE',
-          archivedAt: new Date(),
-          purgeScheduledAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
-          archivedWishlistIds: JSON.stringify(archivedWlIds),
-          archivedItemIds: JSON.stringify(archivedItemIds),
-        },
-      });
-      if (archivedWlIds.length > 0 || archivedItemIds.length > 0) {
-        logger.info({ wishlists: archivedWlIds.length, items: archivedItemIds.length, userId }, 'degradation: archived data');
-      }
-    }
-  } catch (err) {
-    logger.error({ err }, 'degradation archive job failed');
-  }
-}, 60 * 60 * 1000);
-
-// Degradation: purge archived data after 90 days (hourly)
-setInterval(async () => {
-  try {
-    const toPurge = await prisma.degradationState.findMany({
-      where: { phase: 'ARCHIVED', purgeScheduledAt: { lte: new Date() } },
-    });
-    for (const ds of toPurge) {
-      // Check if user regained PRO
-      const ent = await getUserEntitlement(ds.userId);
-      if (ent.isPro) {
-        // Restore archived data
-        const wlIds: string[] = JSON.parse(ds.archivedWishlistIds || '[]');
-        const itemIds: string[] = JSON.parse(ds.archivedItemIds || '[]');
-        if (wlIds.length) await prisma.wishlist.updateMany({ where: { id: { in: wlIds } }, data: { archivedAt: null } });
-        if (itemIds.length) await prisma.item.updateMany({ where: { id: { in: itemIds } }, data: { archivedAt: null } });
-        await prisma.degradationState.update({ where: { id: ds.id }, data: { phase: 'NONE' } });
-        continue;
-      }
-      // Purge: delete archived wishlists and items permanently
-      const wlIds: string[] = JSON.parse(ds.archivedWishlistIds || '[]');
-      const itemIds: string[] = JSON.parse(ds.archivedItemIds || '[]');
-      if (itemIds.length) await prisma.item.deleteMany({ where: { id: { in: itemIds } } });
-      if (wlIds.length) await prisma.wishlist.deleteMany({ where: { id: { in: wlIds } } });
-      await prisma.degradationState.update({ where: { id: ds.id }, data: { phase: 'PURGED' } });
-      logger.info({ wishlists: wlIds.length, items: itemIds.length, userId: ds.userId }, 'degradation: purged data');
-    }
-  } catch (err) {
-    logger.error({ err }, 'degradation purge job failed');
-  }
-}, 60 * 60 * 1000);
+// Billing schedulers (P5r-2): subscription expiry, promo expiry,
+// degradation grace + degradation purge — extracted to ./schedulers/
+// billing.ts. Cadence (60 * 60 * 1000) and log messages preserved
+// byte-identical.
+startBillingSchedulers({ prisma, logger, getUserEntitlement, PLANS });
 
 // ─── Referral program: expired-attribution sweeper (every 15 min) ────────────
 // Flips PENDING_ACTIVATION rows past windowDeadlineAt → REJECTED with
