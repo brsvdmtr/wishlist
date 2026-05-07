@@ -282,3 +282,26 @@ export async function isWishlistWritable(userId: string, wishlistId: string, pla
 // contracts preserved); future cleanup PRs can adopt.
 export type EntitlementResult = Awaited<ReturnType<typeof getUserEntitlement>>;
 export type EffectiveEntitlements = Awaited<ReturnType<typeof getEffectiveEntitlements>>;
+
+// ─── Gift Notes feature gate (P5s-5 — moved from index.ts) ──────────────────
+// Deferred from the initial P5s-1 entitlement extraction because it
+// closes over `trackEvent`. After P5s-5 placed `trackEvent` in
+// ./services/analytics.ts, requireGiftNotes can live alongside the rest
+// of the entitlement layer. Body byte-identical to the previous in-place
+// definition in apps/api/src/index.ts:275.
+//
+// Consumers: routes/gift-notes.routes.ts (sole consumer; receives via
+// `deps` factory contract — Strategy A, signature unchanged).
+
+import { trackEvent } from './analytics';
+
+/** Gate helper: Gift Notes feature required */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function requireGiftNotes(ent: EffectiveEntitlements, res: any): boolean {
+  if (!ent.hasGiftNotes) {
+    trackEvent('feature_gate_hit_gift_notes');
+    res.status(403).json({ error: 'gift_notes_required' });
+    return false;
+  }
+  return true;
+}

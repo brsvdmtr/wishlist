@@ -14,11 +14,6 @@ import { z } from 'zod';
 import {
   prisma,
   Prisma,
-  markFirstWishlist,
-  markFirstItem,
-  tryQualifyAttribution,
-  processReward,
-  loadReferralConfig,
   sweepExpiredPendingAttributions,
 } from '@wishlist/db';
 import logger from './logger';
@@ -33,7 +28,7 @@ import {
 } from './security';
 import { parseUrl } from './url-parser.js';
 import { getOrCreateProfile } from './profile.js';
-import { t, normalizeLocale, resolveEffectiveLocale, pluralize, type Locale, type LanguageMode, type LanguageSettings, getOnboardingMeta, type OnboardingVariant, deriveMarketBucket, isSupportedImportRegion, ANALYTICS_EVENTS } from '@wishlist/shared';
+import { t, normalizeLocale, resolveEffectiveLocale, pluralize, type Locale, type LanguageMode, type LanguageSettings, getOnboardingMeta, type OnboardingVariant, deriveMarketBucket, isSupportedImportRegion } from '@wishlist/shared';
 
 // Sentry namespace stays imported here so the error handler and the
 // uncaughtException / unhandledRejection handlers further down can call
@@ -124,7 +119,10 @@ import {
   getUserEntitlement,
   getEffectiveEntitlements,
   isWishlistWritable,
+  requireGiftNotes,
 } from './services/entitlement';
+import { trackEvent, trackAnalyticsEvent } from './services/analytics';
+import { runReferralProgressHook, notifyReferralInviterRewarded } from './services/referral-hooks';
 import {
   DRAFTS_ITEM_LIMIT,
   reassignPrimaryBeforeWishlistDelete,
@@ -271,15 +269,8 @@ declare global {
 // factory deps unchanged. `requireGiftNotes` stays here below because
 // it depends on `trackEvent`, which is also still in this file.
 
-/** Gate helper: Gift Notes feature required */
-function requireGiftNotes(ent: Awaited<ReturnType<typeof getEffectiveEntitlements>>, res: any): boolean {
-  if (!ent.hasGiftNotes) {
-    trackEvent('feature_gate_hit_gift_notes');
-    res.status(403).json({ error: 'gift_notes_required' });
-    return false;
-  }
-  return true;
-}
+// requireGiftNotes moved to ./services/entitlement.ts in P5s-5 (deferred
+// from P5s-1 because it closed over trackEvent; now both live in services/).
 
 // Wire the wishlists service factory once trackEvent is defined. Used by
 // registerOnboardingRouter (line ~1463) and the url-import service factory
@@ -297,263 +288,17 @@ const importUrlForUser = createImportUrlForUser({ trackEvent, getOrCreateDraftsW
 // Strategy B: imported directly by routes/gift-notes.routes.ts and
 // schedulers/events.ts; no longer threaded through their deps factories.
 
-// Analytics / logging stub
-function trackEvent(event: string, userId?: string, props?: Record<string, unknown>) {
-  logger.info({ event, userId, props }, 'analytics event');
-  // Persist to DB for god-mode analytics: feature gate hits, onboarding, demo item, and error events.
-  // Fire-and-forget — never blocks the request path.
-  const shouldPersist =
-    event.startsWith('feature_gate_hit_') ||
-    event.startsWith('onboarding_') ||
-    event.startsWith('demo_item_') ||
-    event.startsWith('gift_') ||
-    event.startsWith('first_share_prompt_') ||
-    event.startsWith('ready_share_prompt_') ||
-    event.startsWith('group_gift_') ||
-    event.startsWith('secret_res.') ||
-    event.startsWith('showcase.') ||
-    event.startsWith('public_profile.') ||
-    event.startsWith('error:');
-  if (shouldPersist && userId) {
-    prisma.analyticsEvent
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .create({ data: { event, userId, props: props ? (props as any) : undefined } })
-      .catch((e) => logger.debug({ err: e, event }, 'analytics write failed'));
-  }
-}
-// ─────────────────────────────────────────────────────────────────────────────
+// trackEvent + trackAnalyticsEvent extracted to ./services/analytics.ts in
+// P5s-5 (Strategy A — source moves; routes/schedulers/services continue
+// receiving the imported references via existing factory deps unchanged).
+// ANALYTICS_EVENTS_SET migrates with them as a private module-internal set.
 
-// ── Product analytics event helper ──────────────────────────────────────────
-// Allowlist is sourced from @wishlist/shared so API + frontend + any other
-// consumer stay in sync. Adding a new event: add it to packages/shared/src/
-// analyticsEvents.ts and rebuild shared. Events not in this set are silently
-// dropped — gate intentionally keeps the AnalyticsEvent table schemaful.
-const ANALYTICS_EVENTS_SET = new Set<string>(ANALYTICS_EVENTS);
-
-function trackAnalyticsEvent(params: {
-  event: string;
-  userId?: string;
-  props?: Record<string, unknown>;
-}): void {
-  if (!ANALYTICS_EVENTS_SET.has(params.event)) return;
-  let props = params.props;
-  if (props) {
-    const cleaned: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(props)) {
-      cleaned[k] = typeof v === 'string' && v.length > 300 ? v.slice(0, 300) + '...' : v;
-    }
-    const ser = JSON.stringify(cleaned);
-    props = ser.length > 1024 ? { _truncated: true } : cleaned;
-  }
-  prisma.analyticsEvent.create({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    data: { event: params.event, userId: params.userId ?? null, props: props ? (props as any) : undefined },
-  }).catch((e) => logger.debug({ err: e, event: params.event }, 'analytics write failed'));
-}
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Resolve a user's effective locale for proactive notifications (i.e. when
- * there's no `ctx.from.language_code` available because the user isn't the
- * active actor). Resolution order:
- *   1. profile.manualLanguage (MANUAL mode) — user's explicit pick
- *   2. Telegram getChat language_code (AUTO mode) — authoritative live value
- *   3. 'ru' fallback — matches our user base (overwhelmingly Russian)
- *
- * Without (2), AUTO-mode users got English messages because normalizeLocale(undefined)
- * returns 'en' — wrong for our base. One getChat call per notification is a
- * tolerable cost for a rare event (referral rewards).
- */
-async function resolveProactiveUserLocale(
-  profile: { languageMode: string; manualLanguage: string | null } | null,
-  telegramChatId: string | null,
-): Promise<Locale> {
-  if (profile?.languageMode === 'manual' && profile.manualLanguage) {
-    return profile.manualLanguage as Locale;
-  }
-  if (telegramChatId && process.env.BOT_TOKEN) {
-    try {
-      const resp = await fetch(
-        `https://api.telegram.org/bot${process.env.BOT_TOKEN}/getChat?chat_id=${telegramChatId}`,
-      );
-      const data = await resp.json() as { ok: boolean; result?: { language_code?: string } };
-      if (data.ok && data.result?.language_code) {
-        return normalizeLocale(data.result.language_code);
-      }
-    } catch {
-      // fall through to fallback
-    }
-  }
-  return 'ru';
-}
-
-/**
- * Best-effort Telegram notification to an inviter that their referral reward
- * was granted. Resolves the inviter's locale from their UserProfile so the
- * message is in their preferred language. Uses the shared sendTgBotMessage
- * helper (raw Telegram API via BOT_TOKEN).
- */
-async function notifyReferralInviterRewarded(inviterUserId: string, daysGranted: number): Promise<void> {
-  try {
-    const config = await loadReferralConfig(prisma);
-    if (!config.notifyInviterReward) return;
-    const user = await prisma.user.findUnique({
-      where: { id: inviterUserId },
-      select: {
-        telegramChatId: true,
-        profile: { select: { languageMode: true, manualLanguage: true } },
-      },
-    });
-    if (!user?.telegramChatId) return;
-    const locale = await resolveProactiveUserLocale(user.profile, user.telegramChatId);
-    const text = t('bot_referral_inviter_rewarded', locale, { days: String(daysGranted) });
-    // sendTgBotMessage returns false on any Telegram-side failure (API error,
-    // network, bot blocked). Emit the matching event so delivery dashboards
-    // reflect reality, not intent.
-    const delivered = await sendTgBotMessage(user.telegramChatId, text);
-    trackAnalyticsEvent({
-      event: delivered
-        ? 'referral.bot_notification_sent'
-        : 'referral.bot_notification_delivery_failed',
-      userId: inviterUserId,
-      props: { type: 'reward', daysGranted },
-    });
-  } catch (err) {
-    logger.warn({ err, inviterUserId }, '[referral] reward notification failed');
-  }
-}
-
-// ─── Referral qualify + reward pipeline (fire-and-forget) ────────────────────
-//
-// Called after wishlist.created and item.created. Does three things in order:
-//   1. Marks the appropriate firstWishlistAt / firstItemAt milestone (idempotent).
-//   2. Runs tryQualifyAttribution — if both milestones present and within the
-//      window, transitions PENDING_ACTIVATION → QUALIFIED.
-//   3. If qualified, runs processReward — fraud + cap checks, then grant or
-//      reject. Writes ReferralAttribution.status and ReferralReward rows.
-//
-// Wrapped in try/catch so any referral-side failure never breaks the primary
-// request. Emits analytics for every terminal outcome so Slice 6 observability
-// can reconstruct the funnel.
-async function runReferralProgressHook(
-  userId: string,
-  milestone: 'first_wishlist' | 'first_item',
-): Promise<void> {
-  try {
-    if (milestone === 'first_wishlist') {
-      await markFirstWishlist(prisma, userId);
-      trackAnalyticsEvent({ event: 'referral.first_wishlist_created', userId });
-    } else {
-      await markFirstItem(prisma, userId);
-      trackAnalyticsEvent({ event: 'referral.first_item_created', userId });
-    }
-
-    const qualified = await tryQualifyAttribution(prisma, userId);
-    if (qualified.kind !== 'qualified') return;
-
-    trackAnalyticsEvent({
-      event: 'referral.qualification_criteria_met',
-      userId,
-      props: { attributionId: qualified.attributionId, milestone },
-    });
-    trackAnalyticsEvent({
-      event: 'referral.qualified',
-      userId,
-      props: { attributionId: qualified.attributionId, inviterUserId: qualified.inviterUserId },
-    });
-
-    const decision = await processReward(prisma, qualified.attributionId);
-    switch (decision.kind) {
-      case 'rewarded':
-        trackAnalyticsEvent({
-          event: 'referral.rewarded',
-          userId: qualified.inviterUserId,
-          props: {
-            attributionId: qualified.attributionId,
-            rewardId: decision.rewardId,
-            daysGranted: decision.daysGranted,
-            newExpiryAt: decision.newExpiryAt.toISOString(),
-          },
-        });
-        trackAnalyticsEvent({
-          event: 'referral.pro_subscription_extended',
-          userId: qualified.inviterUserId,
-          props: { attributionId: qualified.attributionId, daysGranted: decision.daysGranted },
-        });
-        // Fire-and-forget: notify inviter via Telegram
-        void notifyReferralInviterRewarded(qualified.inviterUserId, decision.daysGranted);
-        break;
-      case 'auto_rejected':
-        trackAnalyticsEvent({
-          event: 'referral.rejected',
-          userId: qualified.inviterUserId,
-          props: {
-            attributionId: qualified.attributionId,
-            reason: 'FRAUD_REJECTED',
-            fraudScore: decision.fraudScore,
-            signalCount: decision.signals.length,
-          },
-        });
-        break;
-      case 'review_queued':
-        trackAnalyticsEvent({
-          event: 'referral.fraud_review_queued',
-          userId: qualified.inviterUserId,
-          props: {
-            attributionId: qualified.attributionId,
-            fraudScore: decision.fraudScore,
-            signalCount: decision.signals.length,
-          },
-        });
-        break;
-      case 'cap_rejected':
-        trackAnalyticsEvent({
-          event: 'referral.rejected',
-          userId: qualified.inviterUserId,
-          props: {
-            attributionId: qualified.attributionId,
-            reason: 'REWARD_CAP_REACHED',
-            capReason: decision.reason,
-            monthlyUsed: decision.monthlyUsed,
-            yearlyUsed: decision.yearlyUsed,
-          },
-        });
-        trackAnalyticsEvent({
-          event: 'referral.cap_check_performed',
-          userId: qualified.inviterUserId,
-          props: { reason: decision.reason, monthlyUsed: decision.monthlyUsed, yearlyUsed: decision.yearlyUsed },
-        });
-        break;
-      case 'already_granted':
-        trackAnalyticsEvent({
-          event: 'referral.idempotency_hit',
-          userId: qualified.inviterUserId,
-          props: { attributionId: qualified.attributionId, context: 'processReward' },
-        });
-        break;
-      case 'not_qualified':
-        // Shouldn't happen — tryQualifyAttribution returned qualified. Log defensively.
-        logger.warn(
-          { userId, attributionId: qualified.attributionId },
-          '[referral] processReward returned not_qualified immediately after qualify',
-        );
-        trackAnalyticsEvent({
-          event: 'referral.attribution_invariant_violation',
-          userId: qualified.inviterUserId,
-          props: { attributionId: qualified.attributionId, context: 'qualified_then_not_qualified' },
-        });
-        break;
-    }
-  } catch (e) {
-    logger.error({ err: e, userId, milestone }, '[referral] progress hook failed');
-    trackAnalyticsEvent({
-      event: 'referral.reward_grant_failed',
-      userId,
-      props: { milestone, error: e instanceof Error ? e.message : String(e) },
-    });
-  }
-}
-// ─────────────────────────────────────────────────────────────────────────────
+// resolveProactiveUserLocale + notifyReferralInviterRewarded +
+// runReferralProgressHook extracted to ./services/referral-hooks.ts in
+// P5s-5 (Strategy A — source moves; routes continue receiving the
+// imported references via existing factory deps unchanged).
+// resolveProactiveUserLocale stays module-private inside the service
+// (only consumer is notifyReferralInviterRewarded).
 
 // ─── Onboarding Engine ────────────────────────────────────────────────────────
 // Extracted to ./services/onboarding.ts in P5s-3. Strategy hybrid:
