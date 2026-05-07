@@ -9,6 +9,7 @@
 // Wire formats (must stay symmetric with apps/api/src/telegram/deepLinks.ts):
 //   comment-reply        — crpl_<itemId>__c_<commentId>
 //   reservation-reminder — rrem_<itemId>__m_<reservationMetaId>
+//   event-reminder       — evnt_<occasionId>
 
 // Cuid-shape guard reused by every deep-link parser. cuids are
 // `^[a-z0-9]{20,30}$` in practice, but the looser regex below also accepts
@@ -40,4 +41,22 @@ export function parseReservationReminderPayload(payload: string): ReservationRem
     return { kind: 'malformed' };
   }
   return { kind: 'ok', itemId, reservationMetaId };
+}
+
+export type EventReminderPayload =
+  | { kind: 'ok'; occasionId: string }
+  | { kind: 'malformed' };
+
+export function parseEventReminderPayload(payload: string): EventReminderPayload {
+  if (!payload.startsWith('evnt_')) return { kind: 'malformed' };
+
+  let occasionId: string;
+  try {
+    occasionId = decodeURIComponent(payload.slice('evnt_'.length));
+  } catch {
+    return { kind: 'malformed' };
+  }
+
+  if (!looksLikeId(occasionId)) return { kind: 'malformed' };
+  return { kind: 'ok', occasionId };
 }

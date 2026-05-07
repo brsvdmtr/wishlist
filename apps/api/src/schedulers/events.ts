@@ -26,6 +26,7 @@ import {
   computeReminderSchedule,
   buildReminderEpisodeKey,
 } from '../services/calendar';
+import { buildEventReminderDeepLink } from '../telegram/deepLinks';
 
 export type EventSchedulerDeps = {
   prisma: PrismaClient;
@@ -114,7 +115,7 @@ export function startEventSchedulers(deps: EventSchedulerDeps): void {
           const text = `<b>${esc(title)}</b>\n\n${esc(body)}`;
           delivered = await sendTgBotMessage(chatId, text, {
             inline_keyboard: [[
-              { text: locale === 'ru' ? '📱 Открыть' : 'Open', url: 'https://t.me/WishBoardBot/app' },
+              { text: locale === 'ru' ? '📱 Открыть' : 'Open', url: buildEventReminderDeepLink(r.occasion.id) },
             ]],
           });
           if (delivered) sent++;

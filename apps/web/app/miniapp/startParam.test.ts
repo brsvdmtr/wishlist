@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseReservationReminderPayload } from './startParam';
+import { parseReservationReminderPayload, parseEventReminderPayload } from './startParam';
 
 describe('parseReservationReminderPayload', () => {
   it('parses a well-formed rrem_<itemId>__m_<metaId> payload', () => {
@@ -65,12 +65,66 @@ describe('parseReservationReminderPayload', () => {
       'santa_join_token123',
       'gg_token123',
       'occasion_cmaa1bb2ccdd',
+      'evnt_cmaa1bb2ccdd',
       'profile_someuser',
       'src_email__med_marketing',
       'cs_token123',
       'create_wishlist',
     ]) {
       expect(parseReservationReminderPayload(other)).toEqual({ kind: 'malformed' });
+    }
+  });
+});
+
+describe('parseEventReminderPayload', () => {
+  it('parses a well-formed evnt_<occasionId> payload', () => {
+    const result = parseEventReminderPayload('evnt_cmaa1bb2ccdd');
+    expect(result).toEqual({ kind: 'ok', occasionId: 'cmaa1bb2ccdd' });
+  });
+
+  it('rejects payload without evnt_ prefix', () => {
+    expect(parseEventReminderPayload('occasion_cmaa1bb2ccdd')).toEqual({ kind: 'malformed' });
+    expect(parseEventReminderPayload('rrem_cmaa1bb2ccdd__m_cmm9zz8yyxx')).toEqual({ kind: 'malformed' });
+    expect(parseEventReminderPayload('foo')).toEqual({ kind: 'malformed' });
+    expect(parseEventReminderPayload('')).toEqual({ kind: 'malformed' });
+  });
+
+  it('rejects ids that fail the strict cuid-shape regex', () => {
+    expect(parseEventReminderPayload('evnt_short')).toEqual({ kind: 'malformed' });
+    expect(parseEventReminderPayload(`evnt_${'a'.repeat(50)}`)).toEqual({ kind: 'malformed' });
+    expect(parseEventReminderPayload('evnt_cmaa1bb2c!dd')).toEqual({ kind: 'malformed' });
+    // Decoded value is real but contains a space — strict regex rejects.
+    expect(parseEventReminderPayload('evnt_id%20with%20space')).toEqual({ kind: 'malformed' });
+  });
+
+  it('does not throw on a malformed URI-encoded payload', () => {
+    // Lone `%` is invalid for decodeURIComponent — must surface as
+    // malformed, not bubble up as an exception.
+    expect(parseEventReminderPayload('evnt_%E0%A4%A')).toEqual({ kind: 'malformed' });
+  });
+
+  it('round-trips the wire format produced by buildEventReminderDeepLink', () => {
+    // Contract test — keeps the API helper's encode and the parser's decode
+    // symmetric. Wire format documented in apps/api/src/telegram/deepLinks.ts.
+    const occasionId = 'cmaa1bb2ccdd';
+    const wirePayload = `evnt_${encodeURIComponent(occasionId)}`;
+    expect(parseEventReminderPayload(wirePayload)).toEqual({ kind: 'ok', occasionId });
+  });
+
+  it('does not match other deep-link payload prefixes', () => {
+    for (const other of [
+      'crpl_cmaa1bb2ccdd__c_cmcc3dd4eeff',
+      'rrem_cmaa1bb2ccdd__m_cmm9zz8yyxx',
+      'br_cmaa1bb2ccdd',
+      'santa_join_token123',
+      'gg_token123',
+      'occasion_cmaa1bb2ccdd',
+      'profile_someuser',
+      'src_email__med_marketing',
+      'cs_token123',
+      'create_wishlist',
+    ]) {
+      expect(parseEventReminderPayload(other)).toEqual({ kind: 'malformed' });
     }
   });
 });

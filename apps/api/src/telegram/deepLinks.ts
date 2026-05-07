@@ -13,6 +13,7 @@
 // Wire formats:
 //   comment-reply        — crpl_<itemId>__c_<commentId>
 //   reservation-reminder — rrem_<itemId>__m_<reservationMetaId>
+//   event-reminder       — evnt_<occasionId>
 //
 // MINI_APP_URL fallback chain matches every other call site in index.ts:
 //   1. process.env.MINI_APP_URL (preferred, set in prod)
@@ -31,4 +32,8 @@ export function buildCommentReplyDeepLink(itemId: string, commentId: string): st
 
 export function buildReservationReminderDeepLink(itemId: string, reservationMetaId: string): string {
   return `${getMiniAppUrl()}?startapp=rrem_${encodeURIComponent(itemId)}__m_${encodeURIComponent(reservationMetaId)}`;
+}
+
+export function buildEventReminderDeepLink(occasionId: string): string {
+  return `${getMiniAppUrl()}?startapp=evnt_${encodeURIComponent(occasionId)}`;
 }

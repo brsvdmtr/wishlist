@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { buildCommentReplyDeepLink, buildReservationReminderDeepLink } from './deepLinks';
+import { buildCommentReplyDeepLink, buildReservationReminderDeepLink, buildEventReminderDeepLink } from './deepLinks';
 
 // Snapshot env vars and restore between cases — the helpers read at call
 // time, so each test sets up its own env.
@@ -72,5 +72,44 @@ describe('buildCommentReplyDeepLink (regression)', () => {
     process.env.WEB_ORIGIN = 'https://example.com';
     const url = buildCommentReplyDeepLink('cmaa1bb2ccdd', 'cmcc3dd4eeff');
     expect(url).toBe('https://example.com/miniapp?startapp=crpl_cmaa1bb2ccdd__c_cmcc3dd4eeff');
+  });
+});
+
+describe('buildEventReminderDeepLink', () => {
+  it('uses MINI_APP_URL when set', () => {
+    process.env.MINI_APP_URL = 'https://t.me/WishBoardBot/app';
+    const url = buildEventReminderDeepLink('cmaa1bb2ccdd');
+    expect(url).toBe('https://t.me/WishBoardBot/app?startapp=evnt_cmaa1bb2ccdd');
+  });
+
+  it('falls back to WEB_ORIGIN + /miniapp when MINI_APP_URL is missing', () => {
+    process.env.WEB_ORIGIN = 'https://example.com';
+    const url = buildEventReminderDeepLink('cmaa1bb2ccdd');
+    expect(url).toBe('https://example.com/miniapp?startapp=evnt_cmaa1bb2ccdd');
+  });
+
+  it('falls back to wishlistik.ru/miniapp when both env vars missing', () => {
+    const url = buildEventReminderDeepLink('cmaa1bb2ccdd');
+    expect(url).toBe('https://wishlistik.ru/miniapp?startapp=evnt_cmaa1bb2ccdd');
+  });
+
+  it('encodes occasionId via encodeURIComponent', () => {
+    process.env.MINI_APP_URL = 'https://t.me/WishBoardBot/app';
+    const url = buildEventReminderDeepLink('id with space');
+    expect(url).toBe('https://t.me/WishBoardBot/app?startapp=evnt_id%20with%20space');
+  });
+
+  it('does not collide with reservation-reminder, comment-reply, or the existing `occasion_` prefix', () => {
+    const a = buildEventReminderDeepLink('cmaa1bb2ccdd');
+    const b = buildReservationReminderDeepLink('cmaa1bb2ccdd', 'cmm9zz8yyxx');
+    const c = buildCommentReplyDeepLink('cmaa1bb2ccdd', 'cmcc3dd4eeff');
+    expect(a).toContain('?startapp=evnt_');
+    expect(a).not.toContain('rrem_');
+    expect(a).not.toContain('crpl_');
+    // The legacy `occasion_` payload (used elsewhere in the bot for copy-link
+    // entry) shares `occas`-something — guard against accidental shape drift.
+    expect(a).not.toContain('occasion_');
+    expect(b).toContain('rrem_');
+    expect(c).toContain('crpl_');
   });
 });

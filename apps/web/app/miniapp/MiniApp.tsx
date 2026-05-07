@@ -28,7 +28,7 @@ import {
   SECURITY_TOAST_CODES,
   CLIENT_BUG_CODES,
 } from './idempotency';
-import { parseReservationReminderPayload, looksLikeId } from './startParam';
+import { parseReservationReminderPayload, parseEventReminderPayload, looksLikeId } from './startParam';
 
 // ═══════════════════════════════════════════════════════
 // TELEGRAM TYPES
@@ -8504,6 +8504,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       if (!startParam || !startParam.startsWith('rrem_')) {
         setHomeReturnTab(null);
       }
+      // Event-reminder (`evnt_`) sets `gnViewingOccasion` so the
+      // gift-notes-occasion screen renders. The pre-existing `occasion_`
+      // branch sets the same state — exempt both from the reset.
+      if (!startParam || (!startParam.startsWith('evnt_') && !startParam.startsWith('occasion_'))) {
+        setGnViewingOccasion(null);
+      }
 
       if (startParam && startParam.startsWith('santa_')) {
         // Deep link from Santa invite.
@@ -8588,9 +8594,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             setGnViewingOccasion(data.occasion);
             bootSetScreen('gift-notes-occasion');
           } else {
+            // Failure path: clear any stale occasion from a previous open so
+            // the cached value can't surface in handlers that read
+            // gnViewingOccasion outside of the gift-notes-occasion render gate.
+            setGnViewingOccasion(null);
             bootSetScreen('my-wishlists');
           }
-        }).catch(() => bootSetScreen('my-wishlists'));
+        }).catch(() => { setGnViewingOccasion(null); bootSetScreen('my-wishlists'); });
       } else if (startParam && startParam.startsWith('draft_')) {
         // Deep link from bot: open draft item
         const draftItemId = startParam.slice(6); // strip "draft_"
@@ -8743,6 +8753,69 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 const reason = itemResult.kind === 'forbidden' ? 'no_longer_reserver' : itemResult.kind;
                 trackEvent('reservation_reminder_deeplink_unavailable', { itemId: targetItemId, reason });
                 bootSetScreen('my-reservations');
+              }
+            })
+            .catch(handleErr);
+        }
+      } else if (startParam && startParam.startsWith('evnt_')) {
+        // Event-reminder deep link: evnt_<occasionId>.
+        // Sent by the bot's "📱 Открыть" button on gift-occasion reminders
+        // (events.ts scheduler). Lands directly on the occasion detail
+        // screen in Gift Notes. Distinct from the pre-existing `occasion_`
+        // branch (which is a copy-link entry point with silent fallback) —
+        // reminder click creates a stronger user expectation, so we toast
+        // explicitly on missing/error rather than silently routing home.
+        //
+        // 403 specifically maps to a Pro paywall: GET /tg/gift-occasions/:id
+        // is gated by `requireGiftNotes` which returns
+        // 403 { error: 'gift_notes_required' } when the user no longer has
+        // the entitlement (Pro lapsed between reminder send and click).
+        // The "occasion not yours" case returns 404, not 403, so 403 is
+        // unambiguous — route to gift-notes-paywall instead of the generic
+        // not-found toast (would misrepresent paywall as deletion).
+        const parsed = parseEventReminderPayload(startParam);
+        if (parsed.kind === 'malformed') {
+          trackEvent('event_reminder_deeplink_opened', { reason: 'malformed', payload: startParam });
+          loadWishlists()
+            .then(() => {
+              trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
+              pushToast(t('event_reminder_not_found_toast', locale), 'error');
+              setGnViewingOccasion(null);
+              bootSetScreen('my-wishlists');
+            })
+            .catch(handleErr);
+        } else {
+          const targetOccasionId = parsed.occasionId;
+          trackEvent('event_reminder_deeplink_opened', { occasionId: targetOccasionId });
+          const occasionPromise = tgFetch(`/tg/gift-occasions/${encodeURIComponent(targetOccasionId)}`)
+            .then(async (res) => {
+              if (res.status === 404) return { kind: 'not_found' as const };
+              if (res.status === 403) {
+                const body = await res.json().catch(() => ({})) as { error?: string };
+                if (body.error === 'gift_notes_required') return { kind: 'paywall' as const };
+                return { kind: 'forbidden' as const };
+              }
+              if (!res.ok) return { kind: 'error' as const };
+              const json = await res.json() as { occasion: unknown };
+              return { kind: 'ok' as const, occasion: json.occasion };
+            })
+            .catch(() => ({ kind: 'error' as const }));
+
+          Promise.all([loadWishlists().catch(() => {}), occasionPromise])
+            .then(([, occResult]) => {
+              trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
+              if (occResult.kind === 'ok') {
+                setGnViewingOccasion(occResult.occasion);
+                bootSetScreen('gift-notes-occasion');
+              } else if (occResult.kind === 'paywall') {
+                trackEvent('event_reminder_deeplink_paywall', { occasionId: targetOccasionId });
+                setGnViewingOccasion(null);
+                bootSetScreen('gift-notes-paywall');
+              } else {
+                pushToast(t('event_reminder_not_found_toast', locale), 'error');
+                trackEvent('event_reminder_deeplink_unavailable', { occasionId: targetOccasionId, reason: occResult.kind });
+                setGnViewingOccasion(null);
+                bootSetScreen('my-wishlists');
               }
             })
             .catch(handleErr);
