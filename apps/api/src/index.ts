@@ -1222,6 +1222,10 @@ protectTgRoute('POST',   '/wishlists/:id/categories',                  idem('POS
 protectTgRoute('POST',   '/wishlists/:id/categories/reorder',          idem('POST /tg/wishlists/:id/categories/reorder', { category: 'wishlist.category' }));
 protectTgRoute('PATCH',  '/wishlists/:wlId/categories/:catId',         idem('PATCH /tg/wishlists/:wlId/categories/:catId', { category: 'wishlist.category' }));
 protectTgRoute('DELETE', '/wishlists/:wlId/categories/:catId',         idem('DELETE /tg/wishlists/:wlId/categories/:catId', { category: 'wishlist.category' }));
+// Items reorder within a wishlist (Wave-2 P3) — large-payload state-changing
+// reorder of items inside one wishlist. Same `wishlist.update` idem category
+// as PATCH /wishlists/:id and POST /wishlists/:id/transfer-items.
+protectTgRoute('POST',   '/wishlists/:id/items/reorder',               idem('POST /tg/wishlists/:id/items/reorder', { category: 'wishlist.update' }));
 
 // ── Items (single) ───────────────────────────────────────────────────────────
 protectTgRoute('POST',   '/wishlists/:id/items',             createRateLimiter('item.create'), idem('POST /tg/wishlists/:id/items', { category: 'item.create' }));
@@ -1233,6 +1237,12 @@ protectTgRoute('POST',   '/items/:id/photo',                 idem('POST /tg/item
 protectTgRoute('DELETE', '/items/:id/photo',                 idem('DELETE /tg/items/:id/photo', { category: 'item.photo' }));
 protectTgRoute('POST',   '/items/:id/placements',            idem('POST /tg/items/:id/placements', { category: 'item.update' }));
 protectTgRoute('DELETE', '/items/:id/placements/:wishlistId', idem('DELETE /tg/items/:id/placements/:wishlistId', { category: 'item.update' }));
+// Items extras (Pro features) — Wave-2 P3 closure of the three single-item
+// endpoints flagged in routes/items.routes.ts header docblock. All share
+// `item.update` idem category; rely on global state.changing rate limit.
+protectTgRoute('POST',   '/items/:id/copy',                  idem('POST /tg/items/:id/copy', { category: 'item.update' }));
+protectTgRoute('POST',   '/items/:id/move',                  idem('POST /tg/items/:id/move', { category: 'item.update' }));
+protectTgRoute('POST',   '/items/:id/move-category',         idem('POST /tg/items/:id/move-category', { category: 'item.update' }));
 
 // ── Items (bulk) ─────────────────────────────────────────────────────────────
 // All bulk endpoints share the item.bulk limiter (10 / 10 min) so a single
@@ -1243,6 +1253,9 @@ protectTgRoute('POST',   '/items/bulk-archive',              createRateLimiter('
 protectTgRoute('POST',   '/items/bulk-restore',              createRateLimiter('item.bulk'), idem('POST /tg/items/bulk-restore', { category: 'item.bulk' }));
 protectTgRoute('POST',   '/items/bulk-copy',                 createRateLimiter('item.bulk'), idem('POST /tg/items/bulk-copy', { category: 'item.bulk' }));
 protectTgRoute('POST',   '/items/bulk-hard-delete',          createRateLimiter('item.bulk'), idem('POST /tg/items/bulk-hard-delete', { category: 'item.bulk' }));
+// Bulk move-category (Pro feature) — Wave-2 P3 closure; same item.bulk
+// limiter + idem category as the other bulk-* operations above.
+protectTgRoute('POST',   '/items/bulk-move-category',        createRateLimiter('item.bulk'), idem('POST /tg/items/bulk-move-category', { category: 'item.bulk' }));
 
 // ── Reservations ─────────────────────────────────────────────────────────────
 // Reserve gets BOTH limiters (short burst + daily cap). Other reservation

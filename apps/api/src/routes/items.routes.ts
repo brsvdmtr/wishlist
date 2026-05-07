@@ -41,16 +41,12 @@
 //     middleware on the photo POST route; the byte-identical handler body
 //     uses processImage + deleteUploadFile inline).
 //
-// Pre-existing security gaps (NOT addressed in this PR — flag-only):
-//   - POST /tg/items/:id/move-category — no idempotency middleware
-//     registered; state-changing (placement.update + item.updateMany).
-//   - POST /tg/items/bulk-move-category — same as above.
-//   - POST /tg/items/:id/move — no idempotency; state-changing
-//     (transfers item across wishlists, deletes/recreates placements).
-//   - POST /tg/items/:id/copy — no idempotency; state-changing
-//     (creates new Item + placement).
-// All four state-changing endpoints rely on the global state-changing
-// limiter only. Wave-2 task to add idem coverage.
+// Wave-2 P3 closure: POST /tg/items/:id/{copy,move,move-category} and
+// POST /tg/items/bulk-move-category now have protectTgRoute coverage with
+// idempotency middleware (registered in apps/api/src/index.ts alongside
+// the rest of the items single/bulk blocks). Single-item endpoints share
+// the `item.update` idem category; the bulk endpoint shares the
+// `item.bulk` limiter + category with the other bulk-* operations.
 
 import { Router } from 'express';
 import { z } from 'zod';

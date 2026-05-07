@@ -6915,6 +6915,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch(`/tg/items/${itemId}/move`, {
         method: 'POST',
         body: JSON.stringify({ targetWishlistId }),
+        idempotency: { action: `item.move:${itemId}:${targetWishlistId}` },
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string };
@@ -9291,6 +9292,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           const mRes = await tgFetch(`/tg/items/${itemId}/move`, {
             method: 'POST',
             body: JSON.stringify({ targetWishlistId: json.wishlist.id }),
+            idempotency: { action: `item.move:${itemId}:${json.wishlist.id}` },
           });
           if (mRes.ok) {
             void loadDrafts();
@@ -9442,6 +9444,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch(`/tg/wishlists/${currentWl.id}/items/reorder`, {
         method: 'POST',
         body: JSON.stringify({ groups }),
+        idempotency: { action: `wishlist.items.reorder:${currentWl.id}` },
       });
       if (!res.ok) { pushToast(t('wl_reorder_error', locale), 'error'); return; }
       setItems([...itemReorderList]);
@@ -9631,6 +9634,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const res = await tgFetch(`/tg/items/${itemIds[0]}/move-category`, {
           method: 'POST',
           body: JSON.stringify({ categoryId: targetCatId }),
+          idempotency: { action: `item.move-category:${itemIds[0]}:${targetCatId}` },
         });
         if (res.status === 402) { showUpsell('categories'); setShowCatPicker(null); return; }
         if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
@@ -9638,6 +9642,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const res = await tgFetch('/tg/items/bulk-move-category', {
           method: 'POST',
           body: JSON.stringify({ itemIds, categoryId: targetCatId }),
+          idempotency: { action: `item.bulk-move-category:${[...itemIds].sort().join(',')}:${targetCatId}` },
         });
         if (res.status === 402) { showUpsell('categories'); setShowCatPicker(null); return; }
         if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
@@ -22387,6 +22392,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 try {
                   const r = await tgFetch(`/tg/items/${copyingItem.id}/copy`, {
                     method: 'POST', body: JSON.stringify({ targetWishlistId: wl.id }),
+                    idempotency: { action: `item.copy:${copyingItem.id}:${wl.id}` },
                   });
                   if (!r.ok) {
                     const body = await r.json().catch(() => ({})) as { error?: string };
