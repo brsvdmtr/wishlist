@@ -1211,6 +1211,18 @@ protectTgRoute('POST',   '/wishlists/:id/unarchive',         idem('POST /tg/wish
 protectTgRoute('POST',   '/wishlists/:id/transfer-items',    idem('POST /tg/wishlists/:id/transfer-items', { category: 'wishlist.update' }));
 protectTgRoute('POST',   '/wishlists/reorder',               idem('POST /tg/wishlists/reorder', { category: 'wishlist.update' }));
 
+// ── Wishlist categories (Pro feature) — Wave-2 P2 ────────────────────────────
+// Categories CRUD live under /wishlists/:id/categories[/:catId]. Wishlist-
+// rooted, but the handlers ship from wishlistsRouter (routes/wishlists.routes
+// .ts) — the protectTgRoute(...) tgRouter.all() registration here fires
+// before sub-router dispatch, same shape as the rest of the wishlists block.
+// Plain `state.changing` rate-limiter (already on tgRouter) is enough — no
+// burst/consensus risk; idem prevents double-tap replay during reorder.
+protectTgRoute('POST',   '/wishlists/:id/categories',                  idem('POST /tg/wishlists/:id/categories', { category: 'wishlist.category' }));
+protectTgRoute('POST',   '/wishlists/:id/categories/reorder',          idem('POST /tg/wishlists/:id/categories/reorder', { category: 'wishlist.category' }));
+protectTgRoute('PATCH',  '/wishlists/:wlId/categories/:catId',         idem('PATCH /tg/wishlists/:wlId/categories/:catId', { category: 'wishlist.category' }));
+protectTgRoute('DELETE', '/wishlists/:wlId/categories/:catId',         idem('DELETE /tg/wishlists/:wlId/categories/:catId', { category: 'wishlist.category' }));
+
 // ── Items (single) ───────────────────────────────────────────────────────────
 protectTgRoute('POST',   '/wishlists/:id/items',             createRateLimiter('item.create'), idem('POST /tg/wishlists/:id/items', { category: 'item.create' }));
 protectTgRoute('PATCH',  '/items/:id',                       idem('PATCH /tg/items/:id', { category: 'item.update' }));
@@ -1260,6 +1272,11 @@ protectTgRoute('POST',   '/selections/:id/subscribe',            idem('POST /tg/
 protectTgRoute('DELETE', '/selections/:id/subscribe',            idem('DELETE /tg/selections/:id/subscribe', { category: 'subscribe' }));
 protectTgRoute('POST',   '/wishlists/:id/subscribe',             idem('POST /tg/wishlists/:id/subscribe', { category: 'subscribe' }));
 protectTgRoute('DELETE', '/wishlists/:id/subscribe',             idem('DELETE /tg/wishlists/:id/subscribe', { category: 'subscribe' }));
+// Profile subscribe (Wave-2 P2). Frontend already passes
+// `idempotency: { action: 'profile.(un)subscribe:<username>' }` for both
+// directions — adding the middleware closes the loop on the server side.
+protectTgRoute('POST',   '/profiles/:username/subscribe',        idem('POST /tg/profiles/:username/subscribe', { category: 'subscribe' }));
+protectTgRoute('DELETE', '/profiles/:username/subscribe',        idem('DELETE /tg/profiles/:username/subscribe', { category: 'subscribe' }));
 
 // ── Billing / Stars (7-day TTL, critical=true logs missing key) ──────────────
 // Recovery rule: the rate limiter sits ONLY on /checkout endpoints. /sync
@@ -1574,9 +1591,13 @@ tgRouter.use(commentsRouter);
 // POST /items/:id/hint). `cancelItemHints` is NOT consumed by these
 // handlers — it stays in index.ts for the items/reservations consumers.
 //
-// Pre-existing security gap (NOT fixed here): POST /items/:id/hint has no
-// protectTgRoute(...) registration; it relies on its own internal anti-
-// spam (3/item/30d + 5/sender/day) plus a 30-min idempotent fast-path.
+// Wave-2 P2: POST /items/:id/hint now has protectTgRoute coverage with
+// idempotency middleware (category: 'hints'). The handler still has its
+// own domain-level anti-spam (3/item/30d + 5/sender/day) plus a 30-min
+// idempotent fast-path; this layer adds Idempotency-Key replay safety
+// for rapid double-tap. Frontend at MiniApp.tsx L7306 already passes
+// `idempotency: { action: 'hint:${item.id}' }`.
+protectTgRoute('POST',   '/items/:id/hint',                     idem('POST /tg/items/:id/hint', { category: 'hints' }));
 const hintsRouter = registerHintsRouter({
   getOrCreateTgUser,
   getUserEntitlement,

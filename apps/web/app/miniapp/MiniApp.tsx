@@ -9552,6 +9552,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch(`/tg/wishlists/${currentWl.id}/categories`, {
         method: 'POST',
         body: JSON.stringify({ name }),
+        idempotency: { action: `wishlist.category.create:${currentWl.id}` },
       });
       if (res.status === 402) {
         showUpsell('categories');
@@ -9591,6 +9592,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch(`/tg/wishlists/${currentWl.id}/categories/${showCatRename.id}`, {
         method: 'PATCH',
         body: JSON.stringify({ name }),
+        idempotency: { action: `wishlist.category.update:${showCatRename.id}` },
       });
       if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
       setCategories(prev => prev.map(c => c.id === showCatRename.id ? { ...c, name } : c));
@@ -9608,6 +9610,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     try {
       const res = await tgFetch(`/tg/wishlists/${currentWl.id}/categories/${showCatDelete.id}`, {
         method: 'DELETE',
+        idempotency: { action: `wishlist.category.delete:${showCatDelete.id}` },
       });
       if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
       // Items move to default category client-side
@@ -9679,6 +9682,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch(`/tg/wishlists/${currentWl.id}/categories/reorder`, {
         method: 'POST',
         body: JSON.stringify({ orderedIds }),
+        idempotency: { action: `wishlist.category.reorder:${currentWl.id}` },
       });
       if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
       // Apply new sort order
