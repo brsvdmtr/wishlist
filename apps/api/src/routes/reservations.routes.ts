@@ -50,6 +50,7 @@ import { zodError } from '../lib/http';
 import { getRequestLocale } from '../lib/locale';
 import { secureCompare } from '../lib/crypto';
 import { sendTgNotification } from '../telegram/botApi';
+import { resolveUserFirstName } from '../services/locale';
 import logger from '../logger';
 
 // Shape of the Telegram initData user object — duplicated from index.ts to
@@ -196,7 +197,6 @@ export type ReservationsRouterDeps = {
     ownerAddOns: Array<{ addonType: string; targetId?: string | null }>,
     wishlistId: string,
   ) => boolean;
-  resolveUserFirstName: (user: OwnerLike, locale?: Locale) => Promise<string>;
   cancelItemHints: (itemId: string) => Promise<void>;
   // Smart Reservations: lead-time hours for reminder/expiringSoon by TTL.
   // Consumed by smartResDerive (defined inside this factory below) — index.ts
@@ -216,7 +216,6 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
     hasReservationPro,
     isReservationBeta,
     hasSmartReservations,
-    resolveUserFirstName,
     cancelItemHints,
     getSmartResLeadHours,
   } = deps;

@@ -21,16 +21,17 @@ import {
   type LanguageMode,
   type LanguageSettings,
 } from '@wishlist/shared';
+import {
+  getNextOccurrenceDate,
+  computeReminderSchedule,
+  buildReminderEpisodeKey,
+} from '../services/calendar';
 
 export type EventSchedulerDeps = {
   prisma: PrismaClient;
   logger: Logger;
   sendTgBotMessage: (chatId: string, text: string, replyMarkup?: Record<string, unknown>) => Promise<boolean>;
   BOT_TOKEN_FOR_DM: string;
-  // Helpers stay in index.ts (also consumed by gift-notes.routes.ts via deps).
-  getNextOccurrenceDate: (eventDate: Date, recurrence: string) => Date | null;
-  computeReminderSchedule: (eventDate: Date, recurrence: string, offsetDays: number, timeOfDay: string) => Date;
-  buildReminderEpisodeKey: (occasionId: string, offsetDays: number, scheduledFor: Date) => string;
 };
 
 export function startEventSchedulers(deps: EventSchedulerDeps): void {
@@ -39,9 +40,6 @@ export function startEventSchedulers(deps: EventSchedulerDeps): void {
     logger,
     sendTgBotMessage,
     BOT_TOKEN_FOR_DM,
-    getNextOccurrenceDate,
-    computeReminderSchedule,
-    buildReminderEpisodeKey,
   } = deps;
 
   // ─── Events Calendar reminders cron (every 5 min) ───────────────────────────

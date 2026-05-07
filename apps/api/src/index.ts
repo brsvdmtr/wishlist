@@ -125,6 +125,37 @@ import {
   getEffectiveEntitlements,
   isWishlistWritable,
 } from './services/entitlement';
+import {
+  DRAFTS_ITEM_LIMIT,
+  reassignPrimaryBeforeWishlistDelete,
+  createGetOrCreateDraftsWishlist,
+} from './services/wishlists';
+import {
+  ONBOARDING_KEY,
+  ONBOARDING_VERSION,
+  RU_VARIANTS,
+  GLOBAL_VARIANTS,
+  FORCED_ROLLOUT_USERS,
+  resolveMarketSegment,
+  variantKeyToSegment,
+  assignOnboardingVariant,
+  getDemoTemplate,
+  isDemoItemUntouched,
+  isMeaningfulEdit,
+  checkOnboardingEligibility,
+  createCompleteOnboarding,
+} from './services/onboarding';
+import {
+  ACTIVE_STATUSES,
+  cancelItemHints,
+  notifySubscribersOfChange,
+  countItemPlacements,
+  extractNumericPrice,
+  priorityToNum,
+  numToPriority,
+  mapTgItem,
+  getItemRole,
+} from './services/items';
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -153,8 +184,9 @@ registerHealthRoutes(app);
 const tgRouter = express.Router();
 // --- Shared helpers
 const ItemStatusSchema = z.enum(['AVAILABLE', 'RESERVED', 'PURCHASED', 'COMPLETED', 'DELETED', 'ARCHIVED']);
-const ACTIVE_STATUSES = ['AVAILABLE', 'RESERVED', 'PURCHASED'] as const;
 const PrioritySchema = z.enum(['LOW', 'MEDIUM', 'HIGH']);
+// ACTIVE_STATUSES extracted to ./services/items.ts in P5s-6 (Strategy A).
+// Imported below alongside the rest of the items helpers.
 
 // Normalize bare domain URLs like "audi.com" → "https://audi.com"
 const normalizeUrl = (val: string) => {
@@ -173,126 +205,11 @@ const actorBodySchema = z.object({
   actorHash: z.string().uuid(),
 });
 
-/** Best-effort: resolve user's first_name from Telegram Bot API, cache in DB. */
-async function resolveUserFirstName(user: { id: string; firstName: string | null; telegramChatId: string | null }, locale: Locale = 'ru'): Promise<string> {
-  if (user.firstName) return user.firstName;
-  const fallback = t('api_user_fallback', locale);
-  const token = process.env.BOT_TOKEN;
-  if (!token || !user.telegramChatId) return fallback;
-  try {
-    const resp = await fetch(`https://api.telegram.org/bot${token}/getChat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: user.telegramChatId }),
-    });
-    if (!resp.ok) return fallback;
-    const json = await resp.json() as { ok: boolean; result?: { first_name?: string } };
-    const name = json.result?.first_name;
-    if (name) {
-      // Cache in DB for future calls
-      await prisma.user.update({ where: { id: user.id }, data: { firstName: name } }).catch(() => {});
-      return name;
-    }
-  } catch { /* best-effort */ }
-  return fallback;
-}
+// resolveUserFirstName extracted to ./services/locale.ts in P5s-10.
+// Strategy B: imported directly by routes/reservations.routes.ts.
 
-/** Cancel all active hints for an item (called when item leaves AVAILABLE state). */
-async function cancelItemHints(itemId: string): Promise<void> {
-  try {
-    await prisma.hint.updateMany({
-      where: { itemId, status: { in: ['SENT', 'DELIVERED'] } },
-      data: { status: 'CANCELLED' },
-    });
-  } catch { /* best-effort */ }
-}
-
-/**
- * Record unread changes for subscribers of a wishlist and send Telegram notifications.
- * Fire-and-forget — never throws.
- *
- * For item_added / item_updated events we attach an inline-keyboard button that
- * deep-links into the Mini App at the specific item via the existing
- * `<slug>__item_<itemId>` startapp format (parsed in MiniApp.tsx bootstrap).
- * Wishlist-only updates currently ship without a button — no slug-only handler
- * in the bootstrap parser yet.
- */
-async function notifySubscribersOfChange(
-  wishlistId: string,
-  entityId: string,
-  changedFields: string[],
-  eventType: 'item_added' | 'item_updated' | 'wishlist_updated',
-  meta: { itemTitle?: string; wishlistTitle?: string; ownerName?: string },
-): Promise<void> {
-  try {
-    const subs = await prisma.wishlistSubscription.findMany({
-      where: { wishlistId },
-      select: { id: true, subscriber: { select: { id: true, telegramChatId: true } } },
-    });
-    if (subs.length === 0) return;
-
-    // Resolve the wishlist slug once for deep-link construction (item events only).
-    const isItemEvent = eventType === 'item_added' || eventType === 'item_updated';
-    let deepLinkUrl: string | null = null;
-    if (isItemEvent) {
-      const wl = await prisma.wishlist.findUnique({ where: { id: wishlistId }, select: { slug: true } });
-      if (wl?.slug) {
-        const miniAppUrl = process.env.MINI_APP_URL ?? (process.env.WEB_ORIGIN ? `${process.env.WEB_ORIGIN}/miniapp` : 'https://wishlistik.ru/miniapp');
-        deepLinkUrl = `${miniAppUrl}?startapp=${encodeURIComponent(wl.slug)}__item_${encodeURIComponent(entityId)}`;
-      }
-    }
-
-    const notifLocale: Locale = 'ru';
-    await Promise.all(
-      subs.map(async (sub) => {
-        // Upsert unread markers
-        await Promise.all(
-          changedFields.map((field) =>
-            prisma.subscriptionUnread.upsert({
-              where: { subId_entityId_fieldName: { subId: sub.id, entityId, fieldName: field } },
-              update: {},
-              create: { subId: sub.id, entityId, fieldName: field },
-            }),
-          ),
-        );
-
-        // Send Telegram notification
-        const chatId = sub.subscriber.telegramChatId;
-        if (!chatId) return;
-
-        let text = '';
-        if (eventType === 'item_added') {
-          text = t('sub_notification_new_item', notifLocale, {
-            owner: meta.ownerName ?? '…',
-            title: meta.itemTitle ?? '…',
-            wishlist: meta.wishlistTitle ?? '…',
-          });
-        } else if (eventType === 'item_updated') {
-          text = t('sub_notification_updated', notifLocale, {
-            title: meta.itemTitle ?? '…',
-            wishlist: meta.wishlistTitle ?? '…',
-          });
-        } else {
-          text = t('sub_notification_wishlist_updated', notifLocale, {
-            title: meta.wishlistTitle ?? '…',
-          });
-        }
-
-        if (deepLinkUrl) {
-          // Use sendTgBotMessage (supports reply_markup) instead of sendTgNotification.
-          // Button text "🎁 Перейти к желанию" — same RU-only stance as the message text.
-          void sendTgBotMessage(chatId, text, {
-            inline_keyboard: [[{ text: '🎁 Перейти к желанию', web_app: { url: deepLinkUrl } }]],
-          });
-        } else {
-          void sendTgNotification(chatId, text);
-        }
-      }),
-    );
-  } catch (err) {
-    logger.error({ err }, 'notifySubscribersOfChange error');
-  }
-}
+// cancelItemHints + notifySubscribersOfChange extracted to
+// ./services/items.ts in P5s-6 (Strategy A). Imported below.
 
 // generateUniqueSupportId + getOrCreateProfile live in ./profile so they can
 // be unit-tested in isolation (race-condition repro for P2002 on userId).
@@ -315,50 +232,11 @@ async function notifySubscribersOfChange(
  * @param opts.position    Position within the wishlist (defaults to appended at end)
  * @param opts.categoryId  Category in target wishlist (null → default category resolved here)
  */
-/**
- * Count how many wishlists an item is currently placed in.
- * Used to render "🔗 В N" badges and to guard the "remove last placement" flow.
- */
-async function countItemPlacements(itemId: string): Promise<number> {
-  return prisma.wishlistItemPlacement.count({ where: { itemId } });
-}
+// countItemPlacements extracted to ./services/items.ts in P5s-6.
 
-/**
- * Before deleting a wishlist, make sure shared wishes (items placed in THIS wishlist
- * as their legacy primary + also placed in other wishlists) don't get cascaded away.
- *
- * Strategy: for each item whose Item.wishlistId = wishlistIdBeingDeleted AND has another
- * placement, reassign Item.wishlistId to the oldest remaining placement (matching the
- * DELETE /items/:id/placements/:wishlistId behaviour). After this, wishlist.delete can
- * safely cascade — it will only remove placements in this wishlist + items that were
- * fully homed here.
- */
-async function reassignPrimaryBeforeWishlistDelete(wishlistId: string): Promise<void> {
-  // Candidate items: primary points to this wishlist
-  const primariesHere = await prisma.item.findMany({
-    where: { wishlistId },
-    select: { id: true },
-  });
-  if (primariesHere.length === 0) return;
-
-  for (const { id } of primariesHere) {
-    const otherPlacement = await prisma.wishlistItemPlacement.findFirst({
-      where: { itemId: id, wishlistId: { not: wishlistId } },
-      orderBy: { addedAt: 'asc' },
-      select: { wishlistId: true, position: true, categoryId: true },
-    });
-    if (!otherPlacement) continue; // item fully homed here — will cascade-delete as expected
-    // Move primary so the item survives the wishlist cascade
-    await prisma.item.update({
-      where: { id },
-      data: {
-        wishlistId: otherPlacement.wishlistId,
-        position: otherPlacement.position,
-        categoryId: otherPlacement.categoryId,
-      },
-    });
-  }
-}
+// reassignPrimaryBeforeWishlistDelete extracted to ./services/wishlists.ts in
+// P5s-7 (Strategy A). Imported at the top of this file and continues passing
+// through router factory deps unchanged.
 
 
 
@@ -402,34 +280,15 @@ function requireGiftNotes(ent: Awaited<ReturnType<typeof getEffectiveEntitlement
   return true;
 }
 
-/** Compute next occurrence date. Handles Feb29 + day>daysInMonth */
-function getNextOccurrenceDate(eventDate: Date, recurrence: string): Date | null {
-  if (recurrence === 'NONE') return eventDate;
-  const now = new Date();
-  const nowStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
-  const [nowY, nowM, nowD] = nowStr.split('-').map(Number) as [number, number, number];
-  const todayNum = nowY * 10000 + nowM * 100 + nowD;
-  const evM = eventDate.getUTCMonth() + 1;
-  const evD = eventDate.getUTCDate();
-  if (recurrence === 'YEARLY') {
-    for (let y = nowY; y <= nowY + 1; y++) {
-      const dim = new Date(y, evM, 0).getDate();
-      const day = Math.min(evD, dim);
-      if (y * 10000 + evM * 100 + day >= todayNum) return new Date(Date.UTC(y, evM - 1, day));
-    }
-  }
-  if (recurrence === 'MONTHLY') {
-    for (let offset = 0; offset <= 1; offset++) {
-      const m = nowM + offset;
-      const y = nowY + Math.floor((m - 1) / 12);
-      const mN = ((m - 1) % 12) + 1;
-      const dim = new Date(y, mN, 0).getDate();
-      const day = Math.min(evD, dim);
-      if (y * 10000 + mN * 100 + day >= todayNum) return new Date(Date.UTC(y, mN - 1, day));
-    }
-  }
-  return eventDate;
-}
+// Wire the wishlists service factory once trackEvent is defined. Used by
+// registerOnboardingRouter (line ~1463) and the importUrlForUser closure
+// later in this file.
+const getOrCreateDraftsWishlist = createGetOrCreateDraftsWishlist({ trackEvent });
+
+// Calendar pure helpers (getNextOccurrenceDate / computeReminderSchedule /
+// buildReminderEpisodeKey) extracted to ./services/calendar.ts in P5s-8.
+// Strategy B: imported directly by routes/gift-notes.routes.ts and
+// schedulers/events.ts; no longer threaded through their deps factories.
 
 // Analytics / logging stub
 function trackEvent(event: string, userId?: string, props?: Record<string, unknown>) {
@@ -690,321 +549,18 @@ async function runReferralProgressHook(
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─── Onboarding Engine ────────────────────────────────────────────────────────
+// Extracted to ./services/onboarding.ts in P5s-3. Strategy hybrid:
+//   - 12 identifiers (consts, types, pure helpers, async Prisma readers)
+//     imported directly by routes/onboarding.routes.ts and routes/items.routes.ts.
+//   - completeOnboarding wired here as a factory because it closes over
+//     trackEvent (analytics out of P5s scope), then passed via deps to
+//     onboarding + items routers.
+const completeOnboarding = createCompleteOnboarding({ trackEvent });
 
-type VariantKey = 'wildberries' | 'goldapple' | 'ozon' | 'yandex_market' | 'amazon' | 'zalando' | 'sephora' | 'apple';
-type MarketSegment = 'ru' | 'global';
-type CompletionReason =
-  | 'demo_converted'
-  | 'real_item_created'
-  | 'demo_deleted_then_real_created'
-  | 'demo_moved_to_user_wishlist'
-  | 'try_import_completed'
-  | 'catalog_selected'
-  | 'manual_created';
+// ─── end Onboarding Engine helpers (extracted to ./services/onboarding.ts) ──
 
-const ONBOARDING_KEY = 'hello_activation';
-const ONBOARDING_VERSION = 1;
-const RU_VARIANTS: VariantKey[]     = ['wildberries', 'goldapple', 'ozon', 'yandex_market'];
-const GLOBAL_VARIANTS: VariantKey[] = ['amazon', 'zalando', 'sephora', 'apple'];
-
-/** Derive market segment from resolved locale. */
-function resolveMarketSegment(locale: Locale): MarketSegment {
-  return locale === 'ru' ? 'ru' : 'global';
-}
-
-/** Derive segment from a stored variantKey (for call-sites that only have the key). */
-function variantKeyToSegment(variantKey: string): MarketSegment {
-  return (GLOBAL_VARIANTS as string[]).includes(variantKey) ? 'global' : 'ru';
-}
-
-// Centralised forced-rollout gate. actorHashes in this set bypass real-item eligibility check.
-// entryPoint is always overridden to 'forced_rollout_test' for these users.
-const FORCED_ROLLOUT_USERS = new Set<string>(
-  (process.env.ONBOARDING_FORCED_USERS ?? '').split(',').filter(Boolean)
-);
-
-// Onboarding v2 is now the default for ALL new users.
-// A/B experiment concluded — v2_try won and became the main flow.
-// Historical variants (v1_demo) are still supported for users already assigned to them.
-function assignOnboardingVariant(_telegramId?: string): { variant: OnboardingVariant; source: 'rollout_config' } {
-  return { variant: 'v2_try', source: 'rollout_config' };
-}
-
-interface DemoItemTemplate {
-  title: string;
-  url: string;
-  price: number;
-  currency: 'RUB' | 'USD';
-  priority: 'MEDIUM';
-  imageUrl: string;
-  description: string;
-}
-
-// Demo item templates — verbatim agreed content. Do not abbreviate URLs or descriptions.
-type RuVariantKey = 'wildberries' | 'goldapple' | 'ozon' | 'yandex_market';
-const DEMO_ITEMS: Record<RuVariantKey, DemoItemTemplate> = {
-  wildberries: {
-    title: 'Подарочный сертификат Wildberries',
-    url: 'https://www.wildberries.ru/gift/certificates',
-    price: 5000,
-    currency: 'RUB',
-    priority: 'MEDIUM',
-    imageUrl: '/onboarding/wb-cert.jpg',
-    description:
-      'Это хороший подарок на любой повод: день рождения, да и просто так. Сертификат можно потратить на любые покупки на Wildberries, кроме нового сертификата. И каждый найдёт то, что ему по душе.',
-  },
-  goldapple: {
-    title: 'Подарочный сертификат Золотое Яблоко',
-    url: 'https://goldapple.ru/cards?srsltid=AfmBOoptUMZa5NGi5PprPHvbcFkRKveW0MDLqc62SrbWenwhpxr1y2H3',
-    price: 5000,
-    currency: 'RUB',
-    priority: 'MEDIUM',
-    imageUrl: '/onboarding/goldapple-cert.jpg',
-    description:
-      'Это хороший подарок на любой повод: день рождения, да и просто так. Сертификат можно потратить на любые покупки в Золотом Яблоке, кроме нового сертификата. И каждый найдёт то, что ему по душе.',
-  },
-  ozon: {
-    title: 'Подарочный сертификат Ozon',
-    url: 'https://www.ozon.ru/landing/giftcertificates/?__rr=1',
-    price: 5000,
-    currency: 'RUB',
-    priority: 'MEDIUM',
-    imageUrl: '/onboarding/ozon-cert.jpg',
-    description:
-      'Это хороший подарок на любой повод: день рождения, да и просто так. Сертификат можно потратить на любые покупки на Ozon, кроме нового сертификата. И каждый найдёт то, что ему по душе.',
-  },
-  yandex_market: {
-    title: 'Подарочный сертификат Яндекс Маркет',
-    url: 'https://market.yandex.ru/card/podarochnyy-sertifikat-yandeks-market-elektronnyy/103670724746?do-waremd5=n5Az0T5R47tdLDQ0qAMd5Q&ogV=-12',
-    price: 5000,
-    currency: 'RUB',
-    priority: 'MEDIUM',
-    imageUrl: '/onboarding/ym-cert.jpg',
-    description:
-      'Это хороший подарок на любой повод: день рождения, да и просто так. Сертификат можно потратить на любые покупки на Яндекс Маркете, кроме нового сертификата. И каждый найдёт то, что ему по душе.',
-  },
-};
-
-const GLOBAL_DEMO_ITEMS: Record<string, DemoItemTemplate> = {
-  amazon: {
-    title: 'Amazon Gift Card',
-    url: 'https://www.amazon.com/dp/B004LLIKVU',
-    price: 50,
-    currency: 'USD',
-    priority: 'MEDIUM',
-    imageUrl: '/onboarding/global/amazon-gift-card.jpg',
-    description:
-      'A great gift for any occasion. The recipient can choose exactly what they want from millions of products on Amazon.',
-  },
-  zalando: {
-    title: 'Zalando Gift Voucher',
-    url: 'https://www.zalando.co.uk/giftvouchers/',
-    price: 50,
-    currency: 'USD',
-    priority: 'MEDIUM',
-    imageUrl: '/onboarding/global/zalando-gift-card.jpg',
-    description:
-      'A stylish and flexible gift. Perfect for fashion, shoes, accessories and more on Zalando.',
-  },
-  sephora: {
-    title: 'Sephora Gift Card',
-    url: 'https://www.sephora.com/gift-cards',
-    price: 50,
-    currency: 'USD',
-    priority: 'MEDIUM',
-    imageUrl: '/onboarding/global/sephora-gift-card.jpg',
-    description:
-      'A beauty gift that works for almost any occasion. Great for skincare, makeup, fragrance and self-care essentials.',
-  },
-  apple: {
-    title: 'Apple Gift Card',
-    url: 'https://www.apple.com/shop/buy-giftcard/giftcard',
-    price: 50,
-    currency: 'USD',
-    priority: 'MEDIUM',
-    imageUrl: '/onboarding/global/apple-gift-card.jpg',
-    description:
-      'A premium digital gift for apps, devices, accessories, entertainment and more across the Apple ecosystem.',
-  },
-};
-
-/** Look up demo template from either pool by variantKey. */
-function getDemoTemplate(variantKey: string): DemoItemTemplate | undefined {
-  return (DEMO_ITEMS as Record<string, DemoItemTemplate>)[variantKey] ?? GLOBAL_DEMO_ITEMS[variantKey];
-}
-
-/** Count real items for the given user across all wishlists. */
-async function countRealItemsForActivation(userId: string): Promise<number> {
-  return prisma.item.count({
-    where: {
-      wishlist: { ownerId: userId },
-      isDemo: false,
-      originType: { not: 'DEMO' },
-      status: { notIn: ['DELETED', 'PURCHASED', 'COMPLETED'] },
-    },
-  });
-}
-
-/** True if SYSTEM_DRAFTS contains any real (non-demo) items for this user. */
-async function hasDraftsUserContent(userId: string): Promise<boolean> {
-  const count = await prisma.item.count({
-    where: {
-      wishlist: { ownerId: userId, type: 'SYSTEM_DRAFTS' },
-      isDemo: false,
-      originType: { not: 'DEMO' },
-      status: { notIn: ['DELETED', 'PURCHASED', 'COMPLETED'] },
-    },
-  });
-  return count > 0;
-}
-
-type EligibilityResult = {
-  eligible: boolean;
-  reason: string;
-  forcedRollout: boolean;
-  draftsHaveUserContent: boolean;
-};
-
-async function checkOnboardingEligibility(
-  userId: string,
-  actorHash: string,
-): Promise<EligibilityResult> {
-  const draftsHaveUserContent = await hasDraftsUserContent(userId);
-
-  // Centralised forced-rollout check — always wins, bypasses real-item count.
-  if (FORCED_ROLLOUT_USERS.has(actorHash)) {
-    return { eligible: true, reason: 'forced_rollout_test', forcedRollout: true, draftsHaveUserContent };
-  }
-
-  const state = await prisma.userOnboardingState.findUnique({
-    where: { userId_onboardingKey_version: { userId, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
-  });
-  if (state?.status === 'COMPLETED') return { eligible: false, reason: 'already_completed', forcedRollout: false, draftsHaveUserContent };
-  if (state?.status === 'DISMISSED') return { eligible: false, reason: 'already_dismissed', forcedRollout: false, draftsHaveUserContent };
-
-  const realItemCount = await countRealItemsForActivation(userId);
-  if (realItemCount > 0) return { eligible: false, reason: 'has_real_items', forcedRollout: false, draftsHaveUserContent };
-
-  return { eligible: true, reason: 'no_onboarding_state', forcedRollout: false, draftsHaveUserContent };
-}
-
-/** True if a demo item has not been meaningfully edited (safe to delete on dismiss). */
-function isDemoItemUntouched(
-  item: { title: string | null; url: string | null; priceText: string | null; becameRealAt: Date | null },
-  template: DemoItemTemplate,
-): boolean {
-  if (item.becameRealAt !== null) return false;
-  if (item.title !== template.title) return false;
-  if (item.url !== template.url) return false;
-  const itemPrice = item.priceText ? Number(item.priceText) : null;
-  if (itemPrice !== template.price) return false;
-  return true;
-}
-
-/** True if any meaningful field differs from the original demo template. */
-function isMeaningfulEdit(
-  update: { title?: string; url?: string | null; price?: number | null; description?: string | null },
-  template: DemoItemTemplate,
-): boolean {
-  if (update.title !== undefined && update.title !== template.title) return true;
-  if (update.url !== undefined && update.url !== template.url) return true;
-  if (update.price !== undefined && update.price !== template.price) return true;
-  if (update.description !== undefined && update.description !== template.description) return true;
-  return false;
-}
-
-/** Complete the onboarding for a user. Idempotent — no-op if already COMPLETED/DISMISSED.
- *  Always fires 'onboarding_completed' analytics event on the first (real) completion. */
-async function completeOnboarding(userId: string, reason: CompletionReason): Promise<void> {
-  const state = await prisma.userOnboardingState.findUnique({
-    where: { userId_onboardingKey_version: { userId, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
-  });
-  if (!state || state.status === 'COMPLETED' || state.status === 'DISMISSED') return;
-
-  const meta = getOnboardingMeta(state.metaJson);
-  const now = new Date();
-  await prisma.userOnboardingState.update({
-    where: { id: state.id },
-    data: { status: 'COMPLETED', completedAt: now, completionReason: reason },
-  });
-
-  // Set becameRealAt only when the demo item itself was meaningfully converted.
-  if (reason === 'demo_converted' && state.demoItemId) {
-    await prisma.item.updateMany({
-      where: { id: state.demoItemId, isDemo: true },
-      data: { becameRealAt: now },
-    });
-  }
-
-  // Analytics — fires exactly once per completion (guard above prevents re-entry).
-  const isLegacyV1 = (meta.onboardingVariant ?? 'v1_demo') === 'v1_demo';
-  trackEvent('onboarding_completed', userId, {
-    onboarding_key: ONBOARDING_KEY,
-    version: ONBOARDING_VERSION,
-    variant_key: state.variantKey ?? null,
-    entry_point: state.entryPoint ?? null,
-    completion_reason: reason,
-    forced_rollout: FORCED_ROLLOUT_USERS.has(userId),
-    market_segment: state.variantKey ? variantKeyToSegment(state.variantKey) : 'ru',
-    onboarding_variant: meta.onboardingVariant ?? 'v1_demo',
-    acquisition_path: meta.acquisitionPath ?? null,
-    experiment_phase: isLegacyV1 ? 'legacy_recovery' : 'post_rollout',
-    onboarding_flow: isLegacyV1 ? 'v1_demo_recovery' : 'main_v2',
-  });
-}
-
-// ─── end Onboarding Engine helpers ───────────────────────────────────────────
-
-/** Extract numeric price from formatted string like "51 975 ₽" → "51975" */
-function extractNumericPrice(priceText: string | null): string | null {
-  if (!priceText) return null;
-  // Remove currency symbols, spaces, non-breaking spaces
-  const digits = priceText.replace(/[^\d.,]/g, '').replace(',', '.');
-  if (!digits) return null;
-  const num = parseFloat(digits);
-  return isNaN(num) ? null : String(num);
-}
-
-function priorityToNum(p: 'LOW' | 'MEDIUM' | 'HIGH'): 1 | 2 | 3 {
-  return p === 'LOW' ? 1 : p === 'HIGH' ? 3 : 2;
-}
-function numToPriority(n: number): 'LOW' | 'MEDIUM' | 'HIGH' {
-  return n === 1 ? 'LOW' : n === 3 ? 'HIGH' : 'MEDIUM';
-}
-
-function mapTgItem(item: {
-  id: string;
-  wishlistId: string;
-  title: string;
-  url: string;
-  priceText: string | null;
-  currency?: string;
-  imageUrl?: string | null;
-  priority: 'LOW' | 'MEDIUM' | 'HIGH';
-  position?: number;
-  status: string;
-  description?: string | null;
-  sourceUrl?: string | null;
-  sourceDomain?: string | null;
-  importMethod?: string | null;
-}) {
-  return {
-    id: item.id,
-    wishlistId: item.wishlistId,
-    title: item.title,
-    url: item.url || null,
-    price: item.priceText ? (Number(item.priceText) || null) : null,
-    currency: item.currency ?? null,
-    imageUrl: item.imageUrl ?? null,
-    priority: priorityToNum(item.priority),
-    position: item.position ?? 0,
-    status: item.status.toLowerCase(),
-    description: item.description ?? null,
-    sourceUrl: item.sourceUrl ?? null,
-    sourceDomain: item.sourceDomain ?? null,
-    importMethod: item.importMethod ?? null,
-  };
-}
+// extractNumericPrice / priorityToNum / numToPriority / mapTgItem extracted
+// to ./services/items.ts in P5s-6.
 
 // getOrCreateTgUser extracted to ./services/telegram-auth.ts in P5s-2.
 // Imported at the top of this file and continues passing through router
@@ -1012,49 +568,7 @@ function mapTgItem(item: {
 
 // getOrCreateProfile lives in ./profile (see comment above generateUniqueSupportId).
 
-type ItemRole = 'owner' | 'reserver' | 'third_party';
-
-async function getItemRole(
-  itemId: string,
-  tgUser: TelegramUser,
-): Promise<{
-  role: ItemRole;
-  item: { id: string; status: string; reservationEpoch: number; reserverUserId: string | null; title: string; wishlist: { ownerId: string }; reservationEvents: { actorHash: string; comment: string | null }[] };
-  actorHash: string;
-  user: { id: string; telegramChatId: string | null };
-} | null> {
-  const actorHash = tgActorHash(tgUser.id);
-  const user = await getOrCreateTgUser(tgUser);
-
-  const item = await prisma.item.findUnique({
-    where: { id: itemId },
-    select: {
-      id: true, status: true, reservationEpoch: true, reserverUserId: true, title: true,
-      wishlist: { select: { ownerId: true } },
-      reservationEvents: {
-        where: { type: 'RESERVED' },
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-        select: { actorHash: true, comment: true },
-      },
-    },
-  });
-  if (!item) return null;
-
-  if (item.wishlist.ownerId === user.id) {
-    return { role: 'owner', item, actorHash, user };
-  }
-
-  if (
-    item.status === 'RESERVED' &&
-    item.reservationEvents.length > 0 &&
-    secureCompare(item.reservationEvents[0]!.actorHash, actorHash)
-  ) {
-    return { role: 'reserver', item, actorHash, user };
-  }
-
-  return { role: 'third_party', item, actorHash, user };
-}
+// ItemRole type + getItemRole extracted to ./services/items.ts in P5s-6.
 
 // IP-throttle gate: short-circuits with 429 if this IP has tripped the
 // `auth_rejected` threshold (10 failures / 60 s → 5 min cool-off). Runs
@@ -1497,9 +1011,6 @@ const giftNotesRouter = registerGiftNotesRouter({
   getEffectiveEntitlements,
   trackEvent,
   requireGiftNotes,
-  getNextOccurrenceDate,
-  computeReminderSchedule,
-  buildReminderEpisodeKey,
   zUrl,
 });
 tgRouter.use(giftNotesRouter);
@@ -1527,22 +1038,11 @@ tgRouter.use(giftNotesRouter);
 const onboardingRouter = registerOnboardingRouter({
   getOrCreateTgUser,
   trackEvent,
-  checkOnboardingEligibility,
-  assignOnboardingVariant,
-  isDemoItemUntouched,
-  getDemoTemplate,
   completeOnboarding,
-  variantKeyToSegment,
-  resolveMarketSegment,
   runReferralProgressHook,
   importUrlForUser,
   getOrCreateDraftsWishlist,
   mapTgItem,
-  ONBOARDING_KEY,
-  ONBOARDING_VERSION,
-  FORCED_ROLLOUT_USERS,
-  RU_VARIANTS,
-  GLOBAL_VARIANTS,
 });
 tgRouter.use(onboardingRouter);
 
@@ -1595,7 +1095,6 @@ const reservationsRouter = registerReservationsRouter({
   hasReservationPro,
   isReservationBeta,
   hasSmartReservations,
-  resolveUserFirstName,
   cancelItemHints,
   getSmartResLeadHours,
 });
@@ -1728,12 +1227,7 @@ const itemsRouter = registerItemsRouter({
   ACTIVE_STATUSES,
   zUrl,
   numToPriority,
-  getDemoTemplate,
-  isMeaningfulEdit,
   completeOnboarding,
-  ONBOARDING_KEY,
-  ONBOARDING_VERSION,
-  FORCED_ROLLOUT_USERS,
 });
 tgRouter.use(itemsRouter);
 
@@ -1973,33 +1467,10 @@ tgRouter.use(santaRouter);
 
 // ─── Import URL: helpers ─────────────────────────────────────────────────────
 
-const DRAFTS_ITEM_LIMIT = 50;
-
-async function getOrCreateDraftsWishlist(userId: string) {
-  const existing = await prisma.wishlist.findFirst({
-    where: { ownerId: userId, type: 'SYSTEM_DRAFTS' },
-    select: { id: true },
-  });
-  if (existing) return existing;
-  const drafts = await prisma.wishlist.create({
-    data: {
-      slug: `drafts-${crypto.randomUUID().slice(0, 12)}`,
-      ownerId: userId,
-      title: 'Неразобранное',
-      type: 'SYSTEM_DRAFTS',
-    },
-    select: { id: true },
-  });
-  // Canonical analytics: auto-created SYSTEM_DRAFTS
-  const existingAny = await prisma.wishlist.count({ where: { ownerId: userId } });
-  trackEvent('wishlist_created', userId, {
-    wishlistId: drafts.id, wishlistType: 'SYSTEM_DRAFTS', source: 'auto_drafts',
-    platform: 'system',
-    isFirstRegularWishlist: false,
-    isFirstAnyWishlist: existingAny === 1,
-  });
-  return drafts;
-}
+// DRAFTS_ITEM_LIMIT + getOrCreateDraftsWishlist factory extracted to
+// ./services/wishlists.ts in P5s-7. The factory wiring lives near the top
+// of this file (right after `trackEvent`) so it is TDZ-safe for all
+// downstream consumers (registerOnboardingRouter, importUrlForUser, etc.).
 
 async function importUrlForUser(
   userId: string,
@@ -2148,20 +1619,8 @@ async function importUrlForUser(
 // Events Calendar v2.1 — reminders, holidays, friends-bdays, inbox, recap
 // ════════════════════════════════════════════════════════════════════════════
 
-function computeReminderSchedule(eventDate: Date, recurrence: string, offsetDays: number, timeOfDay: string): Date {
-  const next = getNextOccurrenceDate(eventDate, recurrence) ?? eventDate;
-  const [hh, mm] = timeOfDay.split(':').map(Number) as [number, number];
-  const base = new Date(next.getTime());
-  base.setUTCDate(base.getUTCDate() + offsetDays);
-  base.setUTCHours(hh - 3, mm, 0, 0); // MSK→UTC
-  return base;
-}
-
-function buildReminderEpisodeKey(occasionId: string, offsetDays: number, scheduledFor: Date): string {
-  const y = scheduledFor.getUTCFullYear();
-  const m = String(scheduledFor.getUTCMonth() + 1).padStart(2, '0');
-  return `occ_${occasionId}_off${offsetDays}_${y}_${m}`;
-}
+// computeReminderSchedule + buildReminderEpisodeKey moved to
+// ./services/calendar.ts in P5s-8. See comment near getNextOccurrenceDate.
 
 
 
@@ -2788,7 +2247,6 @@ startEventSchedulers({
   prisma, logger,
   sendTgBotMessage,
   BOT_TOKEN_FOR_DM,
-  getNextOccurrenceDate, computeReminderSchedule, buildReminderEpisodeKey,
 });
 
 // ─── Santa seasonal broadcasts ───────────────────────────────────────────────

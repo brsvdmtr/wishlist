@@ -58,6 +58,19 @@ import { getRequestLocale } from '../lib/locale';
 import { validateUrl } from '../url-parser.js';
 import { ensureItemPlacement } from '../placements/ensureItemPlacement';
 import { relocateItemPrimary } from '../placements/relocateItemPrimary';
+import {
+  ONBOARDING_KEY,
+  ONBOARDING_VERSION,
+  RU_VARIANTS,
+  GLOBAL_VARIANTS,
+  FORCED_ROLLOUT_USERS,
+  resolveMarketSegment,
+  variantKeyToSegment,
+  assignOnboardingVariant,
+  getDemoTemplate,
+  isDemoItemUntouched,
+  checkOnboardingEligibility,
+} from '../services/onboarding';
 
 // ── Local type re-declarations ────────────────────────────────────────────
 // Kept in sync with apps/api/src/index.ts:989, 991, 997, 1034 (see audit).
@@ -127,19 +140,14 @@ export type OnboardingRouterDeps = {
   getOrCreateTgUser: (tgUser: TelegramUserShape) => Promise<OnboardingUser>;
   trackEvent: (event: string, userId?: string, props?: Record<string, unknown>) => void;
 
-  // Onboarding-specific helpers (only used by /onboarding/* — kept in
-  // index.ts for symmetry; migrating would force duplicating the
-  // cross-domain consts they reference).
-  checkOnboardingEligibility: (userId: string, actorHash: string) => Promise<EligibilityResult>;
-  assignOnboardingVariant: (telegramId?: string) => { variant: OnboardingVariant; source: 'rollout_config' };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- demo Item shape varies; the helper at index.ts:1203 only reads .title/.url/.priceText/.becameRealAt
-  isDemoItemUntouched: (item: any, template: DemoItemTemplate) => boolean;
-
-  // Cross-domain helpers (also used by items routes — MUST stay in index.ts)
-  getDemoTemplate: (variantKey: string) => DemoItemTemplate | undefined;
+  // Onboarding completion — closes over trackEvent in index.ts; passed via
+  // deps as a factory-produced function. All other onboarding helpers and
+  // consts (resolveMarketSegment, variantKeyToSegment, assignOnboardingVariant,
+  // getDemoTemplate, isDemoItemUntouched, checkOnboardingEligibility,
+  // ONBOARDING_KEY, ONBOARDING_VERSION, FORCED_ROLLOUT_USERS, RU_VARIANTS,
+  // GLOBAL_VARIANTS) are imported directly from ../services/onboarding in
+  // P5s-3 (Strategy B).
   completeOnboarding: (userId: string, reason: CompletionReason) => Promise<void>;
-  variantKeyToSegment: (variantKey: string) => MarketSegment;
-  resolveMarketSegment: (locale: Locale) => MarketSegment;
 
   // Cross-domain helpers used by other routes
   runReferralProgressHook: (userId: string, milestone: 'first_wishlist' | 'first_item') => Promise<void>;
@@ -147,40 +155,17 @@ export type OnboardingRouterDeps = {
   getOrCreateDraftsWishlist: (userId: string) => Promise<{ id: string }>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mapTgItem at index.ts:1286 takes a structurally-typed Item; runtime callers below pass partial selects.
   mapTgItem: (item: any) => any;
-
-  // Cross-domain consts (used by items routes too — see index.ts:1006–1023)
-  ONBOARDING_KEY: string;
-  ONBOARDING_VERSION: number;
-  FORCED_ROLLOUT_USERS: Set<string>;
-  // Variant pools used at POST /onboarding/start v1 demo path (line ~7088
-  // in pre-P5h index.ts). Marked optional dep notes: these are also
-  // referenced internally by `getDemoTemplate` (cross-domain) and
-  // `assignOnboardingVariant` (onboarding-only) — passing them through
-  // deps avoids duplicating the array literals here.
-  RU_VARIANTS: VariantKey[];
-  GLOBAL_VARIANTS: VariantKey[];
 };
 
 export function registerOnboardingRouter(deps: OnboardingRouterDeps): Router {
   const {
     getOrCreateTgUser,
     trackEvent,
-    checkOnboardingEligibility,
-    assignOnboardingVariant,
-    isDemoItemUntouched,
-    getDemoTemplate,
     completeOnboarding,
-    variantKeyToSegment,
-    resolveMarketSegment,
     runReferralProgressHook,
     importUrlForUser,
     getOrCreateDraftsWishlist,
     mapTgItem,
-    ONBOARDING_KEY,
-    ONBOARDING_VERSION,
-    FORCED_ROLLOUT_USERS,
-    RU_VARIANTS,
-    GLOBAL_VARIANTS,
   } = deps;
 
   const onboardingRouter = Router();

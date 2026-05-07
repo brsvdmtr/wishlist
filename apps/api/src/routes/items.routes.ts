@@ -63,6 +63,14 @@ import { deleteUploadFile } from '../uploads/uploadCleanup';
 import { countActivePlacementsInWishlist } from '../placements/countActivePlacementsInWishlist';
 import { ensureItemPlacement } from '../placements/ensureItemPlacement';
 import { relocateItemPrimary } from '../placements/relocateItemPrimary';
+import {
+  ONBOARDING_KEY,
+  ONBOARDING_VERSION,
+  FORCED_ROLLOUT_USERS,
+  getDemoTemplate,
+  isMeaningfulEdit,
+  type CompletionReason,
+} from '../services/onboarding';
 import logger from '../logger';
 
 // Shape of the Telegram initData user object — duplicated from index.ts to
@@ -144,30 +152,6 @@ type MapTgItemInput = {
   importMethod?: string | null;
 };
 
-// Onboarding completion reasons — mirrors local CompletionReason union in
-// index.ts:983. PATCH /items/:id and POST /items/:id/move call this with
-// 'demo_converted' / 'demo_moved_to_user_wishlist' respectively.
-type CompletionReason =
-  | 'demo_converted'
-  | 'real_item_created'
-  | 'demo_deleted_then_real_created'
-  | 'demo_moved_to_user_wishlist'
-  | 'try_import_completed'
-  | 'catalog_selected'
-  | 'manual_created';
-
-// Demo item template — only ever passed back into isMeaningfulEdit.
-// Structurally mirrors `interface DemoItemTemplate` at index.ts:1020.
-type DemoItemTemplate = {
-  title: string;
-  url: string;
-  price: number;
-  currency: 'RUB' | 'USD';
-  priority: 'MEDIUM';
-  imageUrl: string;
-  description: string;
-};
-
 export type ItemsRouterDeps = {
   getOrCreateTgUser: (tgUser: TelegramUserShape) => Promise<ItemsUser>;
   getEffectiveEntitlements: (userId: string, godMode?: boolean) => Promise<ItemsEntitlements>;
@@ -189,19 +173,14 @@ export type ItemsRouterDeps = {
   ) => Promise<void>;
   ACTIVE_STATUSES: readonly ('AVAILABLE' | 'RESERVED' | 'PURCHASED')[];
   // Local helpers in index.ts that handlers call — passed via deps to keep
-  // them at the source-of-truth definition (universal helpers + onboarding
-  // completion logic that PATCH /items/:id and POST /items/:id/move need).
+  // them at the source-of-truth definition.
   zUrl: () => z.ZodType<string>;
   numToPriority: (n: number) => 'LOW' | 'MEDIUM' | 'HIGH';
-  getDemoTemplate: (variantKey: string) => DemoItemTemplate | undefined;
-  isMeaningfulEdit: (
-    update: { title?: string; url?: string | null; price?: number | null; description?: string | null },
-    template: DemoItemTemplate,
-  ) => boolean;
+  // Onboarding completion factory — closes over trackEvent in index.ts.
+  // Other onboarding helpers/consts (getDemoTemplate, isMeaningfulEdit,
+  // ONBOARDING_KEY, ONBOARDING_VERSION, FORCED_ROLLOUT_USERS) are imported
+  // directly from ../services/onboarding in P5s-3 (Strategy B).
   completeOnboarding: (userId: string, reason: CompletionReason) => Promise<void>;
-  ONBOARDING_KEY: string;
-  ONBOARDING_VERSION: number;
-  FORCED_ROLLOUT_USERS: ReadonlySet<string>;
 };
 
 export function registerItemsRouter(deps: ItemsRouterDeps): Router {
@@ -221,12 +200,7 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
     ACTIVE_STATUSES,
     zUrl,
     numToPriority,
-    getDemoTemplate,
-    isMeaningfulEdit,
     completeOnboarding,
-    ONBOARDING_KEY,
-    ONBOARDING_VERSION,
-    FORCED_ROLLOUT_USERS,
   } = deps;
 
   const itemsRouter = Router();

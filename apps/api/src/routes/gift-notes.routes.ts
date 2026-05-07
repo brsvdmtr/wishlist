@@ -17,8 +17,7 @@
 // closure deps are hoisted function declarations, so no TDZ-relocation
 // is needed (unlike P5c / P5e / P5f).
 //
-// Helpers `requireGiftNotes`, `getNextOccurrenceDate`,
-// `computeReminderSchedule`, `buildReminderEpisodeKey` intentionally do
+// Helpers `requireGiftNotes` intentionally do
 // NOT migrate — they are shared with the scheduler/cron logic in
 // index.ts (gift-occasion reminder send loop at ~line 12760+ uses all
 // three reminder helpers). They flow through this router via deps.
@@ -38,6 +37,11 @@ import { zodError } from '../lib/http';
 import { upload } from '../uploads/upload.config';
 import { processImage } from '../uploads/imageProcessor';
 import { deleteUploadFile } from '../uploads/uploadCleanup';
+import {
+  getNextOccurrenceDate,
+  computeReminderSchedule,
+  buildReminderEpisodeKey,
+} from '../services/calendar';
 
 type TelegramUserShape = {
   id: number;
@@ -83,10 +87,6 @@ export type GiftNotesRouterDeps = {
   // the actual implementation satisfy the contract via TS bivariance
   // without forcing this file to track unrelated entitlement fields.
   requireGiftNotes: (ent: any, res: unknown) => boolean; // eslint-disable-line @typescript-eslint/no-explicit-any
-  // Date helpers shared with the scheduler — kept in index.ts.
-  getNextOccurrenceDate: (eventDate: Date, recurrence: string) => Date | null;
-  computeReminderSchedule: (eventDate: Date, recurrence: string, offsetDays: number, timeOfDay: string) => Date;
-  buildReminderEpisodeKey: (occasionId: string, offsetDays: number, scheduledFor: Date) => string;
   // URL validator factory — shared closure with adminRouter and
   // item/wishlist handlers in index.ts.
   zUrl: () => z.ZodTypeAny;
@@ -98,9 +98,6 @@ export function registerGiftNotesRouter(deps: GiftNotesRouterDeps): Router {
     getEffectiveEntitlements,
     trackEvent,
     requireGiftNotes,
-    getNextOccurrenceDate,
-    computeReminderSchedule,
-    buildReminderEpisodeKey,
     zUrl,
   } = deps;
 
