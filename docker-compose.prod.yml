@@ -1,5 +1,21 @@
 name: wishlist-prod
 
+# Default Docker json-file logging cap shared by every service. Without this,
+# stdout grows unbounded between recreates (audit 2026-05-07 found 0 caps on
+# any service). 20 MB × 5 = ~100 MB rolling window per container — enough to
+# investigate the average post-recreate incident, small enough that runaway
+# logging cannot fill the disk before Docker rotates.
+#
+# This is a CAPPED ROLLING WINDOW on the lifetime of the running container,
+# NOT a durable archive after recreate. For api/bot the durable archive lives
+# in ./logs/{api,bot} via the bind-mount + pino. web/postgres still rely on
+# this rolling window — see docs/INFRA_AND_ENV.md § Logging.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -17,6 +33,7 @@ services:
       retries: 5
     networks:
       - wishlist-network
+    logging: *default-logging
 
   api:
     build:
@@ -72,6 +89,7 @@ services:
       - wishlist-network
     ports:
       - "127.0.0.1:3001:3001"
+    logging: *default-logging
 
   web:
     build:
@@ -98,6 +116,7 @@ services:
       - "127.0.0.1:3000:3000"
     networks:
       - wishlist-network
+    logging: *default-logging
 
   bot:
     build:
@@ -131,6 +150,7 @@ services:
         condition: service_started
     networks:
       - wishlist-network
+    logging: *default-logging
 
 networks:
   wishlist-network:

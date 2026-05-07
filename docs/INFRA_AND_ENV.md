@@ -1,5 +1,5 @@
 # INFRA_AND_ENV — Infrastructure, Environment & Deployment
-> Last updated: 2026-05-03 · Branch: main
+> Last updated: 2026-05-07 · Branch: main
 >
 
 ## Server
@@ -99,6 +99,194 @@ server {
 - `wishlist-network` (bridge driver)
 - All services on same network
 - Internal DNS: `postgres`, `api`, `web`, `bot`
+
+---
+
+## Logging, Cleanup & Retention
+
+> Last hardened: 2026-05-07. Source-of-truth files: `docker-compose.prod.yml`
+> (logging anchor), `ops/logrotate/wishlist-ops`, `ops/cron/root.crontab`.
+
+### Logging architecture
+
+Every service writes to **two** destinations simultaneously:
+
+1. **Container stdout → Docker `json-file`** with a per-container cap of
+   `max-size: 20m × max-file: 5` (~100 MB rolling window). File at
+   `/var/lib/docker/containers/<id>/<id>-json.log{,.N}`.
+   **Wiped on container recreate** (e.g. `docker compose up -d` after a build).
+2. **Bind-mounted file on host** (api/bot only) at
+   `/opt/wishlist/logs/<service>/`. **Survives recreate.**
+
+Per-service durability table:
+
+| Service | Bind mount | In-process rotation | Durable across recreate? |
+|---------|-----------|---------------------|--------------------------|
+| api | `./logs/api:/app/logs` | pino-roll, daily, 100 MB cap, 14-file retention | ✅ via host file |
+| bot | `./logs/bot:/app/logs` | pino multistream, no rotation (intentional, see `apps/bot/src/logger.ts` — pino-roll worker stalled mid-rollover on 2026-05-02) | ✅ via host file (single growing `bot.log` ~50 KB/day) |
+| web | none | none | ❌ — only the rolling Docker window |
+| postgres | none | none | ❌ — only the rolling Docker window |
+
+The Docker cap is set in `docker-compose.prod.yml` via a single YAML anchor
+(`x-logging: &default-logging`) that all four services reference. To change
+the cap, edit the anchor only.
+
+### Verify the logging cap is applied
+
+```bash
+docker inspect $(docker ps -q) \
+  --format='{{.Name}} | {{.HostConfig.LogConfig.Type}} | {{json .HostConfig.LogConfig.Config}}'
+# Expect for every container:
+#   json-file | {"max-file":"5","max-size":"20m"}
+```
+
+If postgres still shows `{}`, recreate it once with
+`docker compose -f /opt/wishlist/docker-compose.prod.yml up -d postgres` —
+GitHub Actions doesn't rebuild postgres on its own (public image, source
+unchanged), so the first `up -d` after the compose change must be done by
+hand.
+
+### Read logs
+
+```bash
+# Durable (api/bot) — survives every redeploy
+ls -lah /opt/wishlist/logs/api/
+ls -lah /opt/wishlist/logs/bot/
+
+# Errors only on a specific day
+jq -c 'select(.level >= 50)' /opt/wishlist/logs/api/api.log.YYYY-MM-DD.1 | head
+
+# Hourly idempotency cleanup events
+jq -c 'select(.event=="api.idempotency_cleanup_completed")' \
+  /opt/wishlist/logs/api/api.log.YYYY-MM-DD.1
+
+# Rolling-only (web/postgres) — limited to the current container lifetime
+docker compose -f /opt/wishlist/docker-compose.prod.yml logs --since=24h web
+docker compose -f /opt/wishlist/docker-compose.prod.yml logs --since=72h postgres
+```
+
+### Incident investigation after a redeploy
+
+1. **api** — `/opt/wishlist/logs/api/api.log.YYYY-MM-DD.1` (full continuous file). ✅
+2. **bot** — `/opt/wishlist/logs/bot/bot.log` (single accumulating file). ✅
+3. **web** — only `docker compose logs web` from the current container's lifetime. ⚠️ Lost on recreate.
+4. **postgres** — only `docker compose logs postgres`. ⚠️ Lost on recreate.
+5. **nginx (host-level)** — `/var/log/nginx/access.log{,.1}` and `error.log{,.1}`, weekly logrotate, 4 generations.
+
+**Remaining gap (not closed in 2026-05-07 hardening):** web and postgres
+have no durable archive outside the running container. Acceptable as long
+as nginx covers user-visible 5xx and Prisma surfaces pg errors into the
+api log. **Do not redeploy web during an active incident** — first capture
+`docker compose logs web` to a file, then redeploy. Long-term fix when it's
+time: ship to a centralized logging stack (Loki/Promtail or Vector). Not
+in scope of this hardening — see `docs/KNOWN_GAPS_AND_RISKS.md`.
+
+### Host-level logrotate for ops logs
+
+Three append-only files written by the root crontab grow unbounded
+otherwise:
+- `/var/log/watchdog.log` — every 5 min (~25 MB/year)
+- `/var/log/wishlist-backup.log` — daily
+- `/var/log/docker-prune.log` — weekly
+
+Config lives at `/etc/logrotate.d/wishlist-ops`, source-of-truth at
+`ops/logrotate/wishlist-ops` in the repo (weekly · 8 rotations · gzip ·
+delaycompress · copytruncate · missingok · notifempty).
+
+**Install (one-time on prod host):**
+```bash
+sudo cp /opt/wishlist/ops/logrotate/wishlist-ops /etc/logrotate.d/wishlist-ops
+sudo chmod 0644 /etc/logrotate.d/wishlist-ops
+sudo logrotate -d /etc/logrotate.d/wishlist-ops    # dry-run; safe
+```
+
+`copytruncate` is required because cron writes via shell append (`>> file`)
+which keeps an open fd; default rename-based rotation would orphan it.
+
+### Disk cleanup (cron)
+
+Cron is host-level. Source-of-truth in repo at `ops/cron/root.crontab`.
+
+| Cadence | Job | What it does |
+|---------|-----|--------------|
+| `*/5 * * * *` | `ops/watchdog/health-watchdog.mjs` | Pings `/api/health/deep`, alerts via Telegram bot. State at `/tmp/watchdog-state.json`. |
+| `0 3 * * *` | `ops/backup.sh` | Dumps DB + uploads + .env, gzips, sha256, uploads to `wishlist-s3`. Local 14d / S3 30d retention. |
+| `0 4 * * 0` | `docker system prune -af --filter "until=72h"` | Removes stopped containers, dangling images, build-cache items >72 h. **Never** uses `--volumes`. |
+
+**Apply / re-sync the crontab from the repo file:**
+```bash
+sudo crontab -l > /tmp/cron.bak.$(date +%Y%m%d-%H%M%S)
+sudo crontab /opt/wishlist/ops/cron/root.crontab
+sudo crontab -l       # verify
+diff -u /tmp/cron.bak.* <(sudo crontab -l)
+```
+
+### Disk-space sanity checks
+
+```bash
+df -h /                                                # root disk (alert >80%)
+docker system df                                       # images, containers, volumes, cache
+du -sh /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs  # build cache
+du -sh /opt/backups/wishlist /opt/wishlist/logs        # backup + app logs
+
+ls -lh /var/log/{watchdog,wishlist-backup,docker-prune}.log
+```
+
+### Forbidden commands
+
+Never run on prod without an explicit go-ahead:
+
+```bash
+docker system prune --volumes ...    # destroys named volumes (DB, uploads)
+docker volume prune                  # same
+docker volume rm wishlist-prod_*     # same
+docker compose down --volumes        # same
+```
+
+These would erase `wishlist_pg_data` (the database) and
+`wishlist_uploads` (user-uploaded images). The weekly cron prune is
+explicitly scoped with no `--volumes`.
+
+### Backup verification
+
+Daily smoke test (read-only):
+
+```bash
+# Latest backup, local + S3
+ls -lh /opt/backups/wishlist/ | tail
+rclone size wishlist-s3:wishlist-backups
+rclone ls   wishlist-s3:wishlist-backups | sort -k1 -n | tail -5
+
+# Integrity of the most recent local
+LATEST=$(ls -t /opt/backups/wishlist/wishlist_*.tar.gz | head -1)
+gzip -t "$LATEST" && echo "gzip OK"
+(cd /opt/backups/wishlist && sha256sum -c "$(basename "$LATEST").sha256")
+
+# Restore-readiness — read pg_dump TOC without touching the live DB
+TMP=$(mktemp -d)
+tar -xzf "$LATEST" -C "$TMP" ./db.dump
+docker run --rm -v "$TMP:/work" postgres:16-alpine pg_restore -l /work/db.dump | head
+rm -rf "$TMP"
+```
+
+For full restore procedure see [DISASTER_RECOVERY.md](./DISASTER_RECOVERY.md)
+and [MASTER_RESTORE_GUIDE.md](./MASTER_RESTORE_GUIDE.md).
+
+### Rollback for the compose logging change
+
+If the cap ever bites (e.g. you suspect logs being truncated mid-incident),
+the `x-logging` anchor in `docker-compose.prod.yml` is a one-line knob:
+
+```yaml
+# Bump or relax — both safe, no service restart needed beyond up -d:
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "100m"   # was 20m
+    max-file: "10"     # was 5
+```
+
+To fully revert, delete the `x-logging` anchor and the four `logging: *default-logging` lines, then `docker compose -f /opt/wishlist/docker-compose.prod.yml up -d` (each affected service recreates with no logging cap, matching pre-hardening default).
 
 ---
 

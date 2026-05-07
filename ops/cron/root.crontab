@@ -1,0 +1,31 @@
+# Vultr prod VPS — root crontab (canonical copy)
+#
+# This file is the source of truth for what /opt/wishlist needs from the
+# root crontab on the Vultr Amsterdam prod host. Cron itself is host-level,
+# not in compose; keep this file in sync with `sudo crontab -l` on prod.
+#
+# Apply on prod:
+#   sudo crontab -l > /tmp/cron.bak.$(date +%Y%m%d-%H%M%S)
+#   sudo crontab /opt/wishlist/ops/cron/root.crontab
+#   sudo crontab -l                                    # verify
+#
+# Diff after edit:
+#   diff -u /tmp/cron.bak.* <(sudo crontab -l)
+#
+# Last applied: 2026-05-07 — Docker prune TTL tightened 168h → 72h to keep
+# build cache from creeping past ~30 GB on the 94 GB root disk (audit found
+# 37 GB after 4 days post-migration).
+
+# Health watchdog every 5 minutes — pings /api/health/deep, alerts via
+# Telegram bot if status flips. State file at /tmp/watchdog-state.json.
+*/5 * * * * node /opt/wishlist/ops/watchdog/health-watchdog.mjs >> /var/log/watchdog.log 2>&1
+
+# Daily DB + uploads + .env backup at 03:00 UTC. Local retention 14d, S3
+# (Selectel) retention 30d. Script: /opt/wishlist/ops/backup.sh.
+0 3 * * * /opt/wishlist/ops/backup.sh >> /var/log/wishlist-backup.log 2>&1
+
+# Weekly Docker cleanup — removes stopped containers, dangling images, and
+# build-cache items older than 72 h. Conservative enough that the most-recent
+# deploy's cache survives, aggressive enough that 4-day-old cache is reclaimed.
+# Touches NO volumes (volumes are explicit and protected by `up -d`).
+0 4 * * 0 docker system prune -af --filter "until=72h" >> /var/log/docker-prune.log 2>&1

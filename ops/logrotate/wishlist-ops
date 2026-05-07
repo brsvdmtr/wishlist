@@ -1,0 +1,34 @@
+# /etc/logrotate.d/wishlist-ops
+#
+# Host-side logrotate config for the three append-only ops logs that the
+# root crontab on the Vultr prod VPS writes to. Without this they grow
+# unbounded — pre-config audit (2026-05-07) found watchdog.log already
+# at 337 KB after ~4 days, headed for ~25 MB/year per file.
+#
+# Install (one-time on prod host):
+#   sudo cp /opt/wishlist/ops/logrotate/wishlist-ops /etc/logrotate.d/wishlist-ops
+#   sudo chmod 0644 /etc/logrotate.d/wishlist-ops
+#   sudo logrotate -d /etc/logrotate.d/wishlist-ops    # dry-run, no side-effects
+#
+# Force a one-time rotation only when you really want to (e.g. after a long
+# truncate-incident):
+#   sudo logrotate -f /etc/logrotate.d/wishlist-ops
+#
+# Why copytruncate: cron writes via `>> /var/log/<file> 2>&1` shell append,
+# which keeps a single open fd in the cron process tree. The default
+# rename-based rotation would orphan that fd to the rotated file. copytruncate
+# copies + truncates so the open fd still points at the live (now empty) inode.
+
+/var/log/watchdog.log
+/var/log/wishlist-backup.log
+/var/log/docker-prune.log
+{
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    su root root
+}
