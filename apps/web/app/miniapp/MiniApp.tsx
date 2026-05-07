@@ -5852,6 +5852,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ appearance: { theme: themeCtx.theme, accent: themeCtx.accent } }),
+      idempotency: { action: 'me.settings.appearance' },
     }).catch(() => {
       // Persistence is best-effort — local state still works (localStorage)
       // until user re-opens the app and we re-sync from settings.
@@ -6881,6 +6882,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch('/tg/import-url', {
         method: 'POST',
         body: JSON.stringify({ url, source: 'miniapp' }),
+        idempotency: { action: `import.url:${url}` },
       });
       if (!res.ok) {
         if (res.status === 402) {
@@ -9789,6 +9791,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           comment: dgComment.trim() || null,
           visible: dgVisible,
         }),
+        idempotency: { action: 'me.dont-gift' },
       });
       if (res.status === 402) { showUpsell('dont_gift'); return; }
       if (res.ok) {
@@ -9871,6 +9874,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     try {
       const res = await tgFetch(`/tg/wishlists/${wlId}/dont-gift`, {
         method: 'PUT',
+        idempotency: { action: `wishlist.dont-gift:${wlId}` },
         body: JSON.stringify({
           mode: wlDontGiftMode,
           presets: wlDgPresets,
@@ -10566,7 +10570,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const handlePurgeArchive = useCallback(async () => {
     setArchiveBulkLoading(true);
     try {
-      const res = await tgFetch('/tg/archive/purge', { method: 'POST' });
+      const res = await tgFetch('/tg/archive/purge', { method: 'POST', idempotency: { action: 'archive.purge' } });
       if (!res.ok) {
         pushToast(t('toast_error_generic', locale), 'error');
         return;
@@ -11014,7 +11018,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     if (!sr || !sr.hasUnacknowledgedUpdates) return;
     const srId = sr.id;
     const timer = setTimeout(() => {
-      void tgFetch(`/tg/secret-reservations/${srId}/acknowledge`, { method: 'POST', body: '{}' })
+      void tgFetch(`/tg/secret-reservations/${srId}/acknowledge`, { method: 'POST', body: '{}', idempotency: { action: `secret-res.ack:${srId}` } })
         .then((res) => {
           if (!res.ok) return null;
           return res.json() as Promise<{ snapshot: SecretReservationSnapshot; updatesAcknowledgedAt: string }>;
@@ -18297,6 +18301,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                 const r = await tgFetch('/tg/promo/apply', {
                                   method: 'POST',
                                   body: JSON.stringify({ code }),
+                                  idempotency: { action: `promo.apply:${code}` },
                                 });
                                 const data = await r.json() as any;
                                 if (r.ok) {
@@ -18665,7 +18670,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           if (input) input.disabled = true;
                           if (btn) { btn.disabled = true; btn.textContent = t('promo_activating', locale); }
                           try {
-                            const r = await tgFetch('/tg/promo/apply', { method: 'POST', body: JSON.stringify({ code }) });
+                            const r = await tgFetch('/tg/promo/apply', { method: 'POST', body: JSON.stringify({ code }), idempotency: { action: `promo.apply:${code}` } });
                             const data = await r.json() as any;
                             if (r.ok) {
                               if (data.status === 'activated' || data.status === 'already_active') {
@@ -18797,7 +18802,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         if (godModeLoading) return;
                         setGodModeLoading(true);
                         try {
-                          const res = await tgFetch('/tg/me/god-mode', { method: 'POST' });
+                          const res = await tgFetch('/tg/me/god-mode', { method: 'POST', idempotency: { action: 'me.god-mode' } });
                           if (res.ok) {
                             const data = await res.json() as { godMode: boolean };
                             setGodMode(data.godMode);
@@ -22671,7 +22676,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 setBulkActionLoading(true);
                 try {
                   const endpoint = action === 'move' ? '/tg/items/bulk-move' : '/tg/items/bulk-copy';
-                  const r = await tgFetch(endpoint, { method: 'POST', body: JSON.stringify({ itemIds: ids, targetWishlistId: wl.id }) });
+                  const r = await tgFetch(endpoint, { method: 'POST', body: JSON.stringify({ itemIds: ids, targetWishlistId: wl.id }), idempotency: { action: `item.bulk-${action}:${[...ids].sort().join(',')}:${wl.id}` } });
                   const data = await r.json() as any;
                   const successCount = action === 'move' ? (data.moved?.length ?? data.successCount ?? 0) : (data.successCount ?? 0);
                   const total = ids.length;
@@ -25915,6 +25920,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 const res = await tgFetch('/tg/support/tickets', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
+                  idempotency: { action: 'support.ticket.create' },
                   body: JSON.stringify({
                     source: 'settings',
                     screen: screen,
@@ -30906,6 +30912,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             const res = await tgFetch('/tg/promo/apply', {
               method: 'POST',
               body: JSON.stringify({ code: pr.promoCode, source: 'winback' }),
+              idempotency: { action: `promo.apply:${pr.promoCode}` },
             });
             if (res.ok) {
               const json = await res.json() as { status: string; expiresAt?: string };

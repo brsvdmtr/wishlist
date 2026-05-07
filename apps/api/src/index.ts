@@ -1166,7 +1166,7 @@ tgRouter.use((req, res, next) => {
 // tgRouter using `.all()` (Express runs all matching handlers in registration
 // order). The wrapper short-circuits non-matching methods so a single path
 // pattern can carry protection for one method while leaving others alone.
-type TgMethod = 'POST' | 'PATCH' | 'DELETE';
+type TgMethod = 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 function protectTgRoute(method: TgMethod, path: string, ...mws: import('express').RequestHandler[]) {
   tgRouter.all(path, (req, res, next) => {
     if (req.method !== method) return next();
@@ -1226,6 +1226,9 @@ protectTgRoute('DELETE', '/wishlists/:wlId/categories/:catId',         idem('DEL
 // reorder of items inside one wishlist. Same `wishlist.update` idem category
 // as PATCH /wishlists/:id and POST /wishlists/:id/transfer-items.
 protectTgRoute('POST',   '/wishlists/:id/items/reorder',               idem('POST /tg/wishlists/:id/items/reorder', { category: 'wishlist.update' }));
+// Per-wishlist 'Don't Gift' settings (Wave-2 P4) — Pro-gated PUT, same
+// `wishlist.update` idem category as PATCH /wishlists/:id.
+protectTgRoute('PUT',    '/wishlists/:id/dont-gift',                   idem('PUT /tg/wishlists/:id/dont-gift', { category: 'wishlist.update' }));
 
 // ── Items (single) ───────────────────────────────────────────────────────────
 protectTgRoute('POST',   '/wishlists/:id/items',             createRateLimiter('item.create'), idem('POST /tg/wishlists/:id/items', { category: 'item.create' }));
@@ -1342,10 +1345,28 @@ protectTgRoute('POST',   '/me/showcase/cover',                   idem('POST /tg/
 protectTgRoute('DELETE', '/me/showcase/cover',                   idem('DELETE /tg/me/showcase/cover', { category: 'profile.update' }));
 protectTgRoute('PATCH',  '/me/settings',                         idem('PATCH /tg/me/settings', { category: 'profile.update' }));
 
+// God-mode toggle + 'Don't Gift' settings (Wave-2 P4) — Pro/dev-gated user
+// settings, same `profile.update` idem category as the rest of the block.
+protectTgRoute('POST',   '/me/god-mode',                         idem('POST /tg/me/god-mode', { category: 'profile.update' }));
+protectTgRoute('PUT',    '/me/dont-gift',                        idem('PUT /tg/me/dont-gift', { category: 'profile.update' }));
+
 // ── Birthday Reminders (state-changing routes) ───────────────────────────────
 protectTgRoute('PATCH',  '/me/birthday-settings',                 idem('PATCH /tg/me/birthday-settings', { category: 'profile.update' }));
 protectTgRoute('POST',   '/birthday-reminders/mute',              idem('POST /tg/birthday-reminders/mute', { category: 'profile.update' }));
 protectTgRoute('DELETE', '/birthday-reminders/mute/:userId',      idem('DELETE /tg/birthday-reminders/mute', { category: 'profile.update' }));
+
+// ── Wave-2 P4 misc state-changing endpoints ─────────────────────────────────
+// Final closure of Wave-2 — 4 cross-domain one-offs that didn't fit any
+// existing block. New idem categories `promo`, `archive`, `support`, `import`
+// follow the domain-named convention from `gift-notes.*` / `groupgift` /
+// `santa.*` / `hints`. No new rate-limit categories — `state.changing`
+// (already on tgRouter) covers all four; promo and import already have
+// per-route limiters (`promoLimiter`, `importUrlLimiter`) inside their
+// handlers, which fire AFTER the protectTgRoute middleware.
+protectTgRoute('POST',   '/promo/apply',                         idem('POST /tg/promo/apply', { category: 'promo' }));
+protectTgRoute('POST',   '/archive/purge',                       createIdempotencyMiddleware({ endpointKey: 'POST /tg/archive/purge', category: 'archive', critical: true }));
+protectTgRoute('POST',   '/support/tickets',                     idem('POST /tg/support/tickets', { category: 'support' }));
+protectTgRoute('POST',   '/import-url',                          idem('POST /tg/import-url', { category: 'import' }));
 
 // ── Account delete (critical=true; logs missing key for monitoring) ──────────
 protectTgRoute('DELETE', '/me/account',                          createIdempotencyMiddleware({ endpointKey: 'DELETE /tg/me/account', category: 'account.delete', critical: true }));
