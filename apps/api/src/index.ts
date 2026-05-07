@@ -1381,6 +1381,66 @@ tgRouter.use(supportRouter);
 // reminder helpers when re-scheduling fired reminders for the next
 // occurrence). zUrl likewise stays — also used by item/wishlist handlers
 // and adminRouter deps.
+// ─── Gift-notes (Wave 2 P1) — 17 state-changing endpoints ────────────────────
+// 26 handlers total in routes/gift-notes.routes.ts; 7 GET (read-only,
+// no protection needed), 19 state-changing. Two read-marker endpoints
+// are intentionally NOT protected:
+//   - POST /calendar/inbox/:id/read
+//   - POST /calendar/inbox/read-all
+// Both are fire-and-forget UPSERTs on CalendarInboxEntry.readAt,
+// duplicate-safe by design. Same precedent as
+// /me/subscriptions/:id/read (docs/API_SECURITY.md § 4 "Out of Wave-2
+// scope (by design)"). Mini App `markInboxRead` / `markInboxAllRead`
+// helpers in screens/calendar/api.ts intentionally do not pass
+// idempotency option.
+//
+// Registration order: these protectTgRoute entries land BEFORE the
+// `tgRouter.use(giftNotesRouter)` mount below so the gate registration
+// on tgRouter fires before the sub-router's handler dispatch.
+//
+// 0 critical-flag endpoints — no billing flows (those are already
+// covered by Wave-1 /billing/gift-notes/checkout|sync), no mass-DM
+// fan-outs, no distributed-consensus state. All operations are
+// user-CRUD with graceful retry semantics.
+//
+// 0 new rate-limit categories — `state.changing` (60/5min) suffices
+// given the typical user flow (~5-30 ops/session, never bursting).
+//
+// 1 noResponseReplay flag for the multipart photo upload (matches the
+// /items/:id/photo precedent — multipart bodies cannot be cleanly
+// replayed; second call with same key returns
+// IDEMPOTENCY_RESPONSE_NOT_REPLAYABLE).
+
+// Occasions CRUD + state (5)
+protectTgRoute('POST',   '/gift-occasions',                            idem('POST /tg/gift-occasions', { category: 'gift-notes.occasion' }));
+protectTgRoute('PATCH',  '/gift-occasions/:id',                        idem('PATCH /tg/gift-occasions/:id', { category: 'gift-notes.occasion' }));
+protectTgRoute('DELETE', '/gift-occasions/:id',                        idem('DELETE /tg/gift-occasions/:id', { category: 'gift-notes.occasion' }));
+protectTgRoute('POST',   '/gift-occasions/:id/archive',                idem('POST /tg/gift-occasions/:id/archive', { category: 'gift-notes.occasion' }));
+protectTgRoute('POST',   '/gift-occasions/:id/complete',               idem('POST /tg/gift-occasions/:id/complete', { category: 'gift-notes.occasion' }));
+
+// Ideas CRUD (6)
+protectTgRoute('POST',   '/gift-occasions/:id/ideas',                  idem('POST /tg/gift-occasions/:id/ideas', { category: 'gift-notes.idea' }));
+protectTgRoute('PATCH',  '/gift-occasion-ideas/:ideaId',               idem('PATCH /tg/gift-occasion-ideas/:ideaId', { category: 'gift-notes.idea' }));
+protectTgRoute('POST',   '/gift-occasion-ideas/:ideaId/photo',         idem('POST /tg/gift-occasion-ideas/:ideaId/photo', { category: 'gift-notes.idea-photo', noResponseReplay: true }));
+protectTgRoute('DELETE', '/gift-occasion-ideas/:ideaId/photo',         idem('DELETE /tg/gift-occasion-ideas/:ideaId/photo', { category: 'gift-notes.idea-photo' }));
+protectTgRoute('DELETE', '/gift-occasion-ideas/:ideaId',               idem('DELETE /tg/gift-occasion-ideas/:ideaId', { category: 'gift-notes.idea' }));
+protectTgRoute('POST',   '/gift-occasion-ideas/:ideaId/complete',      idem('POST /tg/gift-occasion-ideas/:ideaId/complete', { category: 'gift-notes.idea' }));
+
+// Reminders CRUD (3)
+protectTgRoute('POST',   '/gift-occasions/:id/reminders',              idem('POST /tg/gift-occasions/:id/reminders', { category: 'gift-notes.reminder' }));
+protectTgRoute('PATCH',  '/gift-occasions/:id/reminders/:rid',         idem('PATCH /tg/gift-occasions/:id/reminders/:rid', { category: 'gift-notes.reminder' }));
+protectTgRoute('DELETE', '/gift-occasions/:id/reminders/:rid',         idem('DELETE /tg/gift-occasions/:id/reminders/:rid', { category: 'gift-notes.reminder' }));
+
+// Calendar bulk imports (2)
+protectTgRoute('POST',   '/calendar/import-holidays',                  idem('POST /tg/calendar/import-holidays', { category: 'gift-notes.import' }));
+protectTgRoute('POST',   '/calendar/import-friends-bdays',             idem('POST /tg/calendar/import-friends-bdays', { category: 'gift-notes.import' }));
+
+// Calendar onboarding flag (1) — single-shot UPSERT, server returns
+// existing seenAt if already set; idempotency adds replay safety on
+// retry. Note: /calendar/inbox/:id/read and /calendar/inbox/read-all
+// are NOT protected (read markers, see header comment above).
+protectTgRoute('POST',   '/calendar/onboarding-seen',                  idem('POST /tg/calendar/onboarding-seen', { category: 'calendar.onboarding' }));
+
 const giftNotesRouter = registerGiftNotesRouter({
   getOrCreateTgUser,
   getEffectiveEntitlements,
