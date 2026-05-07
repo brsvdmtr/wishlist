@@ -58,7 +58,11 @@ export interface CreateOccasionPayload {
 }
 
 export async function createOccasion(tg: TgFetch, data: CreateOccasionPayload): Promise<{ occasion: OccasionListItem }> {
-  const r = await tg('/tg/gift-occasions', { method: 'POST', body: JSON.stringify(data) });
+  const r = await tg('/tg/gift-occasions', {
+    method: 'POST',
+    body: JSON.stringify(data),
+    idempotency: { action: 'gift-occasion.create' },
+  });
   return jsonOrThrow(r);
 }
 
@@ -70,22 +74,35 @@ export type UpdateOccasionPayload = Partial<CreateOccasionPayload> & {
 };
 
 export async function updateOccasion(tg: TgFetch, id: string, data: UpdateOccasionPayload): Promise<{ occasion: OccasionListItem }> {
-  const r = await tg(`/tg/gift-occasions/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+  const r = await tg(`/tg/gift-occasions/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+    idempotency: { action: `gift-occasion.update:${id}` },
+  });
   return jsonOrThrow(r);
 }
 
 export async function deleteOccasion(tg: TgFetch, id: string): Promise<{ ok: true }> {
-  const r = await tg(`/tg/gift-occasions/${id}`, { method: 'DELETE' });
+  const r = await tg(`/tg/gift-occasions/${id}`, {
+    method: 'DELETE',
+    idempotency: { action: `gift-occasion.delete:${id}` },
+  });
   return jsonOrThrow(r);
 }
 
 export async function archiveOccasion(tg: TgFetch, id: string): Promise<{ ok: true }> {
-  const r = await tg(`/tg/gift-occasions/${id}/archive`, { method: 'POST' });
+  const r = await tg(`/tg/gift-occasions/${id}/archive`, {
+    method: 'POST',
+    idempotency: { action: `gift-occasion.archive:${id}` },
+  });
   return jsonOrThrow(r);
 }
 
 export async function completeOccasion(tg: TgFetch, id: string): Promise<{ ok: true }> {
-  const r = await tg(`/tg/gift-occasions/${id}/complete`, { method: 'POST' });
+  const r = await tg(`/tg/gift-occasions/${id}/complete`, {
+    method: 'POST',
+    idempotency: { action: `gift-occasion.complete:${id}` },
+  });
   return jsonOrThrow(r);
 }
 
@@ -159,17 +176,28 @@ export async function deleteIdeaPhoto(tg: TgFetch, ideaId: string): Promise<{ ok
 // ─── Reminders CRUD ────────────────────────────────────────────────────────
 
 export async function createReminder(tg: TgFetch, occasionId: string, data: { offsetDays: number; timeOfDay?: string; enabled?: boolean }): Promise<{ reminder: OccasionReminder }> {
-  const r = await tg(`/tg/gift-occasions/${occasionId}/reminders`, { method: 'POST', body: JSON.stringify(data) });
+  const r = await tg(`/tg/gift-occasions/${occasionId}/reminders`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+    idempotency: { action: `gift-occasion-reminder.create:${occasionId}` },
+  });
   return jsonOrThrow(r);
 }
 
 export async function updateReminder(tg: TgFetch, occasionId: string, rid: string, data: Partial<{ offsetDays: number; timeOfDay: string; enabled: boolean }>): Promise<{ reminder: OccasionReminder }> {
-  const r = await tg(`/tg/gift-occasions/${occasionId}/reminders/${rid}`, { method: 'PATCH', body: JSON.stringify(data) });
+  const r = await tg(`/tg/gift-occasions/${occasionId}/reminders/${rid}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+    idempotency: { action: `gift-occasion-reminder.update:${rid}` },
+  });
   return jsonOrThrow(r);
 }
 
 export async function deleteReminder(tg: TgFetch, occasionId: string, rid: string): Promise<{ ok: true }> {
-  const r = await tg(`/tg/gift-occasions/${occasionId}/reminders/${rid}`, { method: 'DELETE' });
+  const r = await tg(`/tg/gift-occasions/${occasionId}/reminders/${rid}`, {
+    method: 'DELETE',
+    idempotency: { action: `gift-occasion-reminder.delete:${rid}` },
+  });
   return jsonOrThrow(r);
 }
 
@@ -181,7 +209,11 @@ export async function listHolidays(tg: TgFetch, country: string): Promise<{ coun
 }
 
 export async function importHolidays(tg: TgFetch, keys: string[], locale: string): Promise<{ imported: number }> {
-  const r = await tg('/tg/calendar/import-holidays', { method: 'POST', body: JSON.stringify({ keys, locale }) });
+  const r = await tg('/tg/calendar/import-holidays', {
+    method: 'POST',
+    body: JSON.stringify({ keys, locale }),
+    idempotency: { action: 'calendar.import-holidays' },
+  });
   return jsonOrThrow(r);
 }
 
@@ -191,7 +223,11 @@ export async function listFriendsBdays(tg: TgFetch): Promise<{ friends: FriendBd
 }
 
 export async function importFriendsBdays(tg: TgFetch, userIds: string[]): Promise<{ imported: number }> {
-  const r = await tg('/tg/calendar/import-friends-bdays', { method: 'POST', body: JSON.stringify({ userIds }) });
+  const r = await tg('/tg/calendar/import-friends-bdays', {
+    method: 'POST',
+    body: JSON.stringify({ userIds }),
+    idempotency: { action: 'calendar.import-friends-bdays' },
+  });
   return jsonOrThrow(r);
 }
 

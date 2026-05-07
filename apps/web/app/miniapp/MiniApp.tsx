@@ -22116,18 +22116,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {/* Actions menu — compact sheet */}
             {gnShowActions && (
               <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, margin: '12px 20px 0', overflow: 'hidden' }}>
-                {o.status === 'ACTIVE' && <button onClick={async () => { setGnShowActions(false); await tgFetch(`/tg/gift-occasions/${o.id}/complete`, { method: 'POST' }); pushToast(t('gn_occasion_completed', locale), 'success'); await refreshList(); setScreen('gift-notes'); }}
+                {o.status === 'ACTIVE' && <button onClick={async () => { setGnShowActions(false); await tgFetch(`/tg/gift-occasions/${o.id}/complete`, { method: 'POST', idempotency: { action: `gift-occasion.complete:${o.id}` } }); pushToast(t('gn_occasion_completed', locale), 'success'); await refreshList(); setScreen('gift-notes'); }}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', border: 'none', background: 'none', width: '100%', textAlign: 'left' as const, cursor: 'pointer', fontSize: 14, fontWeight: 500, color: 'var(--wb-success, #4ADE80)', fontFamily: font }}>
                   <span style={{ fontSize: 15, width: 22, textAlign: 'center' as const, flexShrink: 0 }}>✅</span> {t('gn_complete', locale)}
                 </button>}
-                {o.status === 'ACTIVE' && <button onClick={async () => { setGnShowActions(false); await tgFetch(`/tg/gift-occasions/${o.id}/archive`, { method: 'POST' }); pushToast(t('gn_archive_occasion', locale), 'success'); await refreshList(); setScreen('gift-notes'); }}
+                {o.status === 'ACTIVE' && <button onClick={async () => { setGnShowActions(false); await tgFetch(`/tg/gift-occasions/${o.id}/archive`, { method: 'POST', idempotency: { action: `gift-occasion.archive:${o.id}` } }); pushToast(t('gn_archive_occasion', locale), 'success'); await refreshList(); setScreen('gift-notes'); }}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', border: 'none', borderTop: `1px solid ${C.border}`, background: 'none', width: '100%', textAlign: 'left' as const, cursor: 'pointer', fontSize: 14, fontWeight: 500, color: C.text, fontFamily: font }}>
                   <span style={{ fontSize: 15, width: 22, textAlign: 'center' as const, flexShrink: 0 }}>📦</span> {t('gn_archive_occasion', locale)}
                 </button>}
                 <button onClick={async () => {
                   setGnShowActions(false);
                   if (!confirm(t('gn_confirm_delete', locale))) return;
-                  await tgFetch(`/tg/gift-occasions/${o.id}`, { method: 'DELETE' });
+                  await tgFetch(`/tg/gift-occasions/${o.id}`, { method: 'DELETE', idempotency: { action: `gift-occasion.delete:${o.id}` } });
                   pushToast(t('gn_occasion_deleted', locale), 'success');
                   await refreshList();
                   setScreen('gift-notes');
@@ -22161,9 +22161,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
                     <span style={{ fontSize: 11, color: C.textMuted }}>{new Date(idea.createdAt).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'short' })}</span>
                     {idea.status === 'DONE' && <span style={{ fontSize: 11, color: 'var(--wb-success, #4ADE80)', fontWeight: 600 }}>✓ {t('gn_idea_status_selected', locale)}</span>}
-                    {idea.status !== 'DONE' && <button onClick={async (e) => { e.stopPropagation(); await tgFetch(`/tg/gift-occasion-ideas/${idea.id}/complete`, { method: 'POST' }); await refreshOccasion(); pushToast(t('gn_idea_completed', locale), 'success'); }}
+                    {idea.status !== 'DONE' && <button onClick={async (e) => { e.stopPropagation(); await tgFetch(`/tg/gift-occasion-ideas/${idea.id}/complete`, { method: 'POST', idempotency: { action: `gift-occasion-idea.complete:${idea.id}` } }); await refreshOccasion(); pushToast(t('gn_idea_completed', locale), 'success'); }}
                       style={{ fontSize: 11, fontWeight: 600, color: 'var(--wb-success, #4ADE80)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, padding: 0 }}>✓ {t('gn_complete', locale)}</button>}
-                    <button onClick={async (e) => { e.stopPropagation(); await tgFetch(`/tg/gift-occasion-ideas/${idea.id}`, { method: 'DELETE' }); await refreshOccasion(); }}
+                    <button onClick={async (e) => { e.stopPropagation(); await tgFetch(`/tg/gift-occasion-ideas/${idea.id}`, { method: 'DELETE', idempotency: { action: `gift-occasion-idea.delete:${idea.id}` } }); await refreshOccasion(); }}
                       style={{ fontSize: 11, fontWeight: 600, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, padding: 0 }}>✕</button>
                   </div>
                 </Card>
@@ -22219,7 +22219,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   variant="primary-gradient"
                   disabled={!gnEditTitle.trim()}
                   onClick={async () => {
-                    await tgFetch(`/tg/gift-occasions/${o.id}`, { method: 'PATCH', body: JSON.stringify({ title: gnEditTitle.trim(), personName: gnEditPerson.trim() || null, note: gnEditNote.trim() || null }) });
+                    await tgFetch(`/tg/gift-occasions/${o.id}`, { method: 'PATCH', body: JSON.stringify({ title: gnEditTitle.trim(), personName: gnEditPerson.trim() || null, note: gnEditNote.trim() || null }), idempotency: { action: `gift-occasion.update:${o.id}` } });
                     setGnShowEdit(false);
                     pushToast(t('gn_occasion_updated', locale), 'success');
                     await refreshOccasion();
@@ -22291,7 +22291,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             disabled={!gnFormTitle.trim()}
             style={{ marginTop: 4 }}
             onClick={async () => {
-              const r = await tgFetch('/tg/gift-occasions', { method: 'POST', body: JSON.stringify({ title: gnFormTitle.trim(), eventDate: gnFormDate || undefined, type: gnFormType, recurrence: gnFormDate ? gnFormRecurrence : 'NONE', personName: gnFormPerson.trim() || undefined }) });
+              const r = await tgFetch('/tg/gift-occasions', { method: 'POST', body: JSON.stringify({ title: gnFormTitle.trim(), eventDate: gnFormDate || undefined, type: gnFormType, recurrence: gnFormDate ? gnFormRecurrence : 'NONE', personName: gnFormPerson.trim() || undefined }), idempotency: { action: 'gift-occasion.create' } });
               if (r.ok) {
                 setShowGnCreateOccasion(false);
                 pushToast(t('gn_add_occasion', locale), 'success');
@@ -22327,7 +22327,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             disabled={!gnIdeaText.trim()}
             onClick={async () => {
               if (!gnViewingOccasion) return;
-              const r = await tgFetch(`/tg/gift-occasions/${gnViewingOccasion.id}/ideas`, { method: 'POST', body: JSON.stringify({ text: gnIdeaText.trim(), link: gnIdeaLink.trim() || undefined }) });
+              const r = await tgFetch(`/tg/gift-occasions/${gnViewingOccasion.id}/ideas`, { method: 'POST', body: JSON.stringify({ text: gnIdeaText.trim(), link: gnIdeaLink.trim() || undefined }), idempotency: { action: `gift-occasion-idea.create:${gnViewingOccasion.id}` } });
               if (r.ok) {
                 setShowGnAddIdea(false);
                 pushToast(t('gn_idea_saved', locale), 'success');
