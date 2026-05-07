@@ -114,18 +114,23 @@ Categories / Hints / Subscriptions are deferred to Wave 2.
 
 ## API architecture — MANDATORY for new backend code
 
-`apps/api/src/index.ts` **is** a composition root as of 2026-05-06 (P5
-route extraction + P5r-1..6 scheduler extraction done; ~3 110 LOC, 0
-inline `tg` handlers, 0 actual scheduler calls). Bootstrap, middleware,
-router registration, scheduler registration, `app.listen`, process
-handlers. Nothing else. Decomposition history + roadmap:
+`apps/api/src/index.ts` **is** a composition root as of 2026-05-07 (P5
+route extraction + P5r-1..6 scheduler extraction + P5s-1..10 services
+extraction **all done**; **1 789 LOC**, 0 inline `tg` handlers, 0
+actual scheduler calls; 165 `protectTgRoute`, 24 `register*Router`, 11
+scheduler factory calls). Bootstrap, middleware, router registration,
+scheduler registration, `app.listen`, process handlers. Nothing else.
+Decomposition history + closure status:
 [docs/REFACTOR_API_INDEX_HANDOFF.md](docs/REFACTOR_API_INDEX_HANDOFF.md).
 
 Companion docs:
 - [docs/SCHEDULERS.md](docs/SCHEDULERS.md) — operator reference for all
   9 cron modules (cadence, tables, log labels, monitoring).
-- [docs/SERVICES.md](docs/SERVICES.md) — existing 2 services + planned
-  P5s services (entitlement, telegram-auth, onboarding, etc.).
+- [docs/SERVICES.md](docs/SERVICES.md) — all **13 live services**
+  (`analytics`, `birthday-reminders`, `calendar`, `entitlement`,
+  `items`, `lifecycle`, `locale`, `onboarding`, `referral-hooks`,
+  `santa-season`, `telegram-auth`, `url-import`, `wishlists`) with
+  consumer maps and Strategy A/B choices.
 
 Full contract: [docs/API_ARCHITECTURE_RULES.md](docs/API_ARCHITECTURE_RULES.md).
 
@@ -168,8 +173,11 @@ If you cannot answer all ten, do not start coding.
 
 `schedulers/` and `services/` are **real layers**:
 - `schedulers/` — 9 modules (see [docs/SCHEDULERS.md](docs/SCHEDULERS.md)).
-- `services/` — 2 modules live (lifecycle, birthday-reminders) plus
-  ~10 planned during the P5s wave (see [docs/SERVICES.md](docs/SERVICES.md)).
+- `services/` — **13 modules live** (P5s-1..10 fully shipped — see
+  [docs/SERVICES.md](docs/SERVICES.md)). The extraction wave is
+  **closed**; new helpers that meet the on-touch threshold (3+
+  consumers OR cross-router/scheduler OR factory over runtime dep)
+  MUST go to `services/<name>.ts` rather than back into `index.ts`.
 
 `domain/`, `repositories/`, `integrations/` remain **target folders** —
 create them when the first real file lands; don't pre-seed empty

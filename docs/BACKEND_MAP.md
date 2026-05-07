@@ -1,6 +1,6 @@
 # Backend Map
 
-**Last updated:** 2026-05-06 (post-P5r-6)
+**Last updated:** 2026-05-07 (post-P5s-1..10 — full refactor closure)
 **Project:** Wishlist Telegram Mini App — `apps/api`
 
 ---
@@ -9,15 +9,15 @@
 
 `apps/api/src/index.ts` is a **composition root** — bootstrap, middleware,
 router registration, schedulers, `app.listen`. Nothing else. As of
-2026-05-06 the file is 3 110 LOC with 0 inline `tg` handlers and 0
-actual scheduler calls; the P1–P5/P5r decomposition is done.
+2026-05-07 the file is **1 789 LOC** with 0 inline `tg` handlers and 0
+actual scheduler calls; the P1–P5/P5r/P5s decomposition is **closed**.
 
 New API features go to:
 
 - `routes/<domain>.routes.ts` — HTTP layer, thin handlers (read input,
   validate, call service, shape response).
 - `services/<domain>.service.ts` — business logic and orchestration
-  (live: 2 modules — see [SERVICES.md](SERVICES.md)).
+  (live: **13 modules** — see [SERVICES.md](SERVICES.md)).
 - `schedulers/<job>.ts` — cron / interval jobs (live: 9 modules — see
   [SCHEDULERS.md](SCHEDULERS.md)).
 - `domain/<domain>/*` — pure rules, state transitions, permissions.
@@ -44,9 +44,9 @@ Decomposition handoff → [REFACTOR_API_INDEX_HANDOFF.md](REFACTOR_API_INDEX_HAN
 ```
 apps/api/
 ├── src/
-│   ├── index.ts                    # Composition root (~3,110 LOC; 0 inline handlers,
+│   ├── index.ts                    # Composition root (1 789 LOC; 0 inline handlers,
 │   │                               # 0 actual scheduler calls; 24 register*Router calls,
-│   │                               # 9 start*Scheduler calls, 91 protectTgRoute entries)
+│   │                               # 11 scheduler factory calls, 165 protectTgRoute entries)
 │   ├── url-parser.ts               # URL product card extraction pipeline (~1,059 lines)
 │   ├── browser-network-extractor.ts # Puppeteer XHR/fetch interception for SPAs
 │   ├── sort.ts                     # Item sort order logic (unit-testable, no side effects)
@@ -61,8 +61,8 @@ apps/api/
 │   │                               # birthday-reminders, selections-archive, import,
 │   │                               # telemetry, analytics, maintenance)
 │   ├── schedulers/                 # 9 cron modules — see SCHEDULERS.md
-│   ├── services/                   # 2 cross-cutting services — see SERVICES.md
-│   ├── security/                   # Idempotency, rate limits, IP throttle (Wave 1)
+│   ├── services/                   # 13 service modules — see SERVICES.md
+│   ├── security/                   # Idempotency, rate limits, IP throttle (Wave 1+2)
 │   ├── lib/                        # asyncHandler, crypto, http (zodError), locale
 │   ├── middleware/                 # cors, requestLogger
 │   ├── telegram/                   # Bot API helpers (sendTgNotification, deepLinks, etc.)

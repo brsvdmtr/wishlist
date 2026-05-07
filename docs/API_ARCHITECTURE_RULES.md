@@ -1,16 +1,19 @@
 # API Architecture Rules
 
-**Status:** mandatory · **Last updated:** 2026-05-06 (after P5r-6) · **Owner:** backend
+**Status:** mandatory · **Last updated:** 2026-05-07 (after P5s-1..10 — full closure) · **Owner:** backend
 
 These rules are non-negotiable for any change under `apps/api/`. They exist
 because `index.ts` was a ~20 k-line monolith that grew uncontrollably. The
-decomposition (P1–P5 + P5r-1..6; see
+decomposition (P1–P5 + P5r-1..6 + P5s-1..10; see
 [REFACTOR_API_INDEX_HANDOFF.md](REFACTOR_API_INDEX_HANDOFF.md)) **is
-done as of 2026-05-06**: `index.ts` is 3 110 LOC, 0 inline `tg`
-handlers, 0 actual scheduler calls, all 9 cron jobs and the first 2
-cross-scheduler services have been extracted. The follow-up P5s wave
-moves the remaining ~50 helper functions into `services/`. If new
-features keep landing in `index.ts`, the work is wasted in a few months.
+fully done as of 2026-05-07**: `index.ts` is **1 789 LOC**, 0 inline
+`tg` handlers, 0 actual scheduler calls, all 9 cron jobs extracted, all
+13 services live (`analytics`, `birthday-reminders`, `calendar`,
+`entitlement`, `items`, `lifecycle`, `locale`, `onboarding`,
+`referral-hooks`, `santa-season`, `telegram-auth`, `url-import`,
+`wishlists`). The extraction track is **closed** — no further P5s
+phase is planned. If new features keep landing in `index.ts`, the work
+is wasted in a few months.
 
 If a rule conflicts with a quick fix, the rule wins. Open a discussion before
 bending it.
@@ -104,13 +107,18 @@ A new feature touches some or all of:
 ### Layer status
 
 `schedulers/` and `services/` are now **real** layers (not future
-carve-outs). As of 2026-05-06:
+carve-outs). As of 2026-05-07:
 
 - `schedulers/` ships **9 modules** (cleanup, billing, referral, santa,
   reservations, events, lifecycle, pro-renewal, birthday-reminders) —
   see [SCHEDULERS.md](SCHEDULERS.md).
-- `services/` ships **2 modules** (lifecycle, birthday-reminders) and
-  has ~10 planned during the P5s wave — see [SERVICES.md](SERVICES.md).
+- `services/` ships **13 modules** (`analytics`, `birthday-reminders`,
+  `calendar`, `entitlement`, `items`, `lifecycle`, `locale`,
+  `onboarding`, `referral-hooks`, `santa-season`, `telegram-auth`,
+  `url-import`, `wishlists`) — see [SERVICES.md](SERVICES.md). The P5s
+  extraction wave is closed; new helpers added to `index.ts` that meet
+  the on-touch threshold (3+ consumers OR cross-router/scheduler OR
+  factory over runtime dep) MUST go to `services/<name>.ts`.
 
 `domain/`, `repositories/`, `integrations/` remain **target** folders —
 create them when the first real file lands; don't pre-seed empty
@@ -399,9 +407,9 @@ Before opening / merging the PR:
 
 ## Pointers
 
-- Refactor handoff (P1–P5/P5r status, P5s roadmap): [REFACTOR_API_INDEX_HANDOFF.md](REFACTOR_API_INDEX_HANDOFF.md).
+- Refactor handoff (P1–P5/P5r/P5s — track closed): [REFACTOR_API_INDEX_HANDOFF.md](REFACTOR_API_INDEX_HANDOFF.md).
 - Schedulers reference (9 modules, cadence, monitoring): [SCHEDULERS.md](SCHEDULERS.md).
-- Services layer (2 existing + ~10 planned): [SERVICES.md](SERVICES.md).
+- Services layer (13 live modules, P5s closed): [SERVICES.md](SERVICES.md).
 - Security contract (idempotency / rate limits / Wave-2 status): [API_SECURITY.md](API_SECURITY.md).
 - Architecture overview: [ARCHITECTURE.md](ARCHITECTURE.md).
 - Route inventory: [BACKEND_MAP.md](BACKEND_MAP.md).

@@ -1,6 +1,6 @@
 # API Schedulers
 
-**Last updated:** 2026-05-06 (after P5r-6) · **Owner:** backend
+**Last updated:** 2026-05-07 (post P5s-1..10 — services layer fully closed; scheduler layer unchanged from P5r-6) · **Owner:** backend
 
 Operator reference for the nine scheduler modules under
 `apps/api/src/schedulers/`. Each module is a factory invoked exactly once

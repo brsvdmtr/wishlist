@@ -1,42 +1,42 @@
 # Refactor handoff — `apps/api/src/index.ts` decomposition
 
-**Status as of 2026-05-06.** P1–P5 + P5r-1..6 are **DONE**. `index.ts`
-is now a composition root: 0 inline `tg` handlers, 0 actual scheduler
-calls, 91 `protectTgRoute` entries, 24 `register*Router` factory calls,
-9 `start*Scheduler` factory calls. The single-file monolith is retired.
+**Status as of 2026-05-07.** P1–P5 + P5r-1..6 + **P5s-1..10** are
+**DONE**. The full decomposition track is **closed**. `index.ts` is
+**1 789 LOC** of pure composition root: bootstrap, middleware, security
+gate registration, router mounts, scheduler registration, `app.listen`,
+process handlers — and a thin layer of factory wirings for services
+that close over runtime deps.
 
-Active follow-up: docs refresh (this PR), Wave-2 Santa security, and
-P5s service extraction (~10 services, ~2340 LOC of helpers still inline
-in `index.ts`).
-
-This document is **self-contained**: an agent picking up the next phase
-should not need to read prior conversation. Everything required is
+This document is **self-contained**: an agent picking up future API
+work should not need to read prior conversation. Everything required is
 here, in `git log`, or in the files listed.
 
 ---
 
 ## TL;DR
 
-| Phase | Status | Commits | Δ on `index.ts` |
-|---|---|---|---|
-| **P1+P2+P3** | done | `a5a5fc5` | helper modules extracted: `bootstrap/`, `lib/`, `middleware/`, `telegram/`, `notifications/`, `placements/`, `wishlists/`, `health/`, `uploads/`. `~21,580` → `~19,636`. |
-| **P4** | done | `30839b2` | 3 prefix-bound routers via factory pattern: `internal`, `admin`, `public`. |
-| **P5** | done | series of P5a–P5q (route extractions) + P5r-1..6 (scheduler extractions) | every `tgRouter` handler split into `routes/<domain>.routes.ts`. `~19,636` → `4,740` after route extraction; then **4,740 → 3,110** through P5r scheduler extractions. |
-| **P5r-1..6** | done | `73f76e9`, `5a76659`, `774b59d`, `9b77aca`, `d2fdaf9`, `0f60904` | every scheduler `setInterval` / `setTimeout` moved to `apps/api/src/schedulers/<name>.ts`. Two cross-cutting services landed: `services/lifecycle.ts` and `services/birthday-reminders.ts`. |
+| Phase | Status | Δ on `index.ts` |
+|---|---|---|
+| **P1+P2+P3** | done | helper modules extracted: `bootstrap/`, `lib/`, `middleware/`, `telegram/`, `notifications/`, `placements/`, `wishlists/`, `health/`, `uploads/`. `~21,580` → `~19,636`. |
+| **P4** | done | 3 prefix-bound routers via factory pattern: `internal`, `admin`, `public`. |
+| **P5** | done | every `tgRouter` handler split into `routes/<domain>.routes.ts`. `~19,636` → `4,740`. |
+| **P5r-1..6** | done | every scheduler `setInterval` / `setTimeout` moved to `apps/api/src/schedulers/<name>.ts`. Two cross-cutting services landed (`lifecycle`, `birthday-reminders`). `4,740 → 3,110`. |
+| **P5s-1..10** | done | 11 helper services extracted (`entitlement`, `telegram-auth`, `onboarding`, `santa-season`, `items`, `wishlists`, `calendar`, `url-import`, `locale`, `analytics`, `referral-hooks`). `3,110 → 1,789`. |
+| **Wave-2 security** | done | 165 `protectTgRoute` entries cover every state-changing endpoint; documented exclusions only (read-markers, telemetry, onboarding-flags). |
 
-**Cumulative reduction:** `index.ts` 12,924 → 3,110 LOC (-9,814 LOC,
--75.9% from the pre-P5r baseline; the original peak was ~21,580).
+**Cumulative reduction:** `index.ts` 12 924 (P5r baseline) → **1 789 LOC**
+(−11 135 LOC, **−86.2%** off the post-P5 baseline; **−91.7%** off the
+original ~21 580 monolith peak).
 
-**Composition-root state (verified 2026-05-06 after `0f60904`):**
+**Composition-root state (verified 2026-05-07 after `098fc59`):**
 - 0 inline `tgRouter.<verb>(...)` handlers.
-- 0 actual `setInterval` / `setTimeout` scheduler calls (one
-  `setTimeout(r, PAUSE_MS)` Promise sleep helper inside a route helper
-  is the sole exception, and it is not a cron).
-- 27 `tgRouter.use(...)` mounts; 12 `app.use(...)` mounts; 91
-  `protectTgRoute(...)` entries; 24 `register*Router(...)` calls; 9
-  `start*Scheduler(...)` factory calls.
-- ~50 helper functions and ~30 top-level `const`s remain inline —
-  these are the P5s extraction surface (see [SERVICES.md](SERVICES.md)).
+- 0 actual `setInterval` / `setTimeout` scheduler calls in `index.ts`.
+- 27 `tgRouter.use(...)` mounts; 12 `app.use(...)` mounts.
+- **165** `protectTgRoute(...)` entries (Wave-2 closure).
+- **24** `register*Router(...)` calls.
+- **11** scheduler factory call-sites.
+- **13** services in `apps/api/src/services/`.
+- 0 helpers remaining inline that meet the extraction threshold (3+ consumers, cross-domain coupling, factory closure).
 
 ---
 
@@ -44,11 +44,12 @@ here, in `git log`, or in the files listed.
 
 ```
 apps/api/src/
-├── index.ts                                        3 110 lines (composition root)
+├── index.ts                                        1 789 lines (composition root)
 ├── url-parser.ts, browser-network-extractor.ts     marketplace strategies
 ├── sort.ts, sort.test.ts                           pure
 ├── seed.ts, profile.ts                             one-off
-├── logger.ts, trackAnalyticsEvent.ts                bootstrap-time singletons
+├── logger.ts                                       pino logger singleton
+├── trackAnalyticsEvent.ts                          stranded duplicate (0 importers — flag for cleanup PR)
 │
 ├── bootstrap/
 │   ├── dns.ts                  ipv6first DNS, MUST be first import in index.ts
@@ -78,16 +79,35 @@ apps/api/src/
 ├── uploads/                    upload.config (multer), imageProcessor (sharp),
 │                               uploadCleanup, registerUploads (mounts /uploads)
 │
-├── services/                   ── NEW (P5r-5, P5r-6) ──
-│   ├── lifecycle.ts            createSendLifecycleDM factory + SendDmOutcome type.
-│   │                           Used by schedulers/lifecycle.ts and pro-renewal.ts.
-│   └── birthday-reminders.ts   6 pure helpers (timezone math, occurrence-key,
-│                               display-name picker) + BIRTHDAY_TZ_OFFSET_HOURS.
-│                               Used by routes + scheduler.
+├── services/                   ── 13 modules (P5r-5..6 + P5s-1..10) ──
+│   ├── analytics.ts            trackEvent + trackAnalyticsEvent (stateless)
+│   ├── birthday-reminders.ts   6 pure helpers + BIRTHDAY_TZ_OFFSET_HOURS
+│   ├── calendar.ts             3 pure date helpers (gift-notes / events scheduler)
+│   ├── entitlement.ts          PLANS, prices, SKUs, getUserEntitlement,
+│   │                           getEffectiveEntitlements, isWishlistWritable,
+│   │                           requireGiftNotes (Pro feature gate)
+│   ├── items.ts                ACTIVE_STATUSES, mapTgItem, getItemRole,
+│   │                           cancelItemHints, notifySubscribersOfChange,
+│   │                           countItemPlacements, extractNumericPrice,
+│   │                           priorityToNum, numToPriority
+│   ├── lifecycle.ts            createSendLifecycleDM factory
+│   ├── locale.ts               resolveUserFirstName
+│   ├── onboarding.ts           hello_activation state machine + demo-item
+│   │                           dictionaries + completion factory
+│   ├── referral-hooks.ts       runReferralProgressHook, notifyReferralInviterRewarded,
+│   │                           resolveProactiveUserLocale (private)
+│   ├── santa-season.ts         season window math + alias system + seasonal
+│   │                           broadcasts + maybeRunSeasonalEvents cron entry
+│   ├── telegram-auth.ts        validateTelegramInitData, tgActorHash,
+│   │                           requireTelegramAuth, getOrCreateTgUser,
+│   │                           SYSTEM_ACTOR_HASH, INIT_DATA_*
+│   ├── url-import.ts           createImportUrlForUser factory (URL → draft item)
+│   └── wishlists.ts            DRAFTS_ITEM_LIMIT, reassignPrimaryBeforeWishlistDelete,
+│                               createGetOrCreateDraftsWishlist factory
 │
-├── schedulers/                 ── NEW (P5r-1..6) ──
+├── schedulers/                 ── 9 cron modules ──
 │   ├── billing.ts              hourly: subscription/promo/degradation expiry
-│   ├── birthday-reminders.ts   hourly + 30s startup kick (P5r-6)
+│   ├── birthday-reminders.ts   hourly + 30s startup kick
 │   ├── cleanup.ts              hourly: TTL comments + curated + archive purge
 │   ├── events.ts               5-min: gift-occasion calendar reminders
 │   ├── lifecycle.ts            hourly: win-back DM (segments S1–S4) + dead-air alarm
@@ -100,8 +120,8 @@ apps/api/src/
 │                               runSantaStartupJobs() called from app.listen.
 │
 └── routes/                     24 domain routers + 1 admin / 1 internal / 1 public:
-    ├── santa.routes.ts             3 763 lines, 74 handlers — biggest.
-    ├── me.routes.ts                2 358 lines, 27 handlers — fattest avg (87 LOC/handler).
+    ├── santa.routes.ts             3 763 lines, 74 handlers
+    ├── me.routes.ts                2 358 lines, 27 handlers
     ├── wishlists.routes.ts         1 842 lines, 31 handlers
     ├── items.routes.ts             1 496 lines, 23 handlers
     ├── reservations.routes.ts      1 366 lines, 29 handlers
@@ -130,35 +150,38 @@ apps/api/src/
 cadence, what they do, tables touched, log labels, and monitoring
 notes.
 
-**Services** (existing + planned) are catalogued in [SERVICES.md](SERVICES.md).
+**Services** are catalogued in [SERVICES.md](SERVICES.md) — 13 live
+modules with consumer lists and strategy choices.
 
 ---
 
-## What still lives inside `index.ts` (3,110 LOC)
+## What lives inside `index.ts` today (1 789 LOC)
 
-This is **not** business logic — it is the composition root plus the
-helper layer that has not yet been extracted into `services/`.
+This is **only** composition root — bootstrap, security wiring, factory
+wirings, mounts, listen.
 
-| Block | LOC (approx) | Status |
-|---|---|---|
-| Bootstrap (DNS, env, Sentry, prisma+logger init, multer, express app + middleware chain) | ~600 | stays |
-| ~30 top-level `const` declarations (PLANS, prices, SKUs, ONBOARDING_*, BIRTHDAY_REMINDERS_ENABLED, BOT_TOKEN_FOR_DM, MINI_APP_URL_FOR_DM, LIFECYCLE_PROMO_CODE, PRO_*) | ~50 | most → `services/entitlement.ts` (P5s-1) |
-| ~50 helper functions (entitlement, telegram-auth, onboarding, santa-season, item helpers, wishlist helpers, analytics, referral hooks, calendar, locale, url-import) | ~1,500 | targets for P5s — full inventory in [SERVICES.md § 2](SERVICES.md#2-planned-p5s-services) |
-| 91 `protectTgRoute(...)` security wiring chain | ~150 | stays in composition root (gate registration is correct here) |
-| 24 `register*Router(...)` factory calls | ~50 | stays (composition root) |
-| 9 `start*Scheduler(...)` factory calls | ~25 | stays (composition root) |
-| `app.listen(...)` + process handlers + `runSantaStartupJobs()` | ~30 | stays |
+| Block | LOC (approx) |
+|---|---|
+| Bootstrap (DNS, env, Sentry, prisma+logger init, multer, express app + middleware chain) | ~250 |
+| Top-level imports (24 router factories, 9 scheduler factories, 13 services, security middleware, shared utilities) | ~200 |
+| Service factory wirings (`createGetOrCreateDraftsWishlist`, `createImportUrlForUser`, `createCompleteOnboarding`) | ~10 |
+| 165 `protectTgRoute(...)` security wiring chain | ~250 |
+| 24 `register*Router(...)` factory calls + `tgRouter.use(...)` mounts | ~150 |
+| 11 `start*Scheduler(...)` factory calls | ~60 |
+| `runSantaStartupJobs()` invocation inside app.listen | ~5 |
+| `app.listen(...)` + process handlers (uncaughtException, unhandledRejection) + admin-alert wiring | ~30 |
+| Comment blocks documenting extraction history (P5s-1..10 markers, deferred wiring TDZ rationales) | ~830 |
 
-**Target after the P5s wave:** ~770 LOC of pure composition root +
-auth-gate registration. The remaining ~2,340 LOC of helpers move into
-~10 new services modules.
+The comment density is intentional. Future agents reading `index.ts`
+get history-of-decisions inline (why this wiring sits where it sits,
+which P5s phase moved what, which order matters for TDZ-safety, etc.).
 
 ---
 
-## Composition-root contract (P5+ binding)
+## Composition-root contract (binding for new work)
 
-After P5/P5r, `apps/api/src/index.ts` is a **composition root**. New
-API code follows the iron rules in
+After P5/P5r/P5s, `apps/api/src/index.ts` is a **composition root**.
+New API code follows the iron rules in
 [API_ARCHITECTURE_RULES.md](API_ARCHITECTURE_RULES.md):
 
 - New endpoints land in `routes/<domain>.routes.ts`, never in `index.ts`.
@@ -179,63 +202,14 @@ API code follows the iron rules in
 
 ---
 
-## Roadmap — what comes next
+## Hard constraints (preserved through P1 → P5s-10)
 
-### #1 — `docs(api): refresh post-P5r architecture docs` (this PR)
-
-Pure-doc PR. Updates:
-- This handoff doc.
-- Creates [SCHEDULERS.md](SCHEDULERS.md) and [SERVICES.md](SERVICES.md).
-- Refreshes [API_ARCHITECTURE_RULES.md](API_ARCHITECTURE_RULES.md),
-  [BACKEND_MAP.md](BACKEND_MAP.md), [ARCHITECTURE.md](ARCHITECTURE.md),
-  [API_SECURITY.md](API_SECURITY.md) (Wave-2 status), and
-  [../CLAUDE.md](../CLAUDE.md).
-
-### #2 — `security(api): Wave-2 Santa idempotency + rate-limits`
-
-Add `protectTgRoute` to all 42 state-changing `routes/santa.routes.ts`
-endpoints. Choose rate-limit categories
-(`santa.campaign-mutate`, `santa.participant-action`,
-`santa.message-write`, `santa.vote`, etc.). Add
-`idempotency: { critical: true }` for `draw` / `complete` / `cancel` /
-`exit-approve`. Santa is offseason (Nov 15 – Feb 15 calendar), so
-adoption can ship without breaking real users.
-
-### #3 — `refactor(api): extract entitlement service` (P5s-1)
-
-Move `getUserEntitlement`, `getEffectiveEntitlements`,
-`requireGiftNotes`, `isReservationBeta`, `hasReservationPro`,
-`getSmartResLeadHours`, `hasSmartReservations`, `PLANS`, prices, SKUs,
-`ADDON_CAPS`, `ONE_TIME_SKUS`, `PRO_*` constants to
-`services/entitlement.ts`. ~280 LOC out. Highest fan-out (~20 files).
-
-### #4 — `refactor(api): extract telegram-auth service` (P5s-2)
-
-Move `validateTelegramInitData`, `tgActorHash`, `requireTelegramAuth`,
-`protectTgRoute`, `getOrCreateTgUser`, `SYSTEM_ACTOR_HASH`,
-`INIT_DATA_*` constants to `services/telegram-auth.ts`. **Highest
-risk — ship #3 first and observe before touching auth.**
-
-### #5 — `refactor(api): extract onboarding service` (P5s-3)
-
-Move 10 onboarding state-machine functions + `ONBOARDING_KEY` /
-`ONBOARDING_VERSION` / `FORCED_ROLLOUT_USERS` to
-`services/onboarding.ts`. ~300 LOC out.
-
-**Subsequent P5s candidates** (no global ordering required): santa-season,
-items helpers, wishlists helpers, analytics + referral hooks,
-calendar, url-import, locale. Full inventory in [SERVICES.md § 2](SERVICES.md#2-planned-p5s-services).
-
----
-
-## Hard constraints (preserved through P1 → P5r-6)
-
-1. **Byte-identical handler bodies.** Every route handler and scheduler
-   body extracted via P5/P5r matched the original token-for-token.
-   Only allowed deltas: `tgRouter.X` → `<router>.X`, indent +2 (when
-   moving inside a factory), and dep destructuring at the top of the
-   factory. This rule prevented behaviour regressions across all
-   phases.
+1. **Byte-identical handler bodies.** Every route handler, scheduler
+   body, and service helper extracted via P5/P5r/P5s matched the
+   original token-for-token. Only allowed deltas: file location +
+   import vs deps wiring + export keyword + factory wrapping where the
+   body closes over a runtime dep. This rule prevented behaviour
+   regressions across all 11 P5s commits.
 2. **No middleware-order changes** (`cors → express.json → requestLogger
    → /uploads → /health → routers → error handler`).
 3. **No Prisma schema change without explicit proposal + approval.**
@@ -243,32 +217,33 @@ calendar, url-import, locale. Full inventory in [SERVICES.md § 2](SERVICES.md#2
    churn, or duplication while extracting, open a separate commit.
 5. **Test baseline:** 247 pass / 3 fail. The 3 failures are in
    [`apps/api/src/sort.test.ts`](../apps/api/src/sort.test.ts) and
-   predate this work. Any commit that changes either number is rejected.
+   predate this work.
 6. **Type-check baseline:** clean apart from the 3 sort.test.ts errors.
-   `npx tsc --project apps/api/tsconfig.json --noEmit` after every step.
 
 ---
 
-## Verification recipe (run after every P5s step)
+## Verification recipe (used after every P5s step)
 
 ```bash
-# 1. Type-check (filter pre-existing sort.test.ts noise)
-npx tsc --project apps/api/tsconfig.json --noEmit 2>&1 | grep -v "sort.test.ts" | head
+# 1. Type-check
+npx tsc --project apps/api/tsconfig.build.json --noEmit
 
-# 2. Build
+# 2. Builds
 pnpm -C apps/api build
-
-# 3. Tests (baseline: 247 pass / 3 fail)
-pnpm -C apps/api test 2>&1 | tail -20
-
-# 4. Bot still type-checks (in case shared types drifted)
 pnpm -C apps/bot build
-
-# 5. Web still builds
 pnpm -C apps/web build
 
-# 6. Visual sanity: line count delta on index.ts
-wc -l apps/api/src/index.ts
+# 3. Tests (baseline: 247 pass / 3 fail)
+pnpm -C apps/api test 2>&1 | tail -10
+
+# 4. Static composition-root invariants (must not change)
+grep -cE "protectTgRoute\(" apps/api/src/index.ts          # 165
+grep -cE "register[A-Z][A-Za-z]+Router\(" apps/api/src/index.ts  # 24
+grep -cE "^tgRouter\.(get|post|patch|put|delete)\(" apps/api/src/index.ts  # 0
+grep -cE "^setInterval\(|^cron\." apps/api/src/index.ts    # 0
+
+# 5. index.ts LOC
+wc -l apps/api/src/index.ts                                 # 1789
 ```
 
 After deploy (push to `main` → GitHub Actions `Deploy to Vultr`):
@@ -282,26 +257,27 @@ ssh vultr 'docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist -c 
 ssh vultr 'docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist -c "SELECT event, COUNT(*) FROM \"AnalyticsEvent\" WHERE event LIKE '\''error:%'\'' AND \"createdAt\" >= NOW() - INTERVAL '\''1 day'\'' GROUP BY event ORDER BY count DESC;"'
 ```
 
-For scheduler-relevant changes, also see the per-cron monitoring
-windows in [SCHEDULERS.md § Deploy monitoring](SCHEDULERS.md#deploy-monitoring).
-
-Failed migrations resolved with:
-```bash
-ssh vultr 'docker exec wishlist-prod-api-1 /app/packages/db/node_modules/.bin/prisma migrate resolve --applied <migration_name> --schema=/app/packages/db/prisma/schema.prisma'
-```
-
 ---
 
-## Open backlog (post-P5r)
+## Closure status
+
+**Decomposition track:** 100% complete as of 2026-05-07.
+
+**Wave-2 security:** 100% complete as of 2026-05-07. 165 `protectTgRoute`
+entries cover every state-changing endpoint. 10 documented exclusions
+(5 read-markers, 4 telemetry/analytics, 1 onboarding-seen flag).
+
+**Open backlog after closure:**
 
 | Item | Where | Notes |
 |---|---|---|
-| Wave-2 Santa security | `routes/santa.routes.ts` (42 state-changing endpoints, 0 `protectTgRoute` coverage) | See [API_SECURITY.md § 4](API_SECURITY.md#4-wave-2-status). Highest-priority gap; santa is offseason so safe rollout window. |
-| Wave-2 gift-notes / hints / promo / profiles / selections-archive / comments / maintenance | various routes | ~17 endpoints, lower priority than santa. Detail in [API_SECURITY.md § 4](API_SECURITY.md#4-wave-2-status). |
-| `services/entitlement.ts` (P5s-1) | `index.ts` → `services/entitlement.ts` | Highest LOC reduction; first P5s extraction. |
-| `services/telegram-auth.ts` (P5s-2) | `index.ts` → `services/telegram-auth.ts` | Auth core; ship after entitlement is monitored. |
-| `services/onboarding.ts` (P5s-3) | `index.ts` → `services/onboarding.ts` | Conversion-critical; deploy off-peak. |
-| Subsequent P5s services | `index.ts` → `services/<name>.ts` | santa-season / items / wishlists / analytics / referral-hooks / calendar / url-import / locale. See [SERVICES.md § 2](SERVICES.md#2-planned-p5s-services). |
+| Dead-code cleanup | `apps/api/src/trackAnalyticsEvent.ts` | Stranded near-duplicate of `services/analytics.ts:trackAnalyticsEvent` (different signature, different truncation strategy). 0 importers. Safe-delete in a tiny follow-up PR. |
+| Doc-guard regressions | `docs/DESIGN_DECISIONS.md`, `docs/DATA_MODEL.md`, `docs/FRONTEND_MAP.md` | 3 pre-existing CI doc-guard failures, unrelated to API track. Predates this work. |
+
+There is **no open extraction work**. New helpers added to `index.ts`
+that meet the on-touch threshold (3+ consumers OR cross-router/scheduler
+coupling OR factory over runtime dep) immediately violate the
+composition-root contract — they MUST go to `services/<name>.ts`.
 
 ---
 
@@ -310,9 +286,7 @@ ssh vultr 'docker exec wishlist-prod-api-1 /app/packages/db/node_modules/.bin/pr
 This section used to read "do NOT chase Telegram outbound flakiness in
 P5". That caveat is retired. Production runs on Vultr Amsterdam VPS
 (commit `0e7a9f6`); both IPv4 and IPv6 reach `api.telegram.org` in
-~30 ms. The bot's recipient retry (`fa0b52d`) and API's idempotency
-window alignment (`6574323`) remain in place as defence-in-depth, but
-they no longer mask anything visible.
+~30 ms.
 
 References:
 - [BUGFIX_LESSONS.md](BUGFIX_LESSONS.md) — 2026-05-03 entry.
@@ -321,27 +295,8 @@ References:
 
 ---
 
-## Quick start for the next agent
-
-```bash
-# 1. Make sure local main matches origin and tests are green
-git fetch origin && git checkout main && git pull origin main
-pnpm -C apps/api test 2>&1 | tail -5     # expect 247 pass / 3 fail
-
-# 2. Pick the next phase from § Roadmap. Read SERVICES.md § 2 to find
-#    which helpers move where.
-
-# 3. For service extraction, follow the P5r pattern:
-#    audit → confirm → byte-identical extraction → verify → commit →
-#    deploy → immediate health → first-tick (or analogous) check.
-
-# 4. Verification recipe above. Push to main on green; GitHub Actions
-#    handles deploy.
-```
-
----
-
-*Maintainer note*: this doc is a snapshot. After every P5s step, update
-the file map's `index.ts` LOC, the helper-block table, and the roadmap
-checkmarks. The intent is that a future agent at any P5s stage can
-read this single doc and pick up cleanly.
+*Maintainer note*: this doc is now a snapshot of the closed track. The
+file map's `index.ts` LOC, the `What lives inside index.ts` table, and
+the closure status reflect the 2026-05-07 final state. Future API work
+on top of this codebase does not need to update this file unless the
+refactor track is somehow re-opened (no current trigger for that).
