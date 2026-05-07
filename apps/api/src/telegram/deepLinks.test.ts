@@ -1,0 +1,76 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { buildCommentReplyDeepLink, buildReservationReminderDeepLink } from './deepLinks';
+
+// Snapshot env vars and restore between cases — the helpers read at call
+// time, so each test sets up its own env.
+const ORIG_MINI_APP_URL = process.env.MINI_APP_URL;
+const ORIG_WEB_ORIGIN = process.env.WEB_ORIGIN;
+
+beforeEach(() => {
+  delete process.env.MINI_APP_URL;
+  delete process.env.WEB_ORIGIN;
+});
+
+afterEach(() => {
+  if (ORIG_MINI_APP_URL === undefined) delete process.env.MINI_APP_URL;
+  else process.env.MINI_APP_URL = ORIG_MINI_APP_URL;
+  if (ORIG_WEB_ORIGIN === undefined) delete process.env.WEB_ORIGIN;
+  else process.env.WEB_ORIGIN = ORIG_WEB_ORIGIN;
+});
+
+describe('buildReservationReminderDeepLink', () => {
+  it('uses MINI_APP_URL when set', () => {
+    process.env.MINI_APP_URL = 'https://t.me/WishBoardBot/app';
+    const url = buildReservationReminderDeepLink('cmaa1bb2ccdd', 'cmm9zz8yyxx');
+    expect(url).toBe('https://t.me/WishBoardBot/app?startapp=rrem_cmaa1bb2ccdd__m_cmm9zz8yyxx');
+  });
+
+  it('falls back to WEB_ORIGIN + /miniapp when MINI_APP_URL is missing', () => {
+    process.env.WEB_ORIGIN = 'https://example.com';
+    const url = buildReservationReminderDeepLink('cmaa1bb2ccdd', 'cmm9zz8yyxx');
+    expect(url).toBe('https://example.com/miniapp?startapp=rrem_cmaa1bb2ccdd__m_cmm9zz8yyxx');
+  });
+
+  it('falls back to wishlistik.ru/miniapp when both env vars missing', () => {
+    const url = buildReservationReminderDeepLink('cmaa1bb2ccdd', 'cmm9zz8yyxx');
+    expect(url).toBe('https://wishlistik.ru/miniapp?startapp=rrem_cmaa1bb2ccdd__m_cmm9zz8yyxx');
+  });
+
+  it('encodes itemId and reservationMetaId via encodeURIComponent', () => {
+    process.env.MINI_APP_URL = 'https://t.me/WishBoardBot/app';
+    // Realistic cuids never contain reserved chars, but the helper should be
+    // safe regardless — the parser symmetrically decodeURIComponent's both
+    // segments.
+    const url = buildReservationReminderDeepLink('id with space', 'meta/slash');
+    expect(url).toBe('https://t.me/WishBoardBot/app?startapp=rrem_id%20with%20space__m_meta%2Fslash');
+  });
+
+  it('produces a payload that starts with rrem_ and contains the __m_ separator', () => {
+    const url = buildReservationReminderDeepLink('cmaa1bb2ccdd', 'cmm9zz8yyxx');
+    const startapp = new URL(url).searchParams.get('startapp')!;
+    expect(startapp.startsWith('rrem_')).toBe(true);
+    expect(startapp).toContain('__m_');
+  });
+
+  it('does not collide with the comment-reply deep link prefix', () => {
+    const a = buildReservationReminderDeepLink('aaaa1111bbbb', 'cccc2222dddd');
+    const b = buildCommentReplyDeepLink('aaaa1111bbbb', 'cccc2222dddd');
+    expect(a).not.toBe(b);
+    expect(a).toContain('rrem_');
+    expect(b).toContain('crpl_');
+  });
+});
+
+describe('buildCommentReplyDeepLink (regression)', () => {
+  it('still uses crpl_ prefix and __c_ separator after refactor', () => {
+    process.env.MINI_APP_URL = 'https://t.me/WishBoardBot/app';
+    const url = buildCommentReplyDeepLink('cmaa1bb2ccdd', 'cmcc3dd4eeff');
+    expect(url).toBe('https://t.me/WishBoardBot/app?startapp=crpl_cmaa1bb2ccdd__c_cmcc3dd4eeff');
+  });
+
+  it('honours the same fallback chain', () => {
+    process.env.WEB_ORIGIN = 'https://example.com';
+    const url = buildCommentReplyDeepLink('cmaa1bb2ccdd', 'cmcc3dd4eeff');
+    expect(url).toBe('https://example.com/miniapp?startapp=crpl_cmaa1bb2ccdd__c_cmcc3dd4eeff');
+  });
+});

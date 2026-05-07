@@ -27,6 +27,7 @@
 import type { PrismaClient } from '@wishlist/db';
 import type { Logger } from 'pino';
 import { t } from '@wishlist/shared';
+import { buildReservationReminderDeepLink } from '../telegram/deepLinks';
 
 export type ReservationReminderDeps = {
   prisma: PrismaClient;
@@ -91,7 +92,7 @@ export function startReservationReminderScheduler(deps: ReservationReminderDeps)
           if (meta.note) text += `\n\n📝 ${meta.note}`;
           await sendTgBotMessage(reserver.telegramChatId, text, {
             inline_keyboard: [[
-              { text: '📱 Открыть', url: 'https://t.me/WishBoardBot/app' },
+              { text: '📱 Открыть', url: buildReservationReminderDeepLink(meta.item.id, meta.id) },
               { text: '✓ Куплено', callback_data: `res_purchased:${meta.item.id}` },
             ]],
           });

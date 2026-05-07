@@ -28,6 +28,7 @@ import {
   SECURITY_TOAST_CODES,
   CLIENT_BUG_CODES,
 } from './idempotency';
+import { parseReservationReminderPayload, looksLikeId } from './startParam';
 
 // ═══════════════════════════════════════════════════════
 // TELEGRAM TYPES
@@ -8496,6 +8497,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       if (!startParam || !startParam.startsWith('br_')) {
         setBirthdayContext(null);
       }
+      // Same reasoning for the reservation-reminder deep link: `rrem_` sets
+      // `homeReturnTab='reservations'` so the reserver-only Pro management UI
+      // renders. Clear it on every fresh boot that isn't `rrem_`, otherwise
+      // a cached session can leak that flag into an unrelated open.
+      if (!startParam || !startParam.startsWith('rrem_')) {
+        setHomeReturnTab(null);
+      }
 
       if (startParam && startParam.startsWith('santa_')) {
         // Deep link from Santa invite.
@@ -8622,8 +8630,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const sepIdx = rest.indexOf('__c_');
         const targetItemId = sepIdx >= 0 ? rest.slice(0, sepIdx) : '';
         const targetCommentId = sepIdx >= 0 ? rest.slice(sepIdx + 4) : '';
-        // Strict id validation — refuse to land if payload is malformed
-        const looksLikeId = (s: string) => /^[a-z0-9_-]{10,40}$/i.test(s);
+        // Strict id validation — refuse to land if payload is malformed.
+        // Shared with the rrem_ parser via `looksLikeId` from ./startParam.
         if (!looksLikeId(targetItemId) || !looksLikeId(targetCommentId)) {
           trackEvent('comment_reply_deeplink_opened', { reason: 'malformed', payload: startParam });
           loadWishlists()
@@ -8658,6 +8666,83 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               } else {
                 setItemUnavailableReason('unknown');
                 bootSetScreen('item-unavailable');
+              }
+            })
+            .catch(handleErr);
+        }
+      } else if (startParam && startParam.startsWith('rrem_')) {
+        // Reservation-reminder deep link: rrem_<itemId>__m_<reservationMetaId>.
+        // Sent by the bot's "📱 Открыть" button on reservation reminders.
+        // Mirrors the home-tab reservation tap at MiniApp.tsx:13620-13622:
+        //   setViewingItem(<GuestItem with reservedByActorHash stamped>)
+        //   setHomeReturnTab('reservations')
+        //   setScreen('guest-item-detail')
+        // `homeReturnTab === 'reservations'` is the load-bearing flag that
+        // gates the Pro management section (line 16583) and the second
+        // reserver-only block (line 16775). Without it the reminder lands
+        // the user on a stripped item screen with no Mark-purchased / Cancel
+        // controls — the entire point of the deep link is lost.
+        //
+        // Stale-reservation paths: the API's `getItemRole` (services/items.ts)
+        // grants `reserver` ONLY when `item.status === 'RESERVED'` AND the
+        // current user matches the latest RESERVED event's actor hash. Any
+        // other state (auto-released → AVAILABLE, purchased, owner-archived)
+        // returns 403 → handled in the not-found/forbidden/error branch.
+        // Hence no `200 OK + status !== 'reserved'` branch is needed.
+        const parsed = parseReservationReminderPayload(startParam);
+        if (parsed.kind === 'malformed') {
+          trackEvent('reservation_reminder_deeplink_opened', { reason: 'malformed', payload: startParam });
+          Promise.all([loadWishlists().catch(() => {}), loadReservations().catch(() => {})])
+            .then(() => {
+              trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
+              pushToast(t('reservation_reminder_not_found_toast', locale), 'error');
+              bootSetScreen('my-reservations');
+            })
+            .catch(handleErr);
+        } else {
+          const { itemId: targetItemId, reservationMetaId: targetMetaId } = parsed;
+          trackEvent('reservation_reminder_deeplink_opened', { itemId: targetItemId, reservationMetaId: targetMetaId });
+          const itemPromise = tgFetch(`/tg/items/${encodeURIComponent(targetItemId)}`)
+            .then(async (res) => {
+              if (res.status === 404) return { kind: 'not_found' as const };
+              if (res.status === 403) return { kind: 'forbidden' as const };
+              if (!res.ok) return { kind: 'error' as const };
+              const json = await res.json() as { item: Item };
+              return { kind: 'ok' as const, item: json.item };
+            })
+            .catch(() => ({ kind: 'error' as const }));
+
+          // Actor-hash race: bootstrap fires `computeActorHash(...).then(...)`
+          // fire-and-forget; if `tgFetch` resolves first, `myActorHashRef`
+          // would still be empty and the stamp on `reservedByActorHash`
+          // would never match the gate at line 16583/16775. Computing it
+          // here in the chain (idempotent SHA over the user id) is cheap
+          // and forces the order.
+          const hashPromise: Promise<string> = user
+            ? computeActorHash(user.id).catch(() => '')
+            : Promise.resolve('');
+
+          Promise.all([loadWishlists().catch(() => {}), loadReservations().catch(() => {}), itemPromise, hashPromise])
+            .then(([, , itemResult, myHash]) => {
+              trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
+              if (itemResult.kind === 'ok') {
+                const guestItem = {
+                  ...itemResult.item,
+                  reservedByDisplayName: null,
+                  reservedByActorHash: myHash || null,
+                } as unknown as GuestItem;
+                setViewingItem(guestItem);
+                setHomeReturnTab('reservations');
+                bootSetScreen('guest-item-detail');
+              } else {
+                // not_found / forbidden / error — route to the reservations
+                // list with an explicit toast. forbidden maps to "you're no
+                // longer the reserver" (auto-released, purchased, owner
+                // archived, or unreserved by self before clicking).
+                pushToast(t('reservation_reminder_not_found_toast', locale), 'error');
+                const reason = itemResult.kind === 'forbidden' ? 'no_longer_reserver' : itemResult.kind;
+                trackEvent('reservation_reminder_deeplink_unavailable', { itemId: targetItemId, reason });
+                bootSetScreen('my-reservations');
               }
             })
             .catch(handleErr);

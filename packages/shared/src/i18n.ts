@@ -1117,6 +1117,7 @@ const ru: Dict = {
   item_unavailable_title: 'Желание больше недоступно',
   item_unavailable_subtitle: 'Возможно, оно было удалено или к нему больше нет доступа',
   go_home_btn: 'На главную',
+  reservation_reminder_not_found_toast: 'Бронирование не найдено или уже недоступно',
 
   // ── Smart Reservations ──────────────────────────────────────────────────
   smart_res_section_title: 'Умные брони',
@@ -3832,6 +3833,7 @@ const en: Dict = {
   comments_reply_deleted_tag: 'Reply to a deleted comment',
   item_unavailable_title: 'This wish is no longer available',
   item_unavailable_subtitle: 'It may have been deleted or you no longer have access',
+  reservation_reminder_not_found_toast: 'Reservation not found or no longer available',
   go_home_btn: 'Home',
 
   // ── Smart Reservations ──────────────────────────────────────────────────
@@ -7317,6 +7319,7 @@ const zhCN: Dict = {
   comments_reply_deleted_tag: '回复已删除的评论',
   item_unavailable_title: '该心愿不再可用',
   item_unavailable_subtitle: '可能已被删除或你已无访问权限',
+  reservation_reminder_not_found_toast: '未找到预订或预订已不再可用',
   go_home_btn: '返回主页',
   notif_completed: '✅ 作者标记"{{title}}"已收到。感谢礼物！🎉',
   notif_create_your_wishlist: '\n\n你创建心愿单了吗？打开WishBoard！',
@@ -9291,6 +9294,7 @@ const hi: Dict = {
   comments_reply_deleted_tag: 'हटाई गई टिप्पणी का जवाब',
   item_unavailable_title: 'यह इच्छा अब उपलब्ध नहीं है',
   item_unavailable_subtitle: 'शायद इसे हटा दिया गया हो या आपका एक्सेस नहीं है',
+  reservation_reminder_not_found_toast: 'आरक्षण नहीं मिला या अब उपलब्ध नहीं है',
   go_home_btn: 'मुख्य पृष्ठ',
   notif_completed: '✅ लेखक ने "{{title}}" को प्राप्त चिह्नित किया। उपहार के लिए धन्यवाद! 🎉',
   notif_create_your_wishlist: '\n\nक्या आपने अपनी विशलिस्ट बनाई? WishBoard खोलें!',
@@ -11266,6 +11270,7 @@ const es: Dict = {
   comments_reply_deleted_tag: 'Respuesta a un comentario eliminado',
   item_unavailable_title: 'Este deseo ya no está disponible',
   item_unavailable_subtitle: 'Es posible que haya sido eliminado o que ya no tengas acceso',
+  reservation_reminder_not_found_toast: 'Reserva no encontrada o ya no disponible',
   go_home_btn: 'Inicio',
   notif_completed: '✅ El autor marcó "{{title}}" como recibido. ¡Gracias por el regalo! 🎉',
   notif_create_your_wishlist: '\n\n¿Ya creaste tu wishlist? ¡Abre WishBoard!',
@@ -13241,6 +13246,7 @@ const ar: Dict = {
   comments_reply_deleted_tag: 'ردّ على تعليق محذوف',
   item_unavailable_title: 'الأمنية لم تعد متاحة',
   item_unavailable_subtitle: 'ربما تم حذفها أو لم يعد لديك إذن للوصول إليها',
+  reservation_reminder_not_found_toast: 'الحجز غير موجود أو لم يعد متاحاً',
   go_home_btn: 'الرئيسية',
   notif_completed: '✅ أشار المؤلف أنه استلم "{{title}}". شكراً على الهدية! 🎉',
   notif_create_your_wishlist: '\n\nهل أنشأت قائمة أمنياتك؟ افتح WishBoard!',
