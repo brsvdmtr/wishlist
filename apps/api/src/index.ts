@@ -156,6 +156,7 @@ import {
   mapTgItem,
   getItemRole,
 } from './services/items';
+import { createImportUrlForUser } from './services/url-import';
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -281,9 +282,15 @@ function requireGiftNotes(ent: Awaited<ReturnType<typeof getEffectiveEntitlement
 }
 
 // Wire the wishlists service factory once trackEvent is defined. Used by
-// registerOnboardingRouter (line ~1463) and the importUrlForUser closure
-// later in this file.
+// registerOnboardingRouter (line ~1463) and the url-import service factory
+// just below.
 const getOrCreateDraftsWishlist = createGetOrCreateDraftsWishlist({ trackEvent });
+
+// Wire the url-import service factory once both trackEvent and the drafts
+// helper are ready. Used by /tg/import-url, /tg/internal/import-url, and
+// /tg/onboarding/try-import — all 3 receive the resulting function via
+// register*Router deps.
+const importUrlForUser = createImportUrlForUser({ trackEvent, getOrCreateDraftsWishlist });
 
 // Calendar pure helpers (getNextOccurrenceDate / computeReminderSchedule /
 // buildReminderEpisodeKey) extracted to ./services/calendar.ts in P5s-8.
@@ -1472,93 +1479,12 @@ tgRouter.use(santaRouter);
 // of this file (right after `trackEvent`) so it is TDZ-safe for all
 // downstream consumers (registerOnboardingRouter, importUrlForUser, etc.).
 
-async function importUrlForUser(
-  userId: string,
-  rawUrl: string,
-  note?: string,
-  source?: string,
-  parseOpts?: { noCache?: boolean },
-): Promise<{ item: ReturnType<typeof mapTgItem>; wishlistId: string; parseStatus: 'ok' | 'partial' | 'failed' }> {
-  const draftsWl = await getOrCreateDraftsWishlist(userId);
-
-  // Check drafts limit
-  const draftsCount = await prisma.item.count({
-    where: { wishlistId: draftsWl.id, status: { in: [...ACTIVE_STATUSES] } },
-  });
-  if (draftsCount >= DRAFTS_ITEM_LIMIT) {
-    throw Object.assign(new Error('Drafts limit reached'), { statusCode: 402 });
-  }
-
-  let parsed: Awaited<ReturnType<typeof parseUrl>>;
-  let parseStatus: 'ok' | 'partial' | 'failed' = 'ok';
-
-  try {
-    parsed = await parseUrl(rawUrl, parseOpts);
-    if (!parsed.title && !parsed.priceText && !parsed.imageUrl) {
-      parseStatus = 'failed';
-    } else if (!parsed.title || !parsed.priceText) {
-      parseStatus = 'partial';
-    }
-  } catch {
-    parseStatus = 'failed';
-    let hostname = 'link';
-    try { hostname = new URL(rawUrl).hostname.replace(/^www\./, ''); } catch { /* ignore */ }
-    parsed = {
-      title: null,
-      description: null,
-      priceText: null,
-      imageUrl: null,
-      sourceDomain: hostname,
-      canonicalUrl: rawUrl,
-    };
-  }
-
-  const title = parsed.title || parsed.sourceDomain || 'Link';
-
-  // Description: user note (if any) + parsed description
-  let description: string | null = null;
-  if (note && parsed.description) {
-    description = `💬 ${note}\n\n${parsed.description}`.slice(0, 500);
-  } else if (note) {
-    description = note.slice(0, 500);
-  } else if (parsed.description) {
-    description = parsed.description.slice(0, 500);
-  }
-
-  const item = await prisma.item.create({
-    data: {
-      wishlistId: draftsWl.id,
-      title: title.slice(0, 200),
-      url: parsed.canonicalUrl || rawUrl,
-      description,
-      priceText: extractNumericPrice(parsed.priceText),
-      imageUrl: parsed.imageUrl ?? null,
-      sourceUrl: rawUrl,
-      sourceDomain: parsed.sourceDomain,
-      importMethod: source || 'bot',
-    },
-    select: {
-      id: true, wishlistId: true, title: true, url: true, priceText: true,
-      imageUrl: true, priority: true, status: true, description: true,
-      sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
-    },
-  });
-  // Dual-write: mirror into placement table.
-  await ensureItemPlacement(prisma, { wishlistId: draftsWl.id, itemId: item.id });
-
-  // Canonical analytics: item created via import in SYSTEM_DRAFTS
-  const totalUserItems = await prisma.item.count({ where: { wishlist: { ownerId: userId }, status: { not: 'DELETED' } } });
-  trackEvent('item_created', userId, {
-    itemId: item.id, wishlistId: draftsWl.id, wishlistType: 'SYSTEM_DRAFTS',
-    source: source === 'bot' ? 'bot' : 'import_url',
-    platform: source === 'bot' ? 'bot' : 'miniapp',
-    isFirstItem: totalUserItems === 1,
-    triggeredFromDrafts: true,
-  });
-  if (totalUserItems === 1) trackEvent('first_item_created', userId, { itemId: item.id, wishlistType: 'SYSTEM_DRAFTS', source: source === 'bot' ? 'bot' : 'import_url', platform: source === 'bot' ? 'bot' : 'miniapp' });
-
-  return { item: mapTgItem(item), wishlistId: draftsWl.id, parseStatus };
-}
+// importUrlForUser extracted to ./services/url-import.ts in P5s-9
+// (Strategy A — factory closes over trackEvent + getOrCreateDraftsWishlist;
+// the resulting function continues to flow via existing register*Router
+// deps unchanged for /tg/import-url, /tg/internal/import-url, and
+// /tg/onboarding/try-import). Wiring sits next to the wishlists factory
+// so both factory deps are TDZ-safe before any router that consumes them.
 
 
 // ─── Move item between wishlists ─────────────────────────────────────────────
