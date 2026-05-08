@@ -24,10 +24,12 @@ COPY packages/db ./packages/db
 # Copy shared package
 COPY packages/shared ./packages/shared
 
-# Generate Prisma client and build db + shared packages
+# Generate Prisma client and build db + shared packages.
+# Order matters: db now imports from @wishlist/shared (locale-persistence
+# helper), so shared must compile to dist/ first before db's tsc runs.
 RUN pnpm --filter @wishlist/db exec prisma generate
-RUN pnpm --filter @wishlist/db build
 RUN pnpm --filter @wishlist/shared build
+RUN pnpm --filter @wishlist/db build
 
 # Copy bot source
 COPY apps/bot ./apps/bot
