@@ -5,6 +5,137 @@ New entries go at the top.
 
 ---
 
+## 2026-05-08 — Bulk-select bottom bar: «каша из кнопок» (translucent token на fixed-position баре + сетка не подогнана под кол-во кнопок)
+
+### Ошибка
+Пользователь жмёт «Выбрать несколько» в вишлисте → внизу появляется
+панель с действиями (Удалить / В архив / Перенести / Копировать /
+Выберите категорию / Часть вишлиста), но визуально это выглядит как
+каша: кнопки разной ширины, прыгают на третью строку, наезжают на
+карточки желаний и счётчик «N из M желаний», поверх ещё торчит
+floating «+» FAB. Не понятно, что нажимать.
+
+### Root cause
+Два независимых дефекта в одной области:
+
+1. **Сетка не была подогнана под актуальное количество кнопок.**
+   `gridTemplateColumns` второй строки = `'1fr 1fr'`, но кнопок там 3
+   (Copy / ChooseCategory / Curated) — третья сваливалась на третью
+   строку и занимала ровно половину ширины. Без категорий первая
+   строка `'1fr 1fr 1fr 1fr'` (4 колонки) принимала 5 кнопок — пятая
+   тоже сваливалась вниз на 1/4 ширины. Когда добавляли кнопку
+   `curated_bulk_btn` в коммите `f0c5dac` (апрель), сетку забыли
+   обновить.
+
+2. **Контейнер бара использовал `C.surface` как `background`.**
+   `C.surface` = `var(--wb-surface, rgba(255,255,255,0.035))` — это
+   elevation-токен, ~3.5–4% white поверх `bg`. Для карточек он
+   создаёт subtle-lift, но для **fixed-position bottom bar** даёт
+   почти прозрачный фон: items, FAB и счётчик «29 из 70 желаний»
+   просвечивают сквозь панель. Соседний curated-selection bar
+   использует `C.bg` (solid `#0F0F12`) — правильный паттерн уже
+   существовал в файле, просто bulk-bar его не использовал.
+
+3. **FAB не скрывался во время bulk/curated режимов.** Условия
+   рендера FAB (`!itemReorderMode && !catReorderMode && !showItemForm
+   && !keyboardOpen`) не включали selection-режимы. FAB при
+   `zIndex: 50` и баре при `zIndex: 60` — формально был перекрыт, но
+   из-за прозрачного фона бара виден. Семантически тоже неправильно:
+   «добавить новое желание» в режиме выбора уже существующих не имеет
+   смысла.
+
+### Урок
+- **Translucent токены — для elevation, не для occlusion.** Любой
+  `position: fixed` контейнер, который должен скрывать прокручиваемый
+  контент под собой, MUST использовать **solid** background-токен
+  (`C.bg` / `C.card`), не `C.surface` / `C.surfaceHover`. Это видно
+  сразу при тестировании на длинном списке — но если тестируешь на
+  пустом, баг не проявляется.
+- **Когда добавляешь кнопку в существующую grid — всегда проверяй
+  `gridTemplateColumns`.** В CSS Grid лишняя кнопка молча wraps на
+  следующую строку и занимает column-fraction ширины родителя, что
+  визуально выглядит «как-то почти ок» в превью на десктопе.
+- **Selection-режимы должны отключать FAB и любые add-actions.**
+  Любой mode, где пользователь выбирает существующие сущности, скрывает
+  CTA на создание новых: иначе click-conflict, потеря состояния выбора
+  при переходе на форму, или просто визуальная каша.
+- **Один скриншот может содержать два разных бага.** Первый раунд
+  фикса исправил только сетку — пользователь прислал тот же скриншот:
+  «баг на месте». Второй раунд нашёл прозрачность. Урок: при
+  визуальных багах нужно перечислить все аномалии (overlap, размеры,
+  прозрачность, z-order), а не лечить первое заметное.
+
+### Правило
+- **Любой fixed bottom bar / sheet header / persistent overlay** =
+  solid фон. Грепать `position: 'fixed'` + `background: C.surface` в
+  кодовой базе и заводить follow-up на каждое попадание (текущие
+  кандидаты: Santa exit-request sheet at `MiniApp.tsx:28149` —
+  смягчён затемняющим overlay, но pattern неправильный).
+- **При добавлении новой кнопки в bulk/action bar** — проверить
+  все ветки `gridTemplateColumns` в обоих case'ах (`hasUserCategories`
+  true/false и любые другие условные ветки), что число колонок
+  соответствует числу детей.
+- **При вводе нового selection mode** (curated, bulk, multi-pick) —
+  добавить флаг в условие рендера FAB и любых других CTA на создание.
+
+### Лучший код
+- `apps/web/app/miniapp/MiniApp.tsx` — bulk action bar:
+  - `background: C.surface` → `background: C.bg` (precedent взят у
+    curated-selection bar 95 строк ниже).
+  - `gridTemplateColumns` второй строки: `'1fr 1fr'` → ternary
+    `hasUserCategories ? '1fr 1fr 1fr' : '1fr 1fr'`. Сетка теперь
+    автоматически совпадает с числом детей в каждой ветке.
+  - Кнопка `ChooseCategory` рендерится между Copy и Curated через
+    `{hasUserCategories && <button>...</button>}` — порядок Copy →
+    ChooseCategory → Curated читается как «копия в другую вишку →
+    тег в текущей → внешний share», логичная последовательность.
+- `apps/web/app/miniapp/MiniApp.tsx` — Add-Wish FAB условие
+  расширено: `!bulkSelectionMode && !curatedSelectionMode`.
+  Старый z-order (FAB z:50, bar z:60) больше не load-bearing —
+  семантически чище и устойчиво к будущим z-index изменениям.
+
+```jsx
+// ❌ До: 3 кнопки в 2-колоночную сетку → перенос на 3-ю строку 1/2 ширины
+<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+  <Copy /> <ChooseCategory /> <Curated />
+</div>
+
+// ✅ После: число колонок матчит число детей в каждой ветке
+<div style={{ display: 'grid',
+  gridTemplateColumns: hasUserCategories ? '1fr 1fr 1fr' : '1fr 1fr' }}>
+  <Copy />
+  {hasUserCategories && <ChooseCategory />}
+  <Curated />
+</div>
+```
+
+```jsx
+// ❌ До: translucent elevation token для fixed bottom bar
+<div style={{
+  position: 'fixed', bottom: '76px', zIndex: 60,
+  background: C.surface, // rgba(255,255,255,0.035) — items видны сквозь
+}}>...</div>
+
+// ✅ После: solid bg-токен (соседний curated-bar так и делает)
+<div style={{
+  position: 'fixed', bottom: '76px', zIndex: 60,
+  background: C.bg, // #0F0F12 solid — полностью перекрывает контент
+}}>...</div>
+```
+
+```jsx
+// ❌ До: FAB рендерится во время selection mode → перекрывает action bar
+{!keyboardOpen && <FAB />}
+
+// ✅ После: selection-режимы отключают add-actions
+{!keyboardOpen && !bulkSelectionMode && !curatedSelectionMode && <FAB />}
+```
+
+**Commit:** `7cfc983` — fix(miniapp): opaque bulk action bar + hide FAB during selection modes
+**Предыдущая попытка:** `f98c247` (только сетка, прозрачность не заметил — урок: визуальные баги требуют перечисления всех аномалий)
+
+---
+
 ## 2026-05-08 — Item images: открытие вишлиста на 28 желаний грузит ~28 картинок параллельно по мегабайту с внешних CDN
 
 ### Ошибка
