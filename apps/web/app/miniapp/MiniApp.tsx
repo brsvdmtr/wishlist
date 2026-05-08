@@ -15084,7 +15084,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           OWNER — WISHLIST DETAIL (v2.1 HeroCard)
           ══════════════════════════════════════════════ */}
       {screen === 'wishlist-detail' && currentWl && (
-        <div style={{ padding: '16px 20px', paddingBottom: 'calc(90px + env(safe-area-inset-bottom, 0px))' }}>
+        <div style={{
+          padding: '16px 20px',
+          paddingBottom: bulkSelectionMode
+            ? 'calc(210px + env(safe-area-inset-bottom, 0px))'
+            : curatedSelectionMode
+              ? 'calc(110px + env(safe-area-inset-bottom, 0px))'
+              : 'calc(90px + env(safe-area-inset-bottom, 0px))',
+        }}>
           {/* v2.1 Hero — emoji + title + deadline + integrated stat row */}
           {(() => {
             const loaded = items.length > 0;
