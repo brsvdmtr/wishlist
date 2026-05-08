@@ -28,7 +28,8 @@ import {
 } from './security';
 import { parseUrl } from './url-parser.js';
 import { getOrCreateProfile } from './profile.js';
-import { t, normalizeLocale, resolveEffectiveLocale, pluralize, type Locale, type LanguageMode, type LanguageSettings, getOnboardingMeta, type OnboardingVariant, deriveMarketBucket, isSupportedImportRegion } from '@wishlist/shared';
+import { t, normalizeLocale, resolveEffectiveLocale, pluralize, type Locale, type LanguageMode, type LanguageSettings, getOnboardingMeta, type OnboardingVariant, isSupportedImportRegion } from '@wishlist/shared';
+import { resolveBucketFromRequest } from './services/locale-detection';
 
 // Sentry namespace stays imported here so the error handler and the
 // uncaughtException / unhandledRejection handlers further down can call
@@ -341,31 +342,49 @@ tgRouter.use(requireTelegramAuth);
 // Persist raw Telegram language_code + derived segmentation fields on every authenticated request.
 // Fields updated: language (raw), normalizedLocale, marketBucket, supportedImportRegion.
 // Fire-and-forget: does not block the request path. Uses IS DISTINCT FROM to skip redundant writes.
+//
+// Multi-signal resolver: when Telegram language_code is missing/empty/unknown,
+// falls back through X-Browser-Language → X-Browser-Timezone → IP-geo country →
+// first_name script analysis. NEVER downgrades a known bucket to 'unknown' —
+// missing signals on one request don't erase a previously-resolved bucket.
+//
+// Kill switch: set LOCALE_DETECTION_ENABLED=false in /opt/wishlist/.env to
+// disable the entire write path (e.g. during a prod incident).
 tgRouter.use((req, _res, next) => {
-  if (req.tgUser?.language_code != null) {
-    const telegramId = String(req.tgUser.id);
-    const rawLang = req.tgUser.language_code;
-    const normLocale = normalizeLocale(rawLang);
-    const bucket = deriveMarketBucket(rawLang);
-    const importRegion = isSupportedImportRegion(bucket);
-    prisma.$executeRawUnsafe(
-      `UPDATE "UserProfile"
-       SET language = $1,
-           "normalizedLocale" = $3,
-           "marketBucket" = $4,
-           "supportedImportRegion" = $5
-       WHERE "userId" = (SELECT id FROM "User" WHERE "telegramId" = $2)
-         AND (language IS DISTINCT FROM $1
-              OR "normalizedLocale" IS DISTINCT FROM $3
-              OR "marketBucket" IS DISTINCT FROM $4
-              OR "supportedImportRegion" IS DISTINCT FROM $5)`,
-      rawLang,
-      telegramId,
-      normLocale,
-      bucket,
-      importRegion,
-    ).catch(() => {});
-  }
+  if (process.env.LOCALE_DETECTION_ENABLED === 'false') return next();
+  if (!req.tgUser) return next();
+
+  const telegramId = String(req.tgUser.id);
+  const rawLang = req.tgUser.language_code ?? null;
+  const firstName = req.tgUser.first_name ?? null;
+  const { bucket } = resolveBucketFromRequest(req, { firstName });
+  const normLocale = rawLang ? normalizeLocale(rawLang) : null;
+  const importRegion = isSupportedImportRegion(bucket);
+
+  // Skip write entirely when neither a raw language nor a resolved bucket is
+  // available — saves a round-trip on the noisy "no signal" case.
+  if (bucket === 'unknown' && rawLang == null) return next();
+
+  prisma.$executeRawUnsafe(
+    `UPDATE "UserProfile" p
+     SET language = COALESCE($1, p.language),
+         "normalizedLocale" = COALESCE($3, p."normalizedLocale"),
+         "marketBucket" = COALESCE(NULLIF($4, 'unknown'), p."marketBucket", $4),
+         "supportedImportRegion" = CASE WHEN $4 = 'unknown' THEN p."supportedImportRegion" ELSE $5 END
+     FROM "User" u
+     WHERE p."userId" = u.id AND u."telegramId" = $2
+       AND (
+         COALESCE($1, p.language) IS DISTINCT FROM p.language
+         OR COALESCE($3, p."normalizedLocale") IS DISTINCT FROM p."normalizedLocale"
+         OR COALESCE(NULLIF($4, 'unknown'), p."marketBucket", $4) IS DISTINCT FROM p."marketBucket"
+         OR ($4 <> 'unknown' AND $5 IS DISTINCT FROM p."supportedImportRegion")
+       )`,
+    rawLang,
+    telegramId,
+    normLocale,
+    bucket,
+    importRegion,
+  ).catch(() => {});
   next();
 });
 

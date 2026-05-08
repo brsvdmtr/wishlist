@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import https from 'node:https';
 import path from 'node:path';
 import { prisma, resolveReferralCode, tryCreateAttribution, markFirstBotStart, loadReferralConfig } from '@wishlist/db';
-import { t, pluralize, detectLocale, resolveEffectiveLocale, type Locale } from '@wishlist/shared';
+import { t, pluralize, detectLocale, resolveEffectiveLocale, normalizeLocale, resolveMarketBucket, isSupportedImportRegion, type Locale } from '@wishlist/shared';
 import logger from './logger';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
@@ -594,18 +594,94 @@ if (!token) {
     const telegramId = String(ctx.from.id);
     const chatId = String(ctx.chat.id);
     logger.info({ telegramId, startPayload: ctx.startPayload || null }, '/start received');
+    // Capture every Telegram-supplied identity field. Bot-side ctx.from
+    // mirrors the Mini App initData.user, so the bot path is the only way
+    // to populate identity for users who only ever /start the bot and
+    // never open the Mini App (~29% of all users on 2026-05-08).
+    const fromFirstName = ctx.from.first_name || null;
+    const fromLastName = ctx.from.last_name || null;
+    const fromUsername = ctx.from.username || null;
+    const fromIsPremium = ctx.from.is_premium === true;
+    const fromLangCode = ctx.from.language_code || null;
     // Upsert user with welcomeSent=false on both create AND update.
     //  - create: brand-new user, hasn't received welcome yet
     //  - update: user may have been pre-created by Mini App (API getOrCreateTgUser)
     //    with welcomeSent=true (default), so /start must reset to false to track delivery
     // welcomeSent is set back to true after successful message delivery below.
-    await prisma.user.upsert({
+    const user = await prisma.user.upsert({
       where: { telegramId },
-      update: { telegramChatId: chatId, welcomeSent: false },
-      create: { telegramId, telegramChatId: chatId, welcomeSent: false },
+      update: {
+        telegramChatId: chatId,
+        welcomeSent: false,
+        firstName: fromFirstName,
+        lastName: fromLastName,
+        username: fromUsername,
+        isPremium: fromIsPremium,
+      },
+      create: {
+        telegramId,
+        telegramChatId: chatId,
+        welcomeSent: false,
+        firstName: fromFirstName,
+        lastName: fromLastName,
+        username: fromUsername,
+        isPremium: fromIsPremium,
+      },
     }).catch((err) => {
       logger.warn({ err, telegramId }, 'user upsert failed in /start');
+      return null;
     });
+
+    // Persist locale segmentation on UserProfile (lazy create if missing).
+    // Bot-only users never go through the API tgRouter middleware, so this
+    // is the single point that fixes the marketBucket=NULL backlog. Uses
+    // the same multi-signal resolver as the API middleware, but without
+    // browser/IP signals — only language_code + first_name script analysis.
+    if (user && process.env.LOCALE_DETECTION_ENABLED !== 'false') {
+      try {
+        const { bucket } = resolveMarketBucket({
+          languageCode: fromLangCode,
+          firstName: fromFirstName,
+        });
+        const normLocale = fromLangCode ? normalizeLocale(fromLangCode) : null;
+        const importRegion = isSupportedImportRegion(bucket);
+        if (bucket !== 'unknown' || fromLangCode != null) {
+          const existing = await prisma.userProfile.findUnique({
+            where: { userId: user.id },
+            select: { id: true, language: true, normalizedLocale: true, marketBucket: true, supportedImportRegion: true },
+          });
+          if (!existing) {
+            await prisma.userProfile.create({
+              data: {
+                userId: user.id,
+                defaultCurrency: bucket === 'ru' ? 'RUB' : 'USD',
+                language: fromLangCode,
+                normalizedLocale: normLocale,
+                marketBucket: bucket,
+                supportedImportRegion: bucket === 'unknown' ? null : importRegion,
+              },
+            });
+          } else {
+            // Never downgrade a known bucket to 'unknown' — preserve any
+            // bucket previously resolved by API middleware (which has more
+            // signals: browser headers + IP geo).
+            const nextBucket = bucket === 'unknown' ? (existing.marketBucket ?? bucket) : bucket;
+            const nextImport = bucket === 'unknown' ? existing.supportedImportRegion : importRegion;
+            await prisma.userProfile.update({
+              where: { userId: user.id },
+              data: {
+                language: fromLangCode ?? existing.language,
+                normalizedLocale: normLocale ?? existing.normalizedLocale,
+                marketBucket: nextBucket,
+                supportedImportRegion: nextImport,
+              },
+            });
+          }
+        }
+      } catch (err) {
+        logger.warn({ err, telegramId }, 'profile locale upsert failed in /start');
+      }
+    }
 
     // Fire-and-forget analytics
     prisma.analyticsEvent.create({

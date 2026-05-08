@@ -25,5 +25,5 @@ export const corsMiddleware = cors({
     return cb(null, false);
   },
   methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'X-ADMIN-KEY', 'X-TG-INIT-DATA', 'X-TG-DEV', 'X-INTERNAL-KEY', 'Idempotency-Key'],
+  allowedHeaders: ['Content-Type', 'X-ADMIN-KEY', 'X-TG-INIT-DATA', 'X-TG-DEV', 'X-INTERNAL-KEY', 'Idempotency-Key', 'X-Browser-Language', 'X-Browser-Timezone'],
 });

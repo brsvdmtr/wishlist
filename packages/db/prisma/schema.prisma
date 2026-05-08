@@ -170,6 +170,14 @@ model User {
   telegramId     String?  @unique
   telegramChatId String?
   firstName      String?
+  // Additional Telegram identity fields. Captured opportunistically on
+  // every authenticated request (Mini App initData) and on every bot
+  // /start. Not used for auth decisions — purely for dashboards, support
+  // lookup ("@username"), and richer god-mode segmentation. isPremium
+  // tracks whether the user has Telegram Premium at last-seen time.
+  lastName       String?
+  username       String?
+  isPremium      Boolean  @default(false)
   godMode        Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

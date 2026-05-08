@@ -49,6 +49,9 @@ export type TelegramUser = {
   last_name?: string;
   username?: string;
   language_code?: string;
+  is_premium?: boolean;
+  added_to_attachment_menu?: boolean;
+  allows_write_to_pm?: boolean;
 };
 
 /** Max age for Telegram initData auth_date (seconds). Default 24 hours; configurable via INIT_DATA_MAX_AGE_SECONDS. */
@@ -124,9 +127,30 @@ export function requireTelegramAuth(req: Request, res: Response, next: NextFunct
 }
 
 export async function getOrCreateTgUser(tgUser: TelegramUser) {
+  // Capture every Telegram-supplied identity field on every authenticated
+  // request. These are non-auth fields (no security decision relies on
+  // them) — purely for dashboards, support lookup, and richer god-mode
+  // segmentation. lastName/username are nullable; isPremium defaults to
+  // false on missing.
+  const lastName = tgUser.last_name ?? null;
+  const username = tgUser.username ?? null;
+  const isPremium = tgUser.is_premium === true;
   return prisma.user.upsert({
     where: { telegramId: String(tgUser.id) },
-    update: { telegramChatId: String(tgUser.id), firstName: tgUser.first_name || null },
-    create: { telegramId: String(tgUser.id), telegramChatId: String(tgUser.id), firstName: tgUser.first_name || null },
+    update: {
+      telegramChatId: String(tgUser.id),
+      firstName: tgUser.first_name || null,
+      lastName,
+      username,
+      isPremium,
+    },
+    create: {
+      telegramId: String(tgUser.id),
+      telegramChatId: String(tgUser.id),
+      firstName: tgUser.first_name || null,
+      lastName,
+      username,
+      isPremium,
+    },
   });
 }

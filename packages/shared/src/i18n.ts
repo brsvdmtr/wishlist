@@ -167,6 +167,265 @@ export const MARKET_BUCKET_LABELS: Record<MarketBucket, string> = {
   unknown: 'Неизвестно',
 };
 
+// ─── Multi-signal market bucket resolver ────────────────────────────────────
+//
+// `deriveMarketBucket(languageCode)` is a single-signal helper. When Telegram
+// initData has no language_code (or sends an empty/unknown value), we fall
+// back through a priority chain of secondary signals collected via
+// X-Browser-Language / X-Browser-Timezone request headers, server-side IP
+// geolookup, and Unicode-script analysis of the user's first_name.
+
+/**
+ * Strict variant of deriveMarketBucket: returns 'unknown' for unrecognised
+ * BCP-47 prefixes so the fallback chain keeps trying. The lenient
+ * `deriveMarketBucket` rounds unrecognised prefixes to 'other_known', which
+ * would prematurely halt the fallback chain on noisy values like 'xx-YY'.
+ */
+function deriveBucketFromLanguageStrict(rawLanguage?: string | null): MarketBucket {
+  if (!rawLanguage) return 'unknown';
+  const lower = rawLanguage.toLowerCase();
+  if (lower.startsWith('ru')) return 'ru';
+  if (lower.startsWith('ar')) return 'ar';
+  if (lower.startsWith('en')) return 'en';
+  if (lower.startsWith('hi')) return 'hi';
+  if (lower.startsWith('zh')) return 'zh-CN';
+  if (lower.startsWith('es')) return 'es';
+  const prefix = lower.split(/[-_]/)[0];
+  if (prefix && OTHER_KNOWN_PREFIXES.includes(prefix)) return 'other_known';
+  return 'unknown';
+}
+
+/**
+ * IANA timezone → market bucket. Russia covers all 11 RU zones plus the
+ * Russian-speaking ex-USSR countries with reliable WB/Ozon shipping
+ * (BY, KZ, KG). Arabic = MENA. Spanish = ES + Latin America. Other
+ * recognised but non-target zones (Europe/Berlin, Asia/Tokyo) map to
+ * 'other_known'. Anything not in the map falls through to next signal.
+ */
+const TZ_TO_BUCKET: Record<string, MarketBucket> = {
+  // Russia (all 11 zones)
+  'Europe/Moscow': 'ru', 'Europe/Kaliningrad': 'ru', 'Europe/Volgograd': 'ru',
+  'Europe/Samara': 'ru', 'Europe/Astrakhan': 'ru', 'Europe/Saratov': 'ru',
+  'Europe/Simferopol': 'ru', 'Europe/Ulyanovsk': 'ru', 'Europe/Kirov': 'ru',
+  'Asia/Yekaterinburg': 'ru', 'Asia/Omsk': 'ru', 'Asia/Novosibirsk': 'ru',
+  'Asia/Novokuznetsk': 'ru', 'Asia/Krasnoyarsk': 'ru', 'Asia/Tomsk': 'ru',
+  'Asia/Barnaul': 'ru', 'Asia/Irkutsk': 'ru', 'Asia/Chita': 'ru',
+  'Asia/Yakutsk': 'ru', 'Asia/Khandyga': 'ru', 'Asia/Vladivostok': 'ru',
+  'Asia/Ust-Nera': 'ru', 'Asia/Magadan': 'ru', 'Asia/Sakhalin': 'ru',
+  'Asia/Srednekolymsk': 'ru', 'Asia/Anadyr': 'ru', 'Asia/Kamchatka': 'ru',
+  // Belarus, Kazakhstan, Kyrgyzstan (Russian-speaking + WB import support)
+  'Europe/Minsk': 'ru', 'Asia/Almaty': 'ru', 'Asia/Aqtau': 'ru',
+  'Asia/Aqtobe': 'ru', 'Asia/Atyrau': 'ru', 'Asia/Oral': 'ru',
+  'Asia/Qostanay': 'ru', 'Asia/Qyzylorda': 'ru', 'Asia/Bishkek': 'ru',
+  // Arabic — Gulf, Levant, Maghreb, Sudan
+  'Asia/Riyadh': 'ar', 'Asia/Dubai': 'ar', 'Asia/Qatar': 'ar',
+  'Asia/Bahrain': 'ar', 'Asia/Kuwait': 'ar', 'Asia/Muscat': 'ar',
+  'Asia/Aden': 'ar', 'Asia/Baghdad': 'ar', 'Asia/Amman': 'ar',
+  'Asia/Beirut': 'ar', 'Asia/Damascus': 'ar', 'Asia/Hebron': 'ar',
+  'Asia/Gaza': 'ar', 'Africa/Cairo': 'ar', 'Africa/Algiers': 'ar',
+  'Africa/Casablanca': 'ar', 'Africa/El_Aaiun': 'ar', 'Africa/Tunis': 'ar',
+  'Africa/Tripoli': 'ar', 'Africa/Khartoum': 'ar', 'Africa/Juba': 'ar',
+  'Africa/Mogadishu': 'ar', 'Africa/Djibouti': 'ar', 'Africa/Nouakchott': 'ar',
+  'Indian/Comoro': 'ar',
+  // India
+  'Asia/Kolkata': 'hi', 'Asia/Calcutta': 'hi',
+  // China + HK + Macau + Taiwan
+  'Asia/Shanghai': 'zh-CN', 'Asia/Hong_Kong': 'zh-CN', 'Asia/Macau': 'zh-CN',
+  'Asia/Taipei': 'zh-CN', 'Asia/Urumqi': 'zh-CN', 'Asia/Chongqing': 'zh-CN',
+  // English-speaking
+  'America/New_York': 'en', 'America/Chicago': 'en', 'America/Denver': 'en',
+  'America/Los_Angeles': 'en', 'America/Phoenix': 'en', 'America/Anchorage': 'en',
+  'America/Detroit': 'en', 'America/Indiana/Indianapolis': 'en',
+  'Pacific/Honolulu': 'en',
+  'America/Toronto': 'en', 'America/Vancouver': 'en', 'America/Edmonton': 'en',
+  'America/Winnipeg': 'en', 'America/Halifax': 'en', 'America/St_Johns': 'en',
+  'Europe/London': 'en', 'Europe/Dublin': 'en', 'Europe/Belfast': 'en',
+  'Australia/Sydney': 'en', 'Australia/Melbourne': 'en', 'Australia/Brisbane': 'en',
+  'Australia/Perth': 'en', 'Australia/Adelaide': 'en', 'Australia/Hobart': 'en',
+  'Pacific/Auckland': 'en', 'Pacific/Fiji': 'en',
+  'Asia/Singapore': 'en', 'Africa/Johannesburg': 'en', 'Africa/Lagos': 'en',
+  'Africa/Nairobi': 'en', 'Africa/Accra': 'en',
+  // Spanish — Spain + Latin America
+  'Europe/Madrid': 'es', 'Atlantic/Canary': 'es', 'Africa/Ceuta': 'es',
+  'America/Mexico_City': 'es', 'America/Cancun': 'es', 'America/Tijuana': 'es',
+  'America/Monterrey': 'es', 'America/Hermosillo': 'es',
+  'America/Argentina/Buenos_Aires': 'es', 'America/Argentina/Cordoba': 'es',
+  'America/Argentina/Mendoza': 'es', 'America/Santiago': 'es', 'America/Bogota': 'es',
+  'America/Lima': 'es', 'America/Caracas': 'es', 'America/La_Paz': 'es',
+  'America/Asuncion': 'es', 'America/Montevideo': 'es', 'America/Quito': 'es',
+  'America/Guatemala': 'es', 'America/Havana': 'es', 'America/Santo_Domingo': 'es',
+  'America/Tegucigalpa': 'es', 'America/Managua': 'es', 'America/Costa_Rica': 'es',
+  'America/Panama': 'es', 'America/El_Salvador': 'es', 'America/Puerto_Rico': 'es',
+  // Recognised but non-target → other_known
+  'Europe/Berlin': 'other_known', 'Europe/Vienna': 'other_known',
+  'Europe/Zurich': 'other_known', 'Europe/Paris': 'other_known',
+  'Europe/Brussels': 'other_known', 'Europe/Amsterdam': 'other_known',
+  'Europe/Rome': 'other_known', 'Europe/Lisbon': 'other_known',
+  'Europe/Stockholm': 'other_known', 'Europe/Oslo': 'other_known',
+  'Europe/Copenhagen': 'other_known', 'Europe/Helsinki': 'other_known',
+  'Europe/Warsaw': 'other_known', 'Europe/Prague': 'other_known',
+  'Europe/Budapest': 'other_known', 'Europe/Bucharest': 'other_known',
+  'Europe/Athens': 'other_known', 'Europe/Sofia': 'other_known',
+  'Europe/Belgrade': 'other_known', 'Europe/Zagreb': 'other_known',
+  'Europe/Bratislava': 'other_known', 'Europe/Ljubljana': 'other_known',
+  'Europe/Tallinn': 'other_known', 'Europe/Riga': 'other_known',
+  'Europe/Vilnius': 'other_known', 'Europe/Kyiv': 'other_known',
+  'Europe/Kiev': 'other_known', 'Europe/Chisinau': 'other_known',
+  'Europe/Istanbul': 'other_known', 'Europe/Athens ': 'other_known',
+  'Asia/Tokyo': 'other_known', 'Asia/Seoul': 'other_known',
+  'Asia/Pyongyang': 'other_known', 'Asia/Tehran': 'other_known',
+  'Asia/Jerusalem': 'other_known', 'Asia/Tel_Aviv': 'other_known',
+  'Asia/Bangkok': 'other_known', 'Asia/Ho_Chi_Minh': 'other_known',
+  'Asia/Saigon': 'other_known', 'Asia/Jakarta': 'other_known',
+  'Asia/Manila': 'other_known', 'Asia/Kuala_Lumpur': 'other_known',
+  'Asia/Yangon': 'other_known', 'Asia/Phnom_Penh': 'other_known',
+  'Asia/Vientiane': 'other_known', 'Asia/Kabul': 'other_known',
+  'Asia/Karachi': 'other_known', 'Asia/Dhaka': 'other_known',
+  'Asia/Colombo': 'other_known', 'Asia/Kathmandu': 'other_known',
+  'Asia/Tashkent': 'other_known', 'Asia/Samarkand': 'other_known',
+  'Asia/Dushanbe': 'other_known', 'Asia/Ashgabat': 'other_known',
+  'Asia/Baku': 'other_known', 'Asia/Tbilisi': 'other_known',
+  'Asia/Yerevan': 'other_known', 'Asia/Ulaanbaatar': 'other_known',
+};
+
+/** Derive market bucket from IANA timezone (e.g. `Europe/Moscow`). */
+export function deriveMarketBucketFromTimezone(tz?: string | null): MarketBucket {
+  if (!tz) return 'unknown';
+  return TZ_TO_BUCKET[tz] ?? 'unknown';
+}
+
+/**
+ * ISO 3166-1 alpha-2 country code → market bucket. Used for IP-geo-derived
+ * country codes from `geoip-lite`. Keep aligned with TZ_TO_BUCKET semantics.
+ */
+const COUNTRY_TO_BUCKET: Record<string, MarketBucket> = {
+  // Russia + Russian-speaking ex-USSR with WB/Ozon import support
+  RU: 'ru', BY: 'ru', KZ: 'ru', KG: 'ru',
+  // Arabic — Gulf, Levant, Maghreb, Sudan, Horn of Africa
+  SA: 'ar', AE: 'ar', QA: 'ar', BH: 'ar', KW: 'ar', OM: 'ar', YE: 'ar',
+  IQ: 'ar', JO: 'ar', LB: 'ar', SY: 'ar', PS: 'ar',
+  EG: 'ar', DZ: 'ar', MA: 'ar', TN: 'ar', LY: 'ar', SD: 'ar', SS: 'ar',
+  MR: 'ar', SO: 'ar', DJ: 'ar', KM: 'ar', EH: 'ar',
+  // India
+  IN: 'hi',
+  // Greater China
+  CN: 'zh-CN', HK: 'zh-CN', MO: 'zh-CN', TW: 'zh-CN',
+  // English-speaking primary markets
+  US: 'en', GB: 'en', UK: 'en', IE: 'en', CA: 'en', AU: 'en', NZ: 'en',
+  ZA: 'en', SG: 'en', NG: 'en', KE: 'en', GH: 'en',
+  // Spanish — Spain + Latin America
+  ES: 'es', MX: 'es', AR: 'es', CL: 'es', CO: 'es', PE: 'es', VE: 'es',
+  BO: 'es', PY: 'es', UY: 'es', EC: 'es', GT: 'es', HN: 'es', SV: 'es',
+  NI: 'es', CR: 'es', PA: 'es', DO: 'es', CU: 'es', PR: 'es',
+  // Recognised non-target → other_known
+  DE: 'other_known', FR: 'other_known', IT: 'other_known', NL: 'other_known',
+  BE: 'other_known', CH: 'other_known', AT: 'other_known', PT: 'other_known',
+  SE: 'other_known', NO: 'other_known', DK: 'other_known', FI: 'other_known',
+  IS: 'other_known', PL: 'other_known', CZ: 'other_known', SK: 'other_known',
+  HU: 'other_known', RO: 'other_known', BG: 'other_known', GR: 'other_known',
+  HR: 'other_known', SI: 'other_known', RS: 'other_known', BA: 'other_known',
+  ME: 'other_known', MK: 'other_known', AL: 'other_known', XK: 'other_known',
+  EE: 'other_known', LV: 'other_known', LT: 'other_known',
+  UA: 'other_known', MD: 'other_known', GE: 'other_known', AM: 'other_known',
+  AZ: 'other_known', UZ: 'other_known', TJ: 'other_known', TM: 'other_known',
+  TR: 'other_known', IR: 'other_known', IL: 'other_known', AF: 'other_known',
+  PK: 'other_known', BD: 'other_known', LK: 'other_known', NP: 'other_known',
+  BT: 'other_known', MV: 'other_known', MM: 'other_known', TH: 'other_known',
+  VN: 'other_known', LA: 'other_known', KH: 'other_known', ID: 'other_known',
+  PH: 'other_known', MY: 'other_known', BN: 'other_known',
+  JP: 'other_known', KR: 'other_known', KP: 'other_known', MN: 'other_known',
+  ET: 'other_known', UG: 'other_known', TZ: 'other_known', RW: 'other_known',
+  BR: 'other_known',
+};
+
+/** Derive market bucket from ISO 3166-1 alpha-2 country code. */
+export function deriveMarketBucketFromCountry(cc?: string | null): MarketBucket {
+  if (!cc) return 'unknown';
+  return COUNTRY_TO_BUCKET[cc.toUpperCase()] ?? 'unknown';
+}
+
+/**
+ * Derive market bucket from a Telegram `first_name` by Unicode-script analysis.
+ * Last-resort fallback when no language/TZ/country signal is available.
+ * Latin-script names give no signal (any culture might use them) and return
+ * 'unknown' so the chain doesn't lock in a wrong answer.
+ */
+export function deriveMarketBucketFromName(name?: string | null): MarketBucket {
+  if (!name) return 'unknown';
+  if (/[Ѐ-ӿ]/.test(name)) return 'ru';        // Cyrillic
+  if (/[؀-ۿݐ-ݿ]/.test(name)) return 'ar'; // Arabic
+  if (/[ऀ-ॿ]/.test(name)) return 'hi';        // Devanagari
+  if (/[一-鿿㐀-䶿]/.test(name)) return 'zh-CN'; // Han
+  // Korean Hangul + Japanese kana → other_known (no dedicated bucket)
+  if (/[가-힯]/.test(name)) return 'other_known';
+  if (/[぀-ゟ゠-ヿ]/.test(name)) return 'other_known';
+  // Hebrew, Greek, Thai → other_known
+  if (/[֐-׿]/.test(name)) return 'other_known';
+  if (/[Ͱ-Ͽ]/.test(name)) return 'other_known';
+  if (/[฀-๿]/.test(name)) return 'other_known';
+  return 'unknown';
+}
+
+/** Signals available when resolving a user's market bucket. */
+export interface MarketBucketSignals {
+  /** Telegram WebApp initData / Telegraf ctx.from `language_code`. */
+  languageCode?: string | null;
+  /** Browser `navigator.language` sent via X-Browser-Language header. */
+  browserLanguage?: string | null;
+  /** Browser `Intl.DateTimeFormat().resolvedOptions().timeZone` via X-Browser-Timezone. */
+  timezone?: string | null;
+  /** ISO 3166-1 alpha-2 from server-side IP geolookup. */
+  countryCode?: string | null;
+  /** Telegram `first_name` for Unicode-script fallback. */
+  firstName?: string | null;
+}
+
+/** Which signal won the priority chain (for analytics + debug dashboards). */
+export type MarketBucketSource =
+  | 'language_code'
+  | 'browser_language'
+  | 'timezone'
+  | 'country_code'
+  | 'first_name'
+  | 'unknown';
+
+export interface MarketBucketResolution {
+  bucket: MarketBucket;
+  source: MarketBucketSource;
+}
+
+/**
+ * Resolve a user's market bucket from all available signals, in descending
+ * order of trustworthiness:
+ *   1. Telegram language_code (explicit user setting in Telegram)
+ *   2. Browser navigator.language (explicit user setting in OS)
+ *   3. IANA timezone (deterministic per device location)
+ *   4. IP-geo country code (defeated by VPN, but still useful)
+ *   5. first_name Unicode-script analysis (last resort)
+ *
+ * Returns `{ bucket: 'unknown', source: 'unknown' }` if no signal yields a
+ * recognised bucket — the caller persists this so the dashboard correctly
+ * shows the share of genuinely-undetectable users.
+ */
+export function resolveMarketBucket(signals: MarketBucketSignals): MarketBucketResolution {
+  const lang = deriveBucketFromLanguageStrict(signals.languageCode);
+  if (lang !== 'unknown') return { bucket: lang, source: 'language_code' };
+
+  const browser = deriveBucketFromLanguageStrict(signals.browserLanguage);
+  if (browser !== 'unknown') return { bucket: browser, source: 'browser_language' };
+
+  const tz = deriveMarketBucketFromTimezone(signals.timezone);
+  if (tz !== 'unknown') return { bucket: tz, source: 'timezone' };
+
+  const country = deriveMarketBucketFromCountry(signals.countryCode);
+  if (country !== 'unknown') return { bucket: country, source: 'country_code' };
+
+  const name = deriveMarketBucketFromName(signals.firstName);
+  if (name !== 'unknown') return { bucket: name, source: 'first_name' };
+
+  return { bucket: 'unknown', source: 'unknown' };
+}
+
 export const RU_CATALOG: CatalogTemplate[] = [
   { key: 'airpods',   titleKey: 'catalog_airpods',   emoji: '🎧', amount: 24990, currency: 'RUB' },
   { key: 'sneakers',  titleKey: 'catalog_sneakers',  emoji: '👟', amount: 12500, currency: 'RUB' },

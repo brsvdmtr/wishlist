@@ -5718,6 +5718,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       }
     }
 
+    // Locale-detection fallbacks: when Telegram initData has no
+    // language_code (older clients, certain platforms, empty string), the
+    // server's god-mode "Сегменты" dashboard buckets the user as
+    // 'unknown'. These two browser-side signals — navigator.language and
+    // the IANA timezone — are sent on every request so the API middleware
+    // can resolve a real market bucket. Both are read from the WebView,
+    // which inherits them from the host OS.
+    const browserLanguage = typeof navigator !== 'undefined' ? navigator.language : '';
+    let browserTimezone = '';
+    try {
+      browserTimezone = typeof Intl !== 'undefined'
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone || ''
+        : '';
+    } catch { /* very old WebView */ }
+
     try {
       const res = await fetch(url, {
         ...init,
@@ -5727,6 +5742,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
           ...(initDataRef.current ? { 'X-TG-INIT-DATA': initDataRef.current } : {}),
           ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+          ...(browserLanguage ? { 'X-Browser-Language': browserLanguage } : {}),
+          ...(browserTimezone ? { 'X-Browser-Timezone': browserTimezone } : {}),
           ...(init?.headers as Record<string, string> | undefined),
         },
       });
