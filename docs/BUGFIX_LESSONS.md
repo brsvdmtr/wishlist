@@ -5,6 +5,109 @@ New entries go at the top.
 
 ---
 
+## 2026-05-08 — Item images: открытие вишлиста на 28 желаний грузит ~28 картинок параллельно по мегабайту с внешних CDN
+
+### Ошибка
+Пользователь открывает свой вишлист → карточки желаний рендерятся, но
+вместо превью товаров в течение 5–15 секунд видны emoji-плейсхолдеры
+(😍 / 🎁), потом постепенно начинают появляться картинки. На скриншотах
+все 28 строк списка имели placeholder-emoji в момент captura. Эффект
+особенно заметен на медленной мобильной сети.
+
+### Root cause
+Три фактора накладываются друг на друга, каждый по отдельности
+терпимый, вместе — деградация:
+
+1. **`imageUrl` хранится как сырой external CDN URL.** `url-import.ts`
+   парсил marketplace-страницу через `parseUrl`, доставал `imageUrl`
+   (типично `https://avatars.mds.yandex.net/get-mpic/.../orig`,
+   `https://cdn-img.ozone.ru/...`, `https://images.wbstatic.net/...`)
+   и сохранял **строкой как есть** в `Item.imageUrl`. Никакого
+   download'а / sharp / локального кеша. Mini App ходит за каждой
+   картинкой к чужому CDN.
+2. **Тащим original-resolution для 88-px thumbnail'а.** Yandex `/orig`
+   суффикс = полноразмерный JPG, типично 1–3 МБ. Карточка в списке —
+   88×110 px. Перерасход трафика ~30×.
+3. **`<img>` без lazy/decoding hints.** В `MiniApp.tsx` 19 мест с
+   `<img src={item.imageUrl}>` — ни `loading="lazy"`, ни
+   `decoding="async"`, ни `next/image`, ни IntersectionObserver. На
+   списке из 28 желаний браузер открывает 28 параллельных fetch к
+   внешним CDN при первой отрисовке, конкурируя за коннект и main
+   thread (декодинг блокирует UI).
+
+Geo-latency добавляет финальный гвоздь: API/Mini App теперь хостятся в
+Амстердаме (Vultr, после переезда 2026-05-03), пользователи — в РФ.
+Yandex/WB CDN отдают быстро для российского трафика, но через
+европейский TLS-handshake в один поток на 28 хостов это секунды
+ожидания.
+
+В БД на момент аудита: 78 items с remote `http%` imageUrl против 31
+local `/api/uploads/%`. 70 % товарных карточек ходили в чужой CDN.
+
+### Урок
+1. **External CDN — не source of truth для контента, который критичен
+   для UX.** Картинка товара = главный визуальный якорь карточки. Если
+   она грузится 5+ секунд, пользователь видит «приложение тормозит»,
+   а не «Yandex медленно отдаёт». Переносим в свой `/uploads/`.
+2. **Производительность списков — N-of-M проблема.** На каждом item —
+   свой сетевой запрос. Любая мелкая медлительность (500 ms × 28 =
+   14 секунд wall-clock'а с учётом конкуренции) превращается в
+   ощущаемую деградацию. `loading="lazy"` — практически бесплатный
+   instrument: браузер сам решает, что грузить, а что отложить до
+   скролла.
+3. **Уже существующая инфра должна переиспользоваться.** Sharp pipeline
+   (`apps/api/src/uploads/imageProcessor.ts`) был написан для
+   ручных загрузок 6 месяцев назад. URL-импорт о нём не знал и качал
+   как мог. Цена «протянуть вызов в новый flow» — 30 строк кода;
+   цена «не протянуть» — 6 месяцев деградации UX.
+4. **SSRF guard уже написан и оттестирован** в `url-parser.ts`
+   (`validateUrl` + `assertDnsIsSafe`, покрытие в
+   `security-ssrf.test.ts`). Любой новый код, который дёргает remote
+   URL по пользовательским данным, обязан переиспользовать этих двух
+   helper'ов, а не выкатывать «пока без guard, потом починим».
+
+### Правило
+- **Списочные `<img>`** (всё, что выводится в списке/гриде, а не на
+  отдельной странице товара) MUST иметь `loading="lazy"
+  decoding="async"`. Без исключений.
+- **Любой `imageUrl`, полученный из external источника** (URL parser,
+  Telegram file API, scraper) MUST пройти через
+  `downloadAndProcessImage` перед сохранением в `Item.imageUrl`.
+  Failure ⇒ fall back на remote URL (лучше, чем потерять картинку
+  совсем), но primary path = local.
+- **Любой server-side `fetch(url)` по пользовательскому URL** MUST
+  пройти `validateUrl` + `assertDnsIsSafe` перед запросом. Reject
+  редиректы или revalidate их повторно (см. `fetchHtml` в
+  `url-parser.ts` для эталонной реализации).
+
+### Лучший код
+- `apps/api/src/uploads/imageProcessor.ts` — добавлен
+  `downloadAndProcessImage(url, opts)`: validateUrl → assertDnsIsSafe
+  → fetch с 8 s timeout, manual redirect (reject 3xx), 15 MB cap,
+  content-type guard `image/*` → существующий `processImage`
+  (resize 1600 / mozjpeg q80, EXIF strip).
+- `apps/api/src/services/url-import.ts` — после `parseUrl` и до
+  `prisma.item.create` пытаемся скачать; ошибка логируется как
+  `url_import.image_cache_failed` и не валит импорт (fall back на
+  remote URL).
+- `apps/web/app/miniapp/MiniApp.tsx` — 19 мест с `<img>` для item
+  фотографий получили `loading="lazy" decoding="async"`. Для модальных
+  full-screen viewer'ов — только `decoding="async"` (открываются по
+  явному клику, lazy-load бессмыслен).
+- `apps/api/src/scripts/backfill-item-images.ts` — one-shot
+  бэкфилл для 78 legacy items. Concurrency 3 (вежливо к чужим CDN),
+  поддержка `--dry-run` и `--limit N`. Прогон на проде:
+  77 downloaded / 1 skipped (мёртвый t.me 404) / 0 failed.
+
+После прогона: распределение `Item.imageUrl` сменилось с
+31 local / 78 remote / 83 null / 39 other → 109 local / 1 remote / 83
+null / 39 other. Объём `/data/uploads/` вырос с ~1 MB до 12 MB
+(167 файлов) — приемлемо.
+
+Commit: `f98c247`.
+
+---
+
 ## 2026-05-03 — Hints: «Активный намёк не найден» при свежем клике (idempotency-window mismatch + сетевая стена маскировала логический баг недели)
 
 ### Ошибка
