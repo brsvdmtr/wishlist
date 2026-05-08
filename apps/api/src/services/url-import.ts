@@ -29,6 +29,7 @@ import logger from '../logger';
 import { parseUrl } from '../url-parser.js';
 import { ensureItemPlacement } from '../placements/ensureItemPlacement';
 import { downloadAndProcessImage } from '../uploads/imageProcessor';
+import { deleteUploadFile } from '../uploads/uploadCleanup';
 
 import { ACTIVE_STATUSES, extractNumericPrice, mapTgItem } from './items';
 import { DRAFTS_ITEM_LIMIT } from './wishlists';
@@ -52,6 +53,38 @@ export type ImportUrlForUserFn = (
   source?: string,
   parseOpts?: { noCache?: boolean },
 ) => Promise<ImportUrlResult>;
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+// Atomic Item insert + placement upsert. Both writes share one transaction so
+// a placement failure (e.g. resolveDefaultCategoryId throws on a corrupted
+// wishlist) rolls back the Item row, keeping the file/row pair consistent.
+type CreateItemTx = Pick<typeof prisma, 'item' | 'wishlistItemPlacement' | 'wishlistCategory'>;
+async function createItemWithPlacement(
+  tx: CreateItemTx,
+  data: {
+    wishlistId: string;
+    title: string;
+    url: string;
+    description: string | null;
+    priceText: string | null;
+    imageUrl: string | null;
+    sourceUrl: string;
+    sourceDomain: string | null;
+    importMethod: string;
+  },
+) {
+  const created = await tx.item.create({
+    data,
+    select: {
+      id: true, wishlistId: true, title: true, url: true, priceText: true,
+      imageUrl: true, priority: true, status: true, description: true,
+      sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
+    },
+  });
+  await ensureItemPlacement(tx, { wishlistId: data.wishlistId, itemId: created.id });
+  return created;
+}
 
 // ─── Factory ────────────────────────────────────────────────────────────────
 
@@ -117,7 +150,19 @@ export function createImportUrlForUser(deps: {
     // Cache the marketplace product photo on our own /uploads dir so the
     // Mini App stops loading multi-MB originals from external CDNs for
     // 88px thumbnails. Failure is non-fatal: fall back to the remote URL.
+    //
+    // freshlyCachedFilename tracks the file we just wrote, so the
+    // orphan-cleanup branch only unlinks files this call site owns — never
+    // a path that came from somewhere else (defence against future code that
+    // might pre-populate `parsed.imageUrl` with a `/api/uploads/...` value).
+    //
+    // NOTE: not retry-safe. If a future caller wraps importUrlForUser in a
+    // Prisma retry loop (e.g. for serialization failures), each attempt would
+    // call downloadAndProcessImage again and write a fresh <uuid>-full.jpg,
+    // leaking the prior attempts. Add external orphan tracking before
+    // wrapping this in any retry harness.
     let storedImageUrl: string | null = parsed.imageUrl ?? null;
+    let freshlyCachedFilename: string | null = null;
     if (storedImageUrl) {
       try {
         const cached = await downloadAndProcessImage(storedImageUrl, {
@@ -126,20 +171,27 @@ export function createImportUrlForUser(deps: {
           suffix: 'full',
         });
         storedImageUrl = `/api/uploads/${cached.filename}`;
+        freshlyCachedFilename = cached.filename;
       } catch (err) {
         logger.warn(
           {
             event: 'url_import.image_cache_failed',
             sourceDomain: parsed.sourceDomain,
-            err: (err as Error).message,
+            err: err instanceof Error ? err.message : String(err),
           },
           'image cache failed, falling back to remote URL',
         );
       }
     }
 
-    const item = await prisma.item.create({
-      data: {
+    // Both DB writes go inside one transaction so a placement failure rolls
+    // back the Item row — without that, an ensureItemPlacement throw would
+    // leave an orphaned Item row AND a cached file referenced by no one
+    // discoverable (item exists but is unplaced).
+
+    let item: Awaited<ReturnType<typeof createItemWithPlacement>>;
+    try {
+      item = await prisma.$transaction(async (tx) => createItemWithPlacement(tx, {
         wishlistId: draftsWl.id,
         title: title.slice(0, 200),
         url: parsed.canonicalUrl || rawUrl,
@@ -149,15 +201,25 @@ export function createImportUrlForUser(deps: {
         sourceUrl: rawUrl,
         sourceDomain: parsed.sourceDomain,
         importMethod: source || 'bot',
-      },
-      select: {
-        id: true, wishlistId: true, title: true, url: true, priceText: true,
-        imageUrl: true, priority: true, status: true, description: true,
-        sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
-      },
-    });
-    // Dual-write: mirror into placement table.
-    await ensureItemPlacement(prisma, { wishlistId: draftsWl.id, itemId: item.id });
+      }));
+    } catch (err) {
+      if (freshlyCachedFilename) {
+        // freshlyCachedFilename came from crypto.randomUUID() in
+        // processImage — path-safe by construction; deleteUploadFile also
+        // re-validates basename traversal as a belt-and-suspenders guard.
+        deleteUploadFile(`/api/uploads/${freshlyCachedFilename}`);
+        logger.warn(
+          {
+            event: 'url_import.image_orphan_cleanup',
+            filename: freshlyCachedFilename,
+            sourceDomain: parsed.sourceDomain,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          'item create rolled back, removed orphaned cached image',
+        );
+      }
+      throw err;
+    }
 
     // Canonical analytics: item created via import in SYSTEM_DRAFTS
     const totalUserItems = await prisma.item.count({ where: { wishlist: { ownerId: userId }, status: { not: 'DELETED' } } });

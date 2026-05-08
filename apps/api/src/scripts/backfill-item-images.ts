@@ -19,13 +19,29 @@ import { downloadAndProcessImage } from '../uploads/imageProcessor';
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
 const limitFlagIdx = args.indexOf('--limit');
-const limit = limitFlagIdx >= 0 ? Number(args[limitFlagIdx + 1] || '0') : 0;
+let limit = 0;
+if (limitFlagIdx >= 0) {
+  const raw = args[limitFlagIdx + 1];
+  const parsed = Number(raw);
+  // Reject NaN / negative / non-integer — silently widening scope on a typo'd
+  // arg would be a footgun on a destructive prod backfill.
+  if (raw === undefined || !Number.isFinite(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
+    console.error(`[backfill] --limit requires a non-negative integer, got: ${JSON.stringify(raw)}`);
+    process.exit(2);
+  }
+  limit = parsed;
+}
 const concurrency = 3; // be polite to marketplace CDNs
 
 async function main(): Promise<void> {
+  // Match http:// or https:// only — startsWith: 'http' would also match
+  // garbage like 'httpfoo' or 'httpsbar' if the column ever held junk.
   const where = {
-    imageUrl: { startsWith: 'http' },
-  } as const;
+    OR: [
+      { imageUrl: { startsWith: 'http://' } },
+      { imageUrl: { startsWith: 'https://' } },
+    ],
+  };
 
   const total = await prisma.item.count({ where });
   console.log(`[backfill] found ${total} item(s) with remote imageUrl${limit ? ` (processing first ${limit})` : ''}${dryRun ? ' [DRY RUN]' : ''}`);
@@ -48,25 +64,39 @@ async function main(): Promise<void> {
       chunk.map(async (item) => {
         const remoteUrl = item.imageUrl!;
         try {
+          if (dryRun) {
+            // Don't touch network or disk — just announce what we would do.
+            // For real reachability testing, run with --limit N (no --dry-run).
+            downloaded++;
+            console.log(`[backfill] WOULD download ${item.id} (${item.sourceDomain ?? '?'}) <- ${remoteUrl}`);
+            return;
+          }
           const cached = await downloadAndProcessImage(remoteUrl, {
             maxDim: 1600,
             quality: 80,
             suffix: 'full',
           });
           const localPath = `/api/uploads/${cached.filename}`;
-          if (!dryRun) {
-            await prisma.item.update({
-              where: { id: item.id },
-              data: { imageUrl: localPath },
-            });
-          }
+          await prisma.item.update({
+            where: { id: item.id },
+            data: { imageUrl: localPath },
+          });
           downloaded++;
           console.log(`[backfill] ok  ${item.id} (${item.sourceDomain ?? '?'}) -> ${localPath} ${cached.sizeBytes}b ${cached.width}x${cached.height}`);
         } catch (err) {
           const msg = (err as Error).message;
-          // Treat 404/403/redirect/not-an-image as "skip" — image source likely
-          // dead or moved; the user still has the remote URL as fallback.
-          const isPermanent = /HTTP (404|403|410)|Redirect|Not an image/.test(msg);
+          // Treat structurally-permanent failures as "skip" — the image source
+          // is dead, moved, oversize, or wrong type, and a re-run will not
+          // recover it. The user still has the remote URL as fallback.
+          //
+          // Strings here must match the throws in downloadAndProcessImage and
+          // the SSRF helpers in url-parser.ts. Update both sides together.
+          const isPermanent =
+            /HTTP (4\d\d|410)/.test(msg) ||                 // 4xx + 410 from response status
+            /Redirect not followed/.test(msg) ||            // 3xx (we don't follow redirects)
+            /Not an allowed image type/.test(msg) ||        // content-type rejection
+            /Image too large/.test(msg) ||                  // size cap exceeded
+            /Ссылка на (внутренний|локальный) адрес/.test(msg); // SSRF reject (validateUrl/assertDnsIsSafe)
           if (isPermanent) {
             skipped++;
             console.log(`[backfill] skip ${item.id} (${item.sourceDomain ?? '?'}): ${msg}`);
