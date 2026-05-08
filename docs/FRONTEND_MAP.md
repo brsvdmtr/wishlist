@@ -1,6 +1,6 @@
 # FRONTEND_MAP.md — Frontend Architecture
 
-> Date: 2026-05-02. Verified from source code.
+> Date: 2026-05-08. Verified from source code.
 
 ---
 
@@ -81,7 +81,7 @@ type Screen =
   | 'item-unavailable' | 'first-share-prompt' | 'link-management'
   // Settings extras (4)
   | 'faq' | 'changelog' | 'legal' | 'legal-doc'
-  // Calendar (1) — UI scaffold only; backend not yet connected
+  // Calendar (1) — Events Calendar v2.1 (full feature, shipped 2026-04-28)
   | 'calendar';
 ```
 

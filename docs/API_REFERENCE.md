@@ -1,6 +1,6 @@
 # API_REFERENCE.md — Complete Endpoint Reference
 
-> Last updated: 2026-05-02. Verified from `apps/api/src/index.ts` (~21,300 lines, 220+ route handlers).
+> Last updated: 2026-05-08. Since the P1–P5s refactor (closed 2026-05-07), `apps/api/src/index.ts` is a **1,789-LOC composition root**; route handlers live in **23 domain routers** under `apps/api/src/routes/<domain>.routes.ts`, with cross-cutting work in `apps/api/src/services/` (13 modules) and crons in `apps/api/src/schedulers/` (9 modules). Endpoints below remain the same; only their source files moved. See [docs/API_ARCHITECTURE_RULES.md](API_ARCHITECTURE_RULES.md).
 
 ---
 
@@ -39,6 +39,8 @@ Uploads are served as static files at `/api/uploads/<filename>`.
 | `onboardingImportLimiter` | 60 s | 3 req/user | `POST /tg/onboarding/try-import` |
 
 **Wave 1 P0 security layer (since 2026-04-29):** all state-changing `/tg/*` routes are also subject to a per-category rate limiter (18 categories defined in `apps/api/src/security/rateLimits.ts`) plus an IP throttle. Source: `apps/api/src/security/`. Env kill switches: `SECURITY_RATE_LIMIT_ENABLED`, `SECURITY_IP_THROTTLE_ENABLED`.
+
+**Wave 2 expansion (2026-05-06..07):** coverage extended to Santa actions, gift-notes (web + api), items Pro extras (priority bump, photo upload multipart), categories, subscriptions, and remaining P4 misc state-changing routes. All `/tg/*` POST/PATCH/DELETE handlers now declare a rate-limit category and accept `Idempotency-Key`; multipart uploads opt out of replay (lock-only).
 
 ### Idempotency-Key (since 2026-04-29)
 

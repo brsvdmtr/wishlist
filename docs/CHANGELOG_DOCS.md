@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-05-08 — Weekly Documentation Update
+
+**4 docs touched** in this weekly summary; most thematic docs already refreshed in-flight by their commits this week (`docs(api): refresh after P5s closure`, `docs(api): refresh architecture after route and scheduler extraction`, `docs: align ops runbooks with Vultr-first prod state`, `docs(bugfix-lessons): hint window mismatch`, etc.):
+
+- **CURRENT_PRODUCT_STATE.md** — Bumped header to 2026-05-08. Added 6 new **Recently Shipped** entries: API Architecture Refactor closure (P1–P5s), API Security Wave 2, Vultr migration, Contextual reminder deep links, Logging hardening, Hint delivery resilience, Support handoff polish. Expanded **Operational Toggles** to cover Wave 2 security coverage, the Vultr production move, and the new logging cap / `pino-roll` host bind-mount / weekly prune TTL changes
+- **API_REFERENCE.md** — Replaced the outdated `~21,300 lines, 220+ handlers` sub-header with the post-refactor reality: `index.ts` is now a **1,789-LOC composition root**; route handlers live in 23 domain routers under `apps/api/src/routes/`; 13 services + 9 schedulers extracted. Endpoints unchanged; only source files moved. Added a **Wave 2 expansion** paragraph to the rate-limit / idempotency section
+- **FRONTEND_MAP.md** — Bumped header date. Fixed stale "Calendar — UI scaffold only; backend not yet connected" comment in the Screen Type Union (calendar shipped 2026-04-28 as full feature)
+- **CHANGELOG_DOCS.md** — this entry
+
+**Headline shipped work since 2026-05-02 (~60 commits):**
+
+- **API Architecture Refactor — P1–P5s closure** (~45 refactor commits, `eec4b13` + `0090d5f` doc refreshes) — `apps/api/src/index.ts` reduced from ~21,300 LOC to **1,789 LOC** (composition root). 23 domain routers split out (`me`, `referral`, `lightweight tg`, `support`, `birthday-reminders`, `promo`, `gift-notes`, `onboarding`, `selections-archive`, `reservations`, `comments-hints`, `group-gifts`, `billing`, `items`, `wishlists`, `santa`, …). 9 cron schedulers extracted (`cleanup`, `billing`, `referral`, `santa`, `reservations`, `events`, `lifecycle`, `pro-renewal`, `birthday-reminders`). 13 services extracted (`entitlement`, `telegram-auth`, `core helpers`, `url-import`, `analytics`, `referral-hooks`, `santa-season`, plus the previously-shipped `birthday-reminders`, `calendar`, `items`, `lifecycle`, `locale`, `onboarding`, `wishlists`). New backend code MUST go to routes/services/schedulers — `index.ts` is closed
+- **API Security Wave 2** (`2aa4d15`, `5726c81`, `dc7e561`, `bbd427b`, `bb575a8`, `754e53b`, `6d9d9c9`) — Idempotency + rate-limit coverage extended to Santa actions, gift-notes (web + api), items Pro extras (priority bump, photo upload multipart), categories, subscriptions, P4 misc state-changing routes. Closes the remaining gap from Wave 1 P0; `/tg/*` POST/PATCH/DELETE coverage is now full
+- **Vultr production migration** (`0e7a9f6` + `d26720f`, `f6b32c0`, `e4a4de9` doc updates) — Production moved Timeweb → Vultr Amsterdam (`199.247.24.125`). `git push` deploys via GitHub Actions; ops via `admin-ops.yml`. SSH alias `Host vultr`. Old Timeweb VPS being decommissioned
+- **Contextual reminder deep links** (`b5c0e1c` reservations, `2531f53` gift occasions) — New start-param prefixes `rrem_<itemId>__m_<metaId>` and `evnt_<occasionId>` route reminder bot DMs to the relevant entity in the Mini App. Distinguishes 404, 403 `gift_notes_required`, and other errors. Helpers in `apps/api/src/telegram/deepLinks.ts`; parsers in `apps/web/app/miniapp/startParam.ts`. +11 unit tests
+- **Logging hardening** (`bb8bdf2`, `1e85ab6`) — Docker `json-file` driver capped 20m × 5 across api/bot/web/postgres; `pino-roll` to host bind-mount (`/opt/wishlist/logs/{api,bot}/`); ops cron `logrotate` weekly × 8 gzip; weekly Docker prune 168h → 72h (build cache had hit 37 GB on 94 GB disk). Bot logger reverted from stalled `pino-roll` worker to main-thread multistream + structured startup logs
+- **Hint delivery resilience** (`491a2ba`, `fa0b52d`, `6574323`, `02e2975`, `1e9f65d` revert, `5ac98e8`, `b517c1d`, `95c5707`) — first-click fast & idempotent; cancel stale SENT hints on the 30-min lookup window match; retry recipient `sendMessage` 3× 5s on network failure; reword anonymity confirmation copy. Bot startup classifies aborts as transient and silences config noise. IPv6-first DNS revert (RKN-blocked IPv4 to Telegram still requires the SNAT workaround)
+- **Support handoff polish** (`ddd8bae`, `8698d3a`) — `/tg/support/contact` shows active plan, deduplicates metadata in bot DM, Mini App closes after handoff. Misc DX: `APP_RELEASE` env populated from git HEAD during deploy (`053c102`)
+
+**Migrations applied this window:** none (no schema changes since 2026-04-30; last migration was `20260430020000_add_birthday_reminders` covered in the 2026-05-02 entry).
+
+---
+
 ## 2026-05-02 — Weekly Documentation Update
 
 **6 docs updated** to reflect ~50 commits since the 2026-04-24 weekly update (the 2026-04-30 entry covered Birthday Reminders only):
