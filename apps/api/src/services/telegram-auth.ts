@@ -50,8 +50,6 @@ export type TelegramUser = {
   username?: string;
   language_code?: string;
   is_premium?: boolean;
-  added_to_attachment_menu?: boolean;
-  allows_write_to_pm?: boolean;
 };
 
 /** Max age for Telegram initData auth_date (seconds). Default 24 hours; configurable via INIT_DATA_MAX_AGE_SECONDS. */

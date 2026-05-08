@@ -271,7 +271,7 @@ const TZ_TO_BUCKET: Record<string, MarketBucket> = {
   'Europe/Tallinn': 'other_known', 'Europe/Riga': 'other_known',
   'Europe/Vilnius': 'other_known', 'Europe/Kyiv': 'other_known',
   'Europe/Kiev': 'other_known', 'Europe/Chisinau': 'other_known',
-  'Europe/Istanbul': 'other_known', 'Europe/Athens ': 'other_known',
+  'Europe/Istanbul': 'other_known',
   'Asia/Tokyo': 'other_known', 'Asia/Seoul': 'other_known',
   'Asia/Pyongyang': 'other_known', 'Asia/Tehran': 'other_known',
   'Asia/Jerusalem': 'other_known', 'Asia/Tel_Aviv': 'other_known',
@@ -349,19 +349,37 @@ export function deriveMarketBucketFromCountry(cc?: string | null): MarketBucket 
  * Last-resort fallback when no language/TZ/country signal is available.
  * Latin-script names give no signal (any culture might use them) and return
  * 'unknown' so the chain doesn't lock in a wrong answer.
+ *
+ * Block coverage (per Unicode 16):
+ *   • Cyrillic + Cyrillic Supplement + Cyrillic Extended-A/B/C/D
+ *   • Arabic + Supplement + Extended-A/B + Presentation Forms-A/B
+ *     (Presentation forms cover Persian/Urdu names common in real data)
+ *   • Devanagari + Devanagari Extended
+ *   • CJK Unified Ideographs + Extension A (B-G ext blocks omitted —
+ *     they're surrogate pairs and the runtime regex literal here would
+ *     mis-bound them; modern Han names use only the BMP blocks)
  */
 export function deriveMarketBucketFromName(name?: string | null): MarketBucket {
   if (!name) return 'unknown';
-  if (/[Ѐ-ӿ]/.test(name)) return 'ru';        // Cyrillic
-  if (/[؀-ۿݐ-ݿ]/.test(name)) return 'ar'; // Arabic
-  if (/[ऀ-ॿ]/.test(name)) return 'hi';        // Devanagari
-  if (/[一-鿿㐀-䶿]/.test(name)) return 'zh-CN'; // Han
-  // Korean Hangul + Japanese kana → other_known (no dedicated bucket)
+  // Cyrillic: U+0400-U+04FF + U+0500-U+052F (Supplement) + U+1C80-U+1C8F (Ext-C)
+  // + U+2DE0-U+2DFF (Ext-A) + U+A640-U+A69F (Ext-B)
+  if (/[Ѐ-ԯᲀ-᲏ⷠ-ⷿꙀ-ꚟ]/.test(name)) return 'ru';
+  // Arabic: U+0600-U+06FF + U+0750-U+077F (Suppl) + U+0870-U+089F (Ext-B)
+  // + U+08A0-U+08FF (Ext-A) + U+FB50-U+FDFF (Pres-A) + U+FE70-U+FEFF (Pres-B)
+  if (/[؀-ۿݐ-ݿࡰ-࢟ࢠ-ࣿﭐ-﷿ﹰ-﻿]/.test(name)) return 'ar';
+  // Devanagari: U+0900-U+097F + U+A8E0-U+A8FF (Extended)
+  if (/[ऀ-ॿ꣠-ꣿ]/.test(name)) return 'hi';
+  // CJK Unified Ideographs: U+4E00-U+9FFF + U+3400-U+4DBF (Ext-A)
+  if (/[一-鿿㐀-䶿]/.test(name)) return 'zh-CN';
+  // Korean Hangul: U+AC00-U+D7AF → other_known (no dedicated bucket)
   if (/[가-힯]/.test(name)) return 'other_known';
-  if (/[぀-ゟ゠-ヿ]/.test(name)) return 'other_known';
-  // Hebrew, Greek, Thai → other_known
+  // Japanese Hiragana + Katakana: U+3040-U+30FF
+  if (/[぀-ヿ]/.test(name)) return 'other_known';
+  // Hebrew: U+0590-U+05FF
   if (/[֐-׿]/.test(name)) return 'other_known';
+  // Greek + Coptic: U+0370-U+03FF
   if (/[Ͱ-Ͽ]/.test(name)) return 'other_known';
+  // Thai: U+0E00-U+0E7F
   if (/[฀-๿]/.test(name)) return 'other_known';
   return 'unknown';
 }
@@ -380,7 +398,9 @@ export interface MarketBucketSignals {
   firstName?: string | null;
 }
 
-/** Which signal won the priority chain (for analytics + debug dashboards). */
+/** Which signal won the priority chain. Currently used by the backfill
+ *  script's per-source breakdown stats; not yet persisted on UserProfile,
+ *  so live request paths discard it. */
 export type MarketBucketSource =
   | 'language_code'
   | 'browser_language'
@@ -1277,6 +1297,8 @@ const ru: Dict = {
     '🎉 PRO подключен!\n\n✅ 10 вишлистов\n✅ 100 желаний в каждом\n✅ Комментарии и импорт по ссылке\n\nДействует до {{date}}',
   bot_pro_activated_yearly:
     '👑 PRO · Год подключен!\n\n✅ Все 19 PRO-фич\n✅ Экономия 33% vs помесячно\n✅ Один платёж — год без забот\n\nДействует до {{date}}',
+  bot_pro_activated_lifetime:
+    '∞ PRO навсегда подключен!\n\n✅ Все функции PRO\n✅ Без срока окончания\n✅ Один платёж — навсегда\n\nPro теперь твой навсегда.',
   bot_pro_renewal_7d:
     '👑 Твой PRO истекает через 7 дней ({{date}}).\n\nПродли сейчас, чтобы не потерять доступ к 19 PRO-функциям.',
   bot_pro_renewal_1d:
@@ -1336,6 +1358,9 @@ const ru: Dict = {
   api_invoice_title_yearly: 'WishBoard PRO · Год',
   api_invoice_desc_yearly: 'PRO на целый год. 19 функций, экономия 33% vs помесячно.',
   api_invoice_label_yearly: 'PRO на год',
+  api_invoice_title_lifetime: 'WishBoard PRO · Навсегда',
+  api_invoice_desc_lifetime: 'Один платёж — Pro без срока окончания. Все функции навсегда.',
+  api_invoice_label_lifetime: 'PRO навсегда',
   paywall_hero_title: 'WishBoard PRO',
   paywall_hero_sub: '19 функций для тех,\nкто дарит и получает всерьёз',
   paywall_sec_new: 'Новое в PRO',
@@ -1348,10 +1373,24 @@ const ru: Dict = {
   paywall_save_badge: '−33%',
   paywall_cta_monthly: 'Начать PRO · {{price}} ⭐/мес',
   paywall_cta_yearly: 'Начать PRO · {{price}} ⭐/год',
+  paywall_cta_lifetime: 'Купить навсегда · {{price}} ⭐',
   paywall_trust: '💳 ⭐ Stars · Отмена в любой момент',
   paywall_trust_yearly: '💳 ⭐ Stars · Разовый платёж за год',
+  paywall_trust_lifetime: '⭐ Stars · Оплата один раз — Pro навсегда',
   paywall_chip_unlock: 'Чтобы разблокировать {{feature}}',
   paywall_new_badge: 'NEW',
+  // ── Pro Lifetime (one-time permanent purchase) ──────────────────────────
+  paywall_plan_lifetime_name: 'Pro навсегда',
+  paywall_plan_lifetime_subtitle: 'Один платёж. Pro без срока окончания.',
+  paywall_plan_lifetime_per: 'один платёж',
+  paywall_plan_lifetime_badge: 'Навсегда',
+  pro_lifetime_active_title: 'Pro навсегда',
+  pro_lifetime_active_desc: 'Без срока окончания',
+  pro_lifetime_no_renewal_note: 'Pro навсегда не имеет автопродления. Отмена и реактивация не применимы.',
+  pro_lifetime_success_title: 'Готово — Pro теперь навсегда',
+  pro_lifetime_success_desc: 'Один платёж — все функции PRO остаются с тобой без срока окончания.',
+  pro_lifetime_existing_monthly_warning: 'Pro навсегда уже активен. Если у тебя была месячная подписка, её автопродление можно отменить отдельно — Pro навсегда от этого не пропадёт.',
+  toast_pro_lifetime_activated: 'Pro навсегда подключён ✨',
 
   // ── Notification strings ──────────────────────────────────────────────────
   notif_reserved: '🎁 {{name}} забронировал желание «{{title}}»',
@@ -3998,6 +4037,8 @@ const en: Dict = {
     '🎉 PRO activated!\n\n✅ 10 wishlists\n✅ 100 wishes each\n✅ Comments and import by link\n\nActive until {{date}}',
   bot_pro_activated_yearly:
     '👑 PRO · Year activated!\n\n✅ All 19 PRO features\n✅ Save 33% vs monthly\n✅ One payment — a year of peace\n\nActive until {{date}}',
+  bot_pro_activated_lifetime:
+    '∞ PRO forever activated!\n\n✅ All PRO features\n✅ No expiration\n✅ One payment — keep PRO forever\n\nPro is yours forever.',
   bot_pro_renewal_7d:
     '👑 Your PRO expires in 7 days ({{date}}).\n\nRenew now to keep all 19 PRO features.',
   bot_pro_renewal_1d:
@@ -4055,6 +4096,9 @@ const en: Dict = {
   api_invoice_title_yearly: 'WishBoard PRO · Year',
   api_invoice_desc_yearly: 'PRO for a full year. 19 features, save 33% vs monthly.',
   api_invoice_label_yearly: 'PRO for a year',
+  api_invoice_title_lifetime: 'WishBoard PRO · Forever',
+  api_invoice_desc_lifetime: 'One payment — Pro with no expiration. All features, forever.',
+  api_invoice_label_lifetime: 'PRO forever',
   paywall_hero_title: 'WishBoard PRO',
   paywall_hero_sub: '19 features for people\nwho gift and receive seriously',
   paywall_sec_new: 'New in PRO',
@@ -4067,10 +4111,24 @@ const en: Dict = {
   paywall_save_badge: '−33%',
   paywall_cta_monthly: 'Start PRO · {{price}} ⭐/mo',
   paywall_cta_yearly: 'Start PRO · {{price}} ⭐/yr',
+  paywall_cta_lifetime: 'Buy forever · {{price}} ⭐',
   paywall_trust: '💳 ⭐ Stars · Cancel anytime',
   paywall_trust_yearly: '💳 ⭐ Stars · One-time yearly payment',
+  paywall_trust_lifetime: '⭐ Stars · One-time payment — Pro forever',
   paywall_chip_unlock: 'To unlock {{feature}}',
   paywall_new_badge: 'NEW',
+  // ── Pro Lifetime (one-time permanent purchase) ──────────────────────────
+  paywall_plan_lifetime_name: 'Pro forever',
+  paywall_plan_lifetime_subtitle: 'One payment. Pro with no expiration.',
+  paywall_plan_lifetime_per: 'one-time',
+  paywall_plan_lifetime_badge: 'Forever',
+  pro_lifetime_active_title: 'Pro forever',
+  pro_lifetime_active_desc: 'No expiration date',
+  pro_lifetime_no_renewal_note: 'Pro forever has no auto-renewal. Cancel and reactivate do not apply.',
+  pro_lifetime_success_title: 'Done — Pro is yours forever',
+  pro_lifetime_success_desc: 'One payment — all PRO features stay with you with no expiration date.',
+  pro_lifetime_existing_monthly_warning: 'Pro forever is active. If you had a monthly subscription, you can cancel its auto-renewal separately — Pro forever will not go away.',
+  toast_pro_lifetime_activated: 'Pro forever activated ✨',
 
   // ── Notification strings ──────────────────────────────────────────────────
   notif_reserved: '🎁 {{name}} reserved the wish "{{title}}"',
@@ -7878,6 +7936,26 @@ const zhCN: Dict = {
   br_paywall_feature_audience: '扩展受众',
   br_paywall_feature_owner_extra: '所有者 14 天和 7 天窗口',
   br_pro_required_toast: 'Pro 功能',
+
+  // ── Pro Lifetime (one-time permanent purchase) ──────────────────────────
+  api_invoice_title_lifetime: 'WishBoard PRO · 永久',
+  api_invoice_desc_lifetime: '一次付款 — Pro 永不过期。所有功能,永久享用。',
+  api_invoice_label_lifetime: 'PRO 永久',
+  bot_pro_activated_lifetime:
+    '∞ PRO 永久版已激活！\n\n✅ 所有 PRO 功能\n✅ 永不过期\n✅ 一次付款 — 永久 Pro\n\nPro 永远属于你。',
+  paywall_plan_lifetime_name: 'Pro 永久',
+  paywall_plan_lifetime_subtitle: '一次付款。Pro 永不过期。',
+  paywall_plan_lifetime_per: '一次性',
+  paywall_plan_lifetime_badge: '永久',
+  paywall_cta_lifetime: '永久购买 · {{price}} ⭐',
+  paywall_trust_lifetime: '⭐ Stars · 一次付款 — Pro 永久',
+  pro_lifetime_active_title: 'Pro 永久',
+  pro_lifetime_active_desc: '永不过期',
+  pro_lifetime_no_renewal_note: 'Pro 永久没有自动续费。取消和重新激活不适用。',
+  pro_lifetime_success_title: '完成 — Pro 现在永远属于你',
+  pro_lifetime_success_desc: '一次付款 — 所有 PRO 功能永远陪伴你。',
+  pro_lifetime_existing_monthly_warning: 'Pro 永久已激活。如果你之前有月度订阅,可以单独取消其自动续费 — Pro 永久不会消失。',
+  toast_pro_lifetime_activated: 'Pro 永久已激活 ✨',
 };
 
 const hi: Dict = {
@@ -9854,6 +9932,26 @@ const hi: Dict = {
   br_paywall_feature_audience: 'विस्तारित ऑडियंस',
   br_paywall_feature_owner_extra: 'मालिक की 14 और 7 दिन की विंडो',
   br_pro_required_toast: 'Pro सुविधा',
+
+  // ── Pro Lifetime (one-time permanent purchase) ──────────────────────────
+  api_invoice_title_lifetime: 'WishBoard PRO · हमेशा के लिए',
+  api_invoice_desc_lifetime: 'एक भुगतान — Pro बिना समाप्ति के। सभी सुविधाएँ, हमेशा के लिए।',
+  api_invoice_label_lifetime: 'PRO हमेशा के लिए',
+  bot_pro_activated_lifetime:
+    '∞ PRO हमेशा के लिए चालू!\n\n✅ सभी PRO सुविधाएँ\n✅ कभी समाप्त नहीं\n✅ एक भुगतान — Pro हमेशा\n\nPro अब आपका हमेशा के लिए है।',
+  paywall_plan_lifetime_name: 'Pro हमेशा के लिए',
+  paywall_plan_lifetime_subtitle: 'एक भुगतान। Pro की कोई समाप्ति तिथि नहीं।',
+  paywall_plan_lifetime_per: 'एक बार',
+  paywall_plan_lifetime_badge: 'हमेशा',
+  paywall_cta_lifetime: 'हमेशा के लिए खरीदें · {{price}} ⭐',
+  paywall_trust_lifetime: '⭐ Stars · एकमुश्त भुगतान — Pro हमेशा के लिए',
+  pro_lifetime_active_title: 'Pro हमेशा के लिए',
+  pro_lifetime_active_desc: 'कोई समाप्ति तिथि नहीं',
+  pro_lifetime_no_renewal_note: 'Pro हमेशा के लिए में स्वतः नवीनीकरण नहीं है। रद्द और पुनः सक्रिय करना लागू नहीं होते।',
+  pro_lifetime_success_title: 'हो गया — Pro अब हमेशा के लिए तुम्हारा है',
+  pro_lifetime_success_desc: 'एक भुगतान — सभी PRO सुविधाएँ बिना समाप्ति तिथि के तुम्हारे साथ रहेंगी।',
+  pro_lifetime_existing_monthly_warning: 'Pro हमेशा के लिए सक्रिय है। यदि पहले मासिक सदस्यता थी, उसका स्वतः नवीनीकरण अलग से रद्द किया जा सकता है — Pro हमेशा के लिए वैसे ही चालू रहेगा।',
+  toast_pro_lifetime_activated: 'Pro हमेशा के लिए चालू ✨',
 };
 
 const es: Dict = {
@@ -11831,6 +11929,26 @@ const es: Dict = {
   br_paywall_feature_audience: 'Audiencia ampliada',
   br_paywall_feature_owner_extra: 'Ventanas dueño 14 y 7 días',
   br_pro_required_toast: 'Función Pro',
+
+  // ── Pro Lifetime (one-time permanent purchase) ──────────────────────────
+  api_invoice_title_lifetime: 'WishBoard PRO · Para siempre',
+  api_invoice_desc_lifetime: 'Un pago — Pro sin caducidad. Todas las funciones, para siempre.',
+  api_invoice_label_lifetime: 'PRO para siempre',
+  bot_pro_activated_lifetime:
+    '∞ ¡PRO para siempre activado!\n\n✅ Todas las funciones PRO\n✅ Sin caducidad\n✅ Un pago — Pro para siempre\n\nPro es tuyo para siempre.',
+  paywall_plan_lifetime_name: 'Pro para siempre',
+  paywall_plan_lifetime_subtitle: 'Un pago. Pro sin fecha de caducidad.',
+  paywall_plan_lifetime_per: 'pago único',
+  paywall_plan_lifetime_badge: 'Para siempre',
+  paywall_cta_lifetime: 'Comprar para siempre · {{price}} ⭐',
+  paywall_trust_lifetime: '⭐ Stars · Pago único — Pro para siempre',
+  pro_lifetime_active_title: 'Pro para siempre',
+  pro_lifetime_active_desc: 'Sin fecha de caducidad',
+  pro_lifetime_no_renewal_note: 'Pro para siempre no tiene renovación automática. Cancelar y reactivar no aplican.',
+  pro_lifetime_success_title: 'Listo — Pro es tuyo para siempre',
+  pro_lifetime_success_desc: 'Un pago — todas las funciones PRO permanecen contigo sin fecha de caducidad.',
+  pro_lifetime_existing_monthly_warning: 'Pro para siempre está activo. Si tenías una suscripción mensual, puedes cancelar su renovación automática por separado — Pro para siempre no desaparecerá.',
+  toast_pro_lifetime_activated: 'Pro para siempre activado ✨',
 };
 
 const ar: Dict = {
@@ -13808,6 +13926,26 @@ const ar: Dict = {
   br_paywall_feature_audience: 'جمهور موسع',
   br_paywall_feature_owner_extra: 'نوافذ صاحب 14 و7 أيام',
   br_pro_required_toast: 'ميزة Pro',
+
+  // ── Pro Lifetime (one-time permanent purchase) ──────────────────────────
+  api_invoice_title_lifetime: 'WishBoard PRO · للأبد',
+  api_invoice_desc_lifetime: 'دفعة واحدة — Pro بلا انتهاء. كل الميزات، للأبد.',
+  api_invoice_label_lifetime: 'PRO للأبد',
+  bot_pro_activated_lifetime:
+    '∞ تم تفعيل PRO للأبد!\n\n✅ جميع ميزات PRO\n✅ لا تنتهي صلاحيته\n✅ دفعة واحدة — Pro للأبد\n\nPro لك للأبد الآن.',
+  paywall_plan_lifetime_name: 'Pro للأبد',
+  paywall_plan_lifetime_subtitle: 'دفعة واحدة. Pro بدون تاريخ انتهاء.',
+  paywall_plan_lifetime_per: 'دفعة واحدة',
+  paywall_plan_lifetime_badge: 'للأبد',
+  paywall_cta_lifetime: 'اشترِ للأبد · {{price}} ⭐',
+  paywall_trust_lifetime: '⭐ Stars · دفعة واحدة — Pro للأبد',
+  pro_lifetime_active_title: 'Pro للأبد',
+  pro_lifetime_active_desc: 'بدون تاريخ انتهاء',
+  pro_lifetime_no_renewal_note: 'Pro للأبد ليس له تجديد تلقائي. الإلغاء والتنشيط لا ينطبقان.',
+  pro_lifetime_success_title: 'تم — Pro لك الآن للأبد',
+  pro_lifetime_success_desc: 'دفعة واحدة — جميع ميزات PRO تبقى معك بدون تاريخ انتهاء.',
+  pro_lifetime_existing_monthly_warning: 'Pro للأبد مُفعّل. إذا كان لديك اشتراك شهري، يمكنك إلغاء التجديد التلقائي بشكل منفصل — Pro للأبد لن يختفي.',
+  toast_pro_lifetime_activated: 'تم تفعيل Pro للأبد ✨',
 };
 
 // ─── Dictionaries map ─────────────────────────────────────────────────────────

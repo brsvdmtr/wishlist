@@ -28,8 +28,9 @@ import {
 } from './security';
 import { parseUrl } from './url-parser.js';
 import { getOrCreateProfile } from './profile.js';
-import { t, normalizeLocale, resolveEffectiveLocale, pluralize, type Locale, type LanguageMode, type LanguageSettings, getOnboardingMeta, type OnboardingVariant, isSupportedImportRegion } from '@wishlist/shared';
-import { resolveBucketFromRequest } from './services/locale-detection';
+import { t, resolveEffectiveLocale, pluralize, type Locale, type LanguageMode, type LanguageSettings, getOnboardingMeta, type OnboardingVariant } from '@wishlist/shared';
+import { resolveBucketFromRequest, prewarmGeoip } from './services/locale-detection';
+import { persistResolvedBucket } from '@wishlist/db';
 
 // Sentry namespace stays imported here so the error handler and the
 // uncaughtException / unhandledRejection handlers further down can call
@@ -102,6 +103,7 @@ import {
   PLANS,
   PRO_PRICE_XTR,
   PRO_YEARLY_PRICE_XTR,
+  PRO_LIFETIME_PRICE_XTR,
   PRO_SUBSCRIPTION_PERIOD,
   PRO_YEARLY_EXTEND_SECONDS,
   PRO_PLAN_CODE,
@@ -358,33 +360,19 @@ tgRouter.use((req, _res, next) => {
   const rawLang = req.tgUser.language_code ?? null;
   const firstName = req.tgUser.first_name ?? null;
   const { bucket } = resolveBucketFromRequest(req, { firstName });
-  const normLocale = rawLang ? normalizeLocale(rawLang) : null;
-  const importRegion = isSupportedImportRegion(bucket);
 
   // Skip write entirely when neither a raw language nor a resolved bucket is
   // available — saves a round-trip on the noisy "no signal" case.
   if (bucket === 'unknown' && rawLang == null) return next();
 
-  prisma.$executeRawUnsafe(
-    `UPDATE "UserProfile" p
-     SET language = COALESCE($1, p.language),
-         "normalizedLocale" = COALESCE($3, p."normalizedLocale"),
-         "marketBucket" = COALESCE(NULLIF($4, 'unknown'), p."marketBucket", $4),
-         "supportedImportRegion" = CASE WHEN $4 = 'unknown' THEN p."supportedImportRegion" ELSE $5 END
-     FROM "User" u
-     WHERE p."userId" = u.id AND u."telegramId" = $2
-       AND (
-         COALESCE($1, p.language) IS DISTINCT FROM p.language
-         OR COALESCE($3, p."normalizedLocale") IS DISTINCT FROM p."normalizedLocale"
-         OR COALESCE(NULLIF($4, 'unknown'), p."marketBucket", $4) IS DISTINCT FROM p."marketBucket"
-         OR ($4 <> 'unknown' AND $5 IS DISTINCT FROM p."supportedImportRegion")
-       )`,
-    rawLang,
-    telegramId,
-    normLocale,
+  // Atomic INSERT…ON CONFLICT DO UPDATE in shared services/locale-persistence;
+  // never downgrades a known bucket to 'unknown'. Fire-and-forget so the auth
+  // path is never blocked by a slow segmentation write.
+  persistResolvedBucket({
+    target: { telegramId },
+    rawLanguage: rawLang,
     bucket,
-    importRegion,
-  ).catch(() => {});
+  }).catch(() => {});
   next();
 });
 
@@ -681,6 +669,7 @@ const meRouter = registerMeRouter({
   ACTIVE_STATUSES,
   PRO_PRICE_XTR,
   PRO_YEARLY_PRICE_XTR,
+  PRO_LIFETIME_PRICE_XTR,
   ONE_TIME_SKUS,
 });
 tgRouter.use(meRouter);
@@ -955,7 +944,7 @@ tgRouter.use(groupGiftsRouter);
 // Bot side (apps/bot/src/index.ts:1103+) — `pre_checkout_query` and
 // `successful_payment` handlers — owns Subscription activation and
 // UserAddOn creation. Invoice payload formats are byte-identical
-// (pro_monthly|pro_yearly|addon:<sku>|addon:gift_notes_unlock).
+// (pro_monthly|pro_yearly|pro_lifetime|addon:<sku>|addon:gift_notes_unlock).
 const billingRouter = registerBillingRouter({
   getOrCreateTgUser,
   getEffectiveEntitlements,
@@ -965,6 +954,7 @@ const billingRouter = registerBillingRouter({
   hasReservationPro,
   PRO_PRICE_XTR,
   PRO_YEARLY_PRICE_XTR,
+  PRO_LIFETIME_PRICE_XTR,
   PRO_SUBSCRIPTION_PERIOD,
   PRO_PLAN_CODE,
   GIFT_NOTES_PRICE_XTR,
@@ -1781,6 +1771,16 @@ app.listen(PORT, () => {
   logger.info({ port: PORT }, 'API server listening');
   // Send startup alert to admins (best-effort)
   void sendAdminAlert(`🟢 <b>API started</b>\nPort: ${PORT}\nEnv: ${process.env.NODE_ENV ?? 'development'}`);
+
+  // Pre-load geoip-lite (~100 MB binary DB → ~100 ms event-loop block) at
+  // boot so the first authenticated request doesn't pay the cold-start
+  // cost. Skipped when the kill switch is off — no point loading the DB
+  // we won't query. Logs whether the load succeeded (false = corrupt /
+  // missing data file → request path silently degrades to no-IP-geo).
+  if (process.env.LOCALE_DETECTION_ENABLED !== 'false') {
+    const ok = prewarmGeoip();
+    logger.info({ geoipLoaded: ok }, 'geoip-lite prewarm');
+  }
 
   // Hourly cleanup of expired IdempotencyKey rows. No-op in tests (unless
   // CLEANUP_JOB_IN_TEST=true) and skipped when SECURITY_CLEANUP_JOB_ENABLED=false.

@@ -52,8 +52,13 @@ function emptyStats(): Stats {
 
 async function backfillUsersWithoutProfile(stats: Stats): Promise<void> {
   // Users who /start-ed the bot but never opened the Mini App: no
-  // UserProfile row at all. Create one with the script-analysis bucket
-  // (best we can do with no language_code captured).
+  // UserProfile row at all. Create one only when script analysis yields a
+  // recognised bucket — we deliberately leave the orphan untouched when
+  // bucket='unknown' because writing an empty profile (NULL bucket, NULL
+  // language) gives the dashboard nothing new (LEFT JOIN already coalesces
+  // missing profile to 'unknown') and would steal the chance for the next
+  // live request from this user (Mini App or bot interaction) to populate
+  // the row with full identity fields via the auth/upsert path.
   const orphans = await prisma.user.findMany({
     where: { profile: null },
     select: { id: true, firstName: true },
@@ -67,7 +72,13 @@ async function backfillUsersWithoutProfile(stats: Stats): Promise<void> {
     stats.by_bucket[bucket]++;
     if (bucket === 'unknown') continue;
 
-    if (!dryRun) {
+    if (dryRun) {
+      stats.profiles_created++;
+      stats.buckets_resolved++;
+      continue;
+    }
+
+    try {
       await prisma.userProfile.create({
         data: {
           userId: u.id,
@@ -75,12 +86,12 @@ async function backfillUsersWithoutProfile(stats: Stats): Promise<void> {
           marketBucket: bucket,
           supportedImportRegion: isSupportedImportRegion(bucket),
         },
-      }).catch((err) => {
-        console.error(`[backfill] create profile failed for ${u.id}:`, err);
       });
+      stats.profiles_created++;
+      stats.buckets_resolved++;
+    } catch (err) {
+      console.error(`[backfill] create profile failed for ${u.id}:`, err);
     }
-    stats.profiles_created++;
-    stats.buckets_resolved++;
   }
 }
 
@@ -115,7 +126,12 @@ async function backfillProfilesWithUnknownBucket(stats: Stats): Promise<void> {
       continue;
     }
 
-    if (!dryRun) {
+    if (dryRun) {
+      stats.buckets_resolved++;
+      continue;
+    }
+
+    try {
       const normLocale = p.language ? normalizeLocale(p.language) : null;
       await prisma.userProfile.update({
         where: { userId: p.userId },
@@ -124,11 +140,11 @@ async function backfillProfilesWithUnknownBucket(stats: Stats): Promise<void> {
           supportedImportRegion: isSupportedImportRegion(bucket),
           ...(normLocale ? { normalizedLocale: normLocale } : {}),
         },
-      }).catch((err) => {
-        console.error(`[backfill] update profile failed for ${p.userId}:`, err);
       });
+      stats.buckets_resolved++;
+    } catch (err) {
+      console.error(`[backfill] update profile failed for ${p.userId}:`, err);
     }
-    stats.buckets_resolved++;
   }
 }
 

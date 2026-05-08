@@ -11,6 +11,9 @@ if (process.env.NODE_ENV !== 'production') {
 
 export { PrismaClient, Prisma } from '@prisma/client';
 
+// Locale segmentation persistence — shared by api middleware + bot /start.
+export { persistResolvedBucket, type PersistBucketInput, type PersistBucketTarget } from './locale-persistence';
+
 // Referral program — shared core logic (used by api + bot).
 // See packages/db/src/referral.ts for the full module; this re-export keeps
 // callers on `import { ... } from '@wishlist/db'`.

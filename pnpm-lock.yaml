@@ -197,6 +197,9 @@ importers:
       '@prisma/client':
         specifier: 5.18.0
         version: 5.18.0(prisma@5.18.0)
+      '@wishlist/shared':
+        specifier: workspace:*
+        version: link:../shared
       zod:
         specifier: 3.23.8
         version: 3.23.8

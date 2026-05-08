@@ -23,7 +23,9 @@ import { getClientIp } from '../security/ipHash';
 
 // geoip-lite is loaded lazily so that boot doesn't slow down or fail when
 // the kill switch is off. Its 100+ MB binary database loads into memory
-// on first lookup; once loaded, lookups are sub-millisecond.
+// on first lookup (one-time ~100ms event-loop block); once loaded, lookups
+// are sub-millisecond. Call `prewarmGeoip()` from bootstrap to pay that
+// cost upfront if you don't want it amortized into the first user request.
 let _geoipModule: typeof import('geoip-lite') | null = null;
 let _geoipLoadFailed = false;
 
@@ -41,9 +43,21 @@ function getGeoip(): typeof import('geoip-lite') | null {
   }
 }
 
+/** Pre-load geoip-lite at boot to avoid ~100ms cold-start penalty on the
+ * first authenticated request. Safe to call multiple times — the load is
+ * cached. Returns false if the geoip-lite module is unavailable (corrupt
+ * DB, missing files, etc.); the request path silently degrades. */
+export function prewarmGeoip(): boolean {
+  return getGeoip() !== null;
+}
+
 /** Look up ISO 3166-1 alpha-2 country code for an IP, or null on miss. */
 export function lookupCountryByIp(ip: string | null | undefined): string | null {
   if (!ip) return null;
+  // getClientIp() returns the literal 'unknown' when no IP is present;
+  // skip the geoip lookup for that sentinel rather than hashing a
+  // non-IP string.
+  if (ip === 'unknown') return null;
   const geoip = getGeoip();
   if (!geoip) return null;
   try {
@@ -54,21 +68,25 @@ export function lookupCountryByIp(ip: string | null | undefined): string | null 
   }
 }
 
+// BCP-47 / IANA tz characters: ASCII letters/digits + '-' / '_' / '/' / '+'.
+// Reject anything else to harden against log-poisoning if any downstream
+// logger prints these raw, and to keep header values comparable to the
+// resolver's static maps (which are pure ASCII).
+const ASCII_LANGUAGE_RE = /^[A-Za-z0-9_-]{1,35}$/;
+const ASCII_TIMEZONE_RE = /^[A-Za-z0-9_/+-]{1,64}$/;
+
 /** Read X-Browser-Language header (sent by Mini App `tgFetch`). */
 function readBrowserLanguage(req: Request): string | null {
   const raw = req.get('X-Browser-Language');
   if (!raw) return null;
-  // Header is `navigator.language`, e.g. 'ru-RU' or 'en-US'. Cap length to
-  // protect against malformed clients sending a 1 KB blob.
-  return raw.length <= 35 ? raw : null;
+  return ASCII_LANGUAGE_RE.test(raw) ? raw : null;
 }
 
 /** Read X-Browser-Timezone header (IANA zone, e.g. 'Europe/Moscow'). */
 function readBrowserTimezone(req: Request): string | null {
   const raw = req.get('X-Browser-Timezone');
   if (!raw) return null;
-  // IANA timezone names are at most ~40 chars. Reject anything longer.
-  return raw.length <= 64 ? raw : null;
+  return ASCII_TIMEZONE_RE.test(raw) ? raw : null;
 }
 
 export interface RequestBucketContext {

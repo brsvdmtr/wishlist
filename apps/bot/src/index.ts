@@ -11,8 +11,8 @@ import { Telegraf, Markup, TelegramError } from 'telegraf';
 import fs from 'node:fs';
 import https from 'node:https';
 import path from 'node:path';
-import { prisma, resolveReferralCode, tryCreateAttribution, markFirstBotStart, loadReferralConfig } from '@wishlist/db';
-import { t, pluralize, detectLocale, resolveEffectiveLocale, normalizeLocale, resolveMarketBucket, isSupportedImportRegion, type Locale } from '@wishlist/shared';
+import { prisma, resolveReferralCode, tryCreateAttribution, markFirstBotStart, loadReferralConfig, persistResolvedBucket } from '@wishlist/db';
+import { t, pluralize, detectLocale, resolveEffectiveLocale, resolveMarketBucket, type Locale } from '@wishlist/shared';
 import logger from './logger';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
@@ -632,54 +632,25 @@ if (!token) {
       return null;
     });
 
-    // Persist locale segmentation on UserProfile (lazy create if missing).
-    // Bot-only users never go through the API tgRouter middleware, so this
-    // is the single point that fixes the marketBucket=NULL backlog. Uses
-    // the same multi-signal resolver as the API middleware, but without
-    // browser/IP signals — only language_code + first_name script analysis.
+    // Persist locale segmentation on UserProfile via the shared
+    // packages/db/locale-persistence helper — same atomic
+    // INSERT…ON CONFLICT DO UPDATE used by the API tgRouter middleware,
+    // so concurrent /start retries (webhook redelivery) and a parallel
+    // Mini App request can't race. Bot has no browser/IP signals, so
+    // only language_code + first_name script analysis feed the resolver.
     if (user && process.env.LOCALE_DETECTION_ENABLED !== 'false') {
-      try {
-        const { bucket } = resolveMarketBucket({
-          languageCode: fromLangCode,
-          firstName: fromFirstName,
+      const { bucket } = resolveMarketBucket({
+        languageCode: fromLangCode,
+        firstName: fromFirstName,
+      });
+      if (bucket !== 'unknown' || fromLangCode != null) {
+        await persistResolvedBucket({
+          target: { userId: user.id },
+          rawLanguage: fromLangCode,
+          bucket,
+        }).catch((err) => {
+          logger.warn({ err, telegramId }, 'profile locale upsert failed in /start');
         });
-        const normLocale = fromLangCode ? normalizeLocale(fromLangCode) : null;
-        const importRegion = isSupportedImportRegion(bucket);
-        if (bucket !== 'unknown' || fromLangCode != null) {
-          const existing = await prisma.userProfile.findUnique({
-            where: { userId: user.id },
-            select: { id: true, language: true, normalizedLocale: true, marketBucket: true, supportedImportRegion: true },
-          });
-          if (!existing) {
-            await prisma.userProfile.create({
-              data: {
-                userId: user.id,
-                defaultCurrency: bucket === 'ru' ? 'RUB' : 'USD',
-                language: fromLangCode,
-                normalizedLocale: normLocale,
-                marketBucket: bucket,
-                supportedImportRegion: bucket === 'unknown' ? null : importRegion,
-              },
-            });
-          } else {
-            // Never downgrade a known bucket to 'unknown' — preserve any
-            // bucket previously resolved by API middleware (which has more
-            // signals: browser headers + IP geo).
-            const nextBucket = bucket === 'unknown' ? (existing.marketBucket ?? bucket) : bucket;
-            const nextImport = bucket === 'unknown' ? existing.supportedImportRegion : importRegion;
-            await prisma.userProfile.update({
-              where: { userId: user.id },
-              data: {
-                language: fromLangCode ?? existing.language,
-                normalizedLocale: normLocale ?? existing.normalizedLocale,
-                marketBucket: nextBucket,
-                supportedImportRegion: nextImport,
-              },
-            });
-          }
-        }
-      } catch (err) {
-        logger.warn({ err, telegramId }, 'profile locale upsert failed in /start');
       }
     }
 
@@ -1186,8 +1157,8 @@ if (!token) {
       const parts = raw.split(':');
       const payloadType = parts[0];
 
-      if (payloadType === 'pro_monthly' || payloadType === 'pro_yearly') {
-        // pro_monthly:<telegramId>:<uuid>  |  pro_yearly:<telegramId>:<uuid>
+      if (payloadType === 'pro_monthly' || payloadType === 'pro_yearly' || payloadType === 'pro_lifetime') {
+        // pro_monthly:<telegramId>:<uuid>  |  pro_yearly:<telegramId>:<uuid>  |  pro_lifetime:<telegramId>:<uuid>
         if (parts.length < 3) {
           logger.warn({ invoicePayload: raw, reason: 'invalid_pro_payload' }, 'pre_checkout rejected');
           await ctx.answerPreCheckoutQuery(false, 'Invalid payment');
@@ -1290,6 +1261,32 @@ if (!token) {
           return;
         }
 
+        // Lifetime guard: if user already has a lifetime subscription, do NOT
+        // downgrade by overwriting with monthly. This happens when a user buys
+        // lifetime while a Telegram-side monthly auto-renew is still active and
+        // Telegram subsequently fires a monthly charge. Record the PaymentEvent
+        // for audit and ack the user, but keep the lifetime row intact.
+        const existingSub = await prisma.subscription.findUnique({
+          where: { userId_planCode: { userId: user.id, planCode: 'PRO' } },
+        });
+        if (existingSub && existingSub.billingPeriod === 'lifetime') {
+          await prisma.paymentEvent.create({
+            data: {
+              subscriptionId: existingSub.id,
+              userId: user.id,
+              telegramPaymentChargeId: chargeId,
+              providerPaymentChargeId: providerChargeId,
+              invoicePayload: payment.invoice_payload,
+              totalAmount: payment.total_amount,
+              currency: payment.currency,
+              eventType: 'payment_success_post_lifetime',
+              rawPayload: JSON.stringify(payment),
+            },
+          });
+          logger.warn({ userId: user.id, chargeId }, 'monthly payment received after lifetime — kept lifetime, audited only');
+          return;
+        }
+
         const now = new Date();
         const periodEnd = payment.subscription_expiration_date
           ? new Date(payment.subscription_expiration_date * 1000)
@@ -1382,6 +1379,24 @@ if (!token) {
         const existingSub = await prisma.subscription.findUnique({
           where: { userId_planCode: { userId: user.id, planCode: 'PRO' } },
         });
+        // Lifetime guard — never downgrade lifetime to yearly. Audit only.
+        if (existingSub && existingSub.billingPeriod === 'lifetime') {
+          await prisma.paymentEvent.create({
+            data: {
+              subscriptionId: existingSub.id,
+              userId: user.id,
+              telegramPaymentChargeId: chargeId,
+              providerPaymentChargeId: providerChargeId,
+              invoicePayload: payment.invoice_payload,
+              totalAmount: payment.total_amount,
+              currency: payment.currency,
+              eventType: 'payment_success_post_lifetime',
+              rawPayload: JSON.stringify(payment),
+            },
+          });
+          logger.warn({ userId: user.id, chargeId }, 'yearly payment received after lifetime — kept lifetime, audited only');
+          return;
+        }
         const startFrom = existingSub && existingSub.currentPeriodEnd > now
           ? existingSub.currentPeriodEnd
           : now;
@@ -1436,6 +1451,98 @@ if (!token) {
           Markup.inlineKeyboard([Markup.button.webApp(t('bot_open_app', locale), MINI_APP_URL)]),
         );
         logger.info({ userId: user.id, chargeId, periodEnd: periodEnd.toISOString(), stackedFromExisting: existingSub?.currentPeriodEnd ?? null }, 'yearly subscription activated');
+        return;
+      }
+
+      // ── PRO lifetime (one-time, permanent): pro_lifetime:<telegramId>:<uuid> ──
+      //   Lifetime is a non-recurring Stars purchase that grants permanent Pro.
+      //   We write a Subscription with billingPeriod='lifetime', cancelAtPeriodEnd=false,
+      //   and currentPeriodEnd anchored at 2099-12-31 (a semantic "no expiry"
+      //   sentinel — resolvers always treat billingPeriod='lifetime' as truth,
+      //   the date is just defensive padding so the expiry-sweep cron never
+      //   flips it to EXPIRED). Lifetime overrides any prior monthly/yearly row;
+      //   if a previous row existed, this upsert overwrites it (preserving
+      //   PaymentEvent history via the audit trail). Idempotent on chargeId.
+      if (payloadType === 'pro_lifetime') {
+        if (parts.length < 3) return;
+        const telegramId = parts[1];
+
+        const user = await prisma.user.findUnique({ where: { telegramId }, select: { id: true } });
+        if (!user) {
+          logger.error({ telegramId }, 'lifetime payment user not found');
+          return;
+        }
+
+        const chargeId = payment.telegram_payment_charge_id;
+        const providerChargeId = payment.provider_payment_charge_id ?? null;
+
+        // Idempotency
+        const existing = await prisma.paymentEvent.findUnique({ where: { telegramPaymentChargeId: chargeId } });
+        if (existing) {
+          logger.info({ chargeId }, 'duplicate lifetime payment, skip');
+          return;
+        }
+
+        const now = new Date();
+        // Sentinel "no-expiry" date — must match PRO_LIFETIME_PERIOD_END in
+        // apps/api/src/services/entitlement.ts. Hard-coded here to avoid a
+        // cross-package import; both sides MUST stay in sync.
+        const lifetimePeriodEnd = new Date('2099-12-31T00:00:00.000Z');
+
+        const existingSub = await prisma.subscription.findUnique({
+          where: { userId_planCode: { userId: user.id, planCode: 'PRO' } },
+        });
+
+        await prisma.$transaction(async (tx) => {
+          const sub = await tx.subscription.upsert({
+            where: { userId_planCode: { userId: user.id, planCode: 'PRO' } },
+            create: {
+              userId: user.id,
+              planCode: 'PRO',
+              status: 'ACTIVE',
+              starsPrice: payment.total_amount,
+              telegramChargeId: chargeId,
+              currentPeriodStart: now,
+              currentPeriodEnd: lifetimePeriodEnd,
+              source: 'telegram_stars',
+              billingPeriod: 'lifetime',
+              cancelAtPeriodEnd: false,
+            },
+            update: {
+              status: 'ACTIVE',
+              starsPrice: payment.total_amount,
+              telegramChargeId: chargeId,
+              currentPeriodEnd: lifetimePeriodEnd,
+              cancelledAt: null,
+              cancelAtPeriodEnd: false,
+              source: 'telegram_stars',
+              billingPeriod: 'lifetime',
+            },
+          });
+          await tx.paymentEvent.create({
+            data: {
+              subscriptionId: sub.id,
+              userId: user.id,
+              telegramPaymentChargeId: chargeId,
+              providerPaymentChargeId: providerChargeId,
+              invoicePayload: payment.invoice_payload,
+              totalAmount: payment.total_amount,
+              currency: payment.currency,
+              eventType: 'payment_success_lifetime',
+              rawPayload: JSON.stringify(payment),
+            },
+          });
+        });
+
+        const locale = getLocale(ctx);
+        await ctx.reply(
+          t('bot_pro_activated_lifetime', locale),
+          Markup.inlineKeyboard([Markup.button.webApp(t('bot_open_app', locale), MINI_APP_URL)]),
+        );
+        logger.info(
+          { userId: user.id, chargeId, replacedPrior: existingSub?.billingPeriod ?? null },
+          'lifetime subscription activated',
+        );
         return;
       }
 
