@@ -2395,6 +2395,8 @@ function ItemThumb({ item }: { item: Item | GuestItem }) {
       <img
         src={item.imageUrl}
         alt=""
+        loading="lazy"
+        decoding="async"
         onError={() => setImgErr(true)}
         style={{
           ...baseStyle,
@@ -2633,6 +2635,8 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
           <img
             src={item.imageUrl!}
             alt=""
+            loading="lazy"
+            decoding="async"
             onError={() => setImgErr(true)}
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', minHeight: 88, maxHeight: 110 }}
           />
@@ -2820,6 +2824,8 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
           <img
             src={item.imageUrl!}
             alt=""
+            loading="lazy"
+            decoding="async"
             onError={() => setImgErr(true)}
             style={{ width: '100%', height: 200, objectFit: 'cover', display: 'block' }}
           />
@@ -11722,7 +11728,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               background: item.imageUrl ? undefined : 'linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.2), rgba(168,85,247,0.2))',
               display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, flexShrink: 0, overflow: 'hidden',
             }}>
-              {item.imageUrl ? <img src={item.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '📦'}
+              {item.imageUrl ? <img src={item.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '📦'}
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'inline-block', background: 'rgba(74, 222, 128, 0.15)', color: 'var(--wb-success, #4ADE80)', fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 8, marginBottom: 6 }}>
@@ -13559,7 +13565,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                         display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0,
                                       }}>
                                         {it.imageUrl
-                                          ? <img src={it.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                          ? <img src={it.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                           : '🎁'}
                                       </div>
                                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -14144,6 +14150,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       <img
                         src={item.imageUrl}
                         alt=""
+                        loading="lazy"
+                        decoding="async"
                         style={{ width: 56, height: 56, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }}
                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                       />
@@ -14332,7 +14340,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                 display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0,
                               }}>
                                 {it.imageUrl
-                                  ? <img src={it.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  ? <img src={it.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                   : '🎁'}
                               </div>
                               <div style={{ flex: 1, minWidth: 0 }}>
@@ -14905,6 +14913,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <img
             src={viewingItem.imageUrl}
             alt=""
+            decoding="async"
             style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 12 }}
           />
           <button
@@ -15720,6 +15729,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <img
                 src={viewingItem.imageUrl}
                 alt=""
+                decoding="async"
                 onClick={() => setItemPhotoOpen(true)}
                 style={{ width: '100%', aspectRatio: '16/10', objectFit: 'cover', display: 'block', background: 'var(--wb-surface)', cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
               />
@@ -16026,6 +16036,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <img
                 src={viewingItem.imageUrl}
                 alt=""
+                decoding="async"
                 onClick={() => setItemPhotoOpen(true)}
                 style={{ width: '100%', height: 230, objectFit: 'cover', borderRadius: 20, display: 'block', background: C.surface, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
               />
@@ -16355,6 +16366,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <img
                 src={viewingItem.imageUrl}
                 alt=""
+                decoding="async"
                 onClick={() => setItemPhotoOpen(true)}
                 style={{ width: '100%', height: 230, objectFit: 'cover', borderRadius: 20, display: 'block', background: C.surface, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
               />
@@ -16966,7 +16978,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 14 }}>
                         {item.imageUrl ? (
-                          <img src={item.imageUrl} alt="" style={{ width: 54, height: 54, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
+                          <img src={item.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: 54, height: 54, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
                         ) : (
                           <div style={{
                             width: 54, height: 54, borderRadius: 14, flexShrink: 0,
@@ -21494,7 +21506,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           background: C.surface, borderTop: `1px solid ${C.border}`,
           padding: '12px 16px',
         }}>
-          <div style={{ display: 'grid', gridTemplateColumns: hasUserCategories ? '1fr 1fr 1fr' : '1fr 1fr 1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
             <button
               disabled={bulkActionLoading}
               onClick={async () => {
@@ -21547,40 +21559,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             >
               {t('bulk_move', locale)}
             </button>
-            {!hasUserCategories && (
-              <>
-                <button
-                  disabled={bulkActionLoading}
-                  onClick={() => setShowBulkTargetPicker('copy')}
-                  style={{ ...btnBase, background: C.greenSoft, color: C.green, borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
-                >
-                  {t('bulk_copy', locale)}
-                </button>
-                <button
-                  disabled={bulkActionLoading}
-                  onClick={() => {
-                    if (planInfo.code === 'FREE') { showUpsell('curated_selection'); return; }
-                    setCuratedSelectedIds(new Set(bulkSelectedIds));
-                    setBulkSelectionMode(false);
-                    setCuratedTitle(t('curated_default_title', locale));
-                    setShowCuratedConfigure(true);
-                  }}
-                  style={{ ...btnBase, background: 'rgba(96,165,250,0.12)', color: '#60A5FA', borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
-                >
-                  {t('curated_bulk_btn', locale)}
-                </button>
-              </>
-            )}
           </div>
-          {hasUserCategories && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
-              <button
-                disabled={bulkActionLoading}
-                onClick={() => setShowBulkTargetPicker('copy')}
-                style={{ ...btnBase, background: C.greenSoft, color: C.green, borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
-              >
-                {t('bulk_copy', locale)}
-              </button>
+          <div style={{ display: 'grid', gridTemplateColumns: hasUserCategories ? '1fr 1fr 1fr' : '1fr 1fr', gap: 8, marginTop: 8 }}>
+            <button
+              disabled={bulkActionLoading}
+              onClick={() => setShowBulkTargetPicker('copy')}
+              style={{ ...btnBase, background: C.greenSoft, color: C.green, borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
+            >
+              {t('bulk_copy', locale)}
+            </button>
+            {hasUserCategories && (
               <button
                 disabled={bulkActionLoading}
                 onClick={() => setShowCatPicker({ itemIds: [...bulkSelectedIds] })}
@@ -21588,21 +21576,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               >
                 {t('cat_choose', locale)}
               </button>
-              <button
-                disabled={bulkActionLoading}
-                onClick={() => {
-                  if (planInfo.code === 'FREE') { showUpsell('curated_selection'); return; }
-                  setCuratedSelectedIds(new Set(bulkSelectedIds));
-                  setBulkSelectionMode(false);
-                  setCuratedTitle(t('curated_default_title', locale));
-                  setShowCuratedConfigure(true);
-                }}
-                style={{ ...btnBase, background: 'rgba(96,165,250,0.12)', color: '#60A5FA', borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
-              >
-                {t('curated_bulk_btn', locale)}
-              </button>
-            </div>
-          )}
+            )}
+            <button
+              disabled={bulkActionLoading}
+              onClick={() => {
+                if (planInfo.code === 'FREE') { showUpsell('curated_selection'); return; }
+                setCuratedSelectedIds(new Set(bulkSelectedIds));
+                setBulkSelectionMode(false);
+                setCuratedTitle(t('curated_default_title', locale));
+                setShowCuratedConfigure(true);
+              }}
+              style={{ ...btnBase, background: 'rgba(96,165,250,0.12)', color: '#60A5FA', borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
+            >
+              {t('curated_bulk_btn', locale)}
+            </button>
+          </div>
         </div>
       )}
 
@@ -21677,7 +21665,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   padding: '8px 12px', background: C.surface, borderRadius: 10,
                 }}>
                   {item.imageUrl ? (
-                    <img src={item.imageUrl} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover' }} />
+                    <img src={item.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover' }} />
                   ) : (
                     <div style={{ width: 36, height: 36, borderRadius: 8, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🎁</div>
                   )}
@@ -28910,7 +28898,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                         {/* Item image */}
                         {item.imageUrl && (
-                          <img src={item.imageUrl} alt="" style={{ width: 52, height: 52, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
+                          <img src={item.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: 52, height: 52, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
                         )}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 2 }}>{item.title}</div>
@@ -29974,7 +29962,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             }}
           >
             {onboardingDemoItem.imageUrl && (
-              <img src={onboardingDemoItem.imageUrl} alt="" style={{ width: '100%', height: 160, objectFit: 'cover', display: 'block' }} />
+              <img src={onboardingDemoItem.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: 160, objectFit: 'cover', display: 'block' }} />
             )}
             <div style={{ padding: '14px 16px' }}>
               <div style={{ fontSize: 16, fontWeight: 600, color: C.text, marginBottom: 4 }}>{onboardingDemoItem.title}</div>
@@ -30012,7 +30000,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {/* Real wish card */}
               <div style={{ width: '100%', background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.06)', border: '1.5px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.2)', borderRadius: 18, overflow: 'hidden', marginBottom: 24 }}>
                 <div style={{ height: 100, background: 'linear-gradient(135deg, #1f1840, #162040)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48, position: 'relative' }}>
-                  {onboardingTryResult.item.imageUrl ? <img src={onboardingTryResult.item.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '📦'}
+                  {onboardingTryResult.item.imageUrl ? <img src={onboardingTryResult.item.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '📦'}
                   <div style={{ position: 'absolute', top: 10, left: 10, background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.8)', color: '#fff', fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 8 }}>✨ {t('onboarding_complete_your_wish', locale)}</div>
                 </div>
                 <div style={{ padding: '14px 16px' }}>
@@ -30221,7 +30209,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               backdropFilter: 'blur(14px)' as never,
             }}>
               {groupGiftCreateItem.imageUrl ? (
-                <img src={groupGiftCreateItem.imageUrl} alt="" style={{ width: 50, height: 50, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
+                <img src={groupGiftCreateItem.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: 50, height: 50, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
               ) : (
                 <div style={{
                   width: 50, height: 50, borderRadius: 14,
@@ -30389,7 +30377,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               backdropFilter: 'blur(14px)' as never,
             }}>
               {gg.item.imageUrl ? (
-                <img src={gg.item.imageUrl} alt="" style={{ width: 50, height: 50, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
+                <img src={gg.item.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: 50, height: 50, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
               ) : (
                 <div style={{
                   width: 50, height: 50, borderRadius: 14,
@@ -30714,7 +30702,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               backdropFilter: 'blur(14px)' as never,
             }}>
               {gg.item.imageUrl ? (
-                <img src={gg.item.imageUrl} alt="" style={{ width: 50, height: 50, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
+                <img src={gg.item.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: 50, height: 50, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
               ) : (
                 <div style={{
                   width: 50, height: 50, borderRadius: 14,

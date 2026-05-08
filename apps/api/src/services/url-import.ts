@@ -25,8 +25,10 @@
 
 import { prisma } from '@wishlist/db';
 
+import logger from '../logger';
 import { parseUrl } from '../url-parser.js';
 import { ensureItemPlacement } from '../placements/ensureItemPlacement';
+import { downloadAndProcessImage } from '../uploads/imageProcessor';
 
 import { ACTIVE_STATUSES, extractNumericPrice, mapTgItem } from './items';
 import { DRAFTS_ITEM_LIMIT } from './wishlists';
@@ -112,6 +114,30 @@ export function createImportUrlForUser(deps: {
       description = parsed.description.slice(0, 500);
     }
 
+    // Cache the marketplace product photo on our own /uploads dir so the
+    // Mini App stops loading multi-MB originals from external CDNs for
+    // 88px thumbnails. Failure is non-fatal: fall back to the remote URL.
+    let storedImageUrl: string | null = parsed.imageUrl ?? null;
+    if (storedImageUrl) {
+      try {
+        const cached = await downloadAndProcessImage(storedImageUrl, {
+          maxDim: 1600,
+          quality: 80,
+          suffix: 'full',
+        });
+        storedImageUrl = `/api/uploads/${cached.filename}`;
+      } catch (err) {
+        logger.warn(
+          {
+            event: 'url_import.image_cache_failed',
+            sourceDomain: parsed.sourceDomain,
+            err: (err as Error).message,
+          },
+          'image cache failed, falling back to remote URL',
+        );
+      }
+    }
+
     const item = await prisma.item.create({
       data: {
         wishlistId: draftsWl.id,
@@ -119,7 +145,7 @@ export function createImportUrlForUser(deps: {
         url: parsed.canonicalUrl || rawUrl,
         description,
         priceText: extractNumericPrice(parsed.priceText),
-        imageUrl: parsed.imageUrl ?? null,
+        imageUrl: storedImageUrl,
         sourceUrl: rawUrl,
         sourceDomain: parsed.sourceDomain,
         importMethod: source || 'bot',
