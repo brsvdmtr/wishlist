@@ -21476,7 +21476,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
        !itemReorderMode &&
        !catReorderMode &&
        !showItemForm &&
-       !keyboardOpen && (
+       !keyboardOpen &&
+       !bulkSelectionMode &&
+       !curatedSelectionMode && (
         <button
           onClick={() => { resetItemForm(); setShowItemForm(true); }}
           aria-label={t('add_wish_btn', locale)}
@@ -21503,7 +21505,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       {bulkSelectionMode && bulkSelectedIds.size > 0 && screen === 'wishlist-detail' && (
         <div style={{
           position: 'fixed', bottom: 'calc(76px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0, zIndex: 60,
-          background: C.surface, borderTop: `1px solid ${C.border}`,
+          background: C.bg, borderTop: `1px solid ${C.border}`,
           padding: '12px 16px',
         }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
