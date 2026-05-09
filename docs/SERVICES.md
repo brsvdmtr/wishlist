@@ -93,13 +93,29 @@ helpers. After P5s-5 also hosts `requireGiftNotes` (the gift-notes
 feature gate that calls `trackEvent`, deferred from P5s-1).
 
 **Exports include:** `PLANS`, `PRO_PRICE_XTR`, `PRO_YEARLY_PRICE_XTR`,
-`PRO_SUBSCRIPTION_PERIOD`, `PRO_YEARLY_EXTEND_SECONDS`, `PRO_PLAN_CODE`,
-`GIFT_NOTES_PRICE_XTR`, `GIFT_NOTES_SKU`, `GROUP_GIFT_PRICE_XTR`,
+`PRO_LIFETIME_PRICE_XTR`, `PRO_LIFETIME_PERIOD_END`, `LIFETIME_BILLING_PERIOD`,
+`isLifetimeSubscription`, `PRO_SUBSCRIPTION_PERIOD`, `PRO_YEARLY_EXTEND_SECONDS`,
+`PRO_PLAN_CODE`, `GIFT_NOTES_PRICE_XTR`, `GIFT_NOTES_SKU`, `GROUP_GIFT_PRICE_XTR`,
 `GROUP_GIFT_SKU`, `SECRET_RESERVATION_PRICE_XTR`, `SECRET_RESERVATION_SKU`,
 `ONE_TIME_SKUS`, `ADDON_CAPS`, `isReservationBeta`, `hasReservationPro`,
 `getSmartResLeadHours`, `hasSmartReservations`, `getUserEntitlement`,
 `getEffectiveEntitlements`, `isWishlistWritable`, `requireGiftNotes`,
 plus the canonical return-shape types.
+
+**Lifetime support (added 2026-05-08):** Lifetime is a permanent Pro tier
+(2 490 Stars, one-time). It's stored in `Subscription` with
+`billingPeriod='lifetime'` and `currentPeriodEnd=PRO_LIFETIME_PERIOD_END`
+(2099-12-31 sentinel). The resolver picks it like any other paid sub
+(`proSource='subscription'`); UI/services discriminate via
+`subscription.billingPeriod === 'lifetime'`. The pro-renewal reminder
+scheduler (`apps/api/src/schedulers/pro-renewal.ts`) and the
+subscription-expiry sweep (`apps/api/src/schedulers/billing.ts`) both
+exclude `billingPeriod='lifetime'` defensively. The bot's
+`successful_payment` handler refuses to downgrade lifetime when a stale
+monthly/yearly Telegram-side charge arrives — the `Subscription` row is
+preserved and a `payment_success_post_lifetime` PaymentEvent is recorded
+for audit. Cancel and reactivate endpoints return
+`409 lifetime_cannot_cancel` for lifetime users.
 
 ### `services/telegram-auth.ts` (P5s-2, ~250 LOC)
 

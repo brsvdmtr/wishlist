@@ -26,6 +26,7 @@
 // Invoice payload formats — preserved byte-identical, parsed by the bot:
 //   - pro_monthly:<tgId>:<sessionId>
 //   - pro_yearly:<tgId>:<sessionId>
+//   - pro_lifetime:<tgId>:<sessionId>
 //   - addon:<skuCode>:<tgId>:<targetId|_>:<sessionId>
 //   - gift-notes uses the addon scheme: addon:gift_notes_unlock:<tgId>:_:<sessionId>
 //
@@ -55,7 +56,7 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { zodError } from '../lib/http';
 import { getRequestLocale } from '../lib/locale';
 import { createTgInvoiceLink } from '../telegram/invoiceLink';
-import { t } from '@wishlist/shared';
+import { t, LIFETIME_BILLING_PERIOD } from '@wishlist/shared';
 import logger from '../logger';
 
 // Shape of the Telegram initData user object — duplicated from index.ts to
@@ -156,6 +157,7 @@ export type BillingRouterDeps = {
   hasReservationPro: (user: { telegramId?: string | null; godMode: boolean }, isPro: boolean, addOns?: { addonType: string }[]) => boolean;
   PRO_PRICE_XTR: number;
   PRO_YEARLY_PRICE_XTR: number;
+  PRO_LIFETIME_PRICE_XTR: number;
   PRO_SUBSCRIPTION_PERIOD: number;
   PRO_PLAN_CODE: string;
   GIFT_NOTES_PRICE_XTR: number;
@@ -174,6 +176,7 @@ export function registerBillingRouter(deps: BillingRouterDeps): Router {
     hasReservationPro,
     PRO_PRICE_XTR,
     PRO_YEARLY_PRICE_XTR,
+    PRO_LIFETIME_PRICE_XTR,
     PRO_SUBSCRIPTION_PERIOD,
     PRO_PLAN_CODE,
     GIFT_NOTES_PRICE_XTR,
@@ -185,24 +188,38 @@ export function registerBillingRouter(deps: BillingRouterDeps): Router {
   const billingRouter = Router();
 
   // POST /tg/billing/pro/checkout — create Stars invoice link
-  // Body: { plan?: 'monthly' | 'yearly' } — defaults to monthly for back-compat
-  // Monthly = Stars subscription (auto-renews every 30 days).
-  // Yearly  = one-time Stars purchase; bot extends currentPeriodEnd by 365 days.
-  //           Yearly stacks on top of an existing active subscription (start = max(now, currentEnd)).
+  // Body: { plan?: 'monthly' | 'yearly' | 'lifetime' } — defaults to monthly for back-compat
+  // Monthly  = Stars subscription (auto-renews every 30 days).
+  // Yearly   = one-time Stars purchase; bot extends currentPeriodEnd by 365 days.
+  //            Yearly stacks on top of an existing active subscription (start = max(now, currentEnd)).
+  // Lifetime = one-time Stars purchase; bot writes Subscription with
+  //            billingPeriod='lifetime', currentPeriodEnd=PRO_LIFETIME_PERIOD_END (2099-12-31),
+  //            cancelAtPeriodEnd=false. Lifetime overrides any prior monthly/yearly row.
+  //            Already-lifetime users get { alreadySubscribed: true, lifetime: true } and no invoice.
   billingRouter.post(
     '/billing/pro/checkout',
     asyncHandler(async (req, res) => {
       const parsed = z.object({
-        plan: z.enum(['monthly', 'yearly']).optional(),
+        plan: z.enum(['monthly', 'yearly', 'lifetime']).optional(),
       }).safeParse(req.body ?? {});
       const plan = parsed.success && parsed.data.plan ? parsed.data.plan : 'monthly';
       const isYearly = plan === 'yearly';
+      const isLifetime = plan === 'lifetime';
 
       const user = await getOrCreateTgUser(req.tgUser!);
       const ent = await getUserEntitlement(user.id);
+      const isLifetimeActive = ent.subscription?.billingPeriod === LIFETIME_BILLING_PERIOD;
 
-      // Block duplicate monthly signup; allow yearly on top (stacking is expected UX).
-      if (!isYearly && ent.isPro && ent.subscription?.status === 'ACTIVE' && !ent.subscription.cancelAtPeriodEnd && ent.subscription.billingPeriod !== 'yearly') {
+      // Lifetime trumps everything — once permanent Pro is granted, every
+      // subsequent /pro/checkout (monthly, yearly, or lifetime) is a no-op
+      // that just echoes the current entitlement.
+      if (isLifetimeActive) {
+        trackEvent('checkout_already_lifetime', user.id, { plan });
+        return res.json({ subscription: ent.subscription, alreadySubscribed: true, lifetime: true });
+      }
+
+      // Block duplicate monthly signup; allow yearly and lifetime on top (stacking expected).
+      if (!isYearly && !isLifetime && ent.isPro && ent.subscription?.status === 'ACTIVE' && !ent.subscription.cancelAtPeriodEnd && ent.subscription.billingPeriod !== 'yearly') {
         trackEvent('checkout_already_subscribed', user.id);
         return res.json({ subscription: ent.subscription, alreadySubscribed: true });
       }
@@ -211,25 +228,38 @@ export function registerBillingRouter(deps: BillingRouterDeps): Router {
       if (!botToken) return res.status(500).json({ error: 'Bot not configured' });
 
       const checkoutSessionId = crypto.randomUUID();
-      const payloadType = isYearly ? 'pro_yearly' : 'pro_monthly';
+      const payloadType = isLifetime ? 'pro_lifetime' : isYearly ? 'pro_yearly' : 'pro_monthly';
       const payload = `${payloadType}:${req.tgUser!.id}:${checkoutSessionId}`;
-      const price = isYearly ? PRO_YEARLY_PRICE_XTR : PRO_PRICE_XTR;
+      const price = isLifetime ? PRO_LIFETIME_PRICE_XTR : isYearly ? PRO_YEARLY_PRICE_XTR : PRO_PRICE_XTR;
       const locale = getRequestLocale(req);
 
       trackEvent('checkout_started', user.id, { plan });
 
       const invoiceBody: Record<string, unknown> = {
-        title: isYearly ? t('api_invoice_title_yearly', locale) : 'Wishlist Pro',
-        description: isYearly ? t('api_invoice_desc_yearly', locale) : t('api_invoice_desc', locale),
+        title: isLifetime
+          ? t('api_invoice_title_lifetime', locale)
+          : isYearly
+            ? t('api_invoice_title_yearly', locale)
+            : 'Wishlist Pro',
+        description: isLifetime
+          ? t('api_invoice_desc_lifetime', locale)
+          : isYearly
+            ? t('api_invoice_desc_yearly', locale)
+            : t('api_invoice_desc', locale),
         payload,
         currency: 'XTR',
         prices: [{
-          label: isYearly ? t('api_invoice_label_yearly', locale) : t('api_invoice_label', locale),
+          label: isLifetime
+            ? t('api_invoice_label_lifetime', locale)
+            : isYearly
+              ? t('api_invoice_label_yearly', locale)
+              : t('api_invoice_label', locale),
           amount: price,
         }],
       };
-      // Only monthly gets subscription_period — yearly is one-time (TG Stars caps period at 30d).
-      if (!isYearly) {
+      // Only monthly gets subscription_period — yearly and lifetime are one-time
+      // (TG Stars caps recurring period at 30 days; lifetime is non-recurring by design).
+      if (!isYearly && !isLifetime) {
         invoiceBody.subscription_period = PRO_SUBSCRIPTION_PERIOD;
       }
 
@@ -299,6 +329,9 @@ export function registerBillingRouter(deps: BillingRouterDeps): Router {
   );
 
   // POST /tg/billing/subscription/cancel — cancel auto-renewal (keeps PRO until period end)
+  // Lifetime subscriptions cannot be "cancelled" — Pro is permanent. Returns 409
+  // lifetime_cannot_cancel; the Mini App also hides the cancel CTA, this is the
+  // backend backstop in case a stale client still sends the request.
   billingRouter.post(
     '/billing/subscription/cancel',
     asyncHandler(async (req, res) => {
@@ -316,6 +349,10 @@ export function registerBillingRouter(deps: BillingRouterDeps): Router {
       if (!sub) {
         return res.status(404).json({ error: 'No active subscription' });
       }
+      if (sub.billingPeriod === LIFETIME_BILLING_PERIOD) {
+        trackEvent('subscription_cancel_blocked_lifetime', user.id);
+        return res.status(409).json({ error: 'lifetime_cannot_cancel' });
+      }
 
       const updated = await prisma.subscription.update({
         where: { id: sub.id },
@@ -330,16 +367,31 @@ export function registerBillingRouter(deps: BillingRouterDeps): Router {
           periodEnd: updated.currentPeriodEnd.toISOString(),
           cancelAtPeriodEnd: updated.cancelAtPeriodEnd,
           cancelledAt: updated.cancelledAt?.toISOString() ?? null,
+          billingPeriod: updated.billingPeriod ?? null,
         },
       });
     }),
   );
 
-  // POST /tg/billing/subscription/reactivate — re-enable auto-renewal if period not expired
+  // POST /tg/billing/subscription/reactivate — re-enable auto-renewal if period not expired.
+  // Not applicable to lifetime (already permanent + cancelAtPeriodEnd=false), but if a
+  // stale client triggers it on a lifetime row we surface lifetime_cannot_cancel for clarity.
   billingRouter.post(
     '/billing/subscription/reactivate',
     asyncHandler(async (req, res) => {
       const user = await getOrCreateTgUser(req.tgUser!);
+
+      // Lifetime guard fires BEFORE the analytics event so a stale client
+      // hitting reactivate on a lifetime row doesn't pollute the
+      // 'subscription_reactivated' funnel — it has its own dedicated marker.
+      const lifetimeSub = await prisma.subscription.findFirst({
+        where: { userId: user.id, planCode: PRO_PLAN_CODE, billingPeriod: LIFETIME_BILLING_PERIOD },
+      });
+      if (lifetimeSub) {
+        trackEvent('subscription_reactivate_blocked_lifetime', user.id);
+        return res.status(409).json({ error: 'lifetime_cannot_cancel' });
+      }
+
       trackEvent('subscription_reactivated', user.id);
 
       const sub = await prisma.subscription.findFirst({
@@ -367,6 +419,7 @@ export function registerBillingRouter(deps: BillingRouterDeps): Router {
           periodEnd: updated.currentPeriodEnd.toISOString(),
           cancelAtPeriodEnd: updated.cancelAtPeriodEnd,
           cancelledAt: null,
+          billingPeriod: updated.billingPeriod ?? null,
         },
       });
     }),

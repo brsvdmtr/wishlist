@@ -28,6 +28,11 @@
 // shapes — all preserved byte-identical.
 
 import { prisma } from '@wishlist/db';
+import {
+  LIFETIME_BILLING_PERIOD,
+  PRO_LIFETIME_PERIOD_END_ISO,
+  isLifetimeSubscription,
+} from '@wishlist/shared';
 
 // ─── Plan & Entitlement System ──────────────────────────────────────────────
 export const PLANS = {
@@ -54,12 +59,29 @@ export type PlanInfo = (typeof PLANS)[PlanCode];
 
 export const PRO_PRICE_XTR = parseInt(process.env.PRO_PRICE_XTR ?? '100', 10);
 export const PRO_YEARLY_PRICE_XTR = parseInt(process.env.PRO_YEARLY_PRICE_XTR ?? '800', 10);
+export const PRO_LIFETIME_PRICE_XTR = parseInt(process.env.PRO_LIFETIME_PRICE_XTR ?? '2490', 10);
 export const PRO_SUBSCRIPTION_PERIOD = parseInt(process.env.PRO_SUBSCRIPTION_PERIOD ?? '2592000', 10);
 // Yearly one-time purchase extends entitlement by this many seconds.
 // Telegram Stars doesn't support subscription_period > 30 days, so yearly is a
 // non-recurring invoice; the bot extends currentPeriodEnd manually on success.
 export const PRO_YEARLY_EXTEND_SECONDS = parseInt(process.env.PRO_YEARLY_EXTEND_SECONDS ?? '31536000', 10);
+// Lifetime one-time purchase: a permanent entitlement. We still write a
+// Subscription row (currentPeriodEnd is required), so we anchor it to a
+// far-future sentinel. The semantic discriminator is `billingPeriod='lifetime'`
+// — never rely on the date alone. Resolvers, schedulers, and UI must check
+// `billingPeriod` first, the date is just a defensive padding so the
+// expiry-sweep cron can't race a clock skew into rolling lifetime to EXPIRED.
+//
+// LIFETIME_BILLING_PERIOD, PRO_LIFETIME_PERIOD_END_ISO, and isLifetimeSubscription
+// live in @wishlist/shared so apps/bot can import the same source of truth
+// (avoids the previous duplicated string literal in apps/bot/src/index.ts).
+// PRO_LIFETIME_PERIOD_END is the API-side Date instance built from the shared ISO.
+export const PRO_LIFETIME_PERIOD_END = new Date(PRO_LIFETIME_PERIOD_END_ISO);
 export const PRO_PLAN_CODE = process.env.PRO_PLAN_CODE ?? 'PRO';
+
+// Re-export for back-compat: API consumers that already imported these from
+// './services/entitlement' continue to work without churn.
+export { LIFETIME_BILLING_PERIOD, PRO_LIFETIME_PERIOD_END_ISO, isLifetimeSubscription };
 
 // ─── Reservation Pro — feature gate ─────────────────────────────────────────
 

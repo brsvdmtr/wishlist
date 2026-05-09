@@ -92,6 +92,7 @@ export type MeRouterDeps = {
   ACTIVE_STATUSES: readonly ('AVAILABLE' | 'RESERVED' | 'PURCHASED')[];
   PRO_PRICE_XTR: number;
   PRO_YEARLY_PRICE_XTR: number;
+  PRO_LIFETIME_PRICE_XTR: number;
   ONE_TIME_SKUS: Readonly<Record<string, {
     code: string;
     price: number;
@@ -111,6 +112,7 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
     ACTIVE_STATUSES,
     PRO_PRICE_XTR,
     PRO_YEARLY_PRICE_XTR,
+    PRO_LIFETIME_PRICE_XTR,
     ONE_TIME_SKUS,
   } = deps;
 
@@ -321,6 +323,7 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
         usage: { wishlists: wishlistCount },
         proPriceStars: PRO_PRICE_XTR,
         proYearlyPriceStars: PRO_YEARLY_PRICE_XTR,
+        proLifetimePriceStars: PRO_LIFETIME_PRICE_XTR,
         godMode: user.godMode,
         canGodMode,
         // Effective entitlements layer

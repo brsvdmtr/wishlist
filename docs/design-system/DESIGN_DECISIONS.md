@@ -32,6 +32,50 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-05-08 — Pro Lifetime: visible in every paywall sheet (not just `pro_main`)
+
+**Type:** scope-pivot
+
+**Decision.** The Lifetime tile is rendered **unconditionally** in every paywall sheet — feature-gate (limit/comments/hints/etc.) AND voluntary `pro_main` flows alike. Supersedes the original same-day decision below ("only `pro_main` shows lifetime").
+
+**Why the pivot.** Discovery dominates: feature-gate paywalls are the highest-intent moment (user is actively trying to do something Pro-gated), so hiding the most-margin SKU there leaves it invisible to most users. Anchoring also matters — a 2 490 ⭐ tile makes the 800 ⭐ yearly look more reasonable, lifting yearly conversion even when lifetime itself isn't bought. Default selection stays `yearly` and the CTA copy/style adapts only when lifetime is explicitly picked, so accidental upsells aren't a risk.
+
+**Impact.**
+- `apps/web/app/miniapp/MiniApp.tsx` — `showLifetime` gate removed; lifetime tile always renders.
+- The `pro_main` UpsellContext stays (used by Settings → connect_pro and bot `startapp=upgrade_pro`) so analytics can distinguish "user proactively browsed Pro" from "user hit a feature gate"; just no longer the sole tile-visibility key.
+- Mockup `mockups/approved/pro-lifetime-v1.html` Variant A layout unchanged (one tile placement, three states); only the visibility scope widened.
+
+**Approved by.** Dmitry (2026-05-08, post-iter1 product review).
+
+---
+
+## 2026-05-08 — Pro Lifetime tier (Variant A · 2+1 layout)
+
+**Type:** approval + feature-pattern
+
+**Decision.** New permanent Pro tier shipped: **Pro навсегда / Pro forever** at **2 490 ⭐** (one-time). Paywall plan-selector adopts **Variant A · 2+1**: Monthly + Yearly stay in the existing 2-col grid; Lifetime sits below as a full-width premium tile with a gold-accent badge ("Навсегда" / "Forever"), an ∞ glyph, and a gold-gradient CTA when selected. The Settings PRO active card adopts a parallel lifetime variant (gold "Навсегда" pill, "Без срока окончания" body, no cancel/reactivate buttons, static "no auto-renewal" note). Lifetime tile is **only** rendered for the new `'pro_main'` UpsellContext (Settings → connect_pro and bot deep-link `startapp=upgrade_pro`); context-driven feature-gate sheets keep the legacy 2-tile selector.
+
+**Context / why.** Three pricing rungs (100 ⭐ recurring · 800 ⭐ annual · 2 490 ⭐ permanent) widens the LTV ceiling and gives committed users a way to opt out of perpetual renewals. Lifetime is a non-recurring one-off invoice (Telegram Stars caps `subscription_period` at 30 days), so on payment the bot writes `Subscription.billingPeriod='lifetime'`, `currentPeriodEnd=2099-12-31` (sentinel), `cancelAtPeriodEnd=false`. Resolvers/UIs discriminate via `billingPeriod === 'lifetime'` — never the date.
+
+**Mockup.** [`mockups/approved/pro-lifetime-v1.html`](./mockups/approved/pro-lifetime-v1.html) — three plan-selector variants (A 2+1 / B 3-col / C stacked) plus 3 companion phones (Settings active, success sheet, conflict banner). Variant A approved; B and C kept as discussion artefacts.
+
+**Visual tokens used.** No new tokens. Lifetime "Forever" gold accent is the existing `--wb-warning` (#FBBF24 → #F59E0B gradient). Yearly's green `--wb-success` "−33%" save badge is unchanged. ∞ glyph is plain Unicode.
+
+**Promotion.** Mockup moved from `mockups/proposed/` → `mockups/approved/`.
+
+**Supersedes.** Nothing. The previous 2-tile paywall selector remains canonical for context-driven upsells (`comments`, `wishlist_limit`, etc.); only the `'pro_main'` context surfaces the third tile.
+
+**Impact.**
+- New i18n keys (17 strings) added for all 6 locales (ru, en, zh-CN, hi, es, ar): `api_invoice_*_lifetime`, `bot_pro_activated_lifetime`, `paywall_plan_lifetime_*`, `paywall_cta_lifetime`, `paywall_trust_lifetime`, `pro_lifetime_active_*`, `pro_lifetime_no_renewal_note`, `pro_lifetime_success_*`, `pro_lifetime_existing_monthly_warning`, `toast_pro_lifetime_activated`.
+- Lifetime tile is **feature-scoped** in `MiniApp.tsx` (raw inline-styled `<div>` matching the gold tile pattern in the mockup). It is **not** registered as a primitive — used in two places (paywall + Settings) with different shapes; not yet a reusable abstraction.
+- No changes to `packages/ui` or `packages/ui-tokens`.
+- No changes to `COMPONENT_REGISTRY.md`.
+- Paywall UI audit (`pnpm ui:audit`): no new raw tokens introduced — the gold inline values reference existing `--wb-warning` semantics.
+
+**Approved by.** Dmitry (2026-05-08).
+
+---
+
 ## 2026-04-26 — Wishlist emoji picker (Variant A) + SettingsActionRow thumb unification
 
 **Type:** approval + primitive-change

@@ -188,6 +188,7 @@ const CARD_REDESIGN_ENABLED = true;
 // If ops bump the backend env vars, update these too.
 const PRO_PRICE_MONTHLY_STARS = 100;
 const PRO_PRICE_YEARLY_STARS = 800;
+const PRO_PRICE_LIFETIME_STARS = 2490;
 // Profile redesign canary — test before full rollout
 const PROFILE_REDESIGN_IDS = new Set(['8747175307']);
 // Item detail redesign — rolled out to all users
@@ -305,12 +306,18 @@ type PlanInfo = {
   features: string[];
 };
 
+type BillingPeriod = 'monthly' | 'yearly' | 'lifetime';
 type SubscriptionInfo = {
   id: string;
   status: 'ACTIVE' | 'CANCELLED' | 'EXPIRED';
   periodEnd: string;
   cancelledAt: string | null;
   cancelAtPeriodEnd: boolean;
+  // billingPeriod surfaces the canonical 'monthly' | 'yearly' | 'lifetime'
+  // discriminator from the API. Settings UI and paywall use this — never
+  // compare against periodEnd to detect lifetime. Discriminated union so a
+  // typo (e.g. 'liftime') is caught at type-check.
+  billingPeriod?: BillingPeriod | null;
 } | null;
 
 // Add-ons returned from /tg/me/plan
@@ -349,7 +356,8 @@ type UpsellContext =
   | 'bot_import'
   | 'showcase'
   | 'appearance' // v2.1: theme/accent PRO gate
-  | 'birthday_reminders_advanced'; // birthday-reminders Pro features (audience EXTENDED, primary wishlist, custom message, advanced windows)
+  | 'birthday_reminders_advanced' // birthday-reminders Pro features (audience EXTENDED, primary wishlist, custom message, advanced windows)
+  | 'pro_main'; // voluntary upgrade flow (Settings → connect_pro, bot deep-link upgrade_pro). Distinct from feature-gate contexts so analytics can separate "user proactively browsed PRO" from "user hit a limit". Lifetime tile shows in every context (since 2026-05-08).
 
 // UpsellSheetState carries optional wishlistId for wishlist-scoped add-on offers
 type UpsellSheetState = { context: UpsellContext; wishlistId?: string } | null;
@@ -2339,6 +2347,18 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
       t('br_paywall_feature_owner_extra', locale),
     ],
   },
+  // Voluntary upgrade flow — no specific feature gate triggered the open.
+  // Used by Settings → connect_pro and the bot deep-link
+  // `startapp=upgrade_pro`. Kept as a distinct context (rather than reusing
+  // 'wishlist_limit') so analytics can separate proactive interest from
+  // limit-hit conversions. Lifetime tile renders in every paywall sheet
+  // since 2026-05-08, not just here.
+  pro_main: {
+    emoji: '👑',
+    title: t('paywall_hero_title', locale),
+    subtitle: t('paywall_hero_sub', locale),
+    showTable: true,
+  },
 });
 
 // Centralized PRO benefits config — single source of truth for all paywall/plan screens.
@@ -3525,7 +3545,7 @@ function getAddonOffers(locale: Locale): Record<string, { title: string; tag: st
 function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon, addonCheckoutLoading, addonLoadingSku, availableSkus, cappedAddonCodes, locale, referralConfig, onOpenReferral, onReferralImpression }: {
   state: UpsellSheetState;
   onClose: () => void;
-  onUpgrade: (plan: 'monthly' | 'yearly') => void;
+  onUpgrade: (plan: 'monthly' | 'yearly' | 'lifetime') => void;
   checkoutLoading: boolean;
   onBuyAddon: (skuCode: string, targetId?: string) => void;
   addonCheckoutLoading: boolean;
@@ -3545,9 +3565,22 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
   onReferralImpression: (context: string) => void;
 }) {
   const content = state ? getUpsellContent(locale)[state.context] : null;
-  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('yearly');
+  // Lifetime tile renders in EVERY paywall sheet — context-driven feature-gates
+  // (wishlist_limit, comments, hints, …) AND the voluntary 'pro_main' flow.
+  // Rationale (2026-05-08 product decision, supersedes the original 'pro_main'-only
+  // proposal in mockups/approved/pro-lifetime-v1.html):
+  //   • Discovery — feature-gate paywalls are the highest-intent purchase moment;
+  //     hiding lifetime there leaves the most-margin SKU invisible to most users.
+  //   • Anchoring — a 2 490 ⭐ tile makes the 800 ⭐ yearly look reasonable, lifting
+  //     yearly conversion even when lifetime itself isn't bought.
+  //   • One lifetime ≈ 4-6 monthly LTVs at typical retention; the math favors
+  //     surfacing it everywhere.
+  // Default selection stays `yearly` so no accidental upsell; CTA copy adapts to
+  // the chosen plan (gold gradient + "Купить навсегда" only when lifetime is picked).
+  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly' | 'lifetime'>('yearly');
   const monthlyPrice = PRO_PRICE_MONTHLY_STARS;
   const yearlyPrice = PRO_PRICE_YEARLY_STARS;
+  const lifetimePrice = PRO_PRICE_LIFETIME_STARS;
   const yearlyPerMonth = Math.round(yearlyPrice / 12);
   // Fire impression when the paywall becomes visible AND the referral alt
   // CTA would render. Debounced per-open via ref so we don't double-fire on
@@ -3611,12 +3644,19 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
     }}>{children}</div>
   );
 
-  const ctaPrice = selectedPlan === 'yearly' ? yearlyPrice : monthlyPrice;
+  const ctaPrice = selectedPlan === 'lifetime'
+    ? lifetimePrice
+    : selectedPlan === 'yearly'
+      ? yearlyPrice
+      : monthlyPrice;
   const ctaLabel = checkoutLoading
     ? t('upsell_checkout_loading', locale)
-    : selectedPlan === 'yearly'
-      ? t('paywall_cta_yearly', locale, { price: String(ctaPrice) })
-      : t('paywall_cta_monthly', locale, { price: String(ctaPrice) });
+    : selectedPlan === 'lifetime'
+      ? t('paywall_cta_lifetime', locale, { price: String(ctaPrice) })
+      : selectedPlan === 'yearly'
+        ? t('paywall_cta_yearly', locale, { price: String(ctaPrice) })
+        : t('paywall_cta_monthly', locale, { price: String(ctaPrice) });
+  const isLifetimeCta = selectedPlan === 'lifetime';
 
   return (
     <BottomSheet isOpen={state !== null} onClose={onClose}>
@@ -3698,9 +3738,12 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
             </>
           )}
 
-          {/* ── Plan selector (monthly vs yearly) ──
-              Selected → Card.current (accent-tinted) with role=button;
-              unselected → Card.interactive. Keyboard-a11y via role+aria. */}
+          {/* ── Plan selector — Variant A (2+1 layout when lifetime is shown) ──
+              Monthly + Yearly stay in the existing 2-col grid (familiar pattern);
+              Lifetime sits below as a full-width premium tile so its 4-digit
+              price and ∞ icon get visual weight. Lifetime is ONLY rendered for
+              the 'pro_main' (voluntary upgrade) context — feature-gate upsells
+              keep the original 2-tile selector. */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 18 }}>
             {(['monthly', 'yearly'] as const).map((plan) => {
               const isYear = plan === 'yearly';
@@ -3741,6 +3784,80 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
               );
             })}
           </div>
+
+          {/* ── Lifetime premium tile (Variant A · 2+1) ────────────────────
+              Renders unconditionally in every paywall sheet (feature-gate
+              upsells AND the voluntary 'pro_main' flow). See rationale on
+              the showLifetime removal upstream. Gold accent (--wb-warning)
+              distinguishes from green "save" badge on yearly. Inline styles
+              use existing CSS variables — no new tokens. */}
+          {(() => {
+            const isSelected = selectedPlan === 'lifetime';
+            return (
+              <div
+                key="lifetime"
+                onClick={() => setSelectedPlan('lifetime')}
+                role="button"
+                aria-pressed={isSelected}
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPlan('lifetime'); } }}
+                style={{
+                  marginTop: 10,
+                  padding: '18px 18px 16px',
+                  borderRadius: 20,
+                  position: 'relative',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 14,
+                  textAlign: 'start',
+                  background: isSelected
+                    ? 'radial-gradient(ellipse at top right, rgba(251,191,36,0.18), transparent 55%), linear-gradient(135deg, rgba(139,123,255,0.24), rgba(139,123,255,0.06))'
+                    : 'radial-gradient(ellipse at top right, rgba(251,191,36,0.10), transparent 60%), linear-gradient(135deg, rgba(139,123,255,0.18), rgba(139,123,255,0.04))',
+                  border: isSelected
+                    ? '1.5px solid var(--wb-warning, #FBBF24)'
+                    : '1.5px solid rgba(251,191,36,0.35)',
+                  boxShadow: isSelected
+                    ? '0 0 0 2px rgba(251,191,36,0.25), 0 12px 32px rgba(139,123,255,0.22)'
+                    : '0 8px 24px rgba(139,123,255,0.18), inset 0 1px 0 rgba(255,255,255,0.06)',
+                  transition: 'all .18s cubic-bezier(.4,0,.2,1)',
+                }}
+              >
+                {/* Forever badge — gold pill */}
+                <div style={{
+                  position: 'absolute', top: -9, right: 14,
+                  background: 'var(--wb-warning, #FBBF24)', color: '#1a1300',
+                  padding: '3px 8px', borderRadius: 100,
+                  fontSize: 10, fontWeight: 800, letterSpacing: '0.3px',
+                  boxShadow: '0 4px 14px rgba(251,191,36,0.40), inset 0 1px 0 rgba(255,255,255,0.4)',
+                }}>{t('paywall_plan_lifetime_badge', locale)}</div>
+                {/* ∞ icon — gold gradient circle */}
+                <div style={{
+                  width: 46, height: 46, borderRadius: 14, flexShrink: 0,
+                  background: 'linear-gradient(135deg, var(--wb-warning, #FBBF24), #F59E0B)',
+                  color: '#1a1300', fontWeight: 800, fontSize: 24,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 6px 16px rgba(251,191,36,0.35), inset 0 1px 0 rgba(255,255,255,0.45)',
+                }}>∞</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text, letterSpacing: '-0.012em' }}>
+                    {t('paywall_plan_lifetime_name', locale)}
+                  </div>
+                  <div style={{ fontSize: 12.5, color: C.textSec, marginTop: 3, letterSpacing: '-0.003em' }}>
+                    {t('paywall_plan_lifetime_subtitle', locale)}
+                  </div>
+                </div>
+                <div style={{ flexShrink: 0, textAlign: 'end' }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', color: C.text, fontVariantNumeric: 'tabular-nums' as const, whiteSpace: 'nowrap' }}>
+                    {lifetimePrice} ⭐
+                  </div>
+                  <div style={{ fontSize: 10.5, color: C.textMuted, fontWeight: 600, marginTop: 3, letterSpacing: '0.3px', textTransform: 'uppercase' }}>
+                    {t('paywall_plan_lifetime_per', locale)}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* ── Referral alt CTA — only when program is live ── */}
           {referralConfig && referralConfig.enabled && referralConfig.inRollout && referralConfig.ui.entryPointPaywall && (
@@ -3836,7 +3953,10 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
           {/* ── Footer: primary CTA + "Not now" ghost ──
               NOT position:sticky — sheet manages its own scroll and a
               sticky footer with a transparent gradient was showing
-              underlying content bleed-through at the end of scroll. */}
+              underlying content bleed-through at the end of scroll.
+              When lifetime is selected, swap the violet primary-gradient for a
+              gold one (--wb-warning → #F59E0B) via inline style override —
+              keeps Button's loading/disabled/haptic plumbing intact. */}
           <div style={{
             marginTop: 22,
             display: 'flex', flexDirection: 'column', gap: 8,
@@ -3846,9 +3966,24 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
               onClick={() => onUpgrade(selectedPlan)}
               disabled={checkoutLoading || addonCheckoutLoading}
               loading={checkoutLoading}
+              style={isLifetimeCta ? {
+                background: 'linear-gradient(135deg, var(--wb-warning, #FBBF24), #F59E0B)',
+                color: '#1a1300',
+                boxShadow: '0 12px 32px rgba(251,191,36,0.35), inset 0 1px 0 rgba(255,255,255,0.45)',
+              } : undefined}
             >
               {ctaLabel}
             </Button>
+            <div style={{
+              textAlign: 'center', fontSize: 11, color: C.textMuted,
+              marginTop: -2, letterSpacing: 0.1,
+            }}>
+              {isLifetimeCta
+                ? t('paywall_trust_lifetime', locale)
+                : selectedPlan === 'yearly'
+                  ? t('paywall_trust_yearly', locale)
+                  : t('paywall_trust', locale)}
+            </div>
             <Button variant="ghost" size="md" onClick={onClose}>
               {t('upsell_not_now', locale)}
             </Button>
@@ -4481,6 +4616,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
   const [showCancelSub, setShowCancelSub] = useState(false);
   const [cancelSubLoading, setCancelSubLoading] = useState(false);
+  // Pro Lifetime celebration sheet — opens after a successful lifetime purchase
+  // (or after a re-attempt of /pro/checkout for a user who is already lifetime).
+  const [lifetimeSuccessOpen, setLifetimeSuccessOpen] = useState(false);
 
   // Onboarding state
   const [onboardingState, setOnboardingState] = useState<{
@@ -7403,7 +7541,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   }, [viewingItem, descriptionText, tgFetch, pushToast]);
 
   // --- Upgrade to PRO
-  const handleUpgradeToPro = useCallback(async (plan: 'monthly' | 'yearly' = 'monthly') => {
+  const handleUpgradeToPro = useCallback(async (plan: 'monthly' | 'yearly' | 'lifetime' = 'monthly') => {
     trackEvent('pro_cta_clicked', { plan });
     setCheckoutLoading(true);
     try {
@@ -7420,13 +7558,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       }
       if (!res.ok) {
         pushToast(t('toast_checkout_error', locale), 'error');
-        trackEvent('checkout_failed');
+        trackEvent('checkout_failed', { plan });
         setCheckoutLoading(false);
         return;
       }
-      const resData = await res.json() as { invoiceUrl?: string; alreadySubscribed?: boolean };
+      const resData = await res.json() as { invoiceUrl?: string; alreadySubscribed?: boolean; lifetime?: boolean };
       if (resData.alreadySubscribed || !resData.invoiceUrl) {
-        pushToast(t('toast_already_pro', locale), 'success');
+        pushToast(
+          resData.lifetime ? t('toast_pro_lifetime_activated', locale) : t('toast_already_pro', locale),
+          'success',
+        );
         setCheckoutLoading(false);
         // Sync latest state
         try {
@@ -7477,9 +7618,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             setSubscription(syncData.subscription);
             setPlanLimits({ wishlists: syncData.plan.wishlists, items: syncData.plan.items });
             tg.HapticFeedback?.notificationOccurred?.('success');
-            pushToast(t('toast_pro_activated', locale), 'success');
-            trackEvent('checkout_succeeded');
-            setUpsellSheet(null);
+            const isLifetimeNow = syncData.subscription?.billingPeriod === 'lifetime' || plan === 'lifetime';
+            if (isLifetimeNow) {
+              pushToast(t('toast_pro_lifetime_activated', locale), 'success');
+              trackEvent('pro_lifetime_purchased');
+              trackEvent('checkout_succeeded', { plan: 'lifetime' });
+              setUpsellSheet(null);
+              setLifetimeSuccessOpen(true);
+            } else {
+              pushToast(t('toast_pro_activated', locale), 'success');
+              trackEvent('checkout_succeeded', { plan });
+              setUpsellSheet(null);
+            }
             loadWishlists().catch(() => {});
             // Reload comments if user was viewing an item
             if (viewingItem) loadComments(viewingItem.id);
@@ -7527,13 +7677,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         idempotency: { action: 'billing.subscription.cancel' },
       });
       if (res.ok) {
-        const data = await res.json() as { subscription: { id: string; status: string; periodEnd: string; cancelAtPeriodEnd: boolean; cancelledAt: string | null } };
+        const data = await res.json() as { subscription: { id: string; status: string; periodEnd: string; cancelAtPeriodEnd: boolean; cancelledAt: string | null; billingPeriod?: string | null } };
         setSubscription({
           id: data.subscription.id,
           status: data.subscription.status as 'ACTIVE' | 'CANCELLED',
           periodEnd: data.subscription.periodEnd,
           cancelAtPeriodEnd: true,
           cancelledAt: data.subscription.cancelledAt,
+          billingPeriod: (data.subscription.billingPeriod ?? null) as BillingPeriod | null,
         });
         tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred?.('warning');
         const cancelledPeriodEnd = new Date(data.subscription.periodEnd).toLocaleDateString(
@@ -7541,6 +7692,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         );
         pushToast(t('cancel_success', locale, { date: cancelledPeriodEnd }), 'success');
         trackEvent('subscription_cancelled');
+      } else if (res.status === 409) {
+        // Backend defends lifetime even if a stale client tries to cancel.
+        const errBody = await res.json().catch(() => ({}));
+        if (errBody?.error === 'lifetime_cannot_cancel') {
+          pushToast(t('pro_lifetime_active_title', locale), 'success');
+        } else {
+          pushToast(t('toast_cancel_error', locale), 'error');
+        }
       } else {
         pushToast(t('toast_cancel_error', locale), 'error');
       }
@@ -7560,17 +7719,27 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         idempotency: { action: 'billing.subscription.reactivate' },
       });
       if (res.ok) {
-        const data = await res.json() as { subscription: { id: string; status: string; periodEnd: string; cancelAtPeriodEnd: boolean; cancelledAt: string | null } };
+        const data = await res.json() as { subscription: { id: string; status: string; periodEnd: string; cancelAtPeriodEnd: boolean; cancelledAt: string | null; billingPeriod?: string | null } };
         setSubscription({
           id: data.subscription.id,
           status: data.subscription.status as 'ACTIVE' | 'CANCELLED',
           periodEnd: data.subscription.periodEnd,
           cancelAtPeriodEnd: false,
           cancelledAt: null,
+          billingPeriod: (data.subscription.billingPeriod ?? null) as BillingPeriod | null,
         });
         tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred?.('success');
         pushToast(t('toast_renewal_resumed', locale), 'success');
         trackEvent('subscription_reactivated');
+      } else if (res.status === 409) {
+        // Lifetime user tried to reactivate (no-op) — friendly toast, no fallback to checkout.
+        const errBody = await res.json().catch(() => ({}));
+        if (errBody?.error === 'lifetime_cannot_cancel') {
+          pushToast(t('pro_lifetime_active_title', locale), 'success');
+        } else {
+          pushToast(t('toast_renewing_new', locale), 'success');
+          void handleUpgradeToPro();
+        }
       } else {
         // Reactivate failed — maybe cancelled externally, offer new checkout
         pushToast(t('toast_renewing_new', locale), 'success');
@@ -8992,8 +9161,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               }
             } else if (startParam === 'upgrade_pro') {
               bootSetScreen('my-wishlists');
-              // Show PRO upsell sheet after a short delay so the home screen renders first
-              setTimeout(() => showUpsell('bot_import'), 400);
+              // Show PRO upsell sheet after a short delay so the home screen renders first.
+              // 'pro_main' is the voluntary upgrade context — surfaces the Lifetime tile in
+              // addition to monthly/yearly. Other entry points keep their feature-specific context.
+              setTimeout(() => showUpsell('pro_main'), 400);
             } else {
               bootSetScreen('my-wishlists');
             }
@@ -18587,7 +18758,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       </div>
                       <Button
                         variant="primary-gradient"
-                        onClick={() => showUpsell('wishlist_limit')}
+                        onClick={() => showUpsell('pro_main')}
                       >
                         {t('connect_pro', locale)}
                       </Button>
@@ -18695,18 +18866,39 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div style={{ fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 8 }}>
                     {t('profile_plan_title', locale)}
                   </div>
+                  {(() => {
+                    // Single lifetime gate for the entire Settings PRO card —
+                    // header label + badge, period-end / cancelled banners,
+                    // cancel/reactivate buttons, and the no-renewal note all
+                    // branch on the same `isLifetime` value below.
+                    const isLifetime = subscription?.billingPeriod === 'lifetime';
+                    return (
+                  <>
                   <div style={{
                     background: `linear-gradient(145deg, ${C.card}, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.031))`,
                     borderRadius: 16, padding: 20,
                     border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.145)`,
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                      <span style={{ fontSize: 15, fontWeight: 600, color: C.textSec, fontFamily: font }}>{t('settings_plan', locale)}</span>
-                      <span style={{
+                      <span style={{ fontSize: 15, fontWeight: 600, color: C.textSec, fontFamily: font }}>
+                        {isLifetime ? (
+                          <>
+                            <span style={{ marginRight: 8 }}>∞</span>
+                            {t('pro_lifetime_active_title', locale)}
+                          </>
+                        ) : t('settings_plan', locale)}
+                      </span>
+                      <span style={isLifetime ? {
+                        fontSize: 11, fontWeight: 800, letterSpacing: 0.4, padding: '4px 10px', borderRadius: 100,
+                        background: 'var(--wb-warning, #FBBF24)', color: '#1a1300',
+                        boxShadow: '0 4px 14px rgba(251,191,36,0.40), inset 0 1px 0 rgba(255,255,255,0.4)',
+                        textTransform: 'uppercase' as const,
+                      } : {
                         fontSize: 12, fontWeight: 800, letterSpacing: 0.5, padding: '4px 10px', borderRadius: 6,
                         background: `linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.133), rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.071))`,
-                        border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.188)`, color: C.accent,
-                      }}>PRO</span>
+                        border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.188)`,
+                        color: C.accent,
+                      }}>{isLifetime ? t('paywall_plan_lifetime_badge', locale) : 'PRO'}</span>
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -18745,8 +18937,30 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       ))}
                     </div>
 
-                    {/* Subscription info — ACTIVE_RENEWING */}
-                    {subscription && !subscription.cancelAtPeriodEnd && subscription.status !== 'CANCELLED' && (
+                    {/* Subscription info — LIFETIME (gold "no expiration" + monthly-still-active hint) */}
+                    {isLifetime && (
+                      <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          padding: '10px 14px', borderRadius: 12,
+                          background: 'rgba(251,191,36,0.10)',
+                          border: '1px solid rgba(251,191,36,0.28)',
+                          fontSize: 13, color: C.text, lineHeight: 1.4,
+                        }}>
+                          <span style={{ fontSize: 15 }}>∞</span>
+                          <span><strong>{t('pro_lifetime_active_desc', locale)}</strong></span>
+                        </div>
+                        <div style={{
+                          marginTop: 10, fontSize: 12, color: C.textMuted, lineHeight: 1.5,
+                          padding: '0 4px',
+                        }}>
+                          {t('pro_lifetime_existing_monthly_warning', locale)}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Subscription info — ACTIVE_RENEWING (non-lifetime only) */}
+                    {!isLifetime && subscription && !subscription.cancelAtPeriodEnd && subscription.status !== 'CANCELLED' && (
                       <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontSize: 13, color: C.textSec }}>{t('settings_next_renewal', locale)}</span>
@@ -18757,8 +18971,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       </div>
                     )}
 
-                    {/* Subscription info — ACTIVE_CANCELLED */}
-                    {subscription && (subscription.cancelAtPeriodEnd || subscription.status === 'CANCELLED') && (
+                    {/* Subscription info — ACTIVE_CANCELLED (non-lifetime only) */}
+                    {!isLifetime && subscription && (subscription.cancelAtPeriodEnd || subscription.status === 'CANCELLED') && (
                       <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
                         <div style={{
                           display: 'flex', alignItems: 'center', gap: 8,
@@ -18806,24 +19020,37 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     })()}
                   </div>
 
-                  {/* Plan action buttons */}
-                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {subscription && !subscription.cancelAtPeriodEnd && subscription.status !== 'CANCELLED' && (
-                      <Button variant="secondary" onClick={() => setShowCancelSub(true)}>
-                        {t('settings_cancel_renewal', locale)}
-                      </Button>
-                    )}
-                    {subscription && (subscription.cancelAtPeriodEnd || subscription.status === 'CANCELLED') && (
-                      <Button
-                        variant="primary-gradient"
-                        loading={cancelSubLoading}
-                        disabled={cancelSubLoading}
-                        onClick={() => void handleReactivateSub()}
-                      >
-                        {t('settings_resume_sub', locale)}
-                      </Button>
-                    )}
-                  </div>
+                  {/* Plan action buttons — hidden for lifetime (no auto-renewal to manage). */}
+                  {!isLifetime && (
+                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {subscription && !subscription.cancelAtPeriodEnd && subscription.status !== 'CANCELLED' && (
+                        <Button variant="secondary" onClick={() => setShowCancelSub(true)}>
+                          {t('settings_cancel_renewal', locale)}
+                        </Button>
+                      )}
+                      {subscription && (subscription.cancelAtPeriodEnd || subscription.status === 'CANCELLED') && (
+                        <Button
+                          variant="primary-gradient"
+                          loading={cancelSubLoading}
+                          disabled={cancelSubLoading}
+                          onClick={() => void handleReactivateSub()}
+                        >
+                          {t('settings_resume_sub', locale)}
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  {isLifetime && (
+                    <div style={{
+                      marginTop: 14, fontSize: 11.5, color: C.textMuted, lineHeight: 1.5,
+                      textAlign: 'center', letterSpacing: 0.05,
+                    }}>
+                      {t('pro_lifetime_no_renewal_note', locale)}
+                    </div>
+                  )}
+                  </>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -25705,6 +25932,40 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {linkMgmtDetailItem?.type === 'profile' ? t('link_revoke_profile_confirm', locale) : t('link_revoke_confirm', locale)}
             </Button>
           </div>
+        </div>
+      </BottomSheet>
+
+      {/* ── PRO LIFETIME SUCCESS SHEET ── opens after successful lifetime checkout */}
+      <BottomSheet isOpen={lifetimeSuccessOpen} onClose={() => setLifetimeSuccessOpen(false)}>
+        <div style={{ padding: '0 0 8px', textAlign: 'center' }}>
+          <div style={{
+            fontSize: 80, lineHeight: 1, marginBottom: 10,
+            filter: 'drop-shadow(0 18px 36px rgba(251,191,36,0.45))',
+          }}>🎉</div>
+          <div style={{
+            fontSize: 22, fontWeight: 700, color: C.text,
+            letterSpacing: '-0.025em', margin: '0 0 8px', lineHeight: 1.2,
+            whiteSpace: 'pre-line',
+          }}>
+            {t('pro_lifetime_success_title', locale)}
+          </div>
+          <div style={{
+            fontSize: 14, color: C.textSec, lineHeight: 1.5,
+            letterSpacing: '-0.005em', margin: '0 8px 22px',
+          }}>
+            {t('pro_lifetime_success_desc', locale)}
+          </div>
+          <Button
+            variant="primary-gradient" size="lg"
+            onClick={() => setLifetimeSuccessOpen(false)}
+            style={{
+              background: 'linear-gradient(135deg, var(--wb-warning, #FBBF24), #F59E0B)',
+              color: '#1a1300',
+              boxShadow: '0 12px 32px rgba(251,191,36,0.35), inset 0 1px 0 rgba(255,255,255,0.45)',
+            }}
+          >
+            {t('done', locale)}
+          </Button>
         </div>
       </BottomSheet>
 

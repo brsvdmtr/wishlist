@@ -24,7 +24,7 @@
 
 import type { PrismaClient } from '@wishlist/db';
 import type { Logger } from 'pino';
-import { t, resolveEffectiveLocale } from '@wishlist/shared';
+import { t, resolveEffectiveLocale, LIFETIME_BILLING_PERIOD } from '@wishlist/shared';
 import type { SendLifecycleDM } from '../services/lifecycle';
 
 type TrackEvent = (event: string, userId?: string, props?: Record<string, unknown>) => void;
@@ -55,6 +55,12 @@ export function startProRenewalReminderScheduler(deps: ProRenewalSchedulerDeps):
             planCode: PRO_PLAN_CODE,
             status: 'ACTIVE',
             currentPeriodEnd: { gte: new Date(w.lo), lte: new Date(w.hi) },
+            // Lifetime never receives renewal reminders — its sentinel
+            // currentPeriodEnd (2099-12-31) is far outside the 7d / 1d windows
+            // already, but we exclude billingPeriod='lifetime' explicitly so a
+            // future change to the sentinel (or an admin-set date) cannot
+            // accidentally page lifetime users.
+            NOT: { billingPeriod: LIFETIME_BILLING_PERIOD },
             OR: [
               { billingPeriod: 'yearly' },
               { cancelAtPeriodEnd: true },

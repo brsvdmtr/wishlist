@@ -1,21 +1,23 @@
 # MONETIZATION
 
 > Source of truth for plans, limits, entitlements, billing flow, and paywall content.
-> Last updated: 2026-04-24 · Branch: main
+> Last updated: 2026-05-08 · Branch: main
 
 ---
 
 ## 1. Plans
 
-| | **FREE** | **PRO Monthly** | **PRO Yearly** |
-|---|---|---|---|
-| **Code** | `FREE` | `PRO` | `PRO` |
-| **Price** | — | 100 Telegram Stars / month | 800 Telegram Stars (one-time) |
-| **Renewal** | — | Auto-renew (soft cancel: access until period end) | No auto-renewal; manual renewal required |
-| **Duration** | — | 30 days per period | 365 days (one-time payment) |
-| **Savings** | — | — | ~33% vs 12 monthly payments |
+| | **FREE** | **PRO Monthly** | **PRO Yearly** | **PRO Lifetime** |
+|---|---|---|---|---|
+| **Code** | `FREE` | `PRO` | `PRO` | `PRO` |
+| **Price** | — | 100 Telegram Stars / month | 800 Telegram Stars (one-time) | 2 490 Telegram Stars (one-time) |
+| **Renewal** | — | Auto-renew (soft cancel: access until period end) | No auto-renewal; manual renewal required | None — permanent entitlement |
+| **Duration** | — | 30 days per period | 365 days (one-time payment) | Forever |
+| **Savings** | — | — | ~33% vs 12 monthly payments | One-time replaces all future renewals |
 
 **Yearly plan** is a non-recurring Telegram Stars invoice. When paid, the bot extends `Subscription.currentPeriodEnd` by `PRO_YEARLY_EXTEND_SECONDS` (default: 31 536 000 = 365 days). Yearly subscriptions and monthly ones with `cancelAtPeriodEnd=true` receive bot renewal reminder DMs at 7 days and 1 day before expiry.
+
+**Lifetime plan** is a non-recurring Telegram Stars invoice that grants permanent Pro. The bot writes a `Subscription` row with `billingPeriod='lifetime'`, `currentPeriodEnd = 2099-12-31` (sentinel), `cancelAtPeriodEnd = false`. Lifetime overrides any prior monthly/yearly row on upsert; once active, subsequent `pro_monthly` / `pro_yearly` charges (e.g. a still-active Telegram-side monthly auto-renewal) are recorded as `payment_success_post_lifetime` PaymentEvents and do **not** downgrade the Subscription. Lifetime never receives renewal reminders and is excluded from the subscription-expiry sweep cron via an explicit `billingPeriod !== 'lifetime'` filter (defensive — the sentinel date already keeps it out of the window).
 
 All limits and feature flags are defined in a single constant in `apps/api/src/index.ts`:
 
@@ -126,10 +128,14 @@ Function: `getUserEntitlement(userId, godMode?)` — `apps/api/src/index.ts`
 ### Base Entitlement — `getUserEntitlement(userId, godMode?)`
 
 **Resolution order (priority):**
-1. Active `Subscription` with `planCode='PRO'`, `status IN ('ACTIVE','CANCELLED')`, `currentPeriodEnd > now()` → `proSource: 'subscription'`
+1. Active `Subscription` with `planCode='PRO'`, `status IN ('ACTIVE','CANCELLED')`, `currentPeriodEnd > now()` → `proSource: 'subscription'`. Lifetime is the highest-priority sub because each user has at most one `Subscription` row (`@@unique([userId, planCode])`); `pro_lifetime` payments upsert and overwrite any monthly/yearly row, leaving `billingPeriod='lifetime'` as the resolver's view of truth.
 2. Active `PromoRedemption` with `status='ACTIVE'`, not expired → `proSource: 'promo'`
 3. `godMode=true` (user's `telegramId` in `GOD_MODE_TELEGRAM_IDS` env) → `proSource: 'god_mode'`
 4. Otherwise → `PLANS.FREE`, `isPro: false`
+
+**Lifetime discriminator:** `subscription.billingPeriod === 'lifetime'`. UI and downstream services MUST use this field — never compare `currentPeriodEnd` against a far-future heuristic. `proSource` stays `'subscription'` for lifetime users (semantically lifetime IS a subscription, just with no expiry).
+
+**Lifetime + active promo PRO co-existence.** A user can have both an active `PromoRedemption` (granted PRO via a campaign code) and a paid lifetime `Subscription` row. The resolver's priority order picks the paid subscription first, so the user reads as `proSource: 'subscription'` and `subscription.billingPeriod = 'lifetime'`. The `promoPro` field on the response is still populated from the live `PromoRedemption` so downstream UI (Settings promo block) keeps showing the original campaign acknowledgement; this is intentional — losing the promo display on a paid upgrade would feel like a regression. Revoking the promo administratively does not affect lifetime entitlement.
 
 ### Effective Entitlements — `getEffectiveEntitlements(userId, godMode?)`
 
@@ -161,12 +167,15 @@ hasSmartReservations[wId]   = UserAddOn(addonType='smart_reservations_unlock' AN
 | `PRO_PLAN_CODE` | `PRO` | Plan code string |
 | `PRO_YEARLY_PRICE_XTR` | `800` | Stars price for yearly one-time purchase |
 | `PRO_YEARLY_EXTEND_SECONDS` | `31536000` | Seconds added to `currentPeriodEnd` on yearly purchase (365 days) |
+| `PRO_LIFETIME_PRICE_XTR` | `2490` | Stars price for lifetime one-time purchase (permanent Pro) |
 
 ### Checkout Flow
 
 ```
-User selects monthly or yearly plan in paywall
-  → POST /tg/billing/pro/checkout { plan: 'monthly' | 'yearly' }
+User selects monthly, yearly, or lifetime plan in paywall
+  → POST /tg/billing/pro/checkout { plan: 'monthly' | 'yearly' | 'lifetime' }
+  → If user is already lifetime → { alreadySubscribed: true, lifetime: true } (no invoice)
+  → If user is already monthly+!cancelAtPeriodEnd and plan=monthly → { alreadySubscribed: true }
   → createTgInvoiceLink() — wraps TG API call with 1 retry on network failure
       ok=true  → url returned
       ok=false, retryable  → 503 telegram_unavailable (client should show retry toast)
@@ -176,11 +185,32 @@ User selects monthly or yearly plan in paywall
   → User pays in Telegram
   → Telegram sends pre_checkout_query → bot answers ok
   → Telegram sends successful_payment → bot creates/extends Subscription
-      monthly: sets currentPeriodEnd = now + PRO_SUBSCRIPTION_PERIOD
-      yearly:  extends currentPeriodEnd by PRO_YEARLY_EXTEND_SECONDS; billingPeriod='yearly'
+      monthly:  sets currentPeriodEnd = now + PRO_SUBSCRIPTION_PERIOD; billingPeriod='monthly'
+      yearly:   extends currentPeriodEnd by PRO_YEARLY_EXTEND_SECONDS; billingPeriod='yearly'
+      lifetime: sets currentPeriodEnd = 2099-12-31 (sentinel); billingPeriod='lifetime';
+                cancelAtPeriodEnd=false; OVERWRITES any prior monthly/yearly row
   → Frontend polls POST /tg/billing/pro/sync to confirm
   → Returns updated plan + subscription
 ```
+
+### Invoice payload formats
+
+| Plan | Payload |
+|------|---------|
+| Monthly | `pro_monthly:<tgId>:<sessionId>` |
+| Yearly | `pro_yearly:<tgId>:<sessionId>` |
+| Lifetime | `pro_lifetime:<tgId>:<sessionId>` |
+| Add-on | `addon:<sku>:<tgId>:<targetId|_>:<sessionId>` |
+
+### Lifetime override / downgrade protection
+
+When the bot receives a `pro_monthly` or `pro_yearly` `successful_payment` for a user whose existing `Subscription` already has `billingPeriod='lifetime'`, the handler:
+
+1. **Does NOT** overwrite the Subscription row (no downgrade).
+2. **Records** a `PaymentEvent` with `eventType='payment_success_post_lifetime'` for audit + Stars-balance reconciliation.
+3. **Returns silently** — no bot DM (lifetime user already knows they have permanent Pro).
+
+This protects users who buy lifetime while a Telegram-side monthly auto-renewal is still active. Telegram will keep charging the monthly subscription until the user cancels it client-side; our DB stays on lifetime regardless. The Settings UI surfaces a static informational banner (`pro_lifetime_existing_monthly_warning`) reminding the user to cancel any prior monthly auto-renewal separately.
 
 ### API Endpoints
 
@@ -190,21 +220,23 @@ User selects monthly or yearly plan in paywall
 | `POST` | `/tg/billing/pro/checkout` | Create Telegram Stars invoice link |
 | `POST` | `/tg/billing/pro/sync` | Verify subscription after payment |
 | `GET` | `/tg/billing/history` | Payment history (last 20 events) |
-| `POST` | `/tg/billing/subscription/cancel` | Soft-cancel: sets `cancelAtPeriodEnd=true` |
-| `POST` | `/tg/billing/subscription/reactivate` | Re-enable auto-renewal |
+| `POST` | `/tg/billing/subscription/cancel` | Soft-cancel: sets `cancelAtPeriodEnd=true`. Returns **409 `lifetime_cannot_cancel`** if active subscription is lifetime — the Mini App also hides the cancel CTA, this is the backend backstop |
+| `POST` | `/tg/billing/subscription/reactivate` | Re-enable auto-renewal. Returns **409 `lifetime_cannot_cancel`** if user has a lifetime row (no auto-renewal to manage) |
 
 ### Subscription States
 
-| Status | `cancelAtPeriodEnd` | Effect |
-|--------|---------------------|--------|
-| `ACTIVE` | `false` | Auto-renews at period end |
-| `ACTIVE` | `true` | Access until period end, then FREE |
-| `CANCELLED` | — | Was cancelled; if `currentPeriodEnd > now` still PRO |
-| `EXPIRED` | — | Past period end; marked EXPIRED by hourly job |
+| Status | `billingPeriod` | `cancelAtPeriodEnd` | Effect |
+|--------|-----------------|---------------------|--------|
+| `ACTIVE` | `monthly` | `false` | Auto-renews at period end |
+| `ACTIVE` | `monthly` | `true` | Access until period end, then FREE |
+| `ACTIVE` | `yearly` | (n/a) | One-time, expires at `currentPeriodEnd` then FREE |
+| `ACTIVE` | `lifetime` | `false` | Permanent Pro. `currentPeriodEnd = 2099-12-31` sentinel; never expires; cancel/reactivate not applicable |
+| `CANCELLED` | (any) | — | Was cancelled; if `currentPeriodEnd > now` still PRO |
+| `EXPIRED` | (any non-`lifetime`) | — | Past period end; marked EXPIRED by hourly job. Lifetime is excluded from the sweep via `billingPeriod !== 'lifetime'` |
 
 ### PRO Renewal Reminders
 
-Hourly cron job sends bot DM reminders to users whose PRO is expiring soon. Only fires for yearly subscriptions and monthly ones with `cancelAtPeriodEnd=true` (auto-renewing monthly subscribers receive no reminder — Telegram charges automatically).
+Hourly cron job sends bot DM reminders to users whose PRO is expiring soon. Only fires for yearly subscriptions and monthly ones with `cancelAtPeriodEnd=true` (auto-renewing monthly subscribers receive no reminder — Telegram charges automatically). **Lifetime subscriptions are excluded** via an explicit `NOT { billingPeriod: 'lifetime' }` filter on the cron query — defensive, since the 2099 sentinel `currentPeriodEnd` already keeps lifetime out of the 7d/1d windows.
 
 | Milestone | Window | i18n Key |
 |-----------|--------|----------|

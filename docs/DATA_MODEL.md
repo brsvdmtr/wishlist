@@ -706,8 +706,8 @@ PRO plan billing record. One per user (unique on `userId + planCode`).
 | `currentPeriodEnd`   | DateTime             | Yes      | —                 |                                                                          |
 | `cancelledAt`        | DateTime             | No       | —                 | Timestamp of cancellation request                                        |
 | `source`             | String               | No       | `"telegram_stars"`|                                                                          |
-| `billingPeriod`      | String               | No       | `"monthly"`       |                                                                          |
-| `cancelAtPeriodEnd`  | Boolean              | Yes      | `false`           | Soft-cancel: PRO access continues until `currentPeriodEnd`, then expires |
+| `billingPeriod`      | String               | No       | `"monthly"`       | `"monthly"` \| `"yearly"` \| `"lifetime"`. Lifetime has `currentPeriodEnd = 2099-12-31` (sentinel) and `cancelAtPeriodEnd = false` permanently |
+| `cancelAtPeriodEnd`  | Boolean              | Yes      | `false`           | Soft-cancel: PRO access continues until `currentPeriodEnd`, then expires. Always `false` for `billingPeriod='lifetime'` (no auto-renewal) |
 | `createdAt`          | DateTime             | Yes      | now               |                                                                          |
 | `updatedAt`          | DateTime             | Yes      | auto              |                                                                          |
 

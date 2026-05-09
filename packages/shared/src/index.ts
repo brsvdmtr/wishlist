@@ -11,6 +11,32 @@ export const WishlistItemSchema = z.object({
 
 export type WishlistItemInput = z.infer<typeof WishlistItemSchema>;
 
+// ─── Pro Lifetime — cross-package shared constants ───────────────────────────
+// Lifetime is a permanent Pro tier (one-time Telegram Stars purchase). The
+// `Subscription.billingPeriod` discriminator is the canonical truth signal —
+// resolvers, schedulers, and UI compare against `LIFETIME_BILLING_PERIOD`
+// rather than against the sentinel date. The 2099-12-31 sentinel below is
+// defensive padding so the expiry-sweep cron can't race a clock skew.
+//
+// Both apps/api and apps/bot import these — keeping them in @wishlist/shared
+// avoids cross-app duplication that drifts silently.
+
+/** Sentinel value for `Subscription.billingPeriod` denoting permanent Pro. */
+export const LIFETIME_BILLING_PERIOD = 'lifetime' as const;
+
+/** ISO sentinel for `Subscription.currentPeriodEnd` on a lifetime row. Far
+ * enough future that no expiry-sweep query window will catch it; both
+ * apps/api/services/entitlement.ts and apps/bot/successful_payment use this
+ * exact string to construct the Date so the values never drift. */
+export const PRO_LIFETIME_PERIOD_END_ISO = '2099-12-31T00:00:00.000Z';
+
+/** Returns true if the given subscription row represents a lifetime Pro grant. */
+export function isLifetimeSubscription(
+  sub: { billingPeriod?: string | null } | null | undefined,
+): boolean {
+  return !!sub && sub.billingPeriod === LIFETIME_BILLING_PERIOD;
+}
+
 // ─── Share / Deep Link helpers ───────────────────────────
 
 /**

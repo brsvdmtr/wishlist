@@ -37,6 +37,7 @@
 
 import type { PrismaClient } from '@wishlist/db';
 import type { Logger } from 'pino';
+import { LIFETIME_BILLING_PERIOD } from '@wishlist/shared';
 
 // Minimal structural type for getUserEntitlement — handlers in this file
 // only access `.isPro`. Mirrors index.ts:533 return type narrowed.
@@ -57,13 +58,18 @@ export type BillingSchedulerDeps = {
 export function startBillingSchedulers(deps: BillingSchedulerDeps): void {
   const { prisma, logger, getUserEntitlement, PLANS } = deps;
 
-  // Subscription expiry: mark overdue subscriptions as EXPIRED (hourly)
+  // Subscription expiry: mark overdue subscriptions as EXPIRED (hourly).
+  // Lifetime subscriptions are explicitly excluded — they have a 2099 sentinel
+  // currentPeriodEnd (so they would never match anyway), but the explicit
+  // billingPeriod !== 'lifetime' guard makes the contract obvious and survives
+  // any future tweak to the sentinel date.
   setInterval(async () => {
     try {
       const expired = await prisma.subscription.updateMany({
         where: {
           status: { in: ['ACTIVE', 'CANCELLED'] },
           currentPeriodEnd: { lte: new Date() },
+          NOT: { billingPeriod: LIFETIME_BILLING_PERIOD },
         },
         data: { status: 'EXPIRED' },
       });

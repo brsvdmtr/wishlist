@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import https from 'node:https';
 import path from 'node:path';
 import { prisma, resolveReferralCode, tryCreateAttribution, markFirstBotStart, loadReferralConfig, persistResolvedBucket } from '@wishlist/db';
-import { t, pluralize, detectLocale, resolveEffectiveLocale, resolveMarketBucket, type Locale } from '@wishlist/shared';
+import { t, pluralize, detectLocale, resolveEffectiveLocale, resolveMarketBucket, LIFETIME_BILLING_PERIOD, PRO_LIFETIME_PERIOD_END_ISO, type Locale } from '@wishlist/shared';
 import logger from './logger';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
@@ -1269,7 +1269,7 @@ if (!token) {
         const existingSub = await prisma.subscription.findUnique({
           where: { userId_planCode: { userId: user.id, planCode: 'PRO' } },
         });
-        if (existingSub && existingSub.billingPeriod === 'lifetime') {
+        if (existingSub && existingSub.billingPeriod === LIFETIME_BILLING_PERIOD) {
           await prisma.paymentEvent.create({
             data: {
               subscriptionId: existingSub.id,
@@ -1380,7 +1380,7 @@ if (!token) {
           where: { userId_planCode: { userId: user.id, planCode: 'PRO' } },
         });
         // Lifetime guard — never downgrade lifetime to yearly. Audit only.
-        if (existingSub && existingSub.billingPeriod === 'lifetime') {
+        if (existingSub && existingSub.billingPeriod === LIFETIME_BILLING_PERIOD) {
           await prisma.paymentEvent.create({
             data: {
               subscriptionId: existingSub.id,
@@ -1484,10 +1484,11 @@ if (!token) {
         }
 
         const now = new Date();
-        // Sentinel "no-expiry" date — must match PRO_LIFETIME_PERIOD_END in
-        // apps/api/src/services/entitlement.ts. Hard-coded here to avoid a
-        // cross-package import; both sides MUST stay in sync.
-        const lifetimePeriodEnd = new Date('2099-12-31T00:00:00.000Z');
+        // Sentinel "no-expiry" date — single source of truth in
+        // packages/shared (PRO_LIFETIME_PERIOD_END_ISO). Both bot and
+        // apps/api/services/entitlement.ts read from the same constant so
+        // the values can never drift.
+        const lifetimePeriodEnd = new Date(PRO_LIFETIME_PERIOD_END_ISO);
 
         const existingSub = await prisma.subscription.findUnique({
           where: { userId_planCode: { userId: user.id, planCode: 'PRO' } },
@@ -1505,7 +1506,7 @@ if (!token) {
               currentPeriodStart: now,
               currentPeriodEnd: lifetimePeriodEnd,
               source: 'telegram_stars',
-              billingPeriod: 'lifetime',
+              billingPeriod: LIFETIME_BILLING_PERIOD,
               cancelAtPeriodEnd: false,
             },
             update: {
@@ -1516,7 +1517,7 @@ if (!token) {
               cancelledAt: null,
               cancelAtPeriodEnd: false,
               source: 'telegram_stars',
-              billingPeriod: 'lifetime',
+              billingPeriod: LIFETIME_BILLING_PERIOD,
             },
           });
           await tx.paymentEvent.create({

@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>WishBoard · Pro Lifetime — proposal v1 (DRAFT)</title>
+  <style>
+    /* WishBoard v2.1 tokens — pulled from approved/v2.1-refresh-all-screens.html */
+    :root{
+      --wb-bg:#0F0F12; --wb-bg-elev:#15151A;
+      --wb-surface:rgba(255,255,255,0.035); --wb-surface-hover:rgba(255,255,255,0.06);
+      --wb-card:rgba(255,255,255,0.045); --wb-card-strong:rgba(255,255,255,0.07);
+      --wb-border:rgba(255,255,255,0.06); --wb-border-strong:rgba(255,255,255,0.12);
+      --wb-hairline:rgba(255,255,255,0.04);
+      --wb-accent:#8B7BFF; --wb-accent-strong:#B4A6FF; --wb-accent-light:#C8BDFF; --wb-accent-deep:#5B48E5;
+      --wb-accent-r:139; --wb-accent-g:123; --wb-accent-b:255;
+      --wb-accent-soft:rgba(139,123,255,0.14);
+      --wb-accent-soft-strong:rgba(139,123,255,0.30);
+      --wb-accent-shadow:rgba(139,123,255,0.45);
+      --wb-accent-shadow-soft:rgba(139,123,255,0.25);
+      --wb-success:#4ADE80; --wb-success-soft:rgba(74,222,128,0.14);
+      --wb-warning:#FBBF24; --wb-warning-soft:rgba(251,191,36,0.14);
+      --wb-danger:#FB7185; --wb-danger-soft:rgba(251,113,133,0.14);
+      --wb-text:#FFFFFF; --wb-text-secondary:#C7CAD1; --wb-text-muted:#8F94A3;
+      --wb-font:-apple-system,BlinkMacSystemFont,'SF Pro Display','Inter','Segoe UI',sans-serif;
+      --wb-mesh:
+        radial-gradient(ellipse 80% 60% at 12% 0%, rgba(139,123,255,0.22), transparent 55%),
+        radial-gradient(ellipse 60% 50% at 100% 20%, rgba(255,120,180,0.10), transparent 55%),
+        radial-gradient(ellipse 100% 70% at 50% 110%, rgba(139,123,255,0.10), transparent 65%);
+    }
+    *,*::before,*::after{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    html,body{margin:0;padding:0}
+    body{font-family:var(--wb-font); background:#08080B; color:#F4F4F6; padding:48px 20px; line-height:1.4;
+      letter-spacing:-0.011em;}
+    .page-title{text-align:center;font-size:22px;font-weight:700;margin:0 auto 6px;letter-spacing:-0.02em}
+    .page-subtitle{text-align:center;color:var(--wb-text-secondary);font-size:14px;margin:0 auto 36px;max-width:760px}
+    .section{display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap;justify-content:center;margin:0 auto 56px;max-width:1320px}
+    .section-title{font-size:13px;color:var(--wb-warning);text-transform:uppercase;letter-spacing:0.8px;font-weight:700;margin:0 auto 6px;text-align:center}
+    .draft-tag{display:inline-block;background:var(--wb-warning-soft);color:var(--wb-warning);padding:4px 10px;border-radius:100px;font-size:11px;font-weight:700;letter-spacing:0.5px}
+
+    /* Phone shell */
+    .phone{width:375px;min-height:812px;background:var(--wb-bg);border-radius:52px;position:relative;overflow:hidden;
+      box-shadow:0 60px 120px -20px rgba(0,0,0,0.7),0 0 0 1px rgba(255,255,255,0.06),0 0 0 10px #111114,0 0 0 11px #000;
+      flex-shrink:0;isolation:isolate}
+    .phone.tall{min-height:920px}
+    .phone.xtall{min-height:1080px}
+    .phone::before{content:'';position:absolute;inset:0;background:var(--wb-mesh);pointer-events:none;z-index:0}
+    .phone>*{position:relative;z-index:1}
+    .phone-label{position:absolute;top:14px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:#fff;
+      font-size:10px;padding:4px 10px;border-radius:100px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;
+      z-index:10;backdrop-filter:blur(8px);white-space:nowrap}
+    .status{height:52px;padding:18px 28px 0;display:flex;justify-content:space-between;align-items:flex-start;font-size:15px;font-weight:600}
+    .hdr{height:56px;padding:8px 14px;display:flex;align-items:center;gap:8px}
+    .hdr-btn{width:40px;height:40px;border-radius:14px;background:var(--wb-surface);border:1px solid var(--wb-border);
+      backdrop-filter:blur(20px) saturate(140%);display:flex;align-items:center;justify-content:center;
+      color:var(--wb-text);font-size:17px;flex-shrink:0}
+
+    /* Hero (paywall) */
+    .pw-hero{margin:4px 16px 18px;padding:30px 24px 24px;border-radius:26px;color:#fff;position:relative;overflow:hidden;text-align:center;
+      background:
+        radial-gradient(ellipse at top right, rgba(255,255,255,0.18), transparent 55%),
+        radial-gradient(ellipse at bottom left, rgba(91,72,229,0.45), transparent 55%),
+        linear-gradient(135deg,#8B7BFF 0%,#B4A6FF 55%,#5B48E5 100%);
+      box-shadow:0 20px 50px -12px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.24)}
+    .pw-hero-emoji{font-size:64px;margin-bottom:8px;line-height:1;filter:drop-shadow(0 16px 32px var(--wb-accent-shadow))}
+    .pw-hero-title{font-size:32px;font-weight:700;letter-spacing:-0.035em;line-height:1.05}
+    .pw-hero-title .grad{background:linear-gradient(135deg,#FFFFFF 20%,#C8BDFF 80%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+    .pw-hero-sub{font-size:15px;margin-top:8px;line-height:1.45;font-weight:500;color:rgba(255,255,255,0.92);letter-spacing:-0.005em}
+
+    /* Plan tiles — common */
+    .plan-section{padding:0 16px;margin-top:14px}
+    .plan-tile{position:relative;background:var(--wb-card);border:1.5px solid var(--wb-border);border-radius:18px;
+      padding:14px 14px 12px;text-align:left;backdrop-filter:blur(14px);transition:all .18s cubic-bezier(.4,0,.2,1)}
+    .plan-tile.selected{border-color:var(--wb-accent);background:linear-gradient(135deg,var(--wb-accent-soft), rgba(139,123,255,0.04));
+      box-shadow:0 0 0 2px rgba(139,123,255,0.18)}
+    .plan-name{font-size:11px;color:var(--wb-text-muted);margin-bottom:4px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase}
+    .plan-tile.selected .plan-name{color:var(--wb-accent-strong)}
+    .plan-price{font-size:22px;font-weight:800;letter-spacing:-0.02em;color:var(--wb-text);font-feature-settings:'tnum'}
+    .plan-per{font-size:11px;color:var(--wb-text-muted);margin-top:3px;letter-spacing:0}
+    .plan-badge-save{position:absolute;top:-9px;right:10px;background:var(--wb-success);color:#000;padding:3px 8px;border-radius:100px;font-size:10px;font-weight:800;letter-spacing:0.3px}
+    .plan-badge-forever{position:absolute;top:-9px;right:10px;background:var(--wb-warning);color:#1a1300;padding:3px 8px;border-radius:100px;font-size:10px;font-weight:800;letter-spacing:0.3px;
+      box-shadow:0 4px 14px rgba(251,191,36,0.40), inset 0 1px 0 rgba(255,255,255,0.4)}
+
+    /* Variant A — 2+1 layout */
+    .plan-grid-2col{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+    .plan-tile.lifetime-feature{
+      padding:18px 18px 16px;
+      border-radius:20px;
+      background:
+        radial-gradient(ellipse at top right, rgba(251,191,36,0.10), transparent 60%),
+        linear-gradient(135deg, rgba(139,123,255,0.18), rgba(139,123,255,0.04));
+      border:1.5px solid rgba(251,191,36,0.35);
+      box-shadow:0 8px 24px rgba(139,123,255,0.18), inset 0 1px 0 rgba(255,255,255,0.06);
+      display:flex;align-items:center;gap:14px;
+    }
+    .plan-tile.lifetime-feature.selected{
+      border-color:var(--wb-warning);
+      background:
+        radial-gradient(ellipse at top right, rgba(251,191,36,0.18), transparent 55%),
+        linear-gradient(135deg, rgba(139,123,255,0.24), rgba(139,123,255,0.06));
+      box-shadow:0 0 0 2px rgba(251,191,36,0.25), 0 12px 32px rgba(139,123,255,0.22);
+    }
+    .plan-tile.lifetime-feature .infinity{
+      width:46px;height:46px;border-radius:14px;flex-shrink:0;
+      background:linear-gradient(135deg, var(--wb-warning), #F59E0B);
+      display:flex;align-items:center;justify-content:center;
+      font-size:24px;color:#1a1300;font-weight:800;
+      box-shadow:0 6px 16px rgba(251,191,36,0.35), inset 0 1px 0 rgba(255,255,255,0.45);
+    }
+    .plan-tile.lifetime-feature .body{flex:1;min-width:0}
+    .plan-tile.lifetime-feature .body .title{font-size:15px;font-weight:700;color:var(--wb-text);letter-spacing:-0.012em;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .plan-tile.lifetime-feature .body .sub{font-size:12.5px;color:var(--wb-text-secondary);margin-top:3px;letter-spacing:-0.003em}
+    .plan-tile.lifetime-feature .price{font-size:20px;font-weight:800;color:var(--wb-text);letter-spacing:-0.02em;text-align:right;font-feature-settings:'tnum';white-space:nowrap}
+    .plan-tile.lifetime-feature .price .pp{display:block;font-size:10.5px;color:var(--wb-text-muted);font-weight:600;margin-top:3px;letter-spacing:0.3px;text-transform:uppercase}
+
+    /* Variant B — 3 equal columns */
+    .plan-grid-3col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+    .plan-grid-3col .plan-tile{padding:12px 10px 10px;border-radius:16px}
+    .plan-grid-3col .plan-name{font-size:10px;letter-spacing:0.4px}
+    .plan-grid-3col .plan-price{font-size:18px}
+    .plan-grid-3col .plan-per{font-size:10px;margin-top:2px}
+    .plan-grid-3col .plan-badge-save,
+    .plan-grid-3col .plan-badge-forever{font-size:9px;padding:2px 6px}
+
+    /* Variant C — stacked rows */
+    .plan-stack{display:flex;flex-direction:column;gap:8px}
+    .plan-row{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:18px;background:var(--wb-card);border:1.5px solid var(--wb-border);position:relative;backdrop-filter:blur(14px)}
+    .plan-row.selected{border-color:var(--wb-accent);background:linear-gradient(135deg,var(--wb-accent-soft), rgba(139,123,255,0.04));box-shadow:0 0 0 2px rgba(139,123,255,0.18)}
+    .plan-row.lifetime{border:1.5px solid rgba(251,191,36,0.35);
+      background:
+        radial-gradient(ellipse at top right, rgba(251,191,36,0.10), transparent 60%),
+        linear-gradient(135deg, rgba(139,123,255,0.14), rgba(139,123,255,0.02));
+      box-shadow:0 6px 18px rgba(139,123,255,0.14), inset 0 1px 0 rgba(255,255,255,0.05)}
+    .plan-row.lifetime.selected{border-color:var(--wb-warning);box-shadow:0 0 0 2px rgba(251,191,36,0.20), 0 10px 26px rgba(139,123,255,0.20)}
+    .plan-row .icon{width:42px;height:42px;border-radius:13px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;
+      background:linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft));box-shadow:inset 0 1px 0 rgba(255,255,255,0.08)}
+    .plan-row.lifetime .icon{background:linear-gradient(135deg, var(--wb-warning), #F59E0B);color:#1a1300;font-weight:800;
+      box-shadow:0 4px 14px rgba(251,191,36,0.30), inset 0 1px 0 rgba(255,255,255,0.45)}
+    .plan-row .body{flex:1;min-width:0}
+    .plan-row .row-name{font-size:14.5px;font-weight:700;color:var(--wb-text);letter-spacing:-0.012em;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+    .plan-row .row-sub{font-size:12.5px;color:var(--wb-text-secondary);margin-top:2px;letter-spacing:-0.003em}
+    .plan-row .price-block{flex-shrink:0;text-align:right}
+    .plan-row .price-block .p{font-size:18px;font-weight:800;letter-spacing:-0.02em;color:var(--wb-text);font-feature-settings:'tnum'}
+    .plan-row .price-block .pp{font-size:10.5px;color:var(--wb-text-muted);font-weight:600;margin-top:2px;letter-spacing:0.2px;text-transform:uppercase}
+    .plan-row .row-radio{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--wb-border-strong);flex-shrink:0;display:flex;align-items:center;justify-content:center}
+    .plan-row.selected .row-radio{border-color:var(--wb-accent);background:var(--wb-accent)}
+    .plan-row.selected .row-radio::after{content:'';width:8px;height:8px;border-radius:50%;background:#fff}
+
+    /* Inline pill chips */
+    .pill-forever{display:inline-flex;align-items:center;gap:4px;background:var(--wb-warning);color:#1a1300;padding:2px 7px;border-radius:100px;font-size:9.5px;font-weight:800;letter-spacing:0.3px;text-transform:uppercase}
+    .pill-save{display:inline-flex;align-items:center;gap:3px;background:var(--wb-success);color:#000;padding:2px 7px;border-radius:100px;font-size:9.5px;font-weight:800;letter-spacing:0.3px;text-transform:uppercase}
+
+    /* Hero section group label */
+    .pw-section-label{font-size:11px;color:var(--wb-text-muted);font-weight:700;letter-spacing:0.7px;text-transform:uppercase;
+      margin:8px 8px 10px;padding-left:8px}
+
+    /* Buttons */
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:15px 22px;border-radius:18px;
+      border:none;font-family:inherit;font-size:15px;font-weight:650;letter-spacing:-0.015em;cursor:pointer;
+      min-height:52px;width:100%;transition:all .15s cubic-bezier(.4,0,.2,1)}
+    .btn.primary-grad{background:linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep));color:#fff;
+      box-shadow:0 12px 32px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.22)}
+    .btn.gold-grad{background:linear-gradient(135deg, var(--wb-warning), #F59E0B);color:#1a1300;
+      box-shadow:0 12px 32px rgba(251,191,36,0.35), inset 0 1px 0 rgba(255,255,255,0.45)}
+    .btn.ghost{background:transparent;color:var(--wb-text-secondary)}
+    .btn.surface{background:var(--wb-card-strong);color:var(--wb-text);border:1px solid var(--wb-border-strong);backdrop-filter:blur(14px)}
+
+    .pw-cta{padding:18px 16px 22px;display:flex;flex-direction:column;gap:8px}
+    .pw-trust{text-align:center;font-size:11px;color:var(--wb-text-muted);margin-top:2px;letter-spacing:0.1px}
+
+    /* Banner */
+    .banner{display:flex;gap:11px;margin:12px 16px 14px;padding:12px 14px;border-radius:14px;font-size:12.5px;line-height:1.45;
+      align-items:flex-start;color:var(--wb-text);backdrop-filter:blur(14px);letter-spacing:-0.003em}
+    .banner.warn{background:var(--wb-warning-soft);border:1px solid rgba(251,191,36,0.32)}
+    .banner.info{background:var(--wb-accent-soft);border:1px solid var(--wb-accent-soft-strong)}
+    .banner-ic{flex-shrink:0;font-size:16px;margin-top:1px}
+    .banner b{color:var(--wb-text);font-weight:650}
+
+    /* Settings active card */
+    .set-pro-card{margin:0 16px 16px;padding:18px;border-radius:22px;
+      background:linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep));
+      color:#fff;display:flex;align-items:center;gap:14px;
+      box-shadow:0 14px 40px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.22);
+      position:relative;overflow:hidden}
+    .set-pro-card::after{content:'';position:absolute;top:-30%;right:-10%;width:200px;height:200px;
+      background:radial-gradient(circle, rgba(255,255,255,0.20), transparent 70%);pointer-events:none}
+    .set-pro-card.lifetime{
+      background:
+        radial-gradient(ellipse at top right, rgba(251,191,36,0.35), transparent 55%),
+        linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep) 60%, #4A2C8C 100%);
+      box-shadow:0 14px 40px var(--wb-accent-shadow), 0 0 0 1px rgba(251,191,36,0.20), inset 0 1px 0 rgba(255,255,255,0.30)}
+    .set-pro-card .icon-wrap{font-size:30px;line-height:1;width:46px;height:46px;border-radius:14px;
+      background:rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,0.22);backdrop-filter:blur(8px);position:relative;z-index:1}
+    .set-pro-card.lifetime .icon-wrap{
+      background:linear-gradient(135deg, var(--wb-warning), #F59E0B);color:#1a1300;font-weight:800;
+      box-shadow:0 6px 18px rgba(251,191,36,0.40), inset 0 1px 0 rgba(255,255,255,0.55)}
+    .set-pro-card .body{flex:1;min-width:0;position:relative;z-index:1}
+    .set-pro-card .t{font-size:16px;font-weight:700;letter-spacing:-0.018em;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .set-pro-card .s{font-size:13px;opacity:0.88;margin-top:3px;letter-spacing:-0.003em}
+    .set-pro-card .pill-on{background:rgba(251,191,36,0.95);color:#1a1300;font-size:10px;padding:2px 7px;border-radius:100px;font-weight:800;letter-spacing:0.3px;text-transform:uppercase}
+
+    /* Settings rows (mini) */
+    .set-group{margin:0 16px 16px;background:var(--wb-card);border:1px solid var(--wb-border);border-radius:20px;overflow:hidden;backdrop-filter:blur(16px)}
+    .set-row{display:flex;align-items:center;gap:14px;padding:14px 16px;border-top:1px solid var(--wb-hairline)}
+    .set-row:first-child{border-top:none}
+    .set-row .ic{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft));
+      display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+    .set-row .body{flex:1;min-width:0}
+    .set-row .t{font-size:15px;font-weight:600;color:var(--wb-text);letter-spacing:-0.012em}
+    .set-row .s{font-size:12.5px;color:var(--wb-text-secondary);margin-top:2px}
+    .set-row .trail{font-size:20px;color:var(--wb-text-muted)}
+
+    /* Sheet (success) */
+    .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--wb-bg-elev);border:1px solid var(--wb-border);
+      border-bottom:none;border-radius:28px 28px 0 0;padding:24px;z-index:11;
+      box-shadow:0 -20px 60px rgba(0,0,0,0.5)}
+    .sheet-handle{width:40px;height:4px;background:rgba(255,255,255,0.18);border-radius:2px;margin:-10px auto 22px}
+    .sheet-hero{text-align:center;padding:8px 8px 18px}
+    .sheet-hero-emoji{font-size:80px;line-height:1;filter:drop-shadow(0 18px 36px rgba(251,191,36,0.45));margin-bottom:10px}
+    .sheet-hero-title{font-size:24px;font-weight:700;color:var(--wb-text);letter-spacing:-0.025em;margin:0 0 6px;line-height:1.15}
+    .sheet-hero-sub{font-size:14px;color:var(--wb-text-secondary);line-height:1.5;letter-spacing:-0.005em;text-wrap:pretty}
+    .sheet-list{margin:18px 0 22px;background:var(--wb-card-strong);border:1px solid var(--wb-border);border-radius:16px;overflow:hidden}
+    .sheet-list-row{display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid var(--wb-hairline);font-size:13.5px;color:var(--wb-text);letter-spacing:-0.005em}
+    .sheet-list-row:first-child{border-top:none}
+    .sheet-list-row .check{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg, var(--wb-warning), #F59E0B);color:#1a1300;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0}
+
+    /* Side note */
+    .side-note{max-width:340px;color:var(--wb-text-secondary);font-size:13px;line-height:1.6}
+    .side-note .tag{display:inline-block;font-size:10px;padding:3px 8px;border-radius:100px;background:var(--wb-accent-soft);color:var(--wb-accent-strong);font-weight:700;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:10px}
+    .side-note h3{color:var(--wb-text);font-size:16px;margin:0 0 12px;letter-spacing:-0.01em}
+    .side-note h4{color:var(--wb-accent-strong);font-size:13px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700}
+    .side-note h4.gold{color:var(--wb-warning)}
+    .side-note p{margin:0 0 10px}
+    .side-note ul{margin:0 0 12px;padding-left:18px}
+    .side-note li{margin-bottom:4px}
+    .side-note b{color:var(--wb-text);font-weight:600}
+    .side-note code{font-size:11px;background:var(--wb-card-strong);padding:1px 6px;border-radius:4px;color:var(--wb-accent-strong)}
+    .side-note .pro{color:var(--wb-success)}
+    .side-note .con{color:var(--wb-danger)}
+  </style>
+</head>
+<body>
+
+<div style="text-align:center;margin-bottom:8px"><span class="draft-tag">DRAFT · PROPOSAL</span></div>
+<h1 class="page-title">Pro lifetime — third tier «Pro forever»</h1>
+<p class="page-subtitle">
+  Третий тариф Pro: <b>2 490 ⭐</b> один платёж — Pro навсегда. Ниже три варианта layout’а селектора планов
+  + три сопутствующих состояния (active в Settings, success-сheet, conflict-banner при активной monthly).
+  Все токены и примитивы — из v2.1, ничего нового не вводится. Цвет «forever» — существующий
+  <code>--wb-warning</code> (#FBBF24, gold), чтобы визуально отделить от green «save» badge у yearly.
+</p>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- VARIANT A — 2+1 layout (RECOMMENDED) -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">Variant A · 2+1 (рекомендую)</div>
+<div class="section">
+
+  <div class="phone xtall">
+    <div class="phone-label">Paywall · A · 2+1</div>
+    <div class="status"><span>9:41</span><span>●●●●</span></div>
+    <div class="hdr"><div class="hdr-btn">×</div><div style="flex:1"></div><div class="hdr-btn">?</div></div>
+
+    <!-- Hero -->
+    <div class="pw-hero">
+      <div class="pw-hero-emoji">👑</div>
+      <div class="pw-hero-title">WishBoard <span class="grad">PRO</span></div>
+      <div class="pw-hero-sub">Все функции для тех, кто<br/>дарит и получает всерьёз</div>
+    </div>
+
+    <!-- Mocked feature row stub (compressed for layout focus) -->
+    <div style="margin:0 16px 18px;padding:14px;border-radius:18px;background:var(--wb-card);border:1px solid var(--wb-border);text-align:center;font-size:12.5px;color:var(--wb-text-muted);letter-spacing:0.2px;backdrop-filter:blur(14px)">
+      ⤵ 19 функций PRO (отрисовываются как сейчас) ⤵
+    </div>
+
+    <!-- Plan grid: 2 cols (monthly + yearly) -->
+    <div class="plan-section">
+      <div class="pw-section-label">Тариф</div>
+      <div class="plan-grid-2col">
+        <div class="plan-tile">
+          <div class="plan-name">Месяц</div>
+          <div class="plan-price">100 ⭐</div>
+          <div class="plan-per">каждый месяц</div>
+        </div>
+        <div class="plan-tile">
+          <div class="plan-badge-save">−33%</div>
+          <div class="plan-name">Год</div>
+          <div class="plan-price">800 ⭐</div>
+          <div class="plan-per">≈67 ⭐ / мес</div>
+        </div>
+      </div>
+
+      <!-- Lifetime row — premium full-width tile, gold accent border -->
+      <div class="plan-tile lifetime-feature selected" style="margin-top:8px">
+        <div class="plan-badge-forever">Навсегда</div>
+        <div class="infinity">∞</div>
+        <div class="body">
+          <div class="title">Pro навсегда</div>
+          <div class="sub">Один платёж. Pro без срока окончания.</div>
+        </div>
+        <div class="price">2 490 ⭐<span class="pp">один раз</span></div>
+      </div>
+    </div>
+
+    <!-- CTA -->
+    <div class="pw-cta">
+      <button class="btn gold-grad">Купить навсегда · 2 490 ⭐</button>
+      <button class="btn ghost">Не сейчас</button>
+      <div class="pw-trust">⭐ Telegram Stars · оплата один раз</div>
+    </div>
+  </div>
+
+  <div class="side-note">
+    <span class="tag">Variant A · 2+1</span>
+    <h3>Lifetime как отдельный premium-tile</h3>
+    <p>Monthly+Yearly остаются в существующем 2-col grid (привычный паттерн), Lifetime — отдельный full-width tile ниже.</p>
+    <h4 class="gold">Почему так</h4>
+    <ul>
+      <li><span class="pro">+</span> <b>Lifetime ≠ subscription.</b> Это разовая покупка, она не на одном уровне с monthly/yearly семантически.</li>
+      <li><span class="pro">+</span> Цена 2 490 ⭐ занимает 4 цифры — в 3-col tile'е будет визуально перегружено.</li>
+      <li><span class="pro">+</span> Полная ширина даёт место для <b>иконки ∞</b>, заголовка <b>«Pro навсегда»</b>, сабтайтла «Один платёж…», цены и подсказки «один раз».</li>
+      <li><span class="pro">+</span> Gold (<code>--wb-warning</code>) badge «Навсегда» визуально отделяет от green «−33%» у yearly.</li>
+      <li><span class="con">−</span> Чуть больше вертикали (примерно +56 px к paywall'у).</li>
+    </ul>
+    <h4>Что меняется в коде</h4>
+    <ul>
+      <li>Plan-selector (<code>MiniApp.tsx:3704</code>): рендер 3 элементов вместо 2 — <code>['monthly','yearly']</code> → <code>['monthly','yearly','lifetime']</code>.</li>
+      <li>Lifetime получает <b>отдельный визуальный шаблон</b> (не <code>Card variant=current</code>, а кастомная gold-выделенная плашка).</li>
+      <li>Если пользователь уже lifetime — этот блок целиком скрывается, вместо него — сообщение «У тебя Pro навсегда» (см. Phone D ниже).</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- VARIANT B — 3 equal columns -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">Variant B · 3 равных колонки</div>
+<div class="section">
+
+  <div class="phone xtall">
+    <div class="phone-label">Paywall · B · 3-col</div>
+    <div class="status"><span>9:41</span><span>●●●●</span></div>
+    <div class="hdr"><div class="hdr-btn">×</div><div style="flex:1"></div><div class="hdr-btn">?</div></div>
+
+    <div class="pw-hero">
+      <div class="pw-hero-emoji">👑</div>
+      <div class="pw-hero-title">WishBoard <span class="grad">PRO</span></div>
+      <div class="pw-hero-sub">Все функции для тех, кто<br/>дарит и получает всерьёз</div>
+    </div>
+
+    <div style="margin:0 16px 18px;padding:14px;border-radius:18px;background:var(--wb-card);border:1px solid var(--wb-border);text-align:center;font-size:12.5px;color:var(--wb-text-muted);letter-spacing:0.2px;backdrop-filter:blur(14px)">
+      ⤵ 19 функций PRO (как сейчас) ⤵
+    </div>
+
+    <div class="plan-section">
+      <div class="pw-section-label">Тариф</div>
+      <div class="plan-grid-3col">
+        <div class="plan-tile">
+          <div class="plan-name">Месяц</div>
+          <div class="plan-price">100 ⭐</div>
+          <div class="plan-per">/ мес</div>
+        </div>
+        <div class="plan-tile">
+          <div class="plan-badge-save">−33%</div>
+          <div class="plan-name">Год</div>
+          <div class="plan-price">800 ⭐</div>
+          <div class="plan-per">≈67 ⭐/мес</div>
+        </div>
+        <div class="plan-tile selected" style="border-color:var(--wb-warning);background:linear-gradient(135deg, rgba(251,191,36,0.10), rgba(139,123,255,0.04));box-shadow:0 0 0 2px rgba(251,191,36,0.20)">
+          <div class="plan-badge-forever">Навсегда</div>
+          <div class="plan-name" style="color:var(--wb-warning)">Forever</div>
+          <div class="plan-price">2 490 ⭐</div>
+          <div class="plan-per">один платёж</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pw-cta">
+      <button class="btn gold-grad">Купить навсегда · 2 490 ⭐</button>
+      <button class="btn ghost">Не сейчас</button>
+      <div class="pw-trust">⭐ Telegram Stars · оплата один раз</div>
+    </div>
+  </div>
+
+  <div class="side-note">
+    <span class="tag">Variant B · 3-col</span>
+    <h3>Все три плана в одной строке</h3>
+    <p>Самый компактный вариант. Monthly / Yearly / Lifetime — три равных tile'а, lifetime отмечен gold-бейджем.</p>
+    <h4>Плюсы / минусы</h4>
+    <ul>
+      <li><span class="pro">+</span> Минимальный footprint — экономия ≈80 px вертикали vs Variant A.</li>
+      <li><span class="pro">+</span> «Все варианты в одном glance» — пользователь видит ценовую лестницу 100/800/2490.</li>
+      <li><span class="con">−</span> На 375 px ширине каждая колонка ≈110 px. <b>«2 490 ⭐»</b> выглядит тесно.</li>
+      <li><span class="con">−</span> Lifetime теряет «премиальный» вес — выглядит как ещё один план той же категории, хотя это разовая покупка.</li>
+      <li><span class="con">−</span> Plan-name тут уже 10 px — некомфортный нижний предел текста (минимум по WCAG-практике 11–12 px).</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- VARIANT C — Stacked rows -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">Variant C · 3 строки сверху вниз</div>
+<div class="section">
+
+  <div class="phone xtall">
+    <div class="phone-label">Paywall · C · stacked</div>
+    <div class="status"><span>9:41</span><span>●●●●</span></div>
+    <div class="hdr"><div class="hdr-btn">×</div><div style="flex:1"></div><div class="hdr-btn">?</div></div>
+
+    <div class="pw-hero">
+      <div class="pw-hero-emoji">👑</div>
+      <div class="pw-hero-title">WishBoard <span class="grad">PRO</span></div>
+      <div class="pw-hero-sub">Все функции для тех, кто<br/>дарит и получает всерьёз</div>
+    </div>
+
+    <div style="margin:0 16px 18px;padding:14px;border-radius:18px;background:var(--wb-card);border:1px solid var(--wb-border);text-align:center;font-size:12.5px;color:var(--wb-text-muted);letter-spacing:0.2px;backdrop-filter:blur(14px)">
+      ⤵ 19 функций PRO (как сейчас) ⤵
+    </div>
+
+    <div class="plan-section">
+      <div class="pw-section-label">Тариф</div>
+      <div class="plan-stack">
+        <div class="plan-row">
+          <div class="icon">📅</div>
+          <div class="body">
+            <div class="row-name">Каждый месяц</div>
+            <div class="row-sub">Подписка · автопродление</div>
+          </div>
+          <div class="price-block">
+            <div class="p">100 ⭐</div>
+            <div class="pp">/ мес</div>
+          </div>
+          <div class="row-radio"></div>
+        </div>
+        <div class="plan-row selected">
+          <div class="icon">🎉</div>
+          <div class="body">
+            <div class="row-name">Год <span class="pill-save">−33%</span></div>
+            <div class="row-sub">Один платёж — 365 дней</div>
+          </div>
+          <div class="price-block">
+            <div class="p">800 ⭐</div>
+            <div class="pp">≈67 ⭐/мес</div>
+          </div>
+          <div class="row-radio"></div>
+        </div>
+        <div class="plan-row lifetime">
+          <div class="icon">∞</div>
+          <div class="body">
+            <div class="row-name">Pro навсегда <span class="pill-forever">Навсегда</span></div>
+            <div class="row-sub">Один платёж — без срока окончания</div>
+          </div>
+          <div class="price-block">
+            <div class="p">2 490 ⭐</div>
+            <div class="pp">один раз</div>
+          </div>
+          <div class="row-radio"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pw-cta">
+      <button class="btn primary-grad">Оформить Pro на год · 800 ⭐</button>
+      <button class="btn ghost">Не сейчас</button>
+      <div class="pw-trust">⭐ Telegram Stars · отмена в любой момент</div>
+    </div>
+  </div>
+
+  <div class="side-note">
+    <span class="tag">Variant C · stacked</span>
+    <h3>Как list rows с radio</h3>
+    <p>Все три варианта — горизонтальные ListRow’ы с иконкой, описанием, ценой и radio. Похоже на iOS Settings.</p>
+    <h4>Плюсы / минусы</h4>
+    <ul>
+      <li><span class="pro">+</span> Самый читаемый вариант: каждая строка имеет место для иконки, заголовка, описания и цены.</li>
+      <li><span class="pro">+</span> Visual hierarchy через иконку — «Месяц / Год / Forever» считываются за 1.5 секунды.</li>
+      <li><span class="pro">+</span> Естественный пресет для accessibility — radio-pattern.</li>
+      <li><span class="con">−</span> <b>Самый высокий блок</b> (3 × ~70 px = ~210 px только на план-селектор) — paywall и так длинный.</li>
+      <li><span class="con">−</span> Сильно отходит от текущей UI-конвенции paywall'а (там grid-tiles).</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- COMPANION STATES — active / success / conflict -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">Сопутствующие состояния</div>
+<div class="section">
+
+  <!-- D · Lifetime active in Settings -->
+  <div class="phone tall">
+    <div class="phone-label">D · Settings · Lifetime active</div>
+    <div class="status"><span>9:41</span><span>●●●●</span></div>
+    <div class="hdr"><div class="hdr-btn">←</div><div style="flex:1;text-align:center;font-size:16px;font-weight:650">Настройки</div><div style="width:40px"></div></div>
+
+    <div class="set-pro-card lifetime">
+      <div class="icon-wrap">∞</div>
+      <div class="body">
+        <div class="t">Pro навсегда <span class="pill-on">Навсегда</span></div>
+        <div class="s">Без срока окончания · 2 490 ⭐ оплачено</div>
+      </div>
+    </div>
+
+    <!-- regular Pro features showing as active rows -->
+    <div class="set-group">
+      <div class="set-row">
+        <div class="ic">📋</div>
+        <div class="body">
+          <div class="t">До 10 вишлистов</div>
+          <div class="s">Сейчас 4 из 10</div>
+        </div>
+      </div>
+      <div class="set-row">
+        <div class="ic">🎁</div>
+        <div class="body">
+          <div class="t">До 70 желаний в каждом</div>
+          <div class="s">PRO активен</div>
+        </div>
+      </div>
+      <div class="set-row">
+        <div class="ic">🔗</div>
+        <div class="body">
+          <div class="t">Импорт по ссылке</div>
+          <div class="s">Включено</div>
+        </div>
+      </div>
+      <div class="set-row">
+        <div class="ic">💬</div>
+        <div class="body">
+          <div class="t">Комментарии и подсказки</div>
+          <div class="s">Включено</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NOT showing cancel/reactivate row -->
+    <div style="margin:14px 16px 0;font-size:12.5px;color:var(--wb-text-muted);letter-spacing:0.05px;line-height:1.5;text-align:center">
+      Pro навсегда не имеет автопродления.<br/>Отмена и реактивация не применимы.
+    </div>
+  </div>
+
+  <div class="side-note">
+    <span class="tag">D · Settings active</span>
+    <h3>Lifetime в Settings — без cancel/reactivate</h3>
+    <p>Карточка PRO заменяется на gold-trimmed gradient с иконкой <b>∞</b>, бейджем «Навсегда» и подзаголовком «Без срока окончания».</p>
+    <h4>Что отличается от обычного Pro</h4>
+    <ul>
+      <li>В подзаголовке нет <b>«Продление 14 мая · 100 ⭐»</b> — взамен «Без срока окончания».</li>
+      <li><b>Скрыт</b> action-row «Отменить продление» / «Возобновить продление» — для lifetime они не применимы.</li>
+      <li>Внизу — пояснение мелким текстом «Pro навсегда не имеет автопродления».</li>
+    </ul>
+    <h4 class="gold">Backend-гарантия</h4>
+    <p>Endpoint <code>POST /tg/billing/subscription/cancel</code> для lifetime-пользователя возвращает <b>409 lifetime_cannot_cancel</b> — даже если фронт скрыл кнопку, backend защищён.</p>
+  </div>
+</div>
+
+<div class="section">
+  <!-- E · Success sheet after lifetime purchase -->
+  <div class="phone">
+    <div class="phone-label">E · Success sheet</div>
+    <div class="status"><span>9:41</span><span>●●●●</span></div>
+    <!-- backdrop dim -->
+    <div style="position:absolute;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);z-index:10"></div>
+
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-hero">
+        <div class="sheet-hero-emoji">🎉</div>
+        <div class="sheet-hero-title">Готово — Pro теперь<br/>навсегда</div>
+        <div class="sheet-hero-sub">Один платёж — и все функции PRO остаются с тобой без срока окончания.</div>
+      </div>
+      <div class="sheet-list">
+        <div class="sheet-list-row"><div class="check">✓</div>До 10 вишлистов и 70 желаний в каждом</div>
+        <div class="sheet-list-row"><div class="check">✓</div>Импорт по ссылке, комментарии, подсказки</div>
+        <div class="sheet-list-row"><div class="check">✓</div>Reservation PRO — TTL, заметки, история</div>
+        <div class="sheet-list-row"><div class="check">✓</div>Showcase, тайные брони, общие желания</div>
+      </div>
+      <button class="btn gold-grad">К моим вишлистам</button>
+      <button class="btn ghost" style="margin-top:8px">Закрыть</button>
+    </div>
+  </div>
+
+  <div class="side-note">
+    <span class="tag">E · Success</span>
+    <h3>После успешной оплаты lifetime</h3>
+    <p>Bottom-sheet после <code>successful_payment</code>. Подтверждает unlock и перечисляет ключевые группы фич.</p>
+    <h4>Поведение</h4>
+    <ul>
+      <li>Открывается автоматически после <code>billing/pro/sync</code> возвращает <code>{ lifetime: true }</code>.</li>
+      <li>Trackable analytics событие <code>pro_lifetime_purchased</code> при mount, <code>paywall_dismiss</code> при close.</li>
+      <li>Аналог monthly/yearly success-сheet'а, но gold-tinted и с иконкой 🎉.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="section">
+  <!-- F · Conflict warning: lifetime unlocked while monthly subscription is still active -->
+  <div class="phone tall">
+    <div class="phone-label">F · Conflict · Lifetime + active monthly</div>
+    <div class="status"><span>9:41</span><span>●●●●</span></div>
+    <div class="hdr"><div class="hdr-btn">←</div><div style="flex:1;text-align:center;font-size:16px;font-weight:650">Настройки</div><div style="width:40px"></div></div>
+
+    <div class="set-pro-card lifetime">
+      <div class="icon-wrap">∞</div>
+      <div class="body">
+        <div class="t">Pro навсегда <span class="pill-on">Навсегда</span></div>
+        <div class="s">Без срока окончания · активен</div>
+      </div>
+    </div>
+
+    <div class="banner warn">
+      <div class="banner-ic">ℹ️</div>
+      <div>
+        <b>Pro навсегда уже активен.</b> Если у тебя была ежемесячная подписка
+        Telegram Stars, её автопродление можно отменить отдельно — Pro навсегда
+        от этого не пропадёт.
+      </div>
+    </div>
+
+    <!-- legacy monthly subscription block remains so user can cancel its auto-renewal -->
+    <div class="set-group">
+      <div class="set-row">
+        <div class="ic">⏰</div>
+        <div class="body">
+          <div class="t">Месячная подписка</div>
+          <div class="s">Автопродление 14 июня · 100 ⭐</div>
+        </div>
+        <div class="trail">›</div>
+      </div>
+    </div>
+    <div style="margin:0 16px 0;font-size:12.5px;color:var(--wb-text-muted);line-height:1.5;letter-spacing:0.05px">
+      Эта подписка не нужна для работы Pro навсегда.
+      Можно <b style="color:var(--wb-text-secondary)">отменить автопродление</b>, чтобы Telegram не списывал 100 ⭐
+      каждый месяц.
+    </div>
+  </div>
+
+  <div class="side-note">
+    <span class="tag">F · Conflict</span>
+    <h3>Lifetime + ещё активная monthly</h3>
+    <p>Edge case: пользователь сначала купил monthly (auto-renew), потом lifetime. У него теперь и lifetime, и активная Telegram-подписка которая будет списывать 100 ⭐/мес.</p>
+    <h4 class="gold">Дизайн-решение</h4>
+    <ul>
+      <li><b>Не отменять monthly автоматически.</b> Telegram subscription cancellation — отдельный flow, делать «магию» рискованно.</li>
+      <li>Показать <b>warn-banner</b> и оставить старый row «Месячная подписка → cancel» доступным.</li>
+      <li>Объяснить explicit-ом: Pro навсегда от отмены monthly не пропадёт.</li>
+    </ul>
+    <h4>Entitlement priority</h4>
+    <p>В <code>getUserEntitlement</code>: <b>lifetime &gt; subscription &gt; promo &gt; god_mode &gt; free</b>. Lifetime-пользователь всегда Pro, даже если monthly cancel-ится / истекает.</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- DESIGN NOTES -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div style="max-width:780px;margin:0 auto 56px;padding:24px 28px;background:var(--wb-card);border:1px solid var(--wb-border);border-radius:20px;color:var(--wb-text-secondary);font-size:13px;line-height:1.6;backdrop-filter:blur(14px)">
+  <h3 style="color:var(--wb-text);font-size:16px;margin:0 0 14px;letter-spacing:-0.01em">Сводка по решениям, ждём ОК</h3>
+
+  <h4 style="color:var(--wb-warning);font-size:12px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700">1. Layout</h4>
+  <p style="margin:0 0 10px">
+    Рекомендую <b style="color:var(--wb-text)">Variant A · 2+1</b>: monthly+yearly как сейчас (2-col grid), lifetime — отдельный full-width premium tile под ними.
+    Это сохраняет привычный паттерн «recurring vs annual», но честно показывает, что lifetime — другая категория покупки.
+  </p>
+
+  <h4 style="color:var(--wb-warning);font-size:12px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700">2. Цвет «Forever»</h4>
+  <p style="margin:0 0 10px">
+    Использую <code>--wb-warning</code> (#FBBF24, существующий gold token). Не ввожу новых токенов. Визуально отделяет lifetime от green «save» бейджа yearly.
+    Ассоциация «золото = премиум / навсегда» работает в обеих локалях.
+  </p>
+
+  <h4 style="color:var(--wb-warning);font-size:12px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700">3. Иконка</h4>
+  <p style="margin:0 0 10px">
+    Символ <b style="color:var(--wb-text)">∞</b> (infinity) — единый визуальный якорь lifetime во всех состояниях:
+    в plan-tile, в Settings active card, в success-сheet (там 🎉 как праздничная альтернатива).
+  </p>
+
+  <h4 style="color:var(--wb-warning);font-size:12px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700">4. Default selection в paywall</h4>
+  <p style="margin:0 0 10px">
+    Оставляю <b>yearly</b> как default (как сейчас). Lifetime — не дефолт; пользователь должен <b>осознанно выбрать его</b>.
+    Это снижает риск accidental upsell и согласуется с продуктовой иерархией (yearly — наиболее массовый).
+  </p>
+
+  <h4 style="color:var(--wb-warning);font-size:12px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700">5. CTA-стиль</h4>
+  <p style="margin:0 0 10px">
+    Когда выбран monthly/yearly — primary-gradient (violet, как сейчас). Когда выбран lifetime — gold-gradient (<code>--wb-warning</code> → #F59E0B).
+    Это даёт визуальный feedback: «ты выбрал особый план».
+  </p>
+
+  <h4 style="color:var(--wb-warning);font-size:12px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700">6. Что НЕ делаю</h4>
+  <ul style="margin:0 0 10px;padding-left:20px">
+    <li>Не отменяю Telegram-подписку автоматически при покупке lifetime (Telegram subscription cancel — отдельный flow, делать магию опасно).</li>
+    <li>Не ввожу новых дизайн-токенов / не делаю кастомных gold-вариантов.</li>
+    <li>Не меняю layout 19-feature stack — он остаётся как сейчас.</li>
+    <li>Не показываю lifetime в onboarding / в обычных upsell-контекстах FREE-юзеру first-time — только в основном paywall (lifetime — для тех, кто уже понимает ценность Pro).</li>
+  </ul>
+
+  <h4 style="color:var(--wb-warning);font-size:12px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700">7. Локализация</h4>
+  <p style="margin:0 0 10px">
+    Ключи (RU копии в скобках):
+    <code>pro_plan_lifetime_title</code> («Pro навсегда»),
+    <code>pro_plan_lifetime_subtitle</code> («Один платёж. Pro без срока окончания.»),
+    <code>pro_plan_lifetime_badge</code> («Навсегда»),
+    <code>pro_plan_lifetime_cta</code> («Купить навсегда · 2 490 ⭐»),
+    <code>pro_lifetime_active_title</code> («Pro навсегда»),
+    <code>pro_lifetime_active_desc</code> («Без срока окончания»),
+    <code>pro_lifetime_success_title</code> («Готово — Pro теперь навсегда»),
+    <code>pro_lifetime_success_desc</code> («Один платёж…»),
+    <code>pro_lifetime_existing_monthly_warning</code>.
+    Покрытие — все 6 локалей (ru, en, zh-CN, hi, es, ar — RTL уже поддержан в шеле).
+  </p>
+
+  <h4 style="color:var(--wb-warning);font-size:12px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700">8. Открытые вопросы</h4>
+  <ul style="margin:0 0 10px;padding-left:20px">
+    <li><b>Какой layout берём?</b> A (рекомендую) / B / C.</li>
+    <li><b>Иконка ∞ или 👑✨ или другая?</b> Сейчас в success-сheet 🎉, в active card и paywall-tile — ∞.</li>
+    <li><b>Размещение «save» на yearly при наличии lifetime</b> — оставить «−33% vs monthly» или поменять на «−33% vs lifetime»? Считаю, надо оставить «vs monthly» (−33%) — иначе сравнение меняется в зависимости от того, был куплен lifetime или нет, что путает.</li>
+    <li><b>Включать ли lifetime в context-driven upsells</b> (e.g. wishlist_limit hit)? Предлагаю — нет; в context-upsell оставить только monthly/yearly.</li>
+  </ul>
+  <p style="margin:18px 0 0;color:var(--wb-text-muted);font-size:12px">
+    После ОК на layout (A/B/C) и копию — приступаю к реализации: backend (entitlement + checkout + bot handler + scheduler exclusions), API, fronted, i18n × 6, документация (MONETIZATION/DATA_MODEL/SERVICES).
+  </p>
+</div>
+
+</body>
+</html>
