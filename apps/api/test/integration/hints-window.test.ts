@@ -9,11 +9,15 @@
 // Auto-skip without DATABASE_URL (local pnpm test fast path).
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { getTestPrisma, resetDb, disconnectTestPrisma } from '../setup-pg';
+import { getTestPrisma, disconnectTestPrisma } from '../setup-pg';
 import { HINT_LOOKUP_WINDOW_MS } from '@wishlist/shared';
 
 const SKIP = !process.env.DATABASE_URL;
 const suite = SKIP ? describe.skip : describe;
+
+// Unique prefix so parallel integration files don't collide on the
+// shared Postgres database.
+const PREFIX = 'int-hints';
 
 if (SKIP) {
   // eslint-disable-next-line no-console
@@ -23,22 +27,27 @@ if (SKIP) {
 suite('HINT_LOOKUP_WINDOW_MS — real Postgres lookup semantics', () => {
   let userId: string;
   let itemId: string;
+  let wishlistId: string;
 
   beforeAll(async () => {
     const db = getTestPrisma();
-    await resetDb();
+    // Clean only own-prefixed data.
+    await db.hint.deleteMany({ where: { sender: { telegramId: { startsWith: PREFIX } } } });
+    await db.item.deleteMany({ where: { wishlist: { owner: { telegramId: { startsWith: PREFIX } } } } });
+    await db.wishlist.deleteMany({ where: { owner: { telegramId: { startsWith: PREFIX } } } });
+    await db.user.deleteMany({ where: { telegramId: { startsWith: PREFIX } } });
 
-    // Build a minimal sender + wishlist + item to attach hints to.
-    const user = await db.user.create({ data: { telegramId: '5_000_001' } });
+    const user = await db.user.create({ data: { telegramId: `${PREFIX}-owner` } });
     userId = user.id;
 
     const wishlist = await db.wishlist.create({
       data: {
-        slug: `int-hints-${Date.now()}`,
+        slug: `${PREFIX}-${Date.now()}`,
         ownerId: userId,
         title: 'Int test wishlist',
       },
     });
+    wishlistId = wishlist.id;
 
     const item = await db.item.create({
       data: {
@@ -52,6 +61,11 @@ suite('HINT_LOOKUP_WINDOW_MS — real Postgres lookup semantics', () => {
   });
 
   afterAll(async () => {
+    const db = getTestPrisma();
+    await db.hint.deleteMany({ where: { senderUserId: userId } });
+    await db.item.deleteMany({ where: { wishlistId } });
+    await db.wishlist.deleteMany({ where: { id: wishlistId } });
+    await db.user.deleteMany({ where: { id: userId } });
     await disconnectTestPrisma();
   });
 
@@ -92,7 +106,6 @@ suite('HINT_LOOKUP_WINDOW_MS — real Postgres lookup semantics', () => {
         itemId,
         status: 'SENT',
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-        // Backdate the createdAt past the window.
         createdAt: new Date(Date.now() - HINT_LOOKUP_WINDOW_MS - 60_000),
       },
     });
@@ -135,7 +148,7 @@ suite('HINT_LOOKUP_WINDOW_MS — real Postgres lookup semantics', () => {
         itemId,
         status: 'SENT',
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-        createdAt: new Date(Date.now() - 10 * 60_000), // 10 min ago
+        createdAt: new Date(Date.now() - 10 * 60_000),
       },
     })).id;
 

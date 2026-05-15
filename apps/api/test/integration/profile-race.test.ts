@@ -10,14 +10,18 @@
 // via the postgres service container in .github/workflows/test.yml.
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { getTestPrisma, resetDb, disconnectTestPrisma } from '../setup-pg';
+import { getTestPrisma, disconnectTestPrisma } from '../setup-pg';
 import { getOrCreateProfile } from '../../src/profile';
 
 const SKIP = !process.env.DATABASE_URL;
 const suite = SKIP ? describe.skip : describe;
 
+// Unique prefix per file so parallel integration test files don't trample
+// each other's fixtures (vitest runs files in parallel workers; the
+// single Postgres DB is shared).
+const PREFIX = 'int-profile';
+
 if (SKIP) {
-  // Surface the skip explicitly so CI logs make the gap visible.
   // eslint-disable-next-line no-console
   console.warn('[integration] DATABASE_URL not set — skipping profile-race integration tests');
 }
@@ -27,21 +31,23 @@ suite('getOrCreateProfile — real Postgres', () => {
 
   beforeAll(async () => {
     const db = getTestPrisma();
-    await resetDb();
-    // Seed three users for the tests below.
+    // Clean only own-prefixed data so we don't trample other files in flight.
+    await db.userProfile.deleteMany({ where: { user: { telegramId: { startsWith: PREFIX } } } });
+    await db.user.deleteMany({ where: { telegramId: { startsWith: PREFIX } } });
     for (let i = 1; i <= 5; i++) {
-      const id = `int-test-u${i}`;
-      await db.user.create({ data: { id, telegramId: `${1_000_000 + i}` } });
-      userIds.push(id);
+      const u = await db.user.create({ data: { telegramId: `${PREFIX}-${i}` } });
+      userIds.push(u.id);
     }
   });
 
   afterAll(async () => {
+    const db = getTestPrisma();
+    await db.userProfile.deleteMany({ where: { userId: { in: userIds } } });
+    await db.user.deleteMany({ where: { id: { in: userIds } } });
     await disconnectTestPrisma();
   });
 
   beforeEach(async () => {
-    // Clear any profiles created in prior tests so each test starts fresh.
     const db = getTestPrisma();
     await db.userProfile.deleteMany({ where: { userId: { in: userIds } } });
   });
@@ -54,17 +60,11 @@ suite('getOrCreateProfile — real Postgres', () => {
   });
 
   it('Postgres-side P2002 race: 5 concurrent calls all settle on the same row', async () => {
-    // This is the regression test for the 2026-04-30 incident. We fire 5
-    // concurrent getOrCreateProfile calls for the SAME userId. One INSERT
-    // wins at the unique constraint; the other 4 catch P2002 + re-fetch.
-    // Expected outcome: 5 promises resolve, all return the same profile.id,
-    // no rejection.
     const results = await Promise.all(
       Array.from({ length: 5 }, () => getOrCreateProfile(userIds[1]!, 'en')),
     );
-
     const ids = new Set(results.map((p) => p.id));
-    expect(ids.size).toBe(1); // exactly one row created, all 5 returned it
+    expect(ids.size).toBe(1);
     expect(results.every((r) => r.userId === userIds[1]!)).toBe(true);
   });
 
@@ -85,11 +85,9 @@ suite('getOrCreateProfile — real Postgres', () => {
 
   it('lazy-backfills supportId on a profile that was created without one', async () => {
     const db = getTestPrisma();
-    // Create a profile manually without supportId
     await db.userProfile.create({
       data: { userId: userIds[0]!, defaultCurrency: 'USD', supportId: null },
     });
-
     const result = await getOrCreateProfile(userIds[0]!, 'en');
     expect(result.supportId).toBeTruthy();
     expect(result.supportId).toMatch(/^[a-f0-9]+$/);
@@ -98,12 +96,18 @@ suite('getOrCreateProfile — real Postgres', () => {
   it('supportId is unique-per-user even under serial creation pressure', async () => {
     const db = getTestPrisma();
     const seen = new Set<string>();
-    // Serial loop — no race; just verify each generated id is unique.
-    for (let i = 0; i < 10; i++) {
-      const u = await db.user.create({ data: { telegramId: `${9_000_000 + i}` } });
-      const p = await getOrCreateProfile(u.id, 'en');
-      expect(seen.has(p.supportId!)).toBe(false);
-      seen.add(p.supportId!);
+    const localUsers: string[] = [];
+    try {
+      for (let i = 0; i < 10; i++) {
+        const u = await db.user.create({ data: { telegramId: `${PREFIX}-bulk-${i}` } });
+        localUsers.push(u.id);
+        const p = await getOrCreateProfile(u.id, 'en');
+        expect(seen.has(p.supportId!)).toBe(false);
+        seen.add(p.supportId!);
+      }
+    } finally {
+      await db.userProfile.deleteMany({ where: { userId: { in: localUsers } } });
+      await db.user.deleteMany({ where: { id: { in: localUsers } } });
     }
   });
 });
