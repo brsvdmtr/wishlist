@@ -23,6 +23,7 @@ import { SantaHatOverlay } from './components/SantaHatOverlay';
 import { SnowflakeOverlay } from './components/SnowflakeOverlay';
 import { SantaAvatar, santaAliasHue } from './components/SantaAvatar';
 import { UserAvatar } from './components/UserAvatar';
+import { getEmoji, extractFirstEmoji, EMOJIS } from './lib/emoji';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
 import { initSentry, captureException } from './sentry';
 import {
@@ -94,54 +95,7 @@ const C = {
 
 const font = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif";
 
-const EMOJIS = ['🎧','📖','☕','🎵','🎒','📚','🎮','👟','💄','🎨','⌚','🖥','📷','🎸','🏀','🧩','🕯','🍫','🧸','✈️'];
-function getEmoji(s: string) {
-  const code = [...s].reduce((h, c) => ((h << 5) - h) + c.charCodeAt(0), 0);
-  return EMOJIS[Math.abs(code) % EMOJIS.length];
-}
-
-/**
- * Extract the FIRST emoji from arbitrary user input as a single grapheme
- * cluster. Returns null when the input contains no emoji.
- *
- * Handles all emoji oddities correctly:
- *   - Skin-tone modifiers (👋🏽 = base + modifier, 2 codepoints, 1 grapheme)
- *   - ZWJ sequences (👨‍👩‍👧 = 5 codepoints joined, 1 grapheme)
- *   - Regional-indicator pairs / flags (🇷🇺 = 2 codepoints, 1 grapheme)
- *   - Variation selectors (✈️ = ✈ + U+FE0F, 1 grapheme)
- *
- * Used by the wishlist emoji picker — strips letters/digits/punctuation so
- * the user can't break the wishlist hero by pasting "Hello".
- */
-function extractFirstEmoji(input: string): string | null {
-  if (!input) return null;
-  // `Intl.Segmenter` is supported in iOS Safari 14.1+, Chrome 87+, modern
-  // Telegram WebView. We always run inside a Telegram client so it's safe
-  // to assume availability; the `try/catch` is just a paranoid fallback.
-  let segments: Iterable<{ segment: string }> | null = null;
-  try {
-    const seg = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
-    segments = seg.segment(input);
-  } catch { /* old runtime: fall through */ }
-
-  // Emoji-detection regex. `\p{Extended_Pictographic}` matches the full
-  // pictographic set; `\p{Regional_Indicator}{2}` covers flags. Any
-  // intermediate ZWJ/variation-selector chars are part of the same grapheme.
-  const isEmoji = (s: string): boolean => /\p{Extended_Pictographic}|\p{Regional_Indicator}{2}/u.test(s);
-
-  if (segments) {
-    for (const { segment } of segments) {
-      if (isEmoji(segment)) return segment;
-    }
-    return null;
-  }
-
-  // Fallback: scan codepoints, return the first one that's a pictographic.
-  for (const cp of input) {
-    if (isEmoji(cp)) return cp;
-  }
-  return null;
-}
+// EMOJIS / getEmoji / extractFirstEmoji extracted to ./lib/emoji — see Phase 5b.
 
 const GUEST_BUDGET_PRESETS = [3000, 5000, 10000, 25000] as const;
 
