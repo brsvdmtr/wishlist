@@ -28,7 +28,7 @@ suite('birthday-reminders classifier — real Postgres', () => {
       where: {
         OR: [
           { birthdayUser: { telegramId: { startsWith: PREFIX } } },
-          { recipientUser: { telegramId: { startsWith: PREFIX } } },
+          { recipient: { telegramId: { startsWith: PREFIX } } },
         ],
       },
     });
