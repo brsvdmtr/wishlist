@@ -70,6 +70,18 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma client
+        # @prisma/client postinstall can't find the schema (it sits in
+        # packages/db/prisma/) so we must run generate explicitly. Otherwise
+        # tsc against db/api code can't resolve `Prisma.JsonValue`, the
+        # generated `ReferralAttribution` types, etc.
+        run: pnpm -C packages/db db:generate
+
+      - name: Build shared package
+        # packages/db imports from `@wishlist/shared`; without the build,
+        # tsc fails to resolve module types. Must precede db build.
+        run: pnpm -C packages/shared build
+
       - name: Build db package
         run: pnpm -C packages/db build
 
