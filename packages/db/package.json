@@ -10,7 +10,10 @@
     "db:generate": "node scripts/prisma.cjs generate",
     "db:migrate:dev": "node scripts/prisma.cjs migrate dev",
     "db:migrate:deploy": "node scripts/prisma.cjs migrate deploy",
-    "db:studio": "node scripts/prisma.cjs studio"
+    "db:studio": "node scripts/prisma.cjs studio",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@prisma/client": "5.18.0",
@@ -19,9 +22,11 @@
   },
   "devDependencies": {
     "@types/node": "20.14.11",
+    "@vitest/coverage-v8": "^2.1.9",
     "dotenv": "16.4.5",
     "prisma": "5.18.0",
-    "typescript": "5.5.4"
+    "typescript": "5.5.4",
+    "vitest": "^2.1.9"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"

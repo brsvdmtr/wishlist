@@ -1,0 +1,87 @@
+name: Tests
+
+# Runs vitest across the monorepo on every PR and push to main.
+# Required for merge — see `deploy.yml`, which has `needs: test`.
+#
+# Strategy:
+#   - GitHub Actions postgres:16-alpine service container provides a real DB
+#     for integration tests in apps/api (Prisma queries, route handlers,
+#     schedulers). Phase 0–1 tests are pure-unit and don't need it, but the
+#     service is wired up now so Phase 2+ doesn't require touching CI.
+#   - DATABASE_URL is exported for all steps; apps/api integration tests
+#     read it from process.env.
+#   - prisma migrate deploy runs once before tests, establishing the schema.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: wishlist
+          POSTGRES_PASSWORD: wishlist
+          POSTGRES_DB: wishlist_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wishlist -d wishlist_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://wishlist:wishlist@localhost:5432/wishlist_test
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build db package
+        run: pnpm -C packages/db build
+
+      - name: Apply Prisma migrations
+        run: pnpm -C packages/db db:migrate:deploy
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Coverage report (non-blocking)
+        if: always()
+        run: pnpm test:coverage || true
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            apps/*/coverage/
+            packages/*/coverage/
+          retention-days: 7

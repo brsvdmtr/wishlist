@@ -7,7 +7,7 @@ function item(overrides: Partial<SortableItem> & { id: string }): SortableItem {
   return {
     priority: 'MEDIUM',
     status: 'AVAILABLE',
-    updatedAt: d('2026-01-01T00:00:00Z'),
+    position: 0,
     createdAt: d('2026-01-01T00:00:00Z'),
     ...overrides,
   };
@@ -32,36 +32,43 @@ describe('sortItemsJs', () => {
     expect(sortItemsJs(items)[0].id).toBe('active');
   });
 
-  it('tiebreaks by updatedAt DESC within same priority', () => {
+  it('tiebreaks by position ASC within same priority (manual order)', () => {
     const items = [
-      item({ id: 'old', updatedAt: d('2026-01-01T00:00:00Z') }),
-      item({ id: 'new', updatedAt: d('2026-06-01T00:00:00Z') }),
+      item({ id: 'second', position: 10 }),
+      item({ id: 'first', position: 1 }),
+      item({ id: 'third', position: 100 }),
+    ];
+    expect(sortItemsJs(items).map((i) => i.id)).toEqual(['first', 'second', 'third']);
+  });
+
+  it('tiebreaks by createdAt DESC when position equal', () => {
+    const items = [
+      item({ id: 'old', position: 0, createdAt: d('2025-01-01T00:00:00Z') }),
+      item({ id: 'new', position: 0, createdAt: d('2026-01-01T00:00:00Z') }),
     ];
     expect(sortItemsJs(items)[0].id).toBe('new');
   });
 
-  it('tiebreaks by createdAt DESC when updatedAt equal', () => {
+  it('tiebreaks by id DESC when position and createdAt equal', () => {
     const ts = d('2026-01-01T00:00:00Z');
     const items = [
-      item({ id: 'old', updatedAt: ts, createdAt: d('2025-01-01T00:00:00Z') }),
-      item({ id: 'new', updatedAt: ts, createdAt: d('2026-01-01T00:00:00Z') }),
-    ];
-    expect(sortItemsJs(items)[0].id).toBe('new');
-  });
-
-  it('tiebreaks by id DESC when all timestamps equal', () => {
-    const ts = d('2026-01-01T00:00:00Z');
-    const items = [
-      item({ id: 'aaa', updatedAt: ts, createdAt: ts }),
-      item({ id: 'zzz', updatedAt: ts, createdAt: ts }),
+      item({ id: 'aaa', position: 0, createdAt: ts }),
+      item({ id: 'zzz', position: 0, createdAt: ts }),
     ];
     expect(sortItemsJs(items)[0].id).toBe('zzz');
   });
 
+  it('position beats createdAt — manual reorder wins over time', () => {
+    const items = [
+      item({ id: 'newer-but-bumped-down', position: 100, createdAt: d('2026-06-01T00:00:00Z') }),
+      item({ id: 'older-but-on-top', position: 0, createdAt: d('2025-01-01T00:00:00Z') }),
+    ];
+    expect(sortItemsJs(items)[0].id).toBe('older-but-on-top');
+  });
+
   it('unknown/missing priority falls back to rank 1 (treated as LOW)', () => {
     const items = [
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      item({ id: 'unknown', priority: 'UNKNOWN' as any }),
+      item({ id: 'unknown', priority: 'UNKNOWN' as unknown as SortableItem['priority'] }),
       item({ id: 'medium', priority: 'MEDIUM' }),
     ];
     expect(sortItemsJs(items)[0].id).toBe('medium');
@@ -71,18 +78,25 @@ describe('sortItemsJs', () => {
     const items = [item({ id: 'b', priority: 'LOW' }), item({ id: 'a', priority: 'HIGH' })];
     const original = [...items];
     sortItemsJs(items);
-    expect(items[0].id).toBe(original[0].id);
+    expect(items.map((i) => i.id)).toEqual(original.map((i) => i.id));
   });
 
-  it('full integration: active HIGH beats archived HIGH, then priority, then dates', () => {
-    const base = d('2026-01-01T00:00:00Z');
+  it('full integration: active HIGH beats archived HIGH, then priority, then position', () => {
     const items = [
       item({ id: 'd', status: 'COMPLETED', priority: 'HIGH' }),
-      item({ id: 'c', status: 'AVAILABLE', priority: 'LOW' }),
-      item({ id: 'b', status: 'AVAILABLE', priority: 'MEDIUM' }),
-      item({ id: 'a', status: 'AVAILABLE', priority: 'HIGH', updatedAt: base }),
+      item({ id: 'c', status: 'AVAILABLE', priority: 'LOW', position: 0 }),
+      item({ id: 'b', status: 'AVAILABLE', priority: 'MEDIUM', position: 0 }),
+      item({ id: 'a', status: 'AVAILABLE', priority: 'HIGH', position: 0 }),
     ];
     const sorted = sortItemsJs(items).map((i) => i.id);
     expect(sorted).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('mixed positions across priorities — priority always wins over position', () => {
+    const items = [
+      item({ id: 'low-front', priority: 'LOW', position: 0 }),
+      item({ id: 'high-back', priority: 'HIGH', position: 999 }),
+    ];
+    expect(sortItemsJs(items)[0].id).toBe('high-back');
   });
 });
