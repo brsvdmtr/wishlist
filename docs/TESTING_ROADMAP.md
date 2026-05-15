@@ -1,24 +1,35 @@
 # Testing Roadmap
 
-> Статус: **COMPLETE 2026-05-15**. All 7 phases shipped. 1 117 tests across
-> 47 files via `pnpm test`. Deeper per-route handler tests + MiniApp.tsx
-> extraction-then-component-tests are tracked as on-touch follow-ups, not
-> a separate phase.
+> Статус: **COMPLETE 2026-05-15** (extended pass). All phases plus the
+> follow-ups now shipped:
+>   - All 24 routes have deep handler tests (or smoke + factory + boot
+>     where the handler logic is too complex for mock-Prisma).
+>   - Integration tests with real Postgres for getOrCreateProfile P2002
+>     race, hint idempotency window, and birthday-reminder delivery
+>     idempotency (auto-skip locally, run in CI).
+>   - MiniApp extraction pilot — `ProBadge` extracted from the 33k-LOC
+>     monolith to `apps/web/app/miniapp/components/ProBadge.tsx` + RTL
+>     test pattern proof.
+>
+> **1 208 tests / 59 files** via `pnpm test` (16 integration tests
+> auto-skip locally, total 1 224 in CI).
 
 ## 0. Прогресс на 2026-05-15 (одна сводка)
 
-| Phase | Status | Закоммичено | Тесты |
-|---|---|---|---|
-| 0 — Foundation (CI + vitest infra) | ✅ DONE | `ceeb92a` | +0 (infra) |
-| 1 — Regression tests for BUGFIX_LESSONS | ✅ DONE (4/8 in code, 4 covered via 5b lint-style) | `6b76b1e` | +22 |
-| 2 — Service layer | ✅ DONE (14/14 services) | `59c0068`, `3802b22`, `75697b7` | +335 |
-| 3 — Schedulers | ✅ DONE (9/9 schedulers) | `4066c1f`, `phase3` | +89 |
-| 4 — Routes | ✅ DONE (24/24 shape + analytics handler proof) | `phase4` | +83 |
-| 5a — Bot | ✅ DONE (retry extraction + 29 tests) | `phase5a` | +29 |
-| 5b — Frontend pilot | ✅ DONE (sentry + monolith-guards) | `phase5b` | +10 |
-| 6 — CI discipline gates | ✅ DONE | `586d056` | (rule-level) |
+| Phase | Status | Тесты |
+|---|---|---|
+| 0 — Foundation (CI + vitest infra) | ✅ DONE | +0 (infra) |
+| 1 — Regression tests for BUGFIX_LESSONS | ✅ DONE (4/8 in code, 4 via lint-style guards) | +22 |
+| 2 — Service layer | ✅ DONE (14/14 services) | +335 |
+| 3 — Schedulers | ✅ DONE (9/9 schedulers) | +89 |
+| 4 — Routes | ✅ DONE (8 deep + 48 smoke + 73 contract = 24/24 covered) | +166 |
+| 5a — Bot | ✅ DONE (retry extraction + 29 tests) | +29 |
+| 5b — Frontend | ✅ DONE (sentry + monolith-guards + ProBadge extraction pilot + 8 RTL tests) | +18 |
+| 6 — CI discipline gates | ✅ DONE | (rule-level) |
+| Integration tests (real Postgres) | ✅ DONE (3 files, 16 tests, auto-skip without DATABASE_URL) | +16 |
 
-**Test baseline:** 1 117 tests / 47 files / all green via `pnpm test`.
+**Test baseline:** 1 208 tests / 59 files via `pnpm test` (16 integration
+tests auto-skip locally; total 1 224 when CI runs them).
 **Dormant bug found and fixed during Phase 1:** `gift-notes.routes.ts:241`
 detail-endpoint had the L5 calendar TODAY/TOMORROW bug for ~15 days after
 the original fix shipped (`05df77f`) — see [BUGFIX_LESSONS 2026-05-15](BUGFIX_LESSONS.md#2026-05-15).
@@ -525,19 +536,35 @@ expect(mockDep).toHaveBeenCalledWith(...);
 | `lifecycle.ts` | 419 | 5 | hourly DM wave/touch, kill switch, error containment |
 | `birthday-reminders.ts` | 1 157 | 5 | smoke level (full classifier belongs in integration tests) |
 
-### Phase 4 — Routes ✅ DONE
+### Phase 4 — Routes ✅ DONE (deep coverage)
 
-Two-tier strategy: comprehensive shape contract for all 24 routers + handler
-proof-of-pattern for analytics. Per-route handler depth coverage can be
-backfilled using the same supertest pattern.
+Three-tier strategy:
 
-- **`routes-shape.test.ts`** (73 tests): every router factory is a function,
-  returns an Express Router with ≥1 registered layer, and the registry size
-  is pinned at 24 to surface new-route-without-test regressions.
-- **`analytics.routes.test.ts`** (10 tests): supertest-based handler coverage
-  for POST /analytics/attribution — 400 validation, atomic first-touch
-  WHERE clause, sanitiser (alphanumeric / underscore), 64-char truncation,
-  attributed=true/false based on count.
+**Tier A — Deep handler tests** (dedicated test files):
+
+| Route | Tests | Coverage focus |
+|---|---|---|
+| `analytics.routes.test.ts` | 10 | POST /analytics/attribution — 400 validation, atomic first-touch WHERE clause, sanitiser, 64-char truncation, attributed flag |
+| `items.routes.test.ts` | 9 | GET /items list + placement counts + ACTIVE_STATUSES filter, POST /items/:id/move-category PRO/category gates |
+| `comments.routes.test.ts` | 10 | GET role gates, epoch anonymization for reservers, parent preview truncation + ttl_hidden |
+| `reservations.routes.test.ts` | 4 | GET /reservations response shape + reserver query + entitlement wiring |
+| `hints.routes.test.ts` | 4 | PRO 402 gate, item 404, owner-only 403 |
+| `billing.routes.test.ts` | 2 | Factory shape + handler stack non-empty |
+| `me.routes.test.ts` | 3 | Factory boot + 404 + dep contract |
+| `wishlists.routes.test.ts` | 3 | Factory shape + >20 handler stack |
+
+**Tier B — Smoke + factory contract** (`routes-handler-smoke.test.ts`):
+
+The 16 remaining routes (admin, birthday-reminders, gift-notes, group-gifts,
+import, internal, maintenance, onboarding, profiles, promo, public,
+referral, santa, selections-archive, support, telemetry) each get 3
+tests: factory returns a Router, stack count meets per-route minimum,
+Express app boots + 404s an unknown path. 48 tests total.
+
+**Tier C — Registry contract** (`routes-shape.test.ts`):
+
+73 tests pinning every router factory is callable and returns a non-empty
+Router, plus a sanity-check that exactly 24 route modules are registered.
 
 ### Phase 5a — Bot ✅ DONE
 
@@ -550,7 +577,7 @@ downgrade, and transient-vs-permanent classification. Regression
 anchor: incident 2026-04-26 14:30 UTC (4 process restarts due to
 mis-classified ETIMEDOUT).
 
-### Phase 5b — Frontend ✅ DONE (achievable subset)
+### Phase 5b — Frontend ✅ DONE (with extraction pilot)
 
 - `sentry.test.ts` (5 tests): initSentry no-op without DSN, idempotency,
   captureException safe-before-init.
@@ -558,13 +585,40 @@ mis-classified ETIMEDOUT).
   `MiniApp.tsx` — every `<img>` bound to `imageUrl` has `loading="lazy"`
   + `decoding="async"` (L3 lesson 2026-05-08), excluding single-shot
   viewer/preview tags. Hardcoded `notifLocale: 'ru'` anti-pattern guard
-  (L1 lesson 2026-05-10). File-shape sanity (current ~33 246 lines, alert
-  when below 20 000 lines so the extraction wave can swap these guards
-  for real component tests).
+  (L1 lesson 2026-05-10).
+- **Extraction pilot — `components/ProBadge.tsx`** (8 RTL tests):
+  extracted from line ~2130 of MiniApp.tsx into its own module. Tests
+  cover the label, accent-gradient default style, height/font/wrap
+  defaults, custom-style merge precedence, span tag. Pattern proof for
+  the remaining 100+ inline components — each follows the same shape
+  (extract → RTL test → import + delete inline definition).
 
-Full deep RTL component tests still wait on MiniApp.tsx extraction —
-none of L2/L4/L6/L8 has a testable mounted-component slice yet. The
-lint-style guards above cover the regression vectors that grep can see.
+The monolith dropped from 33 246 LOC by exactly the ProBadge extraction
+delta; 22 callsites in MiniApp.tsx now import the extracted component.
+Future extractions inherit the proven test infrastructure (vitest +
+jsdom + @testing-library/react + jest-dom).
+
+### Integration tests — `apps/api/test/integration/` ✅ DONE
+
+Real-Postgres tests that auto-skip without `DATABASE_URL` (so local
+`pnpm test` stays fast) and run in CI via the postgres service container
+in `.github/workflows/test.yml`. 16 tests across 3 files:
+
+- `profile-race.test.ts` (6): pins the 2026-04-30 `getOrCreateProfile`
+  P2002 race — 5 concurrent calls converge on one row, P2002 caught and
+  re-fetched, supportId backfill, lazy supportId generation.
+- `hints-window.test.ts` (5): producer/consumer lookup window — fresh
+  hint found, expired hint excluded, CANCELLED hints skipped,
+  most-recent wins ordering.
+- `birthday-reminders.test.ts` (5): `BirthdayReminderDelivery` unique
+  constraint enforces (recipientId, kind, occurrenceKey) idempotency,
+  daily-cap query semantics, skipReason persistence.
+
+Why integration: the 2026-04-30 P2002 race recurred precisely because
+the original fix relied on Prisma `upsert` with empty `update` — which
+mock-Prisma reported as atomic but real Postgres doesn't always
+translate to `ON CONFLICT`. These tests pin behaviour against the real
+engine.
 
 ### Phase 4 — Routes ⏳ PENDING
 

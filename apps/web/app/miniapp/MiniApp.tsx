@@ -18,6 +18,7 @@ import {
 } from '@wishlist/ui';
 import { AppearanceSettings } from './screens/AppearanceSettings';
 import { CalendarRoot } from './screens/calendar/CalendarRoot';
+import { ProBadge } from './components/ProBadge';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
 import { initSentry, captureException } from './sentry';
 import {
@@ -2127,23 +2128,7 @@ function renderSantaAlias(adjectiveKey: string, animalKey: string, locale: strin
 // rendering across all parent contexts (flex rows, inline text,
 // buttons, list items). DO NOT override height/padding via `style`.
 // Use ProBadge wherever you need to tag something as PRO.
-function ProBadge({ style }: { style?: React.CSSProperties } = {}) {
-  // v2.1 — uses accent CSS vars so badge adapts to theme×accent switch.
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      height: 20, minHeight: 20, padding: '0 8px',
-      borderRadius: 5,
-      background: 'linear-gradient(135deg, var(--wb-accent, #7C6AFF), var(--wb-accent-strong, #A78BFA))',
-      color: '#fff',
-      fontSize: 10, fontWeight: 700, letterSpacing: 0.5, lineHeight: 1,
-      whiteSpace: 'nowrap', flexShrink: 0,
-      verticalAlign: 'middle',
-      boxSizing: 'border-box',
-      ...style,
-    }}>PRO</span>
-  );
-}
+// ProBadge extracted to ./components/ProBadge — see Phase 5b extraction pilot.
 
 /**
  * Small tile that appears on the profile screen advertising the referral
