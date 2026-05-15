@@ -8,10 +8,13 @@
 // Auto-skip without DATABASE_URL.
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
-import { getTestPrisma, resetDb, disconnectTestPrisma } from '../setup-pg';
+import { getTestPrisma, disconnectTestPrisma } from '../setup-pg';
 
 const SKIP = !process.env.DATABASE_URL;
 const suite = SKIP ? describe.skip : describe;
+
+// Unique prefix so parallel integration files don't trample fixtures.
+const PREFIX = 'int-bday';
 
 if (SKIP) {
   // eslint-disable-next-line no-console
@@ -19,28 +22,36 @@ if (SKIP) {
 }
 
 suite('birthday-reminders classifier — real Postgres', () => {
+  async function cleanOwnData() {
+    const db = getTestPrisma();
+    await db.birthdayReminderDelivery.deleteMany({
+      where: {
+        OR: [
+          { birthdayUser: { telegramId: { startsWith: PREFIX } } },
+          { recipientUser: { telegramId: { startsWith: PREFIX } } },
+        ],
+      },
+    });
+    await db.userProfile.deleteMany({ where: { user: { telegramId: { startsWith: PREFIX } } } });
+    await db.user.deleteMany({ where: { telegramId: { startsWith: PREFIX } } });
+  }
+
   beforeAll(async () => {
-    await resetDb();
+    await cleanOwnData();
   });
 
   afterAll(async () => {
+    await cleanOwnData();
     await disconnectTestPrisma();
   });
 
   beforeEach(async () => {
-    // Clean every table mutated by these scenarios.
-    const db = getTestPrisma();
-    await db.birthdayReminderDelivery.deleteMany();
-    await db.wishlistSubscription.deleteMany();
-    await db.item.deleteMany();
-    await db.wishlist.deleteMany();
-    await db.userProfile.deleteMany();
-    await db.user.deleteMany();
+    await cleanOwnData();
   });
 
   it('user without birthday in profile → not a candidate', async () => {
     const db = getTestPrisma();
-    const u = await db.user.create({ data: { telegramId: 'b1' } });
+    const u = await db.user.create({ data: { telegramId: `${PREFIX}-1` } });
     await db.userProfile.create({ data: { userId: u.id, birthday: null } });
 
     // Query candidates the way the scheduler does (profiles with birthday set).
@@ -52,7 +63,7 @@ suite('birthday-reminders classifier — real Postgres', () => {
 
   it('user with birthday but no public wishlist → no friend-reminders eligible', async () => {
     const db = getTestPrisma();
-    const u = await db.user.create({ data: { telegramId: 'b2' } });
+    const u = await db.user.create({ data: { telegramId: `${PREFIX}-2` } });
     await db.userProfile.create({
       data: { userId: u.id, birthday: new Date('1990-05-20'), birthdayPrimaryWishlistId: null },
     });
@@ -72,8 +83,8 @@ suite('birthday-reminders classifier — real Postgres', () => {
 
   it('BirthdayReminderDelivery unique constraint enforces idempotency per (recipientId, kind, occurrenceKey)', async () => {
     const db = getTestPrisma();
-    const sender = await db.user.create({ data: { telegramId: 'bsender' } });
-    const recipient = await db.user.create({ data: { telegramId: 'brecip' } });
+    const sender = await db.user.create({ data: { telegramId: `${PREFIX}-sender` } });
+    const recipient = await db.user.create({ data: { telegramId: `${PREFIX}-recip` } });
 
     const occurrenceKey = '2026-05-20';
 
@@ -111,13 +122,13 @@ suite('birthday-reminders classifier — real Postgres', () => {
 
   it('recipient daily-cap query returns count for MSK today', async () => {
     const db = getTestPrisma();
-    const recipient = await db.user.create({ data: { telegramId: 'bcap' } });
+    const recipient = await db.user.create({ data: { telegramId: `${PREFIX}-cap` } });
 
     // Create 3 deliveries TODAY for this recipient → at cap.
     const today = new Date();
     const todayStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
     for (let i = 0; i < 3; i++) {
-      const sender = await db.user.create({ data: { telegramId: `bsender${i}` } });
+      const sender = await db.user.create({ data: { telegramId: `${PREFIX}-sender-${i}` } });
       await db.birthdayReminderDelivery.create({
         data: {
           birthdayUserId: sender.id,
@@ -142,8 +153,8 @@ suite('birthday-reminders classifier — real Postgres', () => {
 
   it('skipReason can be persisted on a SKIPPED delivery for analytics', async () => {
     const db = getTestPrisma();
-    const sender = await db.user.create({ data: { telegramId: 'bskip-s' } });
-    const recipient = await db.user.create({ data: { telegramId: 'bskip-r' } });
+    const sender = await db.user.create({ data: { telegramId: `${PREFIX}-skip-s` } });
+    const recipient = await db.user.create({ data: { telegramId: `${PREFIX}-skip-r` } });
 
     const row = await db.birthdayReminderDelivery.create({
       data: {
