@@ -32,7 +32,7 @@ suite('HINT_LOOKUP_WINDOW_MS — real Postgres lookup semantics', () => {
   beforeAll(async () => {
     const db = getTestPrisma();
     // Clean only own-prefixed data.
-    await db.hint.deleteMany({ where: { sender: { telegramId: { startsWith: PREFIX } } } });
+    await db.hint.deleteMany({ where: { user: { telegramId: { startsWith: PREFIX } } } });
     await db.item.deleteMany({ where: { wishlist: { owner: { telegramId: { startsWith: PREFIX } } } } });
     await db.wishlist.deleteMany({ where: { owner: { telegramId: { startsWith: PREFIX } } } });
     await db.user.deleteMany({ where: { telegramId: { startsWith: PREFIX } } });
