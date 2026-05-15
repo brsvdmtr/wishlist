@@ -1,7 +1,26 @@
-# Testing Roadmap — DRAFT
+# Testing Roadmap
 
-> Статус: **DRAFT 2026-05-15**. Документ для согласования стратегии тестирования.
-> Реализация по фазам начнётся только после явного одобрения и расстановки приоритетов.
+> Статус: **IN PROGRESS 2026-05-15**. Phases 0, 1 (partial), 2 (partial), 6
+> shipped; Phase 3 / 4 / 5a pending; Phase 5b deferred until MiniApp.tsx
+> extraction. Полное состояние прогресса — в § 10.
+
+## 0. Прогресс на 2026-05-15 (одна сводка)
+
+| Phase | Status | Закоммичено | Тесты |
+|---|---|---|---|
+| 0 — Foundation (CI + vitest infra) | ✅ DONE | `ceeb92a` | +0 (infra) |
+| 1 — Regression tests for BUGFIX_LESSONS | ✅ DONE (4/8 closed in code, 4 deferred) | `6b76b1e` | +22 |
+| 2 — Service layer | 🚧 PARTIAL (11/14 services done) | `59c0068`, `3802b22` | +222 |
+| 3 — Schedulers | ⏳ PENDING | — | — |
+| 4 — Routes | ⏳ PENDING | — | — |
+| 5a — Bot | ⏳ PENDING | — | — |
+| 5b — Frontend pilot (L2/L3/L6/L8 UI regressions) | ⏳ DEFERRED until MiniApp.tsx extraction | — | — |
+| 6 — CI discipline gates | ✅ DONE | this commit | (rule-level) |
+
+**Test baseline after these commits:** 784 tests / 30 files / all green.
+**Dormant bug found and fixed during Phase 1:** `gift-notes.routes.ts:241`
+detail-endpoint had the L5 calendar TODAY/TOMORROW bug for ~15 days after
+the original fix shipped (`05df77f`) — see [BUGFIX_LESSONS 2026-05-15](BUGFIX_LESSONS.md#2026-05-15).
 
 ## 1. Текущее состояние
 
@@ -420,10 +439,128 @@ export default defineConfig({
 
 ---
 
-## Следующий шаг (требует одобрения)
+## 10. Детальный прогресс по фазам
 
-1. **Одобрить Phase 0 — Foundation.** ~1-2 дня работы: install deps, configs, CI workflow, autodiscover. После этого `pnpm test` запускает 23 существующих теста, и CI блокирует красные.
-2. **Параллельно расставить приоритеты Phase 1 (8 регрессий)** — какие из 8 lessons закрываем первыми, или закрываем все сразу.
-3. **Ответить на открытые вопросы § 8** (или отложить до момента, когда упрёмся в каждый).
+### Phase 0 — Foundation ✅ DONE (`ceeb92a`)
 
-Без явного одобрения — этот документ остаётся DRAFT, кода не пишу.
+- `.github/workflows/test.yml` создан, Postgres-service:16-alpine на 5432.
+- `vitest.config.ts` в `apps/{api,web,bot}` + `packages/{shared,db}` с
+  `passWithNoTests`, V8 coverage reporters, content-aware include globs.
+- `pnpm test` / `pnpm test:coverage` / `pnpm test:watch` во всех 5
+  пакетах + root команды.
+- `apps/api/test/{setup-pg.ts,factories/,README.md}` для будущих DB-tests.
+- `apps/web/test/setup-dom.ts` — jest-dom matchers для RTL.
+- **Найденный bug при autodiscover:** `apps/api/src/sort.test.ts` имел 3
+  failing теста (схема устарела от `updatedAt` к `position` после
+  commit `1aa8849`, тест не обновился) — переписан, 10 кейсов, all green.
+
+### Phase 1 — Regressions ✅ DONE (`6b76b1e`)
+
+Из 8 lessons:
+
+- **L1 locale resolver (2026-05-10)** — ✅ уже покрыт `i18n.resolver.test.ts`
+  (121 тест включая cron-path).
+- **L4 hint window mismatch (2026-05-03)** — ✅ extract `HINT_LOOKUP_WINDOW_MS`
+  в `packages/shared`, оба consumer'а (api/routes/hints.routes.ts +
+  bot/src/index.ts) импортируют. Pinning test в
+  `packages/shared/src/hints-window.test.ts` (3 теста).
+- **L5 calendar TODAY/TOMORROW (2026-04-30)** — ✅ extract
+  `daysUntilFromUtcMidnight` в `services/calendar.ts`, **+ найден dormant
+  bug в детальном endpoint** (line 241 пропущен оригинальным фиксом, жил в
+  проде ~15 дней). Фикс + 19 unit-тестов + BUGFIX_LESSONS entry.
+- **L7 P2002 race (2026-04-30)** — ✅ уже покрыт `profile.test.ts` (race-safe
+  parallel test).
+- **L2/L3/L6/L8 (UI lessons)** — ⏳ deferred to Phase 5b. См. § 11.
+
+### Phase 2 — Services 🚧 PARTIAL (`59c0068`, `3802b22`)
+
+**Готово (11 of 14 services):**
+
+| Service | LOC | Tests | Coverage |
+|---|---|---|---|
+| `locale.ts` | 50 | 8 | resolveUserFirstName все ветки |
+| `analytics.ts` | 87 | 24 | trackEvent prefix allowlist + truncation |
+| `birthday-reminders.ts` | 106 | 27 | MSK-tz arithmetic + Feb29 leap |
+| `calendar.ts` | 82 | 19 | daysUntil + getNextOccurrence + reminders |
+| `wishlists.ts` | 99 | 8 | primary reassign + drafts auto-create |
+| `lifecycle.ts` | 110 | 16 | sendLifecycleDM outcome classifier |
+| `locale-detection.ts` | 123 | 12 | header validation + signal aggregation |
+| `telegram-auth.ts` | 154 | 19 | initData HMAC + tgActorHash + upsert |
+| `items.ts` | 274 | 36 | pure mappers + per-recipient locale fanout |
+| `entitlement.ts` | 329 | 54 | PLANS/SKU pin + getEffectiveEntitlements |
+| `referral-hooks.ts` | 241 | 18 | qualify + reward pipeline branching |
+
+**Pending (3 of 14):**
+
+- `url-import.ts` (237 LOC) — marketplace adapter dispatch + HTTP error
+  handling.
+- `onboarding.ts` (311 LOC) — onboarding state machine.
+- `santa-season.ts` (421 LOC) — Secret Santa lifecycle + draw + reveal.
+
+### Phase 3 — Schedulers ⏳ PENDING
+
+9 файлов, каждый — idempotent cron tick. Структура тестов одинаковая:
+seed → tick → assert state. Без real DB → нужно мокать Prisma за слой.
+
+### Phase 4 — Routes ⏳ PENDING
+
+24 файла, приоритет по трафику (items / reservations / comments сначала,
+admin / telemetry — best effort). Большая часть требует integration tests
+с real Postgres → DATABASE_URL guard для local skip + auto-run в CI.
+
+### Phase 5a — Bot ⏳ PENDING
+
+Locale resolution в proactive contexts, retry с 3×5s backoff, IPv6-first
+DNS, /start /wish /hint command handlers. Mocked Telegraf ctx.
+
+### Phase 5b — Frontend ⏳ DEFERRED
+
+L2 / L3 / L6 / L8 живут внутри `apps/web/app/miniapp/MiniApp.tsx`
+(33 246 LOC монолит). Прямое тестирование требует:
+
+- (a) Extraction of `BulkActionBar`, `ItemImage`, `IdeaForm`, `KeyboardAwareCard`
+  в отдельные компоненты.
+- (b) Setup RTL для mounted-slice testing.
+
+Без extraction единственный доступный регрессионный сигнал — grep-based
+lint-style assertion на `loading="lazy"` для image tags. Это даёт low
+signal-to-noise — отложено до момента, когда монолит начнут разбивать
+на компоненты.
+
+### Phase 6 — CI Discipline ✅ DONE
+
+- `.github/workflows/test.yml` теперь имеет `workflow_call` trigger.
+- `.github/workflows/deploy.yml` зависит от `tests` job через
+  `needs: tests` — красный test блокирует prod-deploy.
+- `CLAUDE.md` секция "Testing — MANDATORY" с iron rules: regression
+  test для каждого bug fix, happy + error path для каждого нового
+  state-changing endpoint, extract-on-second-callsite правило, никакого
+  silent `it.skip`, integration tests > mocks для DB-dependent поведения.
+
+## 11. Phase 5b — что именно отложено и как закрыть
+
+| Lesson | Surface | Что тестировать | Что нужно для extraction |
+|---|---|---|---|
+| L2 bulk-bar | `MiniApp.tsx` bulk selection mode | opaque background при активной мульти-селекции + grid layout под 4/5/6/7 кнопок | Extract `<BulkActionBar count={n} />` компонент в `packages/ui` или `apps/web/app/miniapp/screens/` |
+| L3 image lazy-load | 10+ `<img>` тегов в MiniApp.tsx | каждый item-image имеет `loading="lazy"` + `decoding="async"` | Extract `<ItemThumbnail />` компонент, snapshot test атрибутов |
+| L6 idea photo caret | calendar idea form | photo upload не сбрасывает caret position в price input | Extract `<IdeaFormFields />`, RTL focus assertion |
+| L8 keyboard cards | calendar idea cards | tappable при visible keyboard | Extract `useKeyboardSafeAreaInset` hook + RTL test через `visualViewport` мок |
+
+Каждый item — отдельный PR: (1) extract в primitive, (2) test, (3)
+re-wire MiniApp.tsx callsite на новый компонент. Не делать единым waterfall.
+
+## Открытые вопросы (resolution)
+
+§ 8 из исходного draft — defaults применены:
+
+1. **testcontainers vs docker-compose-test:** ✅ Hybrid — local через
+   `docker-compose.dev.yml`, CI через GitHub Actions postgres service.
+2. **Coverage thresholds:** ✅ Soft-warn первые 4 недели (no thresholds
+   set in vitest.config), enforce per-Phase когда коверидж стабилизируется.
+3. **Snapshot тесты для UI:** ✅ Deferred to Phase 5b.
+4. **Frontend mocking:** ✅ Per-test `tgFetch` mock — простой подход.
+   msw добавится если boilerplate становится noisy.
+5. **Test data factories:** ✅ Создан `apps/api/test/factories/` с
+   User / Wishlist / Item builders.
+6. **Test + lesson + fix дисциплина:** ✅ Включено в CLAUDE.md как
+   iron rule, поддержано CI gate `needs: tests`.

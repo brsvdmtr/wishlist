@@ -296,3 +296,83 @@ These rules apply to **every** investigation, regardless of how small the sympto
   - route → layout → page → hooks → API → backend
 - **Prefer systemic fixes, but keep changes proportional.**
 - **If re-architecture is required, define scope, risks, compatibility, and rollout order** before touching code.
+
+---
+
+## Testing — MANDATORY for every PR
+
+Testing stack: **vitest** across the monorepo. CI gate is
+[`.github/workflows/test.yml`](.github/workflows/test.yml) — required by
+`deploy.yml` via `needs: tests`, so a red test blocks production.
+
+Roadmap and per-layer targets: [docs/TESTING_ROADMAP.md](docs/TESTING_ROADMAP.md).
+
+### Iron rules — apply on every PR
+
+- **Every bug fix ships with a regression test + `docs/BUGFIX_LESSONS.md`
+  entry in the same commit** (per `feedback_bugfix_lessons.md` memory).
+  The test must fail at the pre-fix commit and pass at the fix commit.
+  Bundle them — back-to-back pushes double the deploy-restart window.
+- **Every new state-changing API endpoint ships with a happy-path test
+  + at least one error-path test.** No "I'll add tests later." Pick the
+  scope: pure logic in `services/` → unit test with mocked Prisma;
+  Prisma-shape-dependent behaviour → integration test against the real
+  Postgres service (skipped locally when `DATABASE_URL` is not set,
+  always runs in CI).
+- **Every new pure helper / formula repeated ≥2× anywhere** is extracted
+  to a named function (typically in `services/`) with a unit test. Inline
+  duplicates of date math, regex, threshold comparisons, etc. are the
+  single biggest source of bug recurrence we've measured — see the
+  2026-05-15 BUGFIX_LESSONS entry (incomplete L5 fix discovery).
+- **Never delete a failing test to make CI green.** The test is correct;
+  the code is wrong, OR the test needs updating *with the same PR* that
+  changes behaviour. Skipping a test (`it.skip`) requires a comment with
+  the reason + an issue link / TODO. A skip without explanation gets
+  rejected at review.
+- **No new test file may use mocks where a real DB integration test
+  would catch the bug class better.** Mock Prisma for pure-logic /
+  branching tests; use the real Postgres service for P2002, transaction,
+  index-coverage, and constraint-dependent behaviour. The 2026-04-30
+  `getOrCreateProfile` race recurred *because* the original fix relied
+  on mock-Prisma "upsert is atomic" — the integration test caught it
+  only after a real Postgres write under contention.
+
+### Running tests locally
+
+```bash
+pnpm test                          # full monorepo, no DB-dependent tests
+pnpm -C apps/api test              # API only
+pnpm -C apps/web test:watch        # frontend watch mode
+pnpm test:coverage                 # per-package coverage report
+
+# Integration tests with real DB (requires Docker locally):
+docker compose -f docker-compose.dev.yml up -d postgres
+docker exec wishlist-dev-postgres-1 psql -U wishlist -c "CREATE DATABASE wishlist_test;"
+DATABASE_URL=postgresql://wishlist:wishlist@localhost:5432/wishlist_test \
+  pnpm -C packages/db db:migrate:deploy
+DATABASE_URL=postgresql://wishlist:wishlist@localhost:5432/wishlist_test \
+  pnpm -C apps/api test
+```
+
+CI provides the Postgres service automatically; integration tests run there
+without manual setup. See [apps/api/test/README.md](apps/api/test/README.md).
+
+### Test infrastructure layout
+
+- `apps/api/src/**/*.test.ts` — co-located unit tests next to the source.
+- `apps/api/test/setup-pg.ts` — Prisma client + `resetDb()` for integration
+  tests once they land.
+- `apps/api/test/factories/index.ts` — User / Wishlist / Item builders.
+- `packages/shared/src/**/*.test.ts` — shared lib unit tests.
+- `apps/web/app/**/*.test.{ts,tsx}` — Mini App (jsdom + RTL when needed).
+- `.github/workflows/test.yml` — Postgres service container, vitest, coverage.
+
+### Pre-implementation checklist
+
+Before writing code for a new feature, answer in addition to the security
++ architecture checklists:
+
+- Which test file gets the new test? Existing or new?
+- Pure unit or integration (real DB)?
+- For bug fixes — does the test fail at the pre-fix commit?
+- For new features — happy path + at least one error case?

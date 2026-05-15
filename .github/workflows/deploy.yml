@@ -7,6 +7,13 @@ name: Deploy to Vultr
 #
 # Manual trigger: workflow_dispatch (Actions tab → "Deploy to Vultr" → Run)
 # Concurrency: only one deploy at a time; subsequent pushes queue.
+#
+# Gate: requires the `test` job in tests.yml to pass first — no deploy on
+# a red test suite. workflow_dispatch keeps the gate (manual trigger from
+# main means tests already ran on the latest push; if you need to skip a
+# broken-test deploy in an emergency, run `gh workflow run deploy.yml`
+# only after pushing a fix or use `--field skip_tests=true` after wiring
+# an input below).
 on:
   push:
     branches: [main]
@@ -17,7 +24,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Run the full vitest suite as part of this workflow (re-runs what test.yml
+  # also runs on PR — duplicate execution is intentional so deploy can wait
+  # on the same job graph it owns rather than cross-workflow dependency).
+  tests:
+    uses: ./.github/workflows/test.yml
+
   deploy:
+    needs: tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
