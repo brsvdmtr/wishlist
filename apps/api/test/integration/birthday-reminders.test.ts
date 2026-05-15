@@ -81,7 +81,7 @@ suite('birthday-reminders classifier — real Postgres', () => {
       data: {
         birthdayUserId: sender.id,
         recipientUserId: recipient.id,
-        kind: 'friend_today',
+        reminderKind: 'friend_today',
         occurrenceKey,
         status: 'PENDING',
       },
@@ -95,7 +95,7 @@ suite('birthday-reminders classifier — real Postgres', () => {
         data: {
           birthdayUserId: sender.id,
           recipientUserId: recipient.id,
-          kind: 'friend_today',
+          reminderKind: 'friend_today',
           occurrenceKey,
           status: 'PENDING',
         },
@@ -122,7 +122,7 @@ suite('birthday-reminders classifier — real Postgres', () => {
         data: {
           birthdayUserId: sender.id,
           recipientUserId: recipient.id,
-          kind: i === 0 ? 'friend_today' : (i === 1 ? 'friend_1d' : 'friend_7d'),
+          reminderKind: i === 0 ? 'friend_today' : (i === 1 ? 'friend_1d' : 'friend_7d'),
           occurrenceKey: `2026-05-${20 + i}`,
           status: 'SENT',
           sentAt: new Date(todayStart.getTime() + 1_000),
@@ -149,7 +149,7 @@ suite('birthday-reminders classifier — real Postgres', () => {
       data: {
         birthdayUserId: sender.id,
         recipientUserId: recipient.id,
-        kind: 'friend_today',
+        reminderKind: 'friend_today',
         occurrenceKey: '2026-05-20',
         status: 'SKIPPED',
         skipReason: 'no_public_wishlist',
