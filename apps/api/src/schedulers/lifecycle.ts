@@ -22,8 +22,9 @@
 
 import type { PrismaClient } from '@wishlist/db';
 import type { Logger } from 'pino';
-import { t, resolveEffectiveLocale } from '@wishlist/shared';
+import { t, resolveLocaleWithSource } from '@wishlist/shared';
 import type { SendLifecycleDM } from '../services/lifecycle';
+import { profileToLanguageSettings } from '../services/locale';
 
 // Structural narrow over the real `getUserEntitlement` return shape —
 // the lifecycle scheduler only reads `isPro` and `proSource`. Matches
@@ -203,7 +204,7 @@ export function startLifecycleScheduler(deps: LifecycleSchedulerDeps): void {
           // Exclude users created less than 6h ago
           createdAt: { lte: candidateThreshold },
         },
-        select: { id: true, telegramChatId: true, telegramId: true, updatedAt: true, createdAt: true, profile: { select: { notifyMarketing: true, languageMode: true, manualLanguage: true } } },
+        select: { id: true, telegramChatId: true, telegramId: true, updatedAt: true, createdAt: true, profile: { select: { notifyMarketing: true, languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } } },
         orderBy: { createdAt: 'desc' }, // newest first — ensure fresh signups get onboarding touches
       });
 
@@ -260,9 +261,11 @@ export function startLifecycleScheduler(deps: LifecycleSchedulerDeps): void {
           if (existingPromo) actuallyOfferPromo = false; // already used promo
         }
 
-        // Determine locale
-        const locale = resolveEffectiveLocale(
-          candidate.profile ? { languageMode: candidate.profile.languageMode as any, manualLanguage: candidate.profile.manualLanguage as any } : null,
+        // Determine locale — proactive cron context, no live ctx.from.
+        // Resolver chain falls back through persisted normalizedLocale / language
+        // captured by middleware on every authenticated touch.
+        const { locale, source: localeSource } = resolveLocaleWithSource(
+          profileToLanguageSettings(candidate.profile),
         );
 
         // Build episode key
@@ -329,7 +332,7 @@ export function startLifecycleScheduler(deps: LifecycleSchedulerDeps): void {
         const webAppUrl = touch.deepLinkPayload
           ? `${MINI_APP_URL_FOR_DM}?startapp=${touch.deepLinkPayload}`
           : MINI_APP_URL_FOR_DM;
-        const outcome = await sendLifecycleDM(candidate.telegramChatId, msgText, webAppUrl);
+        const outcome = await sendLifecycleDM(candidate.telegramChatId, msgText, locale, webAppUrl);
         const delivered = outcome === 'delivered';
 
         // Transient failures: leave the touch record untouched (sentAt=null) so the
@@ -385,7 +388,7 @@ export function startLifecycleScheduler(deps: LifecycleSchedulerDeps): void {
         }
 
         if (delivered) touchesSent++; else touchesFailed++;
-        logger.info({ delivered, outcome, segment, touchNumber: nextTouchNumber, userId: candidate.id.slice(0, 8), promo: actuallyOfferPromo }, 'lifecycle touch sent');
+        logger.info({ delivered, outcome, segment, touchNumber: nextTouchNumber, userId: candidate.id.slice(0, 8), promo: actuallyOfferPromo, locale, localeSource }, 'lifecycle touch sent');
       }
 
       logger.info({ candidatesFound: candidates.length, touchesSent, touchesFailed, durationMs: Date.now() - cycleStart }, 'lifecycle_cycle_completed');

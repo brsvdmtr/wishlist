@@ -15,17 +15,13 @@
 
 import type { PrismaClient } from '@wishlist/db';
 import type { Logger } from 'pino';
-import {
-  resolveEffectiveLocale,
-  type Locale,
-  type LanguageMode,
-  type LanguageSettings,
-} from '@wishlist/shared';
+import { resolveLocaleWithSource, t } from '@wishlist/shared';
 import {
   getNextOccurrenceDate,
   computeReminderSchedule,
   buildReminderEpisodeKey,
 } from '../services/calendar';
+import { profileToLanguageSettings } from '../services/locale';
 import { buildEventReminderDeepLink } from '../telegram/deepLinks';
 
 export type EventSchedulerDeps = {
@@ -59,7 +55,7 @@ export function startEventSchedulers(deps: EventSchedulerDeps): void {
               linkedUser: { select: { profile: { select: { displayName: true, username: true } }, firstName: true } },
             },
           },
-          owner: { select: { id: true, telegramChatId: true, profile: { select: { languageMode: true, manualLanguage: true } } } },
+          owner: { select: { id: true, telegramChatId: true, profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } } } },
         },
       });
       if (due.length === 0) return;
@@ -71,10 +67,14 @@ export function startEventSchedulers(deps: EventSchedulerDeps): void {
           continue;
         }
         const chatId = r.owner.telegramChatId;
-        const langSettings: LanguageSettings | null = r.owner.profile
-          ? { languageMode: (r.owner.profile.languageMode as LanguageMode) ?? 'auto', manualLanguage: (r.owner.profile.manualLanguage as Locale | null) ?? null }
-          : null;
-        const locale: Locale = resolveEffectiveLocale(langSettings, undefined);
+        const { locale, source: localeSource } = resolveLocaleWithSource(
+          profileToLanguageSettings(r.owner.profile),
+        );
+        // title/body strings remain inline per-locale: functionally complete (all
+        // 6 locales covered via switch), scope-deferred from the 2026-05-10
+        // locale-resolver wave — moving them into the i18n dict is a follow-up
+        // (~36 entries: 3 conditions × 2 fields × 6 locales). Button below uses
+        // the canonical `notif_res_reminder_btn_open` i18n key to match the wave.
         const emoji = r.occasion.emoji ?? (r.occasion.type === 'BIRTHDAY' ? '🎂' : r.occasion.type === 'ANNIVERSARY' ? '💍' : r.occasion.type === 'HOLIDAY' ? '🎉' : '📅');
         const titleText = r.occasion.title;
         let title: string;
@@ -115,10 +115,11 @@ export function startEventSchedulers(deps: EventSchedulerDeps): void {
           const text = `<b>${esc(title)}</b>\n\n${esc(body)}`;
           delivered = await sendTgBotMessage(chatId, text, {
             inline_keyboard: [[
-              { text: locale === 'ru' ? '📱 Открыть' : 'Open', url: buildEventReminderDeepLink(r.occasion.id) },
+              { text: t('notif_res_reminder_btn_open', locale), url: buildEventReminderDeepLink(r.occasion.id) },
             ]],
           });
           if (delivered) sent++;
+          logger.debug({ reminderId: r.id, locale, localeSource, delivered }, 'gift-occasion-reminder attempt');
         }
 
         await prisma.calendarInboxEntry.create({

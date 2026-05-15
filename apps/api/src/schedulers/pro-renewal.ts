@@ -24,8 +24,9 @@
 
 import type { PrismaClient } from '@wishlist/db';
 import type { Logger } from 'pino';
-import { t, resolveEffectiveLocale, LIFETIME_BILLING_PERIOD } from '@wishlist/shared';
+import { t, resolveLocaleWithSource, LIFETIME_BILLING_PERIOD } from '@wishlist/shared';
 import type { SendLifecycleDM } from '../services/lifecycle';
+import { profileToLanguageSettings } from '../services/locale';
 
 type TrackEvent = (event: string, userId?: string, props?: Record<string, unknown>) => void;
 
@@ -68,7 +69,7 @@ export function startProRenewalReminderScheduler(deps: ProRenewalSchedulerDeps):
           },
           include: {
             user: {
-              select: { id: true, telegramChatId: true, profile: { select: { languageMode: true, manualLanguage: true, notifyMarketing: true } } },
+              select: { id: true, telegramChatId: true, profile: { select: { languageMode: true, manualLanguage: true, notifyMarketing: true, normalizedLocale: true, language: true } } },
             },
           },
         });
@@ -81,14 +82,20 @@ export function startProRenewalReminderScheduler(deps: ProRenewalSchedulerDeps):
           const existing = await prisma.paymentEvent.findUnique({ where: { telegramPaymentChargeId: reminderId } });
           if (existing) continue;
 
-          const locale = resolveEffectiveLocale(
-            sub.user.profile ? { languageMode: sub.user.profile.languageMode as any, manualLanguage: sub.user.profile.manualLanguage as any } : null,
+          const { locale, source: localeSource } = resolveLocaleWithSource(
+            profileToLanguageSettings(sub.user.profile),
           );
-          const dateFmtLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
+          const dateFmtLocale =
+            locale === 'ru' ? 'ru-RU'
+            : locale === 'zh-CN' ? 'zh-CN'
+            : locale === 'hi' ? 'hi-IN'
+            : locale === 'es' ? 'es-ES'
+            : locale === 'ar' ? 'ar'
+            : 'en-US';
           const fmtDate = sub.currentPeriodEnd.toLocaleDateString(dateFmtLocale, { day: 'numeric', month: 'long', year: 'numeric' });
           const text = t(w.key, locale, { date: fmtDate });
 
-          const outcome = await sendLifecycleDM(sub.user.telegramChatId, text, MINI_APP_URL_FOR_DM);
+          const outcome = await sendLifecycleDM(sub.user.telegramChatId, text, locale, MINI_APP_URL_FOR_DM);
           if (outcome === 'transient_failure') continue; // retry next hour
 
           // Persist idempotency marker (even on permanent failure — we've tried and
@@ -108,6 +115,7 @@ export function startProRenewalReminderScheduler(deps: ProRenewalSchedulerDeps):
           if (outcome === 'delivered') {
             trackEvent(`pro_renewal_reminder_${w.milestone}`, sub.userId, { billingPeriod: sub.billingPeriod });
           }
+          logger.info({ milestone: w.milestone, userId: sub.userId.slice(0, 8), locale, localeSource, outcome }, 'pro_renewal_reminder_attempt');
         }
       }
     } catch (err) {

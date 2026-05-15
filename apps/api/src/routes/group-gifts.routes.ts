@@ -42,6 +42,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '@wishlist/db';
+import { t, resolveLocaleWithSource, profileToLanguageSettings } from '@wishlist/shared';
 
 import { asyncHandler } from '../lib/asyncHandler';
 import { zodError } from '../lib/http';
@@ -364,14 +365,18 @@ export function registerGroupGiftsRouter(deps: GroupGiftsRouterDeps): Router {
         });
       });
 
-      // Notify organizer
+      // Notify organizer. Recipient = organizer; resolve their locale from
+      // persisted profile (joiner's request locale is irrelevant).
       const organizer = await prisma.user.findUnique({
         where: { id: gg.organizerUserId },
-        select: { telegramChatId: true },
+        select: {
+          telegramChatId: true,
+          profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
+        },
       });
       if (organizer?.telegramChatId) {
-        void sendTgNotification(organizer.telegramChatId,
-          `👥 ${displayName} присоединился к совместному подарку`);
+        const { locale } = resolveLocaleWithSource(profileToLanguageSettings(organizer.profile));
+        void sendTgNotification(organizer.telegramChatId, t('notif_group_gift_joined', locale, { name: displayName }));
       }
 
       // Return updated group gift
@@ -491,12 +496,19 @@ export function registerGroupGiftsRouter(deps: GroupGiftsRouterDeps): Router {
         });
       });
 
-      // Notify all participants
+      // Notify all participants — per-recipient locale (each may have their own).
       for (const p of gg.participants) {
         if (p.userId === user.id) continue;
-        const pUser = await prisma.user.findUnique({ where: { id: p.userId }, select: { telegramChatId: true } });
+        const pUser = await prisma.user.findUnique({
+          where: { id: p.userId },
+          select: {
+            telegramChatId: true,
+            profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
+          },
+        });
         if (pUser?.telegramChatId) {
-          void sendTgNotification(pUser.telegramChatId, '✅ Совместный подарок завершён!');
+          const { locale } = resolveLocaleWithSource(profileToLanguageSettings(pUser.profile));
+          void sendTgNotification(pUser.telegramChatId, t('notif_group_gift_completed', locale));
         }
       }
 
@@ -546,12 +558,19 @@ export function registerGroupGiftsRouter(deps: GroupGiftsRouterDeps): Router {
         });
       });
 
-      // Notify all participants
+      // Notify all participants — per-recipient locale (each may have their own).
       for (const p of gg.participants) {
         if (p.userId === user.id) continue;
-        const pUser = await prisma.user.findUnique({ where: { id: p.userId }, select: { telegramChatId: true } });
+        const pUser = await prisma.user.findUnique({
+          where: { id: p.userId },
+          select: {
+            telegramChatId: true,
+            profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
+          },
+        });
         if (pUser?.telegramChatId) {
-          void sendTgNotification(pUser.telegramChatId, '❌ Совместный подарок отменён');
+          const { locale } = resolveLocaleWithSource(profileToLanguageSettings(pUser.profile));
+          void sendTgNotification(pUser.telegramChatId, t('notif_group_gift_cancelled', locale));
         }
       }
 

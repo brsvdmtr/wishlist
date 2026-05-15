@@ -18,10 +18,11 @@
 // singletons across the API process. Timers are setTimeout-based; entries
 // auto-clean themselves when the timer fires.
 //
-// Notification language: Russian by default (Locale 'ru'). Matches the
-// previous in-place behaviour where notifications use RU regardless of the
-// recipient's language_code, on the assumption that owner-side strings
-// haven't been i18n'd for these flows yet.
+// Notification language: passed in by the caller as `recipientLocale`. The
+// caller resolves the recipient's effective locale (manual → live → persisted
+// → legacy → 'en') via `resolveLocaleWithSource` and hands it through; this
+// queue uses it for the deferred batch-summary text so the immediate and
+// follow-up notifications match the recipient's language.
 
 import { t, pluralize, type Locale } from '@wishlist/shared';
 import { sendTgBotMessage, sendTgNotification } from '../telegram/botApi';
@@ -32,6 +33,7 @@ type PendingEntry = {
   itemTitle: string;
   count: number;
   lastReplyMarkup?: Record<string, unknown>;
+  recipientLocale: Locale;
   timer: ReturnType<typeof setTimeout>;
 };
 
@@ -42,6 +44,7 @@ export function queueCommentNotification(
   chatId: string,
   itemTitle: string,
   text: string,
+  recipientLocale: Locale,
   replyMarkup?: Record<string, unknown>,
 ) {
   const existing = pendingNotifications.get(key);
@@ -61,13 +64,19 @@ export function queueCommentNotification(
     itemTitle,
     count: 0,
     lastReplyMarkup: replyMarkup,
+    recipientLocale,
     timer: setTimeout(() => {
       const e = pendingNotifications.get(key);
       pendingNotifications.delete(key);
       if (!e || e.count === 0) return;
-      const notifLocale: Locale = 'ru'; // notifications use Russian as default
-      const word = pluralize(e.count, 'новый комментарий', 'новых комментария', 'новых комментариев', notifLocale);
-      const batchText = t('notif_batch_comments', notifLocale, {
+      const word = pluralize(
+        e.count,
+        t('notif_batch_comments_word_one', e.recipientLocale),
+        t('notif_batch_comments_word_few', e.recipientLocale),
+        t('notif_batch_comments_word_many', e.recipientLocale),
+        e.recipientLocale,
+      );
+      const batchText = t('notif_batch_comments', e.recipientLocale, {
         count: e.count, word, title: escapeTgHtml(e.itemTitle),
       });
       // Include latest CTA so the user can tap "Reply" from the batch summary too

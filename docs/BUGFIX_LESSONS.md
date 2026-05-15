@@ -5,6 +5,256 @@ New entries go at the top.
 
 ---
 
+## 2026-05-10 — Бот периодически говорит на английском с русскоязычным юзером (lifecycle / pro-renewal / events / birthday / subscriber notifications) — резолвер локали без персистентного фоллбэка + захардкоженный `'ru'` в части путей
+
+### Ошибка
+Юзер с Telegram RU + телефоном RU + `Язык = «Определяется автоматически»`
+получает в боте странный коктейль: уведомления подписчику о новом
+желании приходят по-русски, а lifecycle-сообщение «Add 2 more wishes
+and your wishlist is ready to share… code WISHPRO» — внезапно по-английски.
+Симптом наблюдался у `Dmitriy` 2026-05-10 в S3 lifecycle wave (touch 1,
+key `wb_s3_t1_promo`). Воспроизводится у любого auto-mode юзера, который
+никогда не открывал Mini App либо чьё `UserProfile.normalizedLocale` не
+было прочитано на пути отправки.
+
+### Root cause
+**Архитектурный, а не точечный.** `resolveEffectiveLocale` в
+`packages/shared/src/i18n.ts` поддерживал только два источника:
+
+1. ручной `manualLanguage` (если `languageMode='manual'`)
+2. live `telegramLanguageCode` из текущего HTTP-запроса (`req.tgUser.language_code`)
+
+В **`auto`-режиме без живого запроса** (любой cron / proactive bot send)
+второй источник был `undefined`, и резолвер фоллбэчил в
+`normalizeLocale(undefined)` → возвращал `'en'`. То есть **все фоновые
+отправки шли на английском всем auto-юзерам.**
+
+При этом `UserProfile.normalizedLocale` уже писался middleware в
+`apps/api/src/index.ts:355-377` на каждом аутентифицированном запросе
+Mini App (через `persistResolvedBucket`) — но резолвер этих полей не
+читал. Persisted источник существовал, но был отключён.
+
+Дополнительные смежные дефекты, маскировавшие или усугублявшие баг:
+
+- `apps/api/src/services/items.ts:84` — `const notifLocale: Locale = 'ru'`
+  захардкожен → подписчики всегда получают сообщения по-русски,
+  независимо от своей локали (английский подписчик видит «🎁 Dmitriy
+  добавил(а) "X" в "Y"»). Это маскировало основной баг — RU-сообщения
+  «работали», поэтому проблему долго не замечали.
+- `apps/api/src/routes/items.routes.ts:846, 909, 974`,
+  `apps/api/src/routes/reservations.routes.ts:954, 1239`,
+  `apps/api/src/routes/comments.routes.ts:362`,
+  `apps/api/src/notifications/commentNotificationQueue.ts:68` — тот же
+  паттерн: `const notifLocale: Locale = 'ru'`, get-recipient → send.
+- `apps/api/src/services/referral-hooks.ts:71-92` и
+  `apps/bot/src/index.ts:857-870` — обходной маневр: на каждый proactive
+  send звали `Telegram getChat` чтобы вытащить live `language_code` —
+  лишний round-trip, который вообще не нужен, если уже есть persisted
+  `normalizedLocale`. Запасной фоллбэк там же — `return 'ru'`.
+- `apps/api/src/services/lifecycle.ts:54` — кнопка inline-keyboard
+  `'Открыть WishBoard ✨'` захардкожена внутри `sendLifecycleDM`. Для
+  не-русского сообщения шапка была локализована, кнопка — нет.
+
+Структурно: cron-планировщики (`lifecycle`, `pro-renewal`, `events`,
+`birthday-reminders`) все вызывали резолвер без второго аргумента —
+байт-идентично, и все они теряли локаль одинаково. Это не одна
+случайная ошибка в одной точке, а единый дизайн-промах в API
+shared-резолвера, размноженный на 11+ callsite'ах.
+
+### Урок
+- **Резолвер локали обязан иметь persisted-фоллбэк.** Live request
+  context — самый точный сигнал, но он есть только на синхронном пути
+  (роуты Mini App). Любой cron / задержанный send / bot ticket reply /
+  fanout по подписчикам резолвится **через persisted поля** профиля
+  получателя, иначе вся пуш-коммуникация ломается для всех auto-юзеров.
+- **Persisted-state должен быть в `LanguageSettings`-интерфейсе,
+  а не в обходных хелперах.** Когда у каждого scheduler своя локальная
+  логика выбора локали (referral-hooks: getChat, lifecycle: ничего,
+  birthday: cast-as-LanguageSettings с игнорируемыми полями), баг
+  становится 11-копий-один-и-тот-же. Единственный источник истины —
+  shared `resolveLocaleWithSource(settings, telegramLanguageCode)`.
+- **Захардкоженный `Locale = 'ru'` для notif-получателей — anti-pattern.**
+  Каждое уведомление получает **другой** пользователь со своими
+  настройками. Локаль автора запроса (`req.tgUser.language_code` инициатора)
+  никак не релевантна локали получателя.
+- **Логировать source локали, не только итог.** Без этого «почему бот
+  заговорил на английском» — это перекапывание кода на час. С
+  `localeSource: 'default_en' | 'persisted_normalized' | 'live_telegram'
+  | 'manual' | 'legacy_language'` это grep на 30 секунд.
+
+### Правило
+- **Каждый новый proactive / cron / fanout send-сайт обязан**:
+  1. селектить из БД `{ languageMode, manualLanguage, normalizedLocale,
+     language }` для **получателя** (а не инициатора, если они разные);
+  2. вызывать `resolveLocaleWithSource(settings, undefined)` (или с
+     live `telegramLanguageCode` если он есть в bot ctx);
+  3. логировать `{ locale, localeSource }` в строке отправки.
+- **Никаких новых `const notifLocale: Locale = 'ru' | 'en'`** в
+  кодовой базе. Любая такая строка — отказ от per-recipient resolution.
+- **Никакого `getChat` для recovery языка.** Вся информация уже есть в
+  `UserProfile` благодаря middleware, который пишет `normalizedLocale`
+  на каждом аутентифицированном touch.
+- **Любая inline-keyboard кнопка в bot-сообщении** должна быть в i18n,
+  а её локаль — из того же резолвера, что и тело сообщения.
+  Захардкоженная RU-кнопка под локализованным текстом = баг.
+
+### Лучший код
+- `packages/shared/src/i18n.ts` — `LanguageSettings` расширен полями
+  `normalizedLocale?` / `legacyLanguage?`; новый
+  `resolveLocaleWithSource(settings, telegramLanguageCode?) →
+  { locale, source }` реализует chain manual → live → persisted_normalized
+  → legacy_language → default_en. `resolveEffectiveLocale` стал тонкой
+  обёрткой (обратно совместим: новые поля опциональны).
+- `packages/shared/src/i18n.resolver.test.ts` — 16 unit-тестов на
+  приоритеты + edge cases (manual-без-pick, unsupported normalizedLocale,
+  unknown legacy code).
+- Все 4 cron-планировщика (`lifecycle`, `pro-renewal`, `events`,
+  `birthday-reminders`) теперь селектят полный набор полей и логируют
+  `localeSource`.
+- `services/items.ts` — per-recipient resolve, кнопка через i18n key
+  `sub_notification_open_item_btn`.
+- `services/lifecycle.ts` — `sendLifecycleDM` принимает `locale?`,
+  кнопка через i18n key `lifecycle_dm_open_app_btn`.
+- `services/referral-hooks.ts` — `resolveProactiveUserLocale` теперь
+  тонкая обёртка над shared-резолвером, без `getChat`.
+- `apps/bot/src/index.ts` — три точки в support-flow + inviter-arrival
+  переведены на shared-резолвер; `getChat`-данс выкинут.
+- `notifications/commentNotificationQueue.ts` — принимает
+  `recipientLocale` и использует его для batch-summary, чтобы immediate
+  и follow-up notif были на одном языке.
+- `routes/items.routes.ts` (×3), `routes/reservations.routes.ts` (×2),
+  `routes/comments.routes.ts` (×3 ветки + parent-author) — все
+  переписаны на per-recipient resolve.
+
+### Не сделано в этом фиксе (follow-ups)
+Все три добитых **2026-05-11** в этой же ветке (см. дельту ниже):
+
+- ✅ `apps/api/src/schedulers/reservations.ts` (lines 89-91, 194, 199,
+  236) — добавлены 7 i18n-ключей (`notif_res_reminder_*`) × 6 локалей,
+  все 4 хардкода переписаны на per-recipient resolve через
+  `resolveLocaleWithSource`. Smart-res auto-release / reminder /
+  reservation reminder теперь идут на языке получателя.
+- ✅ `apps/api/src/services/locale.ts:20` — default-параметр `locale:
+  Locale = 'ru'` удалён, параметр сделан обязательным. TS теперь
+  поймает любой будущий вызов без явной локали. Все 6 callers в
+  `routes/reservations.routes.ts` уже передают её — компилируется без
+  правок.
+- ✅ `apps/bot/src/index.ts:2477` — `deliverPendingWelcomes` теперь
+  селектит полный набор полей и резолвит через
+  `resolveLocaleWithSource`. Manual override уважается даже на
+  welcome-пути (юзер мог открыть Mini App → выбрать manual EN, потом
+  выйти и вернуться к welcome via /start).
+
+### Дельта 2026-05-11 — закрытие 3 follow-ups
+- `packages/shared/src/i18n.ts` — +7 ключей (`notif_res_reminder_header`,
+  `_body`, `_body_with_price`, `_from`, `_note`, `_btn_open`,
+  `_btn_purchased`) × 6 локалей.
+- `apps/api/src/schedulers/reservations.ts` — все 4 send-сайта
+  (reservation reminder, smart-res auto-release gifter+owner,
+  smart-res reminder) теперь селектят `{ languageMode, manualLanguage,
+  normalizedLocale, language }` для получателя и логируют `localeSource`.
+- `apps/api/src/services/locale.ts` — `resolveUserFirstName(user,
+  locale: Locale)` без default; контракт явный, ошибки контракта ловит TS.
+- `apps/bot/src/index.ts` — `deliverPendingWelcomes` через
+  `resolveLocaleWithSource`, лог содержит `localeSource`.
+
+### Известные оставшиеся (другие классы багов, не закрыты в этой ветке)
+- `apps/api/src/schedulers/reservations.ts:206` —
+  `t('api_system_auto_released', 'ru')` пишется в `Comment.text`
+  столбец БД. Это **stored** локализация, не ephemeral notification:
+  одна запись показывается всем зрителям независимо от их локали.
+  Чтобы починить — хранить `i18nKey + params` в Comment-row и
+  переводить на render. Бóльший рефактор; вне scope.
+- `apps/web/app/miniapp/MiniApp.tsx:210` — `fmtPrice` default
+  'ru'. Frontend-форматтер, не часть пуш-коммуникации; Mini App
+  держит локаль в React state и переопределяет на каждом вызове.
+  Низкорисково, оставить как есть.
+- `apps/bot/src/index.ts:2331-2333` — `setMyCommands` подаёт описание
+  команд бота **только на одном языке**. Telegram поддерживает
+  `setMyCommands` с `language_code` параметром (отдельные списки на
+  ru / en / etc). Это feature-добавление, а не баг-фикс резолвера —
+  отдельная задача.
+- `apps/api/src/lib/locale.ts:10` — `getRequestLocale(req)` использует
+  только `req.tgUser?.language_code` через `detectLocale`, не уважает
+  manual override. Пользователь с `manual='en'` и Telegram `ru` получит
+  RU на синхронных API-ответах вопреки своему явному выбору. На
+  proactive путях (cron / fanout / bot proactive sends) это уже починено
+  через `resolveLocaleWithSource`, но синхронный путь остаётся
+  непоследовательным: `me.routes.ts:934/1137` использует полный chain,
+  все остальные роуты — старый `getRequestLocale`. Чтобы починить —
+  переписать `getRequestLocale` как обёртку, которая дотягивает
+  профиль из БД (один extra query per request) или прокидывает
+  middleware-собранный профиль в `req.tgUserProfile`. Отдельная задача;
+  blast radius — все синхронные API-ответы.
+
+### Round 2 (2026-05-11) — закрытие code-review feedback (7.5 → 9+/10)
+Code-review subagent дал 7.5/10 с пятью should-fix замечаниями + nits.
+Закрыто в той же ветке:
+
+- ✅ **Helper `profileToLanguageSettings` + `LocaleProfileSlice` type** в
+  `packages/shared/src/i18n.ts`. Лифтит Prisma-`UserProfile` slice в
+  `LanguageSettings`-shape. Re-exported из `apps/api/src/services/locale.ts`
+  для consistency. Заменил 14 повторяющихся inline-объектов на
+  `resolveLocaleWithSource(profileToLanguageSettings(X.profile))` —
+  ~150 строк убрано, плюс `as any` cast'ы централизованы.
+- ✅ **Defensive guard на manualLanguage**: добавлен `isSupportedLocale`
+  check в manual-ветке резолвера. Если dirty data ('pt-BR' и т.п.)
+  попадёт в `manualLanguage`, резолвер не упадёт в `t()` — провалится
+  на следующий signal. Тест `falls through when manualLanguage is dirty`
+  добавлен.
+- ✅ **`apps/api/src/routes/group-gifts.routes.ts` × 3 hardcoded RU**:
+  добавлены 3 i18n keys (`notif_group_gift_joined`, `_completed`,
+  `_cancelled`) × 6 локалей; все 3 send-сайта (organizer-on-join,
+  participants-on-complete, participants-on-cancel) переписаны на
+  per-recipient resolve.
+- ✅ **`apps/bot/src/index.ts:1812` hint fanout**: `Locale = 'en'` убран,
+  recipient теперь резолвится через профиль, fallback `'en'` —
+  legitimate cold-start.
+- ✅ **`apps/api/src/routes/internal.routes.ts:343`** — recovery
+  notification: priority = current resolver chain → snapshot
+  `MaintenanceExposure.locale` → 'en'. Снапшот используется только когда
+  юзер cold-start (default_en); иначе текущая локаль приоритетнее.
+- ✅ **`sendLifecycleDM` локаль обязательна**: dropped optional default;
+  параметр перемещён в `(chatId, text, locale, webAppUrl?)` чтобы
+  required-required-required-optional порядок был естественный. TS
+  поймает регрессии.
+- ✅ **`commentNotificationQueue` плюрали → i18n**: 6 hardcoded
+  `*_COMMENT_FORMS` массивов выкинуты, добавлены 3 keys
+  (`notif_batch_comments_word_one/few/many`) × 6 локалей. Локализация
+  теперь полностью в dict, никакой TS-side утечки.
+- ✅ **`birthday-reminders` restructure**: `as LanguageSettings` cast
+  с лишними полями убран; теперь идёт через канонический
+  `profileToLanguageSettings(...)` — код читается одинаково с 13
+  другими callsites.
+- ✅ **Hindi reservation reminder header** заменён на безопасный
+  loanword `आरक्षण रिमाइंडर` (от диалектной формы `याद दिलावन`).
+- ✅ **Meta-test покрытия ключей**: новый блок в `i18n.resolver.test.ts`,
+  который итерирует по 15 локали-фикс ключам × 6 локалям и проверяет,
+  что `t()` возвращает не-пустую строку, отличную от raw key. Ловит
+  drift при добавлении новой локали или удалении ключа.
+- ✅ **`isSupportedLocale` exported** — теперь публичный, используется
+  в `internal.routes.ts` для валидации snapshot-локали.
+
+Не сделано (nit / out of scope):
+- `apps/api/src/lib/locale.ts:10` `getRequestLocale` — добавлено в
+  follow-up список выше.
+- Hindi/Arabic переводы новых ключей — не верифицированы native speakers.
+  Текущие — best-effort. При жалобе от пользователя — поправить.
+
+### Acceptance — после деплоя
+- Юзер с Telegram RU + auto-mode получает RU lifecycle / promo /
+  reminder / pro-renewal / event / birthday сообщения.
+- Юзер с manual=English получает EN даже при Telegram RU.
+- Юзер с manual=Russian получает RU даже при Telegram EN.
+- Подписчики получают уведомления на **своём** языке, не на языке
+  владельца вишлиста.
+- В логах видно `localeSource` для каждой proactive отправки.
+- Если `localeSource` массово = `default_en` для существующих юзеров,
+  это означает что middleware-захват `normalizedLocale` где-то отвалился —
+  алерт.
+
+---
+
 ## 2026-05-08 — Bulk-select bottom bar: «каша из кнопок» (translucent token на fixed-position баре + сетка не подогнана под кол-во кнопок)
 
 ### Ошибка

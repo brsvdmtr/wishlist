@@ -53,10 +53,8 @@ import type { Logger } from 'pino';
 import {
   t,
   pluralize,
-  resolveEffectiveLocale,
+  resolveLocaleWithSource,
   type Locale,
-  type LanguageMode,
-  type LanguageSettings,
 } from '@wishlist/shared';
 import {
   BIRTHDAY_TZ_OFFSET_HOURS,
@@ -67,6 +65,7 @@ import {
   nextMskMorning,
   pickBirthdayDisplayName,
 } from '../services/birthday-reminders';
+import { profileToLanguageSettings } from '../services/locale';
 
 // Structural narrow over the real `getEffectiveEntitlements` return
 // shape — the birthday scheduler only reads `isPro`. Matches the
@@ -988,21 +987,12 @@ export function startBirthdayRemindersScheduler(deps: BirthdayRemindersScheduler
       return 'skipped';
     }
 
-    // Recipient (may equal birthday user for owner reminders)
-    let recipient: { id: string; telegramChatId: string | null; profile: { notifyBirthdays: boolean; languageMode: string; manualLanguage: string | null; normalizedLocale: string | null; language: string | null } | null } | null = null;
-    if (isOwner) {
-      const userRow = await prisma.user.findUnique({
-        where: { id: d.recipientUserId },
-        select: { id: true, telegramChatId: true, profile: { select: { notifyBirthdays: true, languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } } },
-      });
-      recipient = userRow;
-    } else {
-      const userRow = await prisma.user.findUnique({
-        where: { id: d.recipientUserId },
-        select: { id: true, telegramChatId: true, profile: { select: { notifyBirthdays: true, languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } } },
-      });
-      recipient = userRow;
-    }
+    // Recipient (may equal birthday user for owner reminders). Same query
+    // shape in both cases — privacy / opt-out branching happens below.
+    const recipient = await prisma.user.findUnique({
+      where: { id: d.recipientUserId },
+      select: { id: true, telegramChatId: true, profile: { select: { notifyBirthdays: true, languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } } },
+    });
     if (!recipient?.telegramChatId) {
       await markDeliverySkipped(d.id, 'no_chat_id');
       return 'skipped';
@@ -1021,15 +1011,11 @@ export function startBirthdayRemindersScheduler(deps: BirthdayRemindersScheduler
       if (!bp.birthdayOwnerReminders) { await markDeliverySkipped(d.id, 'friend_reminders_disabled'); return 'skipped'; }
     }
 
-    // Build message
-    const recipientLocale: Locale = recipient.profile
-      ? resolveEffectiveLocale({
-          languageMode: recipient.profile.languageMode as LanguageMode,
-          manualLanguage: recipient.profile.manualLanguage,
-          normalizedLocale: recipient.profile.normalizedLocale,
-          legacyLanguage: recipient.profile.language,
-        } as LanguageSettings)
-      : 'ru';
+    // Build message — proactive cron, no live ctx. Resolver chain falls back
+    // through persisted normalizedLocale / language captured by middleware.
+    const { locale: recipientLocale, source: recipientLocaleSource } = resolveLocaleWithSource(
+      profileToLanguageSettings(recipient.profile),
+    );
 
     const ent = await getEffectiveEntitlements(d.birthdayUserId, birthdayUserRow.godMode);
     const isPro = ent.isPro;
@@ -1094,6 +1080,7 @@ export function startBirthdayRemindersScheduler(deps: BirthdayRemindersScheduler
         kind: d.reminderKind, targetType: d.targetType, recipientId: d.recipientUserId,
         isPro,
       });
+      logger.debug({ deliveryId: d.id, kind: d.reminderKind, locale: recipientLocale, localeSource: recipientLocaleSource }, 'birthday: delivery sent');
       return 'sent';
     }
     if (sendOutcome.kind === 'bot_blocked') {

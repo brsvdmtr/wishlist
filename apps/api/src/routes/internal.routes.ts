@@ -18,7 +18,7 @@ import type { Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { prisma } from '@wishlist/db';
-import { t } from '@wishlist/shared';
+import { t, resolveLocaleWithSource, profileToLanguageSettings, isSupportedLocale } from '@wishlist/shared';
 
 import logger from '../logger';
 import { asyncHandler } from '../lib/asyncHandler';
@@ -318,7 +318,13 @@ export function registerInternalRouter(deps: InternalRouterDeps): Router {
           returnedAt: null,
         },
         include: {
-          user: { select: { telegramChatId: true, telegramId: true } },
+          user: {
+            select: {
+              telegramChatId: true,
+              telegramId: true,
+              profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
+            },
+          },
         },
       });
 
@@ -340,7 +346,19 @@ export function registerInternalRouter(deps: InternalRouterDeps): Router {
               return;
             }
 
-            const locale = (exp.locale || 'ru') as Parameters<typeof t>[1];
+            // Locale priority: user's current preference (resolver chain
+            // through their profile) → snapshot from `MaintenanceExposure.locale`
+            // (captured at incident time) → 'en' default. Current preference
+            // wins because the user may have changed language since the
+            // incident, and recovery message UX is "right now" not "at
+            // incident time". Snapshot is a fallback for cold-start users
+            // whose profile resolves to default_en.
+            const { locale: resolved, source: localeSource } = resolveLocaleWithSource(
+              profileToLanguageSettings(exp.user.profile),
+            );
+            const locale = localeSource === 'default_en' && exp.locale && isSupportedLocale(exp.locale)
+              ? exp.locale
+              : resolved;
             const text = t('maintenance_recovery_text', locale);
             const btnLabel = t('maintenance_recovery_btn', locale);
 

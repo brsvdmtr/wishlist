@@ -21,6 +21,7 @@
 // — that matches the prior in-line guard.
 
 import type { Logger } from 'pino';
+import { t, type Locale } from '@wishlist/shared';
 
 /**
  * Outcome classification for a lifecycle DM send attempt.
@@ -35,7 +36,22 @@ import type { Logger } from 'pino';
  */
 export type SendDmOutcome = 'delivered' | 'bot_blocked' | 'chat_not_found' | 'permanent_failure' | 'transient_failure';
 
-export type SendLifecycleDM = (chatId: string, text: string, webAppUrl?: string) => Promise<SendDmOutcome>;
+/**
+ * Send a lifecycle DM. `locale` localises the inline-keyboard CTA so the
+ * button matches the message language. Required (no default) — historically
+ * the button was hardcoded RU, which broke for every non-Russian recipient,
+ * and a silent default would re-introduce that class of bug. Every caller
+ * MUST resolve the recipient's locale via `resolveLocaleWithSource` and
+ * pass it through. `webAppUrl` is still optional (no button = no localised
+ * CTA needed); `locale` is consumed only when `webAppUrl` is provided but
+ * stays required so the contract is unambiguous at the type level.
+ */
+export type SendLifecycleDM = (
+  chatId: string,
+  text: string,
+  locale: Locale,
+  webAppUrl?: string,
+) => Promise<SendDmOutcome>;
 
 export type CreateSendLifecycleDMDeps = {
   botToken: string;
@@ -45,13 +61,14 @@ export type CreateSendLifecycleDMDeps = {
 /** Send a Telegram DM via bot API. Returns a classified outcome. */
 export function createSendLifecycleDM(deps: CreateSendLifecycleDMDeps): SendLifecycleDM {
   const { botToken, logger } = deps;
-  return async function sendLifecycleDM(chatId: string, text: string, webAppUrl?: string): Promise<SendDmOutcome> {
+  return async function sendLifecycleDM(chatId: string, text: string, locale: Locale, webAppUrl?: string): Promise<SendDmOutcome> {
     if (!botToken || !chatId) return 'permanent_failure';
     const chatIdTail = String(chatId).slice(-4); // log suffix only, keep PII minimal
     try {
       const body: any = { chat_id: chatId, text, parse_mode: 'HTML' };
       if (webAppUrl) {
-        body.reply_markup = { inline_keyboard: [[{ text: 'Открыть WishBoard ✨', web_app: { url: webAppUrl } }]] };
+        const buttonText = t('lifecycle_dm_open_app_btn', locale);
+        body.reply_markup = { inline_keyboard: [[{ text: buttonText, web_app: { url: webAppUrl } }]] };
       }
       const r = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),

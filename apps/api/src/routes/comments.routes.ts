@@ -33,7 +33,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '@wishlist/db';
-import { t, type Locale } from '@wishlist/shared';
+import { t, resolveLocaleWithSource, type Locale } from '@wishlist/shared';
+import { profileToLanguageSettings } from '../services/locale';
 
 import { asyncHandler } from '../lib/asyncHandler';
 import { zodError } from '../lib/http';
@@ -357,33 +358,42 @@ export function registerCommentsRouter(deps: CommentsRouterDeps): Router {
         },
       });
 
-      // Build inline keyboard for the primary comment notification — a "Reply to comment" button
-      // that opens the mini app deep-linked to this specific comment with reply mode active.
-      const notifLocale: Locale = 'ru'; // notifications to other users default to Russian
-      const replyBtnLabel = t('comment_reply_btn', notifLocale);
+      // Build deep-link URL once — it depends only on item/comment IDs, not
+      // on the recipient. Locale-dependent strings (button label + message
+      // body) are resolved per-recipient below using their persisted profile.
       const deepLinkUrl = buildCommentReplyDeepLink(id, comment.id);
-      const commentReplyMarkup = {
-        inline_keyboard: [[{ text: replyBtnLabel, web_app: { url: deepLinkUrl } }]],
-      };
+      const buildReplyMarkup = (locale: Locale) => ({
+        inline_keyboard: [[{ text: t('comment_reply_btn', locale), web_app: { url: deepLinkUrl } }]],
+      });
 
-      // Notify the other party (recipient of the notification = the one who did NOT write this comment)
+      // Notify the other party (recipient = the one who did NOT write this comment).
+      // Resolve their locale from persisted profile fields (no live ctx for the
+      // recipient; this request was initiated by the comment author).
       let notifiedRecipientUserId: string | null = null;
       if (ctx.role === 'reserver') {
         // Notify owner
         const owner = await prisma.user.findUnique({
           where: { id: ctx.item.wishlist.ownerId },
-          select: { telegramChatId: true, id: true },
+          select: {
+            telegramChatId: true,
+            id: true,
+            profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
+          },
         });
         if (owner?.telegramChatId) {
+          const { locale: ownerLocale } = resolveLocaleWithSource(
+            profileToLanguageSettings(owner.profile),
+          );
           const key = `${id}:${owner.id}`;
           queueCommentNotification(
             key, owner.telegramChatId, ctx.item.title,
-            t('notif_commented_reserver', notifLocale, {
+            t('notif_commented_reserver', ownerLocale, {
               name: escapeTgHtml(displayName),
               title: escapeTgHtml(ctx.item.title),
               text: escapeTgHtml(text),
             }),
-            commentReplyMarkup,
+            ownerLocale,
+            buildReplyMarkup(ownerLocale),
           );
           notifiedRecipientUserId = owner.id;
         }
@@ -391,17 +401,25 @@ export function registerCommentsRouter(deps: CommentsRouterDeps): Router {
         // Notify reserver
         const reserver = await prisma.user.findUnique({
           where: { id: ctx.item.reserverUserId },
-          select: { telegramChatId: true, id: true },
+          select: {
+            telegramChatId: true,
+            id: true,
+            profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
+          },
         });
         if (reserver?.telegramChatId) {
+          const { locale: reserverLocale } = resolveLocaleWithSource(
+            profileToLanguageSettings(reserver.profile),
+          );
           const key = `${id}:${reserver.id}`;
           queueCommentNotification(
             key, reserver.telegramChatId, ctx.item.title,
-            t('notif_commented_owner', notifLocale, {
+            t('notif_commented_owner', reserverLocale, {
               title: escapeTgHtml(ctx.item.title),
               text: escapeTgHtml(text),
             }),
-            commentReplyMarkup,
+            reserverLocale,
+            buildReplyMarkup(reserverLocale),
           );
           notifiedRecipientUserId = reserver.id;
         }
@@ -423,25 +441,37 @@ export function registerCommentsRouter(deps: CommentsRouterDeps): Router {
         try {
           // Resolve parent author user: parent.authorActorHash maps to either the owner or the current reserver.
           // We fetch the owner once (needs telegramId to derive their actorHash) and compare.
-          let parentAuthorUser: { id: string; telegramChatId: string | null } | null = null;
+          // Profile fields included so we can resolve the recipient's effective locale.
+          type ParentAuthorUser = {
+            id: string;
+            telegramChatId: string | null;
+            profile: { languageMode: string; manualLanguage: string | null; normalizedLocale: string | null; language: string | null } | null;
+          };
+          let parentAuthorUser: ParentAuthorUser | null = null;
 
           const owner = await prisma.user.findUnique({
             where: { id: ctx.item.wishlist.ownerId },
-            select: { id: true, telegramChatId: true, telegramId: true },
+            select: {
+              id: true, telegramChatId: true, telegramId: true,
+              profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
+            },
           });
           const ownerActorHash = owner?.telegramId
             ? tgActorHash(Number(owner.telegramId))
             : null;
 
           if (ownerActorHash && parent.authorActorHash && secureCompare(ownerActorHash, parent.authorActorHash)) {
-            parentAuthorUser = { id: owner!.id, telegramChatId: owner!.telegramChatId };
+            parentAuthorUser = { id: owner!.id, telegramChatId: owner!.telegramChatId, profile: owner!.profile };
           } else if (ctx.item.reserverUserId) {
             // Reserver match — only if current reservation is the same actor as the parent comment
             const currentReserverActor = ctx.item.reservationEvents[0]?.actorHash ?? null;
             if (currentReserverActor && parent.authorActorHash && secureCompare(currentReserverActor, parent.authorActorHash)) {
               parentAuthorUser = await prisma.user.findUnique({
                 where: { id: ctx.item.reserverUserId },
-                select: { id: true, telegramChatId: true },
+                select: {
+                  id: true, telegramChatId: true,
+                  profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
+                },
               });
             }
           }
@@ -451,7 +481,10 @@ export function registerCommentsRouter(deps: CommentsRouterDeps): Router {
             parentAuthorUser.telegramChatId &&
             parentAuthorUser.id !== ctx.user.id // don't self-notify
           ) {
-            const replyText = t('notif_comment_reply', notifLocale, {
+            const { locale: parentAuthorLocale } = resolveLocaleWithSource(
+              profileToLanguageSettings(parentAuthorUser.profile),
+            );
+            const replyText = t('notif_comment_reply', parentAuthorLocale, {
               title: escapeTgHtml(ctx.item.title),
               ownerName: escapeTgHtml(displayName),
               text: escapeTgHtml(text),
@@ -461,7 +494,7 @@ export function registerCommentsRouter(deps: CommentsRouterDeps): Router {
               parentAuthorUser.id,
               parentAuthorUser.telegramChatId,
               replyText,
-              commentReplyMarkup,
+              buildReplyMarkup(parentAuthorLocale),
             );
             trackEvent('comment_reply_sent_notification_to_author', ctx.user.id, {
               itemId: id,

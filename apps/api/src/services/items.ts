@@ -22,12 +22,13 @@
 //     `@wishlist/shared`.
 
 import { prisma } from '@wishlist/db';
-import { t, type Locale } from '@wishlist/shared';
+import { t, resolveLocaleWithSource } from '@wishlist/shared';
 
 import logger from '../logger';
 import { secureCompare } from '../lib/crypto';
 import { sendTgBotMessage, sendTgNotification } from '../telegram/botApi';
 import { getOrCreateTgUser, tgActorHash, type TelegramUser } from './telegram-auth';
+import { profileToLanguageSettings } from './locale';
 
 // ─── Status tuple shared with multiple route handlers ────────────────────────
 export const ACTIVE_STATUSES = ['AVAILABLE', 'RESERVED', 'PURCHASED'] as const;
@@ -64,9 +65,33 @@ export async function notifySubscribersOfChange(
   meta: { itemTitle?: string; wishlistTitle?: string; ownerName?: string },
 ): Promise<void> {
   try {
+    // Per-recipient locale: select the language fields each subscriber needs
+    // for resolveLocaleWithSource. Owner's language is irrelevant — what
+    // matters is the recipient. Each subscriber gets the message in their own
+    // effective locale (manual override → live TG → persisted normalized →
+    // legacy raw → 'en'). Live TG language_code is unavailable here (this
+    // path runs from a request initiated by the wishlist *owner*, not the
+    // subscriber), so resolution falls back through persisted profile fields
+    // captured by middleware on the subscriber's prior touches.
     const subs = await prisma.wishlistSubscription.findMany({
       where: { wishlistId },
-      select: { id: true, subscriber: { select: { id: true, telegramChatId: true } } },
+      select: {
+        id: true,
+        subscriber: {
+          select: {
+            id: true,
+            telegramChatId: true,
+            profile: {
+              select: {
+                languageMode: true,
+                manualLanguage: true,
+                normalizedLocale: true,
+                language: true,
+              },
+            },
+          },
+        },
+      },
     });
     if (subs.length === 0) return;
 
@@ -81,7 +106,6 @@ export async function notifySubscribersOfChange(
       }
     }
 
-    const notifLocale: Locale = 'ru';
     await Promise.all(
       subs.map(async (sub) => {
         // Upsert unread markers
@@ -99,29 +123,36 @@ export async function notifySubscribersOfChange(
         const chatId = sub.subscriber.telegramChatId;
         if (!chatId) return;
 
+        const { locale, source: localeSource } = resolveLocaleWithSource(
+          profileToLanguageSettings(sub.subscriber.profile),
+        );
+
         let text = '';
         if (eventType === 'item_added') {
-          text = t('sub_notification_new_item', notifLocale, {
+          text = t('sub_notification_new_item', locale, {
             owner: meta.ownerName ?? '…',
             title: meta.itemTitle ?? '…',
             wishlist: meta.wishlistTitle ?? '…',
           });
         } else if (eventType === 'item_updated') {
-          text = t('sub_notification_updated', notifLocale, {
+          text = t('sub_notification_updated', locale, {
             title: meta.itemTitle ?? '…',
             wishlist: meta.wishlistTitle ?? '…',
           });
         } else {
-          text = t('sub_notification_wishlist_updated', notifLocale, {
+          text = t('sub_notification_wishlist_updated', locale, {
             title: meta.wishlistTitle ?? '…',
           });
         }
 
+        logger.debug(
+          { eventType, recipientId: sub.subscriber.id.slice(0, 8), locale, localeSource },
+          'sub_notification_dispatch',
+        );
+
         if (deepLinkUrl) {
-          // Use sendTgBotMessage (supports reply_markup) instead of sendTgNotification.
-          // Button text "🎁 Перейти к желанию" — same RU-only stance as the message text.
           void sendTgBotMessage(chatId, text, {
-            inline_keyboard: [[{ text: '🎁 Перейти к желанию', web_app: { url: deepLinkUrl } }]],
+            inline_keyboard: [[{ text: t('sub_notification_open_item_btn', locale), web_app: { url: deepLinkUrl } }]],
           });
         } else {
           void sendTgNotification(chatId, text);

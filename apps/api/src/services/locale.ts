@@ -1,23 +1,32 @@
 // Locale-related helpers (P5s-10 — extracted from apps/api/src/index.ts).
 //
-// Currently houses one helper: `resolveUserFirstName`, a best-effort
-// resolver that returns a user's first_name, falling back to the
-// Telegram Bot API `getChat` if the firstName field is empty, then
-// caching the result on the User row for future calls.
+// Houses one helper local to API: `resolveUserFirstName` (best-effort
+// first_name resolver: cached `firstName` → live Telegram `getChat` →
+// localised `api_user_fallback`). `locale` is required (no default) so
+// every caller commits to a recipient-resolved locale via the resolver
+// chain.
 //
-// Strategy B: direct import. The previous deps signature in
-// `routes/reservations.routes.ts` (sole consumer) drops this entry in
-// the same PR.
-//
-// `resolveProactiveUserLocale` (referral-coupled) STAYS in index.ts —
-// it is wired into the referral notification flow and out of P5s-10
-// scope (analytics/referral hooks excluded).
+// `profileToLanguageSettings` and its companion `LocaleProfileSlice` type
+// live in `@wishlist/shared` because both `apps/api` and `apps/bot`
+// consume them — re-exported here so existing API imports keep working
+// without a path change.
 
 import { prisma } from '@wishlist/db';
 import { t, type Locale } from '@wishlist/shared';
 
-/** Best-effort: resolve user's first_name from Telegram Bot API, cache in DB. */
-export async function resolveUserFirstName(user: { id: string; firstName: string | null; telegramChatId: string | null }, locale: Locale = 'ru'): Promise<string> {
+export { profileToLanguageSettings, type LocaleProfileSlice } from '@wishlist/shared';
+
+/**
+ * Best-effort: resolve user's first_name from Telegram Bot API, cache in DB.
+ *
+ * `locale` is required — used only for the `api_user_fallback` string when
+ * neither the cached firstName nor a live Telegram getChat lookup yields a
+ * name. Earlier this defaulted to `'ru'`, which returned a Russian fallback
+ * name to non-Russian viewers. Now mandatory so the call site must commit to
+ * a recipient-resolved locale via `resolveLocaleWithSource` (or a request
+ * locale via `getRequestLocale`) — same chain as every other notification.
+ */
+export async function resolveUserFirstName(user: { id: string; firstName: string | null; telegramChatId: string | null }, locale: Locale): Promise<string> {
   if (user.firstName) return user.firstName;
   const fallback = t('api_user_fallback', locale);
   const token = process.env.BOT_TOKEN;

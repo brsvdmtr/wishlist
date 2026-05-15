@@ -18,6 +18,7 @@ import { prisma, Prisma, loadReferralConfig } from '@wishlist/db';
 import {
   t,
   resolveEffectiveLocale,
+  profileToLanguageSettings,
   MARKET_BUCKET_LABELS,
   type Locale,
   type MarketBucket,
@@ -932,10 +933,10 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
       const langMode = (profile.languageMode ?? 'auto') as 'auto' | 'manual';
       const manualLang = profile.manualLanguage as Locale | null ?? null;
       const effectiveLanguage = resolveEffectiveLocale(
-        { languageMode: langMode, manualLanguage: manualLang },
+        profileToLanguageSettings(profile),
         req.tgUser?.language_code,
       );
-  
+
       return res.json({
         // New fields — single source of truth for language
         languageMode: langMode,
@@ -1135,7 +1136,7 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
       const updatedLangMode = (profile.languageMode ?? 'auto') as 'auto' | 'manual';
       const updatedManualLang = profile.manualLanguage as Locale | null ?? null;
       const updatedEffectiveLanguage = resolveEffectiveLocale(
-        { languageMode: updatedLangMode, manualLanguage: updatedManualLang },
+        profileToLanguageSettings(profile),
         req.tgUser?.language_code,
       );
   

@@ -51,11 +51,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '@wishlist/db';
-import { t, type Locale } from '@wishlist/shared';
+import { t, resolveLocaleWithSource } from '@wishlist/shared';
 
 import { asyncHandler } from '../lib/asyncHandler';
 import { zodError } from '../lib/http';
 import { getRequestLocale } from '../lib/locale';
+import { profileToLanguageSettings } from '../services/locale';
 import { sendTgNotification } from '../telegram/botApi';
 import { upload } from '../uploads/upload.config';
 import { processImage } from '../uploads/imageProcessor';
@@ -840,10 +841,16 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
         if (item.reserverUserId) {
           const reserver = await prisma.user.findUnique({
             where: { id: item.reserverUserId },
-            select: { telegramChatId: true },
+            select: {
+              telegramChatId: true,
+              profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
+            },
           });
           if (reserver?.telegramChatId) {
-            const notifLocale: Locale = 'ru'; // notifications to other users default to Russian
+            // Recipient's locale, not the request initiator's.
+            const { locale: notifLocale } = resolveLocaleWithSource(
+              profileToLanguageSettings(reserver.profile),
+            );
             void sendTgNotification(reserver.telegramChatId, t('notif_description_updated', notifLocale, { title: item.title }));
           }
         }
@@ -903,10 +910,16 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
       if (item.reserverUserId) {
         const reserver = await prisma.user.findUnique({
           where: { id: item.reserverUserId },
-          select: { telegramChatId: true },
+          select: {
+            telegramChatId: true,
+            profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
+          },
         });
         if (reserver?.telegramChatId) {
-          const notifLocale: Locale = 'ru'; // notifications to other users default to Russian
+          // Recipient = reserver. Resolve their locale from persisted profile.
+          const { locale: notifLocale } = resolveLocaleWithSource(
+            profileToLanguageSettings(reserver.profile),
+          );
           void sendTgNotification(
             reserver.telegramChatId,
             t('notif_archived', notifLocale, { title: item.title }),
@@ -968,10 +981,16 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
       if (item.reserverUserId) {
         const reserver = await prisma.user.findUnique({
           where: { id: item.reserverUserId },
-          select: { telegramChatId: true, id: true },
+          select: {
+            telegramChatId: true,
+            id: true,
+            profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
+          },
         });
         if (reserver?.telegramChatId) {
-          const notifLocale: Locale = 'ru'; // notifications to other users default to Russian
+          const { locale: notifLocale } = resolveLocaleWithSource(
+            profileToLanguageSettings(reserver.profile),
+          );
           let msg = t('notif_completed', notifLocale, { title: item.title });
           // Soft CTA if reserver has no wishlists
           const reserverWlCount = await prisma.wishlist.count({

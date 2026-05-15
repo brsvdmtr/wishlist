@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import https from 'node:https';
 import path from 'node:path';
 import { prisma, resolveReferralCode, tryCreateAttribution, markFirstBotStart, loadReferralConfig, persistResolvedBucket } from '@wishlist/db';
-import { t, pluralize, detectLocale, resolveEffectiveLocale, resolveMarketBucket, LIFETIME_BILLING_PERIOD, PRO_LIFETIME_PERIOD_END_ISO, type Locale } from '@wishlist/shared';
+import { t, pluralize, detectLocale, resolveEffectiveLocale, resolveLocaleWithSource, profileToLanguageSettings, resolveMarketBucket, LIFETIME_BILLING_PERIOD, PRO_LIFETIME_PERIOD_END_ISO, type Locale } from '@wishlist/shared';
 import logger from './logger';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
@@ -362,7 +362,7 @@ if (!token) {
     // Find which ticket message was replied to
     const originalMsg = await prisma.supportMessage.findFirst({
       where: { telegramSupportMsgId: replyToMsgId },
-      include: { ticket: { include: { user: { select: { telegramChatId: true, profile: { select: { languageMode: true, manualLanguage: true } } } } } } },
+      include: { ticket: { include: { user: { select: { telegramChatId: true, profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } } } } } } },
     });
 
     if (!originalMsg) {
@@ -404,9 +404,7 @@ if (!token) {
       return;
     }
 
-    const userLocale = resolveEffectiveLocale(
-      ticket.user.profile ? { languageMode: ticket.user.profile.languageMode as any, manualLanguage: ticket.user.profile.manualLanguage as any } : null,
-    );
+    const userLocale = resolveEffectiveLocale(profileToLanguageSettings(ticket.user.profile));
     const label = `[${ticket.ticketCode}] ${t('support_reply_label', userLocale)}`;
 
     try {
@@ -450,7 +448,7 @@ if (!token) {
   async function handleCloseTicket(ctx: any, replyToMsgId: number): Promise<void> {
     const supportMsg = await prisma.supportMessage.findFirst({
       where: { telegramSupportMsgId: replyToMsgId },
-      include: { ticket: { include: { user: { select: { telegramChatId: true, profile: { select: { languageMode: true, manualLanguage: true } } } } } } },
+      include: { ticket: { include: { user: { select: { telegramChatId: true, profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } } } } } } },
     });
 
     if (!supportMsg) {
@@ -473,9 +471,7 @@ if (!token) {
     // Notify user (best-effort)
     const userChatId = ticket.user.telegramChatId;
     if (userChatId) {
-      const userLocale = resolveEffectiveLocale(
-        ticket.user.profile ? { languageMode: ticket.user.profile.languageMode as any, manualLanguage: ticket.user.profile.manualLanguage as any } : null,
-      );
+      const userLocale = resolveEffectiveLocale(profileToLanguageSettings(ticket.user.profile));
       const closedText = t('support_closed', userLocale, { code: ticket.ticketCode });
       await bot.telegram.sendMessage(userChatId, closedText).catch(() => {});
     }
@@ -488,7 +484,7 @@ if (!token) {
   async function handleCloseTicketByCode(ctx: any, code: string): Promise<void> {
     const ticket = await prisma.supportTicket.findFirst({
       where: { ticketCode: code.toUpperCase() },
-      include: { user: { select: { telegramChatId: true, profile: { select: { languageMode: true, manualLanguage: true } } } } },
+      include: { user: { select: { telegramChatId: true, profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } } } } },
     });
 
     if (!ticket) {
@@ -507,9 +503,7 @@ if (!token) {
 
     const userChatId = ticket.user.telegramChatId;
     if (userChatId) {
-      const userLocale = resolveEffectiveLocale(
-        ticket.user.profile ? { languageMode: ticket.user.profile.languageMode as any, manualLanguage: ticket.user.profile.manualLanguage as any } : null,
-      );
+      const userLocale = resolveEffectiveLocale(profileToLanguageSettings(ticket.user.profile));
       await bot.telegram.sendMessage(userChatId, t('support_closed', userLocale, { code: ticket.ticketCode })).catch(() => {});
     }
 
@@ -845,29 +839,20 @@ if (!token) {
                 where: { id: inviter.inviterUserId },
                 select: {
                   telegramChatId: true,
-                  profile: { select: { languageMode: true, manualLanguage: true } },
+                  profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
                 },
               });
               if (inviterUser?.telegramChatId) {
-                // Resolve inviter's locale. For MANUAL mode → use stored pick.
-                // For AUTO mode → query Telegram getChat for live language_code
-                // (without it, normalizeLocale(undefined) defaults to 'en',
-                // which is wrong for our mostly-Russian user base).
-                // Fallback 'ru' if getChat fails.
-                let inviterLocale: Locale = 'ru';
-                const prof = inviterUser.profile;
-                if (prof?.languageMode === 'manual' && prof.manualLanguage) {
-                  inviterLocale = prof.manualLanguage as Locale;
-                } else {
-                  try {
-                    const chat = await bot.telegram.getChat(inviterUser.telegramChatId) as { language_code?: string };
-                    if (chat.language_code) {
-                      inviterLocale = detectLocale(chat.language_code);
-                    }
-                  } catch (err) {
-                    logger.warn({ err, inviterUserId: inviter.inviterUserId }, '[referral] getChat for locale resolution failed — defaulting to ru');
-                  }
-                }
+                // Resolve inviter's locale via the shared resolver chain
+                // (manual → live (n/a here) → persisted normalizedLocale →
+                // legacy raw → 'en'). Earlier this called Telegram getChat
+                // on every invite to recover the live language_code; that
+                // round-trip is now redundant because middleware persists
+                // normalizedLocale on every Mini App / bot touch.
+                const { locale: inviterLocale, source: inviterLocaleSource } = resolveLocaleWithSource(
+                  profileToLanguageSettings(inviterUser.profile),
+                );
+                logger.debug({ inviterUserId: inviter.inviterUserId, locale: inviterLocale, localeSource: inviterLocaleSource }, '[referral] inviter arrival locale resolved');
                 // Only emit `sent` analytics if Telegram actually accepted
                 // the message — otherwise bot_notification_sent counts drift
                 // above real deliveries and the dashboard lies.
@@ -1823,17 +1808,24 @@ if (!token) {
       // Skip if recipient is the owner themselves (edge case)
       if (owner?.telegramId === recipientTgId) continue;
 
-      // Recipient locale: not available from users_shared, default to 'en'
-      const recipientLocale: Locale = 'en';
-      const hintText = t('bot_hint_msg', recipientLocale, { owner: ownerName, title: hint.item.title, shortName: shortName.toLowerCase() });
-
-      // Look up whether we already know this recipient's chat (just for log
-      // breadcrumb — sendMessage works for any user_id who has /start-ed
-      // the bot at any point in their lifetime).
+      // Look up whether we already know this recipient + their persisted
+      // language settings (sender's request locale is irrelevant — recipient
+      // is whoever the sender picked from the user-share dialog). For known
+      // recipients (any prior /start or Mini App touch), the resolver chain
+      // gives manual override → persisted normalizedLocale → legacy raw →
+      // 'en'. Cold-start unknown recipients fall through to 'en' default.
       const knownRecipient = await prisma.user.findUnique({
         where: { telegramId: recipientTgId },
-        select: { telegramChatId: true },
+        select: {
+          telegramChatId: true,
+          profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
+        },
       }).catch(() => null);
+      const { locale: recipientLocale, source: recipientLocaleSource } = resolveLocaleWithSource(
+        profileToLanguageSettings(knownRecipient?.profile ?? null),
+      );
+      const hintText = t('bot_hint_msg', recipientLocale, { owner: ownerName, title: hint.item.title, shortName: shortName.toLowerCase() });
+      logger.debug({ hintId: hint.id, recipientTgId, locale: recipientLocale, localeSource: recipientLocaleSource }, 'users_shared: recipient locale resolved');
 
       // Try direct bot delivery — retry on network failure to ride out the
       // VPS↔Telegram path flaps (RKN-blocked IPv4 + deprecated IPv6 source
@@ -2442,7 +2434,14 @@ if (!token) {
           telegramChatId: { not: null },
           createdAt: { gte: sevenDaysAgo },
         },
-        select: { id: true, telegramId: true, telegramChatId: true, profile: { select: { normalizedLocale: true } } },
+        select: {
+          id: true, telegramId: true, telegramChatId: true,
+          // Full language settings so we go through the same resolver chain
+          // as every other proactive send. New users almost never have
+          // manualLanguage set (haven't opened settings yet) — but we honour
+          // it if they did, instead of silently overriding.
+          profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
+        },
       });
 
       if (pending.length === 0) return;
@@ -2455,7 +2454,9 @@ if (!token) {
       for (const user of pending) {
         if (shutdownRequested) break;
         const chatId = user.telegramChatId!;
-        const locale = detectLocale(user.profile?.normalizedLocale ?? undefined);
+        const { locale, source: localeSource } = resolveLocaleWithSource(
+          profileToLanguageSettings(user.profile),
+        );
 
         try {
           // Send welcome via raw API (not ctx — we're outside an update handler).
@@ -2465,7 +2466,7 @@ if (!token) {
           await prisma.user.update({ where: { id: user.id }, data: { welcomeSent: true } });
           await bot.telegram.sendMessage(chatId, t('bot_donation', locale)).catch(() => {});
           sent++;
-          logger.info({ telegramId: user.telegramId }, 'pending welcome delivered');
+          logger.info({ telegramId: user.telegramId, locale, localeSource }, 'pending welcome delivered');
         } catch (err: unknown) {
           // 403 = user blocked bot — mark as sent so we don't retry forever
           const is403 = (err instanceof TelegramError && err.code === 403);

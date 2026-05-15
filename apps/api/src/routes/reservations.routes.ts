@@ -43,14 +43,14 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '@wishlist/db';
-import { t, type Locale } from '@wishlist/shared';
+import { t, resolveLocaleWithSource } from '@wishlist/shared';
 
 import { asyncHandler } from '../lib/asyncHandler';
 import { zodError } from '../lib/http';
 import { getRequestLocale } from '../lib/locale';
 import { secureCompare } from '../lib/crypto';
 import { sendTgNotification } from '../telegram/botApi';
-import { resolveUserFirstName } from '../services/locale';
+import { profileToLanguageSettings, resolveUserFirstName } from '../services/locale';
 import logger from '../logger';
 
 // Shape of the Telegram initData user object — duplicated from index.ts to
@@ -947,10 +947,18 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
       if (itemData) {
         const owner = await prisma.user.findUnique({
           where: { id: itemData.wishlist.ownerId },
-          select: { telegramChatId: true },
+          select: {
+            telegramChatId: true,
+            profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
+          },
         });
         if (owner?.telegramChatId) {
-          const notifLocale: Locale = 'ru';
+          // Recipient = owner. Reserver's request locale is irrelevant; resolve
+          // the owner's effective locale from their persisted profile (no live
+          // ctx for the owner here).
+          const { locale: notifLocale } = resolveLocaleWithSource(
+            profileToLanguageSettings(owner.profile),
+          );
           void sendTgNotification(owner.telegramChatId, t('notif_reserved', notifLocale, { name: displayName, title: result.title }));
         }
       }
@@ -1232,10 +1240,17 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
         if (itemData) {
           const owner = await prisma.user.findUnique({
             where: { id: itemData.wishlist.ownerId },
-            select: { telegramChatId: true },
+            select: {
+              telegramChatId: true,
+              profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
+            },
           });
           if (owner?.telegramChatId) {
-            const notifLocale: Locale = 'ru'; // notifications to other users default to Russian
+            // Recipient = owner. Resolve owner's locale from persisted profile
+            // — reserver's request locale is irrelevant for owner's notification.
+            const { locale: notifLocale } = resolveLocaleWithSource(
+              profileToLanguageSettings(owner.profile),
+            );
             void sendTgNotification(owner.telegramChatId, t('notif_reserved', notifLocale, { name: displayName, title: itemData.title }));
           }
         }

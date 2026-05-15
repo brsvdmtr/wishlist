@@ -26,8 +26,9 @@
 
 import type { PrismaClient } from '@wishlist/db';
 import type { Logger } from 'pino';
-import { t } from '@wishlist/shared';
+import { t, resolveLocaleWithSource } from '@wishlist/shared';
 import { buildReservationReminderDeepLink } from '../telegram/deepLinks';
+import { profileToLanguageSettings } from '../services/locale';
 
 export type ReservationReminderDeps = {
   prisma: PrismaClient;
@@ -80,22 +81,33 @@ export function startReservationReminderScheduler(deps: ReservationReminderDeps)
 
       let sent = 0;
       for (const meta of due) {
+        // Recipient = reserver. Resolve their locale from persisted profile
+        // fields — proactive cron, no live ctx.from.
         const reserver = await prisma.user.findUnique({
           where: { id: meta.reserverUserId },
-          select: { telegramChatId: true },
+          select: {
+            telegramChatId: true,
+            profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
+          },
         });
         if (reserver?.telegramChatId) {
+          const { locale, source: localeSource } = resolveLocaleWithSource(
+            profileToLanguageSettings(reserver.profile),
+          );
           const ownerName = meta.item.wishlist.owner.profile?.displayName ?? meta.item.wishlist.owner.firstName ?? '';
-          let text = `🔔 <b>Напоминание о бронировании</b>\n\n<b>${meta.item.title}</b>`;
-          if (meta.item.priceText) text += ` — ${meta.item.priceText}`;
-          text += `\nИз вишлиста <b>${ownerName}</b>`;
-          if (meta.note) text += `\n\n📝 ${meta.note}`;
+          const bodyKey = meta.item.priceText ? 'notif_res_reminder_body_with_price' : 'notif_res_reminder_body';
+          const bodyParams: Record<string, string> = { title: meta.item.title };
+          if (meta.item.priceText) bodyParams.price = meta.item.priceText;
+          let text = `${t('notif_res_reminder_header', locale)}\n\n${t(bodyKey, locale, bodyParams)}`;
+          text += `\n${t('notif_res_reminder_from', locale, { owner: ownerName })}`;
+          if (meta.note) text += `\n\n${t('notif_res_reminder_note', locale, { note: meta.note })}`;
           await sendTgBotMessage(reserver.telegramChatId, text, {
             inline_keyboard: [[
-              { text: '📱 Открыть', url: buildReservationReminderDeepLink(meta.item.id, meta.id) },
-              { text: '✓ Куплено', callback_data: `res_purchased:${meta.item.id}` },
+              { text: t('notif_res_reminder_btn_open', locale), url: buildReservationReminderDeepLink(meta.item.id, meta.id) },
+              { text: t('notif_res_reminder_btn_purchased', locale), callback_data: `res_purchased:${meta.item.id}` },
             ]],
           });
+          logger.debug({ metaId: meta.id, locale, localeSource }, 'reservation-reminder sent');
           sent++;
         }
 
@@ -149,7 +161,17 @@ export function startSmartReservationSchedulers(deps: SmartReservationSchedulerD
           item: {
             select: {
               id: true, title: true, status: true, reserverUserId: true, reservationEpoch: true,
-              wishlist: { select: { ownerId: true, owner: { select: { telegramChatId: true } } } },
+              wishlist: {
+                select: {
+                  ownerId: true,
+                  owner: {
+                    select: {
+                      telegramChatId: true,
+                      profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
+                    },
+                  },
+                },
+              },
             },
           },
         },
@@ -174,6 +196,11 @@ export function startSmartReservationSchedulers(deps: SmartReservationSchedulerD
             await tx.reservationEvent.create({
               data: { itemId: meta.item.id, type: 'UNRESERVED', actorHash: SYSTEM_ACTOR_HASH, comment: 'auto_released' },
             });
+            // SYSTEM comment text is persisted (not lazily rendered), so a single
+            // locale at write-time is rendered identically to every later viewer.
+            // 'ru' is the project's canonical persisted-text locale. Out of scope
+            // for the 2026-05-10 send-locale resolver wave — proper fix is to
+            // store {key, params} and render at read-time per viewer locale.
             await tx.comment.create({
               data: { itemId: meta.item.id, type: 'SYSTEM', text: t('api_system_auto_released', 'ru'), reservationEpoch: meta.item.reservationEpoch },
             });
@@ -188,15 +215,28 @@ export function startSmartReservationSchedulers(deps: SmartReservationSchedulerD
             });
           });
 
-          // Notify gifter
-          const reserver = await prisma.user.findUnique({ where: { id: meta.reserverUserId }, select: { telegramChatId: true } });
+          // Notify gifter (= reserver). Per-recipient locale from persisted profile.
+          const reserver = await prisma.user.findUnique({
+            where: { id: meta.reserverUserId },
+            select: {
+              telegramChatId: true,
+              profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
+            },
+          });
           if (reserver?.telegramChatId) {
-            void sendTgNotification(reserver.telegramChatId, t('notif_smart_res_auto_released_gifter', 'ru', { title: meta.item.title }));
+            const { locale: gifterLocale } = resolveLocaleWithSource(
+              profileToLanguageSettings(reserver.profile),
+            );
+            void sendTgNotification(reserver.telegramChatId, t('notif_smart_res_auto_released_gifter', gifterLocale, { title: meta.item.title }));
           }
-          // Notify owner
+          // Notify owner. Owner's profile preloaded above with the wishlist
+          // include — no extra round-trip.
           const ownerChatId = meta.item.wishlist.owner.telegramChatId;
           if (ownerChatId) {
-            void sendTgNotification(ownerChatId, t('notif_smart_res_auto_released_owner', 'ru', { title: meta.item.title }));
+            const { locale: ownerLocale } = resolveLocaleWithSource(
+              profileToLanguageSettings(meta.item.wishlist.owner.profile),
+            );
+            void sendTgNotification(ownerChatId, t('notif_smart_res_auto_released_owner', ownerLocale, { title: meta.item.title }));
           }
           logger.info({ metaId: meta.id, itemId: meta.item.id }, 'smart-res: auto-released');
         } catch (err) {
@@ -226,15 +266,25 @@ export function startSmartReservationSchedulers(deps: SmartReservationSchedulerD
           const windowStart = meta.expiresAt.getTime() - leadH * 3600000;
           if (now.getTime() < windowStart) continue; // not in reminder window yet
 
-          const reserver = await prisma.user.findUnique({ where: { id: meta.reserverUserId }, select: { telegramChatId: true } });
+          const reserver = await prisma.user.findUnique({
+            where: { id: meta.reserverUserId },
+            select: {
+              telegramChatId: true,
+              profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
+            },
+          });
           if (!reserver?.telegramChatId) {
             // No chat ID — mark as sent to avoid retrying
             await prisma.reservationMeta.update({ where: { id: meta.id }, data: { reminderSent: true } });
             continue;
           }
+          const { locale, source: localeSource } = resolveLocaleWithSource(
+            profileToLanguageSettings(reserver.profile),
+          );
           const hoursLeft = Math.max(1, Math.round((meta.expiresAt.getTime() - now.getTime()) / 3600000));
-          const delivered = await sendTgNotification(reserver.telegramChatId, t('notif_smart_res_expiring', 'ru', { title: meta.item.title, hours: String(hoursLeft) }))
+          const delivered = await sendTgNotification(reserver.telegramChatId, t('notif_smart_res_expiring', locale, { title: meta.item.title, hours: String(hoursLeft) }))
             .then(() => true).catch(() => false);
+          logger.debug({ metaId: meta.id, locale, localeSource, delivered }, 'smart-res: reminder attempt');
           if (delivered) {
             await prisma.reservationMeta.update({ where: { id: meta.id }, data: { reminderSent: true } });
             logger.info({ metaId: meta.id, itemId: meta.item.id }, 'smart-res: reminder sent');

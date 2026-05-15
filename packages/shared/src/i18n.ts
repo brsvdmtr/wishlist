@@ -45,26 +45,136 @@ export type LanguageMode = 'auto' | 'manual';
 export interface LanguageSettings {
   languageMode: LanguageMode;
   manualLanguage: Locale | null;
+  /**
+   * Persisted canonical locale captured by middleware on every authenticated
+   * Mini App / bot touch (`UserProfile.normalizedLocale`). Used as a fallback
+   * for proactive / cron contexts where the live Telegram language_code is
+   * unavailable. Always preferred over `legacyLanguage` when both are present.
+   */
+  normalizedLocale?: Locale | string | null;
+  /**
+   * Persisted raw Telegram BCP-47 `language_code` (`UserProfile.language`).
+   * Used as a final fallback before defaulting to 'en'. This is the legacy
+   * field — `normalizedLocale` is the canonical replacement, but we keep
+   * legacy as a chain link for users whose normalizedLocale write predates
+   * the multi-signal resolver rollout.
+   */
+  legacyLanguage?: string | null;
 }
+
+/** Source of the resolved locale — emitted in structured logs for diagnostics. */
+export type LocaleSource =
+  | 'manual'
+  | 'live_telegram'
+  | 'persisted_normalized'
+  | 'legacy_language'
+  | 'default_en';
 
 /**
  * Single source of truth for resolving the effective locale.
  *
  * Resolution order:
- *  1. If languageMode='manual' and manualLanguage is set → use manualLanguage
- *  2. Otherwise (auto mode) → normalizeLocale(telegramLanguageCode), fallback 'en'
+ *  1. `manualLanguage` if `languageMode='manual'` (user's explicit pick)
+ *  2. live `telegramLanguageCode` from current request / bot ctx
+ *  3. persisted `normalizedLocale` from UserProfile (cron / proactive fallback)
+ *  4. `normalizeLocale(legacyLanguage)` from raw BCP-47 capture
+ *  5. fallback 'en'
  *
  * This function must be used everywhere locale is determined — API, bot, Mini App.
  * Never use stored language values directly to override Telegram locale.
+ *
+ * Critical for proactive / scheduled sends: any path that does NOT have
+ * `telegramLanguageCode` (lifecycle cron, pro-renewal, birthday-reminders,
+ * subscriber notifications) MUST select `normalizedLocale` and `language`
+ * alongside `languageMode` / `manualLanguage` and pass them in `settings`.
  */
 export function resolveEffectiveLocale(
   settings: LanguageSettings | null | undefined,
   telegramLanguageCode?: string,
 ): Locale {
-  if (settings?.languageMode === 'manual' && settings.manualLanguage) {
-    return settings.manualLanguage;
+  return resolveLocaleWithSource(settings, telegramLanguageCode).locale;
+}
+
+/**
+ * Same resolution as `resolveEffectiveLocale`, but returns the `source` so the
+ * caller can log it. Use this in proactive sends to make "why did this come in
+ * the wrong language" investigations a one-line log lookup instead of a
+ * cross-package treasure hunt.
+ */
+export function resolveLocaleWithSource(
+  settings: LanguageSettings | null | undefined,
+  telegramLanguageCode?: string,
+): { locale: Locale; source: LocaleSource } {
+  // Defensive `isSupportedLocale` guard: if dirty data lands in
+  // `manualLanguage` (e.g. a future migration regression writes 'pt-BR' or
+  // an admin-tool typo writes 'EN'), pinning that string would throw at
+  // `t(key, locale)` because `dicts['pt-BR']` is undefined. Fall through
+  // to the next signal instead — same shape as the persisted_normalized
+  // branch below.
+  if (settings?.languageMode === 'manual' && settings.manualLanguage && isSupportedLocale(settings.manualLanguage)) {
+    return { locale: settings.manualLanguage, source: 'manual' };
   }
-  return normalizeLocale(telegramLanguageCode);
+  if (telegramLanguageCode) {
+    return { locale: normalizeLocale(telegramLanguageCode), source: 'live_telegram' };
+  }
+  const normalized = settings?.normalizedLocale;
+  if (normalized && isSupportedLocale(normalized)) {
+    return { locale: normalized, source: 'persisted_normalized' };
+  }
+  if (settings?.legacyLanguage) {
+    return { locale: normalizeLocale(settings.legacyLanguage), source: 'legacy_language' };
+  }
+  return { locale: 'en', source: 'default_en' };
+}
+
+/** Type-guarded check that an arbitrary string is a supported `Locale`. */
+export function isSupportedLocale(value: string): value is Locale {
+  return value === 'ru' || value === 'en' || value === 'zh-CN'
+    || value === 'hi' || value === 'es' || value === 'ar';
+}
+
+/**
+ * Shape of the persisted-profile slice that proactive sends select to
+ * resolve a recipient's effective locale. Mirrors the Prisma `UserProfile`
+ * columns the resolver consumes — kept here in `shared` (no Prisma dep) so
+ * both `apps/api` and `apps/bot` consume a single canonical adapter.
+ *
+ * `null` represents "user has never opted into a value" (legitimate for
+ * `manualLanguage`, `normalizedLocale`, `language`); a `null` slice itself
+ * means the user has no profile row yet (cold-start) and the resolver will
+ * fall through to the default-en branch.
+ */
+export type LocaleProfileSlice = {
+  languageMode: string;
+  manualLanguage: string | null;
+  normalizedLocale: string | null;
+  language: string | null;
+} | null;
+
+/**
+ * Adapter that lifts a persisted-profile slice into the `LanguageSettings`
+ * shape `resolveLocaleWithSource` consumes. Centralises the casts so every
+ * proactive-send callsite stays a single line.
+ *
+ * Why a helper instead of in-place objects: 14+ callsites repeated the same
+ * `{ languageMode: ... as any, manualLanguage: ... as Locale | null,
+ * normalizedLocale: ..., legacyLanguage: ... }` literal across api + bot.
+ * Centralising makes the next field-add (e.g. browser-resolved
+ * `marketBucket`) a one-touch change instead of a 14-file find-and-replace.
+ */
+export function profileToLanguageSettings(profile: LocaleProfileSlice): LanguageSettings | null {
+  if (!profile) return null;
+  // Casts are safe-at-runtime: `resolveLocaleWithSource` defends with
+  // `isSupportedLocale` on `manualLanguage`, and only branches on the literal
+  // 'manual' for `languageMode` — any unexpected DB value silently takes the
+  // auto path through live/persisted/legacy. Cast over runtime-guard at this
+  // boundary keeps the 14+ call sites a single line each.
+  return {
+    languageMode: profile.languageMode as LanguageMode,
+    manualLanguage: profile.manualLanguage as Locale | null,
+    normalizedLocale: profile.normalizedLocale,
+    legacyLanguage: profile.language,
+  };
 }
 
 // ─── Onboarding v2: A/B test types ──────────────────────────────────────────
@@ -1069,6 +1179,30 @@ const ru: Dict = {
   wb_promo_code_label: 'WISHPRO',
   wb_promo_activate: 'Активировать Pro',
   wb_promo_later: 'Потом',
+  // Inline-keyboard CTA on lifecycle / pro-renewal DMs (proactive bot pushes).
+  lifecycle_dm_open_app_btn: 'Открыть WishBoard ✨',
+  // Inline-keyboard CTA on subscriber notifications about new / updated items.
+  sub_notification_open_item_btn: '🎁 Перейти к желанию',
+  // Reservation reminder (15-min cron) — sent to the reserver when their
+  // self-set reminder date is reached. Composed from header + body + from
+  // (+ optional note); buttons localised separately.
+  notif_res_reminder_header: '🔔 <b>Напоминание о бронировании</b>',
+  notif_res_reminder_body: '<b>{{title}}</b>',
+  notif_res_reminder_body_with_price: '<b>{{title}}</b> — {{price}}',
+  notif_res_reminder_from: 'Из вишлиста <b>{{owner}}</b>',
+  notif_res_reminder_note: '📝 {{note}}',
+  notif_res_reminder_btn_open: '📱 Открыть',
+  notif_res_reminder_btn_purchased: '✓ Куплено',
+  // Group-gift fanout notifications (sent from POST /tg/group-gifts/:id/{join,complete,cancel}).
+  notif_group_gift_joined: '👥 {{name}} присоединился к совместному подарку',
+  notif_group_gift_completed: '✅ Совместный подарок завершён!',
+  notif_group_gift_cancelled: '❌ Совместный подарок отменён',
+  // Plural noun forms used inside `notif_batch_comments` ("3 NEW COMMENTS in
+  // <item>"). Picked by `pluralize(count, one, few, many, locale)` — Russian
+  // uses all three; other locales repeat few=many.
+  notif_batch_comments_word_one: 'новый комментарий',
+  notif_batch_comments_word_few: 'новых комментария',
+  notif_batch_comments_word_many: 'новых комментариев',
   // ── God Mode retention dashboard ──
   ret_title: '📊 Возврат пользователей',
   ret_comms: '✉️ Коммуникации',
@@ -3809,6 +3943,21 @@ const en: Dict = {
   wb_promo_code_label: 'WISHPRO',
   wb_promo_activate: 'Activate Pro',
   wb_promo_later: 'Later',
+  lifecycle_dm_open_app_btn: 'Open WishBoard ✨',
+  sub_notification_open_item_btn: '🎁 Open wish',
+  notif_res_reminder_header: '🔔 <b>Reservation reminder</b>',
+  notif_res_reminder_body: '<b>{{title}}</b>',
+  notif_res_reminder_body_with_price: '<b>{{title}}</b> — {{price}}',
+  notif_res_reminder_from: 'From <b>{{owner}}</b>\'s wishlist',
+  notif_res_reminder_note: '📝 {{note}}',
+  notif_res_reminder_btn_open: '📱 Open',
+  notif_res_reminder_btn_purchased: '✓ Purchased',
+  notif_group_gift_joined: '👥 {{name}} joined the group gift',
+  notif_group_gift_completed: '✅ Group gift completed!',
+  notif_group_gift_cancelled: '❌ Group gift cancelled',
+  notif_batch_comments_word_one: 'new comment',
+  notif_batch_comments_word_few: 'new comments',
+  notif_batch_comments_word_many: 'new comments',
   // ── God Mode retention dashboard ──
   ret_title: '📊 User retention',
   ret_comms: '✉️ Communications',
@@ -7446,6 +7595,21 @@ const zhCN: Dict = {
   wb_cta_open: '打开WishBoard ✨',
   wb_cta_add_wish: '添加愿望',
   wb_cta_create_wishlist: '创建心愿单',
+  lifecycle_dm_open_app_btn: '打开WishBoard ✨',
+  sub_notification_open_item_btn: '🎁 查看愿望',
+  notif_res_reminder_header: '🔔 <b>预订提醒</b>',
+  notif_res_reminder_body: '<b>{{title}}</b>',
+  notif_res_reminder_body_with_price: '<b>{{title}}</b> — {{price}}',
+  notif_res_reminder_from: '来自 <b>{{owner}}</b> 的心愿单',
+  notif_res_reminder_note: '📝 {{note}}',
+  notif_res_reminder_btn_open: '📱 打开',
+  notif_res_reminder_btn_purchased: '✓ 已购买',
+  notif_group_gift_joined: '👥 {{name}} 加入了团购礼物',
+  notif_group_gift_completed: '✅ 团购礼物已完成！',
+  notif_group_gift_cancelled: '❌ 团购礼物已取消',
+  notif_batch_comments_word_one: '条新评论',
+  notif_batch_comments_word_few: '条新评论',
+  notif_batch_comments_word_many: '条新评论',
   wb_promo_s3_title: '心愿单快完成了——这是你的奖励',
   wb_promo_s3_body: '你的列表已经很棒了。送你一个月Pro：',
   wb_promo_s2_title: '第一个愿望已添加——送你奖励',
@@ -9442,6 +9606,21 @@ const hi: Dict = {
   wb_cta_open: 'WishBoard खोलें ✨',
   wb_cta_add_wish: 'इच्छा जोड़ें',
   wb_cta_create_wishlist: 'विशलिस्ट बनाएँ',
+  lifecycle_dm_open_app_btn: 'WishBoard खोलें ✨',
+  sub_notification_open_item_btn: '🎁 इच्छा देखें',
+  notif_res_reminder_header: '🔔 <b>आरक्षण रिमाइंडर</b>',
+  notif_res_reminder_body: '<b>{{title}}</b>',
+  notif_res_reminder_body_with_price: '<b>{{title}}</b> — {{price}}',
+  notif_res_reminder_from: '<b>{{owner}}</b> की विशलिस्ट से',
+  notif_res_reminder_note: '📝 {{note}}',
+  notif_res_reminder_btn_open: '📱 खोलें',
+  notif_res_reminder_btn_purchased: '✓ खरीदा',
+  notif_group_gift_joined: '👥 {{name}} ग्रुप गिफ्ट में शामिल हुए',
+  notif_group_gift_completed: '✅ ग्रुप गिफ्ट पूरा हुआ!',
+  notif_group_gift_cancelled: '❌ ग्रुप गिफ्ट रद्द',
+  notif_batch_comments_word_one: 'नई टिप्पणी',
+  notif_batch_comments_word_few: 'नई टिप्पणियाँ',
+  notif_batch_comments_word_many: 'नई टिप्पणियाँ',
   wb_promo_s3_title: 'विशलिस्ट लगभग तैयार — यह रहा आपका बोनस',
   wb_promo_s3_body: 'आपकी सूची बढ़िया स्थिति में है। एक महीने का Pro:',
   wb_promo_s2_title: 'पहली इच्छा जोड़ी — यह रहा बोनस',
@@ -11439,6 +11618,21 @@ const es: Dict = {
   wb_cta_open: 'Abrir WishBoard ✨',
   wb_cta_add_wish: 'Añadir deseo',
   wb_cta_create_wishlist: 'Crear wishlist',
+  lifecycle_dm_open_app_btn: 'Abrir WishBoard ✨',
+  sub_notification_open_item_btn: '🎁 Ver deseo',
+  notif_res_reminder_header: '🔔 <b>Recordatorio de reserva</b>',
+  notif_res_reminder_body: '<b>{{title}}</b>',
+  notif_res_reminder_body_with_price: '<b>{{title}}</b> — {{price}}',
+  notif_res_reminder_from: 'De la wishlist de <b>{{owner}}</b>',
+  notif_res_reminder_note: '📝 {{note}}',
+  notif_res_reminder_btn_open: '📱 Abrir',
+  notif_res_reminder_btn_purchased: '✓ Comprado',
+  notif_group_gift_joined: '👥 {{name}} se unió al regalo grupal',
+  notif_group_gift_completed: '✅ ¡Regalo grupal completado!',
+  notif_group_gift_cancelled: '❌ Regalo grupal cancelado',
+  notif_batch_comments_word_one: 'nuevo comentario',
+  notif_batch_comments_word_few: 'nuevos comentarios',
+  notif_batch_comments_word_many: 'nuevos comentarios',
   wb_promo_s3_title: 'Tu wishlist casi está lista — aquí tienes tu bonus',
   wb_promo_s3_body: 'Tu lista está en muy buen punto. Un mes de Pro:',
   wb_promo_s2_title: 'Primer deseo añadido — aquí tienes tu bonus',
@@ -13436,6 +13630,21 @@ const ar: Dict = {
   wb_cta_open: 'فتح WishBoard ✨',
   wb_cta_add_wish: 'إضافة أمنية',
   wb_cta_create_wishlist: 'إنشاء قائمة أمنيات',
+  lifecycle_dm_open_app_btn: 'فتح WishBoard ✨',
+  sub_notification_open_item_btn: '🎁 عرض الأمنية',
+  notif_res_reminder_header: '🔔 <b>تذكير بالحجز</b>',
+  notif_res_reminder_body: '<b>{{title}}</b>',
+  notif_res_reminder_body_with_price: '<b>{{title}}</b> — {{price}}',
+  notif_res_reminder_from: 'من قائمة أمنيات <b>{{owner}}</b>',
+  notif_res_reminder_note: '📝 {{note}}',
+  notif_res_reminder_btn_open: '📱 فتح',
+  notif_res_reminder_btn_purchased: '✓ تم الشراء',
+  notif_group_gift_joined: '👥 {{name}} انضم إلى الهدية الجماعية',
+  notif_group_gift_completed: '✅ اكتملت الهدية الجماعية!',
+  notif_group_gift_cancelled: '❌ تم إلغاء الهدية الجماعية',
+  notif_batch_comments_word_one: 'تعليق جديد',
+  notif_batch_comments_word_few: 'تعليقات جديدة',
+  notif_batch_comments_word_many: 'تعليقات جديدة',
   wb_promo_s3_title: 'قائمة أمنياتك شبه جاهزة — إليك مكافأتك',
   wb_promo_s3_body: 'قائمتك في حالة رائعة. إليك شهر Pro:',
   wb_promo_s2_title: 'تمت إضافة الأمنية الأولى — إليك مكافأتك',
