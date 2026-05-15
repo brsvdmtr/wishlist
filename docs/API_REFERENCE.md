@@ -1,6 +1,6 @@
 # API_REFERENCE.md — Complete Endpoint Reference
 
-> Last updated: 2026-05-08. Since the P1–P5s refactor (closed 2026-05-07), `apps/api/src/index.ts` is a **1,789-LOC composition root**; route handlers live in **23 domain routers** under `apps/api/src/routes/<domain>.routes.ts`, with cross-cutting work in `apps/api/src/services/` (13 modules) and crons in `apps/api/src/schedulers/` (9 modules). Endpoints below remain the same; only their source files moved. See [docs/API_ARCHITECTURE_RULES.md](API_ARCHITECTURE_RULES.md).
+> Last updated: 2026-05-15. Since the P1–P5s refactor (closed 2026-05-07), `apps/api/src/index.ts` is a **1,789-LOC composition root**; route handlers live in **23 domain routers** under `apps/api/src/routes/<domain>.routes.ts`, with cross-cutting work in `apps/api/src/services/` (13 modules) and crons in `apps/api/src/schedulers/` (9 modules). Endpoints below remain the same; only their source files moved. See [docs/API_ARCHITECTURE_RULES.md](API_ARCHITECTURE_RULES.md).
 
 ---
 
@@ -24,6 +24,17 @@ Uploads are served as static files at `/api/uploads/<filename>`.
 | Admin | `X-ADMIN-KEY` | `ADMIN_KEY` env var (timing-safe compare) | Admin panel (Next.js pages) |
 | Internal | `X-INTERNAL-KEY` | `BOT_TOKEN` env var (timing-safe compare) | Bot to API server-to-server |
 | Dev bypass | `X-TG-DEV` | Telegram ID number (non-production only) | Local development |
+
+### Optional locale-detection request headers (since 2026-05-08)
+
+The Mini App also sends two informational headers on every authenticated `tgFetch` call to enrich the multi-signal market-bucket resolver (`apps/api/src/services/locale-detection.ts`). Both are optional; absence is normal and never blocks a request.
+
+| Header | Source | Example | Consumed by |
+|--------|--------|---------|-------------|
+| `X-Browser-Language` | `navigator.language` | `ru-RU` | Resolver fallback when `initData.user.language_code` is empty |
+| `X-Browser-Timezone` | `Intl.DateTimeFormat().resolvedOptions().timeZone` | `Europe/Moscow` | Resolver fallback after browser language |
+
+ASCII validation: language is constrained to BCP-47 characters; timezone to IANA characters (`A-Za-z0-9_/+-`). Both must appear in the CORS allow-list (already configured). API also derives a country signal from the client IP via `geoip-lite` (lazy-loaded; prewarmed at `app.listen` so the ~100 ms cold-start cost doesn't land on the first authenticated request). Kill switch: `LOCALE_DETECTION_ENABLED`.
 
 ---
 
@@ -254,12 +265,12 @@ Allows users to specify items they don't want to receive as gifts. Visible on pu
 
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
-| GET | `/tg/me/plan` | Auth user | Current plan, subscription, usage, add-ons, credits, SKU catalog. Includes `proSource`, `promoPro`, `reservationPro`, `proYearlyPriceStars` (800), `appearance: { theme, accent }` (v2.1). Subscription includes `billingPeriod` (`"monthly"` \| `"yearly"` \| `null`) |
-| POST | `/tg/billing/pro/checkout` | Auth user | Create Telegram Stars invoice link. Body: `{ plan?: 'monthly' | 'yearly' }` (defaults to `monthly` for back-compat). Monthly: 100 XTR recurring. Yearly: 800 XTR one-time. Returns `{ invoiceUrl, checkoutSessionId, plan }`. 503 if Telegram API is unreachable (client should show retry toast) |
+| GET | `/tg/me/plan` | Auth user | Current plan, subscription, usage, add-ons, credits, SKU catalog. Includes `proSource`, `promoPro`, `reservationPro`, `proYearlyPriceStars` (800), `proLifetimePriceStars` (2 490, since 2026-05-09), `appearance: { theme, accent }` (v2.1). Subscription includes `billingPeriod` (`"monthly"` \| `"yearly"` \| `"lifetime"` \| `null`). For lifetime users, `currentPeriodEnd` is the 2099-12-31 sentinel — UI MUST discriminate on `billingPeriod === 'lifetime'`, never on the date |
+| POST | `/tg/billing/pro/checkout` | Auth user | Create Telegram Stars invoice link. Body: `{ plan?: 'monthly' | 'yearly' | 'lifetime' }` (defaults to `monthly` for back-compat). Monthly: 100 XTR recurring. Yearly: 800 XTR one-time. Lifetime: 2 490 XTR one-time, permanent (since 2026-05-09). **Already-lifetime users short-circuit** to `{ alreadySubscribed: true, lifetime: true }` with no invoice. Returns `{ invoiceUrl, checkoutSessionId, plan }`. 503 if Telegram API is unreachable (client should show retry toast) |
 | POST | `/tg/billing/pro/sync` | Auth user | Re-query subscription state after payment. Does NOT activate (bot does). Returns `{ plan, subscription }` |
 | GET | `/tg/billing/history` | Auth user | Last 20 payment events |
-| POST | `/tg/billing/subscription/cancel` | Auth user (PRO) | Soft-cancel: `cancelAtPeriodEnd=true`. PRO continues until period end. 404 if no active subscription |
-| POST | `/tg/billing/subscription/reactivate` | Auth user (cancelled PRO) | Re-enable auto-renewal. 404 if no cancelled subscription in period |
+| POST | `/tg/billing/subscription/cancel` | Auth user (PRO) | Soft-cancel: `cancelAtPeriodEnd=true`. PRO continues until period end. 404 if no active subscription. **409 `lifetime_cannot_cancel`** if user has a lifetime row — there is no auto-renewal to manage. Mini App also hides the CTA; this is the backend backstop |
+| POST | `/tg/billing/subscription/reactivate` | Auth user (cancelled PRO) | Re-enable auto-renewal. 404 if no cancelled subscription in period. **409 `lifetime_cannot_cancel`** for lifetime users |
 
 ### Add-ons & Credits
 

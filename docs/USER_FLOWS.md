@@ -1,6 +1,6 @@
 # WishBoard — User Flows
 
-> Source of truth for all user journeys. Last updated: 2026-05-02 · Branch: main
+> Source of truth for all user journeys. Last updated: 2026-05-15 · Branch: main
 >
 > This document reflects the product as implemented, not aspirational features.
 
@@ -498,22 +498,24 @@ The onboarding catalog is locale-aware. Two market segments determine which temp
 
 **Actor:** Authenticated FREE user who wants to upgrade.
 
-1. User taps **"Get Pro"** from any upsell sheet or the Settings screen.
-2. App sends `POST /tg/billing/pro/checkout`.
-3. Server generates a Telegram Stars invoice and returns an `invoiceLink`.
-4. App calls `Telegram.WebApp.openInvoice(invoiceLink)`.
-5. Telegram's native payment sheet opens, showing the cost: **100 Stars / month**.
-6. User confirms payment within Telegram.
-7. Telegram processes the payment and sends a `successful_payment` update to the bot.
-8. Server receives `successful_payment`, creates a `Subscription` record, and marks the user's plan as PRO.
-9. App sends `POST /tg/billing/pro/sync` to confirm the subscription is active and refresh the local plan state.
-10. The UI updates immediately: PRO badge appears, PRO features become accessible, limits are raised.
-11. If a degradation state exists for the user (see [Flow 23](#flow-23-lifecycle--degradation)), it is cleared and any archived data is restored.
+1. User taps **"Get Pro"** from any upsell sheet or the Settings screen. Paywall sheet shows three plan options in a "2 + 1" layout — Monthly (100 ⭐) + Yearly (800 ⭐) in the existing 2-col grid, **Lifetime (2 490 ⭐)** as a full-width gold-accent premium tile below. Default selection is `yearly`.
+2. User picks a plan tile. CTA copy updates per plan; selecting Lifetime flips the CTA to a gold gradient with copy "Купить навсегда · 2 490 ⭐".
+3. App sends `POST /tg/billing/pro/checkout` with `{ plan: 'monthly' | 'yearly' | 'lifetime' }`.
+4. Server generates a Telegram Stars invoice and returns `{ invoiceUrl, checkoutSessionId, plan }`. If the user is already on lifetime and picks any plan, the server short-circuits to `{ alreadySubscribed: true, lifetime: true }` with no invoice; the Mini App shows a "уже активна" toast.
+5. App calls `Telegram.WebApp.openInvoice(invoiceUrl)`.
+6. Telegram's native payment sheet opens, showing the cost: **100 Stars / month**, **800 Stars one-time**, or **2 490 Stars one-time (permanent)**.
+7. User confirms payment within Telegram.
+8. Telegram processes the payment and sends a `successful_payment` update to the bot.
+9. Server receives `successful_payment`, upserts a `Subscription` record (within a transaction for lifetime), writes a `PaymentEvent` (`payment_success_monthly` / `payment_success_yearly` / `payment_success_lifetime`), and marks the user's plan as PRO. Bot sends a celebratory DM (`bot_pro_activated*`).
+10. App sends `POST /tg/billing/pro/sync` to confirm the subscription is active and refresh the local plan state.
+11. The UI updates immediately: PRO badge appears, PRO features become accessible, limits are raised. For lifetime, a celebratory bottom-sheet (`pro_lifetime_success_title` / `_desc`) opens.
+12. If a degradation state exists for the user (see [Flow 23](#flow-23-lifecycle--degradation)), it is cleared and any archived data is restored.
 
 **Edge cases:**
 - If the user closes the payment sheet without paying, the flow is cancelled and the user remains on FREE.
 - If `successful_payment` is received but `/sync` fails (e.g. network error), the plan will be corrected on the next app open when the auth state is refreshed.
-- The subscription is billed monthly via Telegram Stars. Renewal is handled by Telegram's subscription infrastructure.
+- The monthly subscription is billed via Telegram Stars subscription infrastructure. Yearly and Lifetime are one-time non-recurring invoices.
+- **Lifetime downgrade-protection:** if a stale `pro_monthly` or `pro_yearly` `successful_payment` arrives **after** lifetime is active (e.g. a still-active Telegram-side monthly auto-renewal that the user hasn't cancelled), the bot audits via `payment_success_post_lifetime` and **does not** overwrite the lifetime row. The user keeps lifetime. The Settings PRO card surfaces a static info note (`pro_lifetime_existing_monthly_warning`) reminding them to cancel any prior monthly auto-renewal separately, since Telegram will keep charging until they do.
 
 ---
 
@@ -543,6 +545,7 @@ The onboarding catalog is locale-aware. Two market segments determine which temp
 - The two-step confirmation (anti-churn sheet + explicit "Cancel subscription" tap) is intentional to reduce accidental cancellations.
 - Cancellation does not immediately revoke access; PRO features remain available through the paid period end.
 - After the period ends, the plan reverts to FREE. The degradation lifecycle begins (see [Flow 23](#flow-23-lifecycle--degradation)).
+- **Lifetime users cannot cancel.** The cancel and reactivate CTAs are hidden in Settings. If a stale Mini App version still calls the endpoint, the backend returns **409 `lifetime_cannot_cancel`**. There is no auto-renewal to disable; the entitlement is permanent.
 
 ---
 

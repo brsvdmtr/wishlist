@@ -1,6 +1,6 @@
 # Data Model — Wishlist Telegram Mini App
 
-_Last updated: 2026-05-02_
+_Last updated: 2026-05-15_
 
 > **73 models, 36 enums** (PostgreSQL 16, managed by Prisma ORM)
 
@@ -402,6 +402,9 @@ A registered user, identified primarily by their Telegram account.
 | `telegramId`     | String    | No       | —       | Telegram user ID (unique). Primary identity in the Mini App        |
 | `telegramChatId` | String    | No       | —       | Telegram private chat ID for bot DMs                               |
 | `firstName`      | String    | No       | —       | Telegram first name snapshot at last login                         |
+| `lastName`       | String    | No       | —       | Telegram last name snapshot. Captured opportunistically by the auth middleware (Mini App initData) and bot `/start`. Added 2026-05-08 |
+| `username`       | String    | No       | —       | Telegram username snapshot (no `@`). Captured opportunistically. Added 2026-05-08 |
+| `isPremium`      | Boolean   | Yes      | `false` | Whether the Telegram user has Telegram Premium. Captured from initData / bot. Added 2026-05-08 |
 | `godMode`        | Boolean   | Yes      | `false` | When `true`, grants PRO features without an active subscription    |
 | `createdAt`      | DateTime  | Yes      | now     |                                                                    |
 | `updatedAt`      | DateTime  | Yes      | auto    |                                                                    |

@@ -1,6 +1,6 @@
 # FRONTEND_MAP.md — Frontend Architecture
 
-> Date: 2026-05-08. Verified from source code.
+> Date: 2026-05-15. Verified from source code.
 
 ---
 
@@ -358,6 +358,36 @@ The Wave 4 sweep (April–May 2026) extracted 5 additional primitives into `pack
 - `TextField` — token-driven text input with label / hint / error states
 
 In the same wave, every `btnPrimary` / `btnGhost` / `btnSecondary` spread-style button was migrated to `<Button>` from `@wishlist/ui`, and the legacy `C` color constants were swept across remaining screens to CSS custom properties (~330 sites). Result: `pnpm ui:audit` raw-value count fell monotonically across the wave.
+
+### Pro Lifetime tile (paywall + Settings, since 2026-05-09)
+
+The Pro paywall sheet now renders **three plan options** in a "2 + 1" layout:
+
+- Row 1 (existing 2-col grid): Monthly · Yearly
+- Row 2 (full-width premium tile): **Lifetime — 2 490 ⭐**, gold accent (`var(--wb-warning)`, no new tokens), ∞ glyph, "Навсегда" / "Forever" badge.
+
+Default selection stays `yearly`. When Lifetime is picked, the CTA flips to a gold gradient with copy "Купить навсегда · 2 490 ⭐". The Lifetime tile appears in **every paywall sheet** — both feature-gate paywalls and the voluntary `pro_main` flow — for discovery + price anchoring (post-iter1 product decision; pivot from "headline-only" Variant A to "show in every sheet" Variant Б, logged in [docs/design-system/DESIGN_DECISIONS.md](design-system/DESIGN_DECISIONS.md)).
+
+Settings PRO card has a parallel **lifetime variant**:
+
+- Gold "Навсегда" pill replaces the period chip
+- "Без срока окончания" line replaces the next-charge date
+- Cancel / reactivate CTAs hidden (backend also returns 409 `lifetime_cannot_cancel`)
+- Static info note `pro_lifetime_existing_monthly_warning` reminds the user to cancel any pre-existing monthly auto-renewal separately (Telegram keeps charging until cancelled client-side)
+
+A celebratory bottom-sheet (`pro_lifetime_success_*` i18n) opens after a successful lifetime purchase. Mockup: [docs/design-system/mockups/approved/pro-lifetime-v1.html](design-system/mockups/approved/pro-lifetime-v1.html) (Variant A approved 2026-05-09).
+
+### Bulk-select bottom bar (2026-05-08)
+
+Two-defect fix: the bulk-action bar previously used `C.surface` (translucent 3.5% white elevation token) as background — items, the floating "+" FAB, and the item-counter all bled through. Switched to `C.bg` (solid). `gridTemplateColumns` synced with child count after the `curated_bulk_btn` add. The "+" Add-Wish FAB is hidden while bulk- or curated-selection mode is active (adding a wish during selection is semantically wrong and the FAB at `z:50` visually overlapped the bar). Container scroll-padding is now mode-aware:
+
+- `bulkSelectionMode`: 210px (76 offset + 116 bar height + 18 breathing)
+- `curatedSelectionMode`: 110px (70 single-row bar + 40 breathing)
+- default: 90px (floating bottom-nav alone)
+
+### Item image rendering (2026-05-08)
+
+All 19 `<img>` renders of item photos in `MiniApp.tsx` carry `loading="lazy"` and `decoding="async"` (or just `decoding="async"` for in-modal full-size views). Image sources for URL-imported items now resolve to locally-cached `/api/uploads/<uuid>-full.jpg` (sharp pipeline: 1600px resize, mozjpeg q80) rather than raw external CDN URLs.
 
 ---
 
