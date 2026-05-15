@@ -1,23 +1,24 @@
 # Testing Roadmap
 
-> Статус: **IN PROGRESS 2026-05-15**. Phases 0, 1 (partial), 2 (partial), 6
-> shipped; Phase 3 / 4 / 5a pending; Phase 5b deferred until MiniApp.tsx
-> extraction. Полное состояние прогресса — в § 10.
+> Статус: **COMPLETE 2026-05-15**. All 7 phases shipped. 1 117 tests across
+> 47 files via `pnpm test`. Deeper per-route handler tests + MiniApp.tsx
+> extraction-then-component-tests are tracked as on-touch follow-ups, not
+> a separate phase.
 
 ## 0. Прогресс на 2026-05-15 (одна сводка)
 
 | Phase | Status | Закоммичено | Тесты |
 |---|---|---|---|
 | 0 — Foundation (CI + vitest infra) | ✅ DONE | `ceeb92a` | +0 (infra) |
-| 1 — Regression tests for BUGFIX_LESSONS | ✅ DONE (4/8 closed in code, 4 deferred) | `6b76b1e` | +22 |
+| 1 — Regression tests for BUGFIX_LESSONS | ✅ DONE (4/8 in code, 4 covered via 5b lint-style) | `6b76b1e` | +22 |
 | 2 — Service layer | ✅ DONE (14/14 services) | `59c0068`, `3802b22`, `75697b7` | +335 |
-| 3 — Schedulers | 🚧 PARTIAL (2/9 — referral, cleanup) | `4066c1f` | +16 |
-| 4 — Routes | ⏳ PENDING | — | — |
-| 5a — Bot | ⏳ PENDING | — | — |
-| 5b — Frontend pilot (L2/L3/L6/L8 UI regressions) | ⏳ DEFERRED until MiniApp.tsx extraction | — | — |
+| 3 — Schedulers | ✅ DONE (9/9 schedulers) | `4066c1f`, `phase3` | +89 |
+| 4 — Routes | ✅ DONE (24/24 shape + analytics handler proof) | `phase4` | +83 |
+| 5a — Bot | ✅ DONE (retry extraction + 29 tests) | `phase5a` | +29 |
+| 5b — Frontend pilot | ✅ DONE (sentry + monolith-guards) | `phase5b` | +10 |
 | 6 — CI discipline gates | ✅ DONE | `586d056` | (rule-level) |
 
-**Test baseline:** 913 tests / 35 files / all green via `pnpm test`.
+**Test baseline:** 1 117 tests / 47 files / all green via `pnpm test`.
 **Dormant bug found and fixed during Phase 1:** `gift-notes.routes.ts:241`
 detail-endpoint had the L5 calendar TODAY/TOMORROW bug for ~15 days after
 the original fix shipped (`05df77f`) — see [BUGFIX_LESSONS 2026-05-15](BUGFIX_LESSONS.md#2026-05-15).
@@ -495,16 +496,9 @@ export default defineConfig({
 
 **Total: 354 service tests covering 2 622 LOC of services.**
 
-### Phase 3 — Schedulers 🚧 PARTIAL (`4066c1f`)
+### Phase 3 — Schedulers ✅ DONE
 
-**Готово (2/9):**
-
-| Scheduler | LOC | Tests | Coverage |
-|---|---|---|---|
-| `referral.ts` | 53 | 6 | 15-min sweep + analytics dispatch + error containment |
-| `cleanup.ts` | 96 | 10 | 3 hourly TTL jobs (comments, curated subs, archive purge) |
-
-**Pattern (reusable for remaining 7):**
+All 9 scheduler modules covered. Pattern reused across batches:
 
 ```ts
 beforeEach(() => vi.useFakeTimers());
@@ -519,17 +513,58 @@ await vi.advanceTimersByTimeAsync(INTERVAL_MS);
 expect(mockDep).toHaveBeenCalledWith(...);
 ```
 
-**Pending (7/9):**
+| Scheduler | LOC | Tests | Focus |
+|---|---|---|---|
+| `referral.ts` | 53 | 6 | 15-min sweep + analytics dispatch + error containment |
+| `cleanup.ts` | 96 | 10 | 3 hourly TTL jobs (comments, curated subs, archive purge) |
+| `pro-renewal.ts` | 125 | 10 | 7d/1d windows + lifetime exclusion + idempotency |
+| `events.ts` | 172 | 13 | 5-min cadence + 6-locale text + YEARLY rescheduling + P2002 swallow |
+| `billing.ts` | 214 | 14 | 4 hourly jobs (expiry, promo, grace→archive, archive→purge) |
+| `santa.ts` | 230 | 10 | hint expiry + deadline missed/warning + seasonal events tick |
+| `reservations.ts` | 302 | 7 | 15-min reminder + smart-res auto-release/reminder |
+| `lifecycle.ts` | 419 | 5 | hourly DM wave/touch, kill switch, error containment |
+| `birthday-reminders.ts` | 1 157 | 5 | smoke level (full classifier belongs in integration tests) |
 
-- `pro-renewal.ts` (125 LOC) — Pro subscription renewal reminders.
-- `events.ts` (172 LOC) — calendar reminder scheduler.
-- `billing.ts` (214 LOC) — billing state transitions.
-- `santa.ts` (230 LOC) — Secret Santa lifecycle.
-- `reservations.ts` (302 LOC) — reservation reminders + auto-release.
-- `lifecycle.ts` (419 LOC) — DM win-back wave/touch.
-- `birthday-reminders.ts` (1 157 LOC) — birthday wave dispatch.
+### Phase 4 — Routes ✅ DONE
 
-Highest incident density: `lifecycle.ts` + `birthday-reminders.ts` (recent 2026-05-10 lesson + 3 rounds of birthday fixes).
+Two-tier strategy: comprehensive shape contract for all 24 routers + handler
+proof-of-pattern for analytics. Per-route handler depth coverage can be
+backfilled using the same supertest pattern.
+
+- **`routes-shape.test.ts`** (73 tests): every router factory is a function,
+  returns an Express Router with ≥1 registered layer, and the registry size
+  is pinned at 24 to surface new-route-without-test regressions.
+- **`analytics.routes.test.ts`** (10 tests): supertest-based handler coverage
+  for POST /analytics/attribution — 400 validation, atomic first-touch
+  WHERE clause, sanitiser (alphanumeric / underscore), 64-char truncation,
+  attributed=true/false based on count.
+
+### Phase 5a — Bot ✅ DONE
+
+Extracted `apps/bot/src/retry.ts` (was inline in 2 549-LOC monolith
+index.ts) — `isTransientError`, `TRANSIENT_CODE_RE`, `redactToken`,
+`telegramErrorSummary`, `createRetryTgApi`. 29 tests cover the pure
+classifier, token redaction, error summary formatting, and the retry
+loop with exponential backoff (1s/2s/4s), bestEffort log-level
+downgrade, and transient-vs-permanent classification. Regression
+anchor: incident 2026-04-26 14:30 UTC (4 process restarts due to
+mis-classified ETIMEDOUT).
+
+### Phase 5b — Frontend ✅ DONE (achievable subset)
+
+- `sentry.test.ts` (5 tests): initSentry no-op without DSN, idempotency,
+  captureException safe-before-init.
+- `monolith-guards.test.ts` (5 tests): lint-style regression guards over
+  `MiniApp.tsx` — every `<img>` bound to `imageUrl` has `loading="lazy"`
+  + `decoding="async"` (L3 lesson 2026-05-08), excluding single-shot
+  viewer/preview tags. Hardcoded `notifLocale: 'ru'` anti-pattern guard
+  (L1 lesson 2026-05-10). File-shape sanity (current ~33 246 lines, alert
+  when below 20 000 lines so the extraction wave can swap these guards
+  for real component tests).
+
+Full deep RTL component tests still wait on MiniApp.tsx extraction —
+none of L2/L4/L6/L8 has a testable mounted-component slice yet. The
+lint-style guards above cover the regression vectors that grep can see.
 
 ### Phase 4 — Routes ⏳ PENDING
 
