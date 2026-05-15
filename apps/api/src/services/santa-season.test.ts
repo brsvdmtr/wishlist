@@ -67,6 +67,7 @@ import {
   generateSantaAliases,
   sendSeasonalBroadcast,
   maybeRunSeasonalEvents,
+  isSeasonalEventTriggerDay,
 } from './santa-season';
 
 beforeEach(() => {
@@ -82,8 +83,17 @@ describe('getSeasonStartYear — cross-year boundary', () => {
     expect(getSeasonStartYear(new Date('2026-11-01T00:00:00Z'))).toBe(2026);
   });
 
-  it('Nov 15 → current year (season opens)', () => {
+  it('Nov 14 23:59:59 UTC → current year (key already locked, season not open yet)', () => {
+    // Fence-post: the season-key for Nov 14 is the same as Nov 15, but the
+    // season is not yet in. Pair with the inSeason flip-test below to lock
+    // the producer/consumer split.
+    expect(getSeasonStartYear(new Date('2026-11-14T23:59:59Z'))).toBe(2026);
+    expect(getSeasonCalendar(new Date('2026-11-14T23:59:59Z')).inSeason).toBe(false);
+  });
+
+  it('Nov 15 00:00:00 UTC → current year (season-key unchanged, inSeason flips to true)', () => {
     expect(getSeasonStartYear(new Date('2026-11-15T00:00:00Z'))).toBe(2026);
+    expect(getSeasonCalendar(new Date('2026-11-15T00:00:00Z')).inSeason).toBe(true);
   });
 
   it('Dec 25 → current year', () => {
@@ -98,12 +108,43 @@ describe('getSeasonStartYear — cross-year boundary', () => {
     expect(getSeasonStartYear(new Date('2027-02-10T00:00:00Z'))).toBe(2026);
   });
 
-  it('Feb 15 → PRIOR year (last day of season)', () => {
-    expect(getSeasonStartYear(new Date('2027-02-15T00:00:00Z'))).toBe(2026);
+  it('Feb 15 23:59:59 UTC → PRIOR year (last second in-season)', () => {
+    // Symmetric fence-post to Nov 14: season-key still prior-year, but
+    // inSeason has not flipped yet.
+    expect(getSeasonStartYear(new Date('2027-02-15T23:59:59Z'))).toBe(2026);
+    expect(getSeasonCalendar(new Date('2027-02-15T23:59:59Z')).inSeason).toBe(true);
   });
 
-  it('Feb 16 → current year (post-season for prior, pre-season for current)', () => {
+  it('Feb 16 00:00:00 UTC → current year (key flips, inSeason becomes false)', () => {
     expect(getSeasonStartYear(new Date('2027-02-16T00:00:00Z'))).toBe(2027);
+    expect(getSeasonCalendar(new Date('2027-02-16T00:00:00Z')).inSeason).toBe(false);
+  });
+});
+
+describe('isSeasonalEventTriggerDay', () => {
+  it('Nov 1 → PROMO', () => {
+    expect(isSeasonalEventTriggerDay(new Date('2026-11-01T00:00:00Z'))).toBe('PROMO');
+    expect(isSeasonalEventTriggerDay(new Date('2026-11-01T23:59:59Z'))).toBe('PROMO');
+  });
+
+  it('Feb 1 → CLOSING_SOON', () => {
+    expect(isSeasonalEventTriggerDay(new Date('2027-02-01T00:00:00Z'))).toBe('CLOSING_SOON');
+    expect(isSeasonalEventTriggerDay(new Date('2027-02-01T18:00:00Z'))).toBe('CLOSING_SOON');
+  });
+
+  it('non-trigger days → null', () => {
+    expect(isSeasonalEventTriggerDay(new Date('2026-10-31T00:00:00Z'))).toBeNull();
+    expect(isSeasonalEventTriggerDay(new Date('2026-11-02T00:00:00Z'))).toBeNull();
+    expect(isSeasonalEventTriggerDay(new Date('2026-11-15T00:00:00Z'))).toBeNull();
+    expect(isSeasonalEventTriggerDay(new Date('2027-01-31T23:59:59Z'))).toBeNull();
+    expect(isSeasonalEventTriggerDay(new Date('2027-02-02T00:00:00Z'))).toBeNull();
+    expect(isSeasonalEventTriggerDay(new Date('2027-02-15T00:00:00Z'))).toBeNull();
+  });
+
+  it('uses UTC, not local time (server-TZ-independent)', () => {
+    // 2026-10-31 23:00 UTC is Oct 31 in UTC, even if the host is GMT+3 (Nov 1
+    // local time). Predicate must return null because UTC says Oct 31.
+    expect(isSeasonalEventTriggerDay(new Date('2026-10-31T23:00:00Z'))).toBeNull();
   });
 });
 
@@ -379,29 +420,73 @@ describe('sendSeasonalBroadcast', () => {
 });
 
 describe('maybeRunSeasonalEvents', () => {
+  // Pin `now` for the trigger-day tests so behaviour doesn't depend on the
+  // wall clock — these used to silent-pass on Nov 1 and Feb 1 by skipping
+  // the assertion when `today` happened to land on a real trigger day.
+  const nonTriggerDay = new Date('2026-12-25T12:00:00Z'); // mid-season, no broadcast
+  const nov1 = new Date('2026-11-01T08:00:00Z');           // PROMO trigger
+  const feb1 = new Date('2027-02-01T08:00:00Z');           // CLOSING_SOON trigger
+
   it('no-ops when feature is globally disabled', async () => {
     shared.globalConfig.mockResolvedValueOnce({ santaEnabled: false });
-    await maybeRunSeasonalEvents();
+    await maybeRunSeasonalEvents(nov1);
     expect(shared.broadcastLogFindUnique).not.toHaveBeenCalled();
   });
 
-  it('no-ops on a non-trigger day', async () => {
+  it('no-ops on a non-trigger day even when feature enabled', async () => {
     shared.globalConfig.mockResolvedValueOnce({ santaEnabled: true });
-    // Day != Nov 1 and != Feb 1 — depends on test execution date.
-    const today = new Date();
-    const month = today.getMonth() + 1;
-    const day = today.getDate();
-    const isTriggerDay = (month === 11 && day === 1) || (month === 2 && day === 1);
+    await maybeRunSeasonalEvents(nonTriggerDay);
+    expect(shared.broadcastLogFindUnique).not.toHaveBeenCalled();
+  });
 
-    await maybeRunSeasonalEvents();
-    if (!isTriggerDay) {
-      expect(shared.broadcastLogFindUnique).not.toHaveBeenCalled();
-    }
+  it('Nov 1 + enabled + no prior log → looks up + dispatches PROMO for current seasonYear', async () => {
+    shared.globalConfig.mockResolvedValueOnce({ santaEnabled: true });
+    shared.broadcastLogFindUnique.mockResolvedValueOnce(null);
+    // broadcast call path enters sendSeasonalBroadcast → broadcastLogCreate;
+    // we let it succeed quietly so the void-awaited call doesn't reject.
+    shared.broadcastLogCreate.mockResolvedValueOnce({});
+    shared.userFindMany.mockResolvedValue([]);
+    shared.broadcastLogUpdate.mockResolvedValue({});
+
+    await maybeRunSeasonalEvents(nov1);
+
+    expect(shared.broadcastLogFindUnique).toHaveBeenCalledWith({
+      where: { year_type: { year: 2026, type: 'PROMO' } },
+    });
+    expect(shared.loggerInfo).toHaveBeenCalledWith(
+      { seasonYear: 2026, trigger: 'PROMO' },
+      'santa-season: trigger day matched, broadcasting',
+    );
+  });
+
+  it('Feb 1 + enabled + no prior log → looks up CLOSING_SOON for PRIOR seasonYear', async () => {
+    shared.globalConfig.mockResolvedValueOnce({ santaEnabled: true });
+    shared.broadcastLogFindUnique.mockResolvedValueOnce(null);
+    shared.broadcastLogCreate.mockResolvedValueOnce({});
+    shared.userFindMany.mockResolvedValue([]);
+    shared.broadcastLogUpdate.mockResolvedValue({});
+
+    await maybeRunSeasonalEvents(feb1);
+
+    // Feb 1 2027 → seasonYear = 2026 (the season that started Nov 2026)
+    expect(shared.broadcastLogFindUnique).toHaveBeenCalledWith({
+      where: { year_type: { year: 2026, type: 'CLOSING_SOON' } },
+    });
+  });
+
+  it('trigger day but broadcast already sent → skips dispatch (idempotency)', async () => {
+    shared.globalConfig.mockResolvedValueOnce({ santaEnabled: true });
+    shared.broadcastLogFindUnique.mockResolvedValueOnce({ year: 2026, type: 'PROMO' });
+
+    await maybeRunSeasonalEvents(nov1);
+
+    // log row exists → no broadcast attempt
+    expect(shared.broadcastLogCreate).not.toHaveBeenCalled();
   });
 
   it('does not throw when DB query fails (logs error)', async () => {
     shared.globalConfig.mockRejectedValueOnce(new Error('DB down'));
-    await expect(maybeRunSeasonalEvents()).resolves.toBeUndefined();
+    await expect(maybeRunSeasonalEvents(nov1)).resolves.toBeUndefined();
     expect(shared.loggerError).toHaveBeenCalled();
   });
 });

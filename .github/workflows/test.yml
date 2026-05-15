@@ -14,11 +14,10 @@ name: Tests
 
 on:
   pull_request:
-  push:
-    branches: [main]
   # Allow deploy.yml (and other workflows) to invoke this as a gate via
-  # `uses: ./.github/workflows/test.yml`. Same job runs, same green check
-  # required — but the deploy workflow can `needs: tests` on it.
+  # `uses: ./.github/workflows/test.yml`. The push-to-main trigger lives
+  # in deploy.yml's `tests` job — running it independently here would
+  # double-execute every merge for no extra signal.
   workflow_call:
 
 concurrency:
@@ -56,7 +55,11 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9.15.0
+          # Must match `packageManager` in root package.json so CI and the
+          # corepack-aware Docker builds resolve the same pnpm version. A
+          # drift here means the test gate runs against a different binary
+          # than what ships to prod.
+          version: 10.15.0
 
       - name: Setup Node
         uses: actions/setup-node@v4

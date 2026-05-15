@@ -370,51 +370,53 @@ export async function sendSeasonalBroadcast(type: 'PROMO' | 'CLOSING_SOON', seas
 }
 
 /**
- * Idempotent seasonal event handler — runs hourly, triggers broadcasts on calendar milestones.
+ * Pure date predicate — does `now` fall on a seasonal broadcast trigger day?
  *
- * Triggers:
- *   Nov 1  → PROMO broadcast for this year's upcoming season
- *   Feb 1  → CLOSING_SOON broadcast for the season that started last November
+ * Trigger days (UTC):
+ *   Nov 1  → PROMO         (the season opening on Nov 15 of the same year)
+ *   Feb 1  → CLOSING_SOON  (the season started last November; key = year-1)
+ *
+ * Extracted from `maybeRunSeasonalEvents` so trigger-day logic is unit-testable
+ * with fixed dates. The async event handler reads this predicate once and acts
+ * on the result. Uses UTC (matches `getSeasonStartYear` / `getSeasonCalendar`)
+ * so result is timezone-independent.
+ */
+export function isSeasonalEventTriggerDay(now: Date): 'PROMO' | 'CLOSING_SOON' | null {
+  const month = now.getUTCMonth() + 1;
+  const day = now.getUTCDate();
+  if (month === 11 && day === 1) return 'PROMO';
+  if (month === 2 && day === 1) return 'CLOSING_SOON';
+  return null;
+}
+
+/**
+ * Idempotent seasonal event handler — runs hourly, triggers broadcasts on calendar milestones.
  *
  * Deduplication via SantaSeasonalBroadcastLog ensures each broadcast fires exactly once per year,
  * regardless of restarts, multi-instance deployments, or the hourly tick firing multiple times
  * on the same day.
+ *
+ * `now` defaults to `new Date()`; pass an explicit value for tests so the
+ * trigger-day branch is exercisable on any day of the year.
  */
-export async function maybeRunSeasonalEvents(): Promise<void> {
+export async function maybeRunSeasonalEvents(now: Date = new Date()): Promise<void> {
   try {
     // Abort if the feature is globally disabled
     const globalConfig = await prisma.santaGlobalConfig.findUnique({ where: { id: 'global' } });
     if (!globalConfig?.santaEnabled) return;
 
-    const now        = new Date();
+    const trigger = isSeasonalEventTriggerDay(now);
+    if (!trigger) return;
+
     const seasonYear = getSeasonStartYear(now); // canonical season key (Nov-year); handles cross-year boundary
-    const month      = now.getMonth() + 1;
-    const day        = now.getDate();
 
-    // ── November 1: promo notification ──────────────────────────────────────
-    // Nov 1, 2026 → seasonYear = getSeasonStartYear = 2026 (season opens Nov 15, 2026) ✓
-    if (month === 11 && day === 1) {
-      const alreadySent = await prisma.santaSeasonalBroadcastLog.findUnique({
-        where: { year_type: { year: seasonYear, type: 'PROMO' } },
-      });
-      if (!alreadySent) {
-        logger.info({ seasonYear }, 'santa-season: Nov 1 triggering PROMO broadcast');
-        void sendSeasonalBroadcast('PROMO', seasonYear);
-      }
-    }
+    const alreadySent = await prisma.santaSeasonalBroadcastLog.findUnique({
+      where: { year_type: { year: seasonYear, type: trigger } },
+    });
+    if (alreadySent) return;
 
-    // ── February 1: closing-soon notification ───────────────────────────────
-    // Feb 1, 2027 → seasonYear = getSeasonStartYear = 2026 (season started Nov 2026) ✓
-    // getSeasonStartYear() handles the cross-year shift automatically — no manual "year - 1" needed.
-    if (month === 2 && day === 1) {
-      const alreadySent = await prisma.santaSeasonalBroadcastLog.findUnique({
-        where: { year_type: { year: seasonYear, type: 'CLOSING_SOON' } },
-      });
-      if (!alreadySent) {
-        logger.info({ seasonYear }, 'santa-season: Feb 1 triggering CLOSING_SOON broadcast');
-        void sendSeasonalBroadcast('CLOSING_SOON', seasonYear);
-      }
-    }
+    logger.info({ seasonYear, trigger }, 'santa-season: trigger day matched, broadcasting');
+    void sendSeasonalBroadcast(trigger, seasonYear);
   } catch (err) {
     logger.error({ err }, 'santa-season seasonal event check failed');
   }

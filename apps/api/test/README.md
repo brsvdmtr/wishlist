@@ -6,7 +6,8 @@ Lightweight test scaffolding for integration tests against a real Postgres.
 
 - `setup-pg.ts` — connects to a Postgres URL from `DATABASE_URL`, exposes a Prisma client and a `resetDb()` helper for between-test isolation.
 - `factories/` — test data builders for `User`, `Wishlist`, `Item`, `Reservation`, etc. Keep them small and explicit; prefer obvious overrides to clever defaults.
-- `mock-ctx.ts` — Express request/response mocks for unit-testing route handlers in isolation. Integration tests should use `supertest` against a real Express app instead.
+
+For per-handler unit tests in isolation, mock the Express `req`/`res` inline next to the test. Integration tests should use `supertest` against a real Express app instead.
 
 ## Running locally
 

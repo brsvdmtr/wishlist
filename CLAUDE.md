@@ -126,11 +126,11 @@ Decomposition history + closure status:
 Companion docs:
 - [docs/SCHEDULERS.md](docs/SCHEDULERS.md) — operator reference for all
   9 cron modules (cadence, tables, log labels, monitoring).
-- [docs/SERVICES.md](docs/SERVICES.md) — all **13 live services**
+- [docs/SERVICES.md](docs/SERVICES.md) — all **14 live services**
   (`analytics`, `birthday-reminders`, `calendar`, `entitlement`,
-  `items`, `lifecycle`, `locale`, `onboarding`, `referral-hooks`,
-  `santa-season`, `telegram-auth`, `url-import`, `wishlists`) with
-  consumer maps and Strategy A/B choices.
+  `items`, `lifecycle`, `locale`, `locale-detection`, `onboarding`,
+  `referral-hooks`, `santa-season`, `telegram-auth`, `url-import`,
+  `wishlists`) with consumer maps and Strategy A/B choices.
 
 Full contract: [docs/API_ARCHITECTURE_RULES.md](docs/API_ARCHITECTURE_RULES.md).
 

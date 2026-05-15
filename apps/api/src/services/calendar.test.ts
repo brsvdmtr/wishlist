@@ -74,6 +74,24 @@ describe('daysUntilFromUtcMidnight — general cases', () => {
   it('leap day target (Feb 29) → correct count from Feb 25', () => {
     expect(daysUntilFromUtcMidnight(utcMidnight('2028-02-29'), new Date('2028-02-25T18:00:00Z'))).toBe(4);
   });
+
+  it('target with non-midnight time-of-day → normalised internally (same result as midnight)', () => {
+    // Defence against a future caller that reads `target` from a column storing
+    // noon-aligned dates. The original prod bug was the inverse (`now` not
+    // normalised); this test pins the contract that BOTH sides get normalised
+    // so the off-by-one cannot resurface from either end.
+    const noonTarget = new Date('2026-05-10T12:00:00Z');
+    const midnightTarget = new Date('2026-05-10T00:00:00Z');
+    const now = new Date('2026-05-05T08:00:00Z');
+    expect(daysUntilFromUtcMidnight(noonTarget, now)).toBe(daysUntilFromUtcMidnight(midnightTarget, now));
+    expect(daysUntilFromUtcMidnight(noonTarget, now)).toBe(5);
+  });
+
+  it('target at 23:59 UTC same calendar day → 0 (not -1)', () => {
+    const target = new Date('2026-05-05T23:59:00Z');
+    const now = new Date('2026-05-05T08:00:00Z');
+    expect(daysUntilFromUtcMidnight(target, now)).toBe(0);
+  });
 });
 
 describe('getNextOccurrenceDate', () => {

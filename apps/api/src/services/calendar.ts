@@ -61,22 +61,21 @@ export function buildReminderEpisodeKey(occasionId: string, offsetDays: number, 
 }
 
 /**
- * Calendar-day difference between `target` (already at UTC midnight) and
- * `now` (any time of day). Both sides are normalised to UTC midnight before
- * subtraction, so the result is an integer number of *calendar days*, not
- * fractional 24-hour windows.
+ * Calendar-day difference between `target` and `now` — number of whole
+ * calendar days. Both arguments are normalised to UTC midnight internally
+ * before subtraction, so the result is integer-valued regardless of what
+ * time-of-day either argument carries.
  *
  * Why this exists: a 2026-04-30 prod bug rendered the badge "СЕГОДНЯ"
  * for an event tomorrow at 00:00 UTC, queried in the evening. The buggy
  * formula `(target - Date.now()) / 86400_000` produced ~0.36 → Math.round → 0,
  * which the frontend interprets as "today." The fix is to compare two
- * UTC-midnights — `nextDate` is already there (built via `Date.UTC(y, m, d)`),
- * `now` must be normalised explicitly.
- *
- * Pass `now` as a parameter (not via `new Date()` inside) so the function
- * stays trivially testable and time-of-day independent at the seam.
+ * UTC-midnights — both sides normalised here so a future caller passing a
+ * non-midnight-aligned target (e.g. read from a column that stores noon)
+ * still gets the right answer instead of reintroducing the off-by-one.
  */
 export function daysUntilFromUtcMidnight(target: Date, now: Date): number {
+  const targetUtcMs = Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate());
   const todayUtcMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return Math.round((target.getTime() - todayUtcMs) / 86400_000);
+  return Math.round((targetUtcMs - todayUtcMs) / 86400_000);
 }

@@ -44,8 +44,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.useRealTimers();
+  // Drain pending fake timers BEFORE switching back to real, otherwise the
+  // clear runs against the (already-restored) real timer queue and no-ops.
   vi.clearAllTimers();
+  vi.useRealTimers();
 });
 
 describe('startCleanupSchedulers — comment TTL', () => {
@@ -92,7 +94,7 @@ describe('startCleanupSchedulers — comment TTL', () => {
     expect(logger.info).not.toHaveBeenCalled();
   });
 
-  it('swallows comment cleanup errors', async () => {
+  it('swallows comment cleanup errors with the specific log label', async () => {
     mockPrisma.comment.deleteMany.mockRejectedValue(new Error('DB down'));
     const logger = fakeLogger();
 
@@ -103,7 +105,13 @@ describe('startCleanupSchedulers — comment TTL', () => {
     });
     await vi.advanceTimersByTimeAsync(HOURLY_MS);
 
-    expect(logger.error).toHaveBeenCalled();
+    // Tied to the *specific* log line for the comment cleanup path so a
+    // coincident error from one of the other two setIntervals can't mask
+    // a failure to log here.
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ err: expect.any(Error) }),
+      'ttl cleanup failed',
+    );
   });
 });
 

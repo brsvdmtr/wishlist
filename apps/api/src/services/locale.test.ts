@@ -5,7 +5,7 @@
 // before 2026-05-10 fix); failing to pass a recipient-resolved locale means
 // every fallback name comes out in Russian.
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 const shared = vi.hoisted(() => ({
   prismaUserUpdate: vi.fn(),
@@ -159,7 +159,3 @@ describe('resolveUserFirstName', () => {
     expect(name).toBe('Maria');
   });
 });
-
-// vitest's `afterEach` requires explicit import for the lint-friendly form;
-// keep the existing-style at-bottom import to match neighbouring test files.
-import { afterEach } from 'vitest';

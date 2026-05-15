@@ -11,13 +11,13 @@
 | 0 — Foundation (CI + vitest infra) | ✅ DONE | `ceeb92a` | +0 (infra) |
 | 1 — Regression tests for BUGFIX_LESSONS | ✅ DONE (4/8 closed in code, 4 deferred) | `6b76b1e` | +22 |
 | 2 — Service layer | ✅ DONE (14/14 services) | `59c0068`, `3802b22`, `75697b7` | +335 |
-| 3 — Schedulers | ⏳ PENDING | — | — |
+| 3 — Schedulers | 🚧 PARTIAL (2/9 — referral, cleanup) | `4066c1f` | +16 |
 | 4 — Routes | ⏳ PENDING | — | — |
 | 5a — Bot | ⏳ PENDING | — | — |
 | 5b — Frontend pilot (L2/L3/L6/L8 UI regressions) | ⏳ DEFERRED until MiniApp.tsx extraction | — | — |
 | 6 — CI discipline gates | ✅ DONE | `586d056` | (rule-level) |
 
-**Test baseline:** 897 tests / 33 files / all green via `pnpm test`.
+**Test baseline:** 913 tests / 35 files / all green via `pnpm test`.
 **Dormant bug found and fixed during Phase 1:** `gift-notes.routes.ts:241`
 detail-endpoint had the L5 calendar TODAY/TOMORROW bug for ~15 days after
 the original fix shipped (`05df77f`) — see [BUGFIX_LESSONS 2026-05-15](BUGFIX_LESSONS.md#2026-05-15).
@@ -495,10 +495,41 @@ export default defineConfig({
 
 **Total: 354 service tests covering 2 622 LOC of services.**
 
-### Phase 3 — Schedulers ⏳ PENDING
+### Phase 3 — Schedulers 🚧 PARTIAL (`4066c1f`)
 
-9 файлов, каждый — idempotent cron tick. Структура тестов одинаковая:
-seed → tick → assert state. Без real DB → нужно мокать Prisma за слой.
+**Готово (2/9):**
+
+| Scheduler | LOC | Tests | Coverage |
+|---|---|---|---|
+| `referral.ts` | 53 | 6 | 15-min sweep + analytics dispatch + error containment |
+| `cleanup.ts` | 96 | 10 | 3 hourly TTL jobs (comments, curated subs, archive purge) |
+
+**Pattern (reusable for remaining 7):**
+
+```ts
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => {
+  vi.clearAllTimers();  // drain BEFORE restoring real timers
+  vi.useRealTimers();
+});
+
+// Inject mocks via deps factory, advance timer, assert dispatch.
+startXxxSchedulers({ prisma: mockPrisma, logger: fakeLogger(), ...deps });
+await vi.advanceTimersByTimeAsync(INTERVAL_MS);
+expect(mockDep).toHaveBeenCalledWith(...);
+```
+
+**Pending (7/9):**
+
+- `pro-renewal.ts` (125 LOC) — Pro subscription renewal reminders.
+- `events.ts` (172 LOC) — calendar reminder scheduler.
+- `billing.ts` (214 LOC) — billing state transitions.
+- `santa.ts` (230 LOC) — Secret Santa lifecycle.
+- `reservations.ts` (302 LOC) — reservation reminders + auto-release.
+- `lifecycle.ts` (419 LOC) — DM win-back wave/touch.
+- `birthday-reminders.ts` (1 157 LOC) — birthday wave dispatch.
+
+Highest incident density: `lifecycle.ts` + `birthday-reminders.ts` (recent 2026-05-10 lesson + 3 rounds of birthday fixes).
 
 ### Phase 4 — Routes ⏳ PENDING
 

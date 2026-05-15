@@ -52,8 +52,21 @@ export type TelegramUser = {
   is_premium?: boolean;
 };
 
+/**
+ * Parse `INIT_DATA_MAX_AGE_SECONDS` env and clamp to a 60-second minimum.
+ *
+ * Exposed (rather than inlined) so the clamp behaviour is unit-testable
+ * without having to re-import the module under a fresh env. NaN, negative,
+ * zero, missing → 86_400 default (24h); any value < 60 is bumped to 60.
+ */
+export function clampMaxAgeSeconds(raw: string | undefined): number {
+  const parsed = parseInt(raw ?? '86400', 10);
+  const value = Number.isFinite(parsed) && parsed > 0 ? parsed : 86_400;
+  return Math.max(60, value);
+}
+
 /** Max age for Telegram initData auth_date (seconds). Default 24 hours; configurable via INIT_DATA_MAX_AGE_SECONDS. */
-export const INIT_DATA_MAX_AGE_SECONDS = Math.max(60, parseInt(process.env.INIT_DATA_MAX_AGE_SECONDS ?? '86400', 10));
+export const INIT_DATA_MAX_AGE_SECONDS = clampMaxAgeSeconds(process.env.INIT_DATA_MAX_AGE_SECONDS);
 /** Allow minor clock skew (seconds). */
 export const INIT_DATA_CLOCK_SKEW_SECONDS = 30;
 

@@ -27,8 +27,12 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.useRealTimers();
+  // Drain pending fake timers BEFORE switching back to real, otherwise the
+  // clear runs against the (already-restored) real timer queue and no-ops.
+  // The pattern matters: this scheduler file is the proof-of-shape for the
+  // remaining 7 schedulers in Phase 3.
   vi.clearAllTimers();
+  vi.useRealTimers();
 });
 
 describe('startReferralSchedulers — sweep tick', () => {

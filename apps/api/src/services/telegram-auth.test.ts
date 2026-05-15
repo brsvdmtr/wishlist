@@ -28,6 +28,7 @@ import {
   getOrCreateTgUser,
   INIT_DATA_MAX_AGE_SECONDS,
   INIT_DATA_CLOCK_SKEW_SECONDS,
+  clampMaxAgeSeconds,
 } from './telegram-auth';
 
 beforeEach(() => {
@@ -197,10 +198,39 @@ describe('getOrCreateTgUser', () => {
   });
 });
 
-describe('INIT_DATA_MAX_AGE_SECONDS', () => {
-  it('respects a 60-second minimum even if env tries to set lower', () => {
-    // The constant is module-level — we can only verify the value is at
-    // least 60. Setting env after import won't re-evaluate.
+describe('clampMaxAgeSeconds', () => {
+  it('parses a valid env value', () => {
+    expect(clampMaxAgeSeconds('3600')).toBe(3600);
+    expect(clampMaxAgeSeconds('86400')).toBe(86400);
+  });
+
+  it('clamps values below the 60-second floor up to 60', () => {
+    expect(clampMaxAgeSeconds('1')).toBe(60);
+    expect(clampMaxAgeSeconds('30')).toBe(60);
+    expect(clampMaxAgeSeconds('59')).toBe(60);
+    expect(clampMaxAgeSeconds('60')).toBe(60);
+    expect(clampMaxAgeSeconds('61')).toBe(61);
+  });
+
+  it('falls back to 86_400 default for missing env', () => {
+    expect(clampMaxAgeSeconds(undefined)).toBe(86_400);
+  });
+
+  it('falls back to 86_400 for non-numeric env values', () => {
+    expect(clampMaxAgeSeconds('not-a-number')).toBe(86_400);
+  });
+
+  it('falls back to 86_400 for empty string', () => {
+    expect(clampMaxAgeSeconds('')).toBe(86_400);
+  });
+
+  it('falls back to 86_400 for zero or negative env values (defensive)', () => {
+    expect(clampMaxAgeSeconds('0')).toBe(86_400);
+    expect(clampMaxAgeSeconds('-100')).toBe(86_400);
+  });
+
+  it('module-level INIT_DATA_MAX_AGE_SECONDS came from this clamp', () => {
+    // Sanity check that the exported constant is at least the floor.
     expect(INIT_DATA_MAX_AGE_SECONDS).toBeGreaterThanOrEqual(60);
   });
 });
