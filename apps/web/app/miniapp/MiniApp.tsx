@@ -19,6 +19,10 @@ import {
 import { AppearanceSettings } from './screens/AppearanceSettings';
 import { CalendarRoot } from './screens/calendar/CalendarRoot';
 import { ProBadge } from './components/ProBadge';
+import { SantaHatOverlay } from './components/SantaHatOverlay';
+import { SnowflakeOverlay } from './components/SnowflakeOverlay';
+import { SantaAvatar, santaAliasHue } from './components/SantaAvatar';
+import { UserAvatar } from './components/UserAvatar';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
 import { initSentry, captureException } from './sentry';
 import {
@@ -1881,166 +1885,9 @@ function resolveOwnerName(
     fallback;
 }
 
-/**
- * UserAvatar — reusable avatar circle.
- * Shows profile photo if avatarUrl is provided; falls back to first letter of name.
- * Size, accent colour, and optional border can all be customised per call-site.
- * Pass hat={true} during Secret Santa season to overlay the festive hat.
- */
-function UserAvatar({
-  avatarUrl, name, size, accent, border, style: extraStyle, hat,
-}: {
-  avatarUrl?: string | null;
-  name?: string | null;
-  size: number;
-  accent: string;
-  border?: string;
-  style?: React.CSSProperties;
-  hat?: boolean;
-}) {
-  const initial = ((name ?? '?').trim() || '?')[0]!.toUpperCase();
-  const avatarDiv = (
-    <div style={{
-      width: size, height: size, borderRadius: '50%',
-      background: `linear-gradient(135deg, ${accent}, ${accent}80)`,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: Math.round(size * 0.42), fontWeight: 700, color: '#fff',
-      ...(border ? { border } : {}),
-      ...(avatarUrl
-        ? { backgroundImage: `url(${avatarUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-        : {}),
-      ...extraStyle,
-    }}>{!avatarUrl && initial}</div>
-  );
-  if (!hat) return avatarDiv;
-  return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-      {avatarDiv}
-      <SantaHatOverlay size={size} />
-    </div>
-  );
-}
-
-/**
- * SantaHatOverlay — inline SVG festive hat for seasonal avatar decoration.
- * Renders a red Santa hat (cone + white pom-pom + white fur brim) at a size
- * proportional to the avatar it sits on.  Positioned top-right, slightly tilted.
- * pointer-events:none — purely decorative, never blocks clicks.
- */
-function SantaHatOverlay({ size }: { size: number }) {
-  const w = Math.round(size * 0.68);
-  const h = Math.round(size * 0.58);
-  return (
-    <svg
-      viewBox="0 0 44 40"
-      width={w}
-      height={h}
-      aria-hidden="true"
-      style={{
-        position: 'absolute',
-        top: -Math.round(h * 0.52),
-        right: -Math.round(w * 0.16),
-        pointerEvents: 'none',
-        userSelect: 'none',
-        zIndex: 2,
-        overflow: 'visible',
-        filter: 'drop-shadow(0 1px 2.5px rgba(0,0,0,.28))',
-      }}
-    >
-      {/* Red cone — tip offset left of center gives a natural lean */}
-      <polygon points="18,1 2,34 42,34" fill="#C41E1E" />
-      {/* Slightly lighter inner sheen for depth */}
-      <polygon points="18,1 10,34 26,34" fill="#D42828" opacity="0.35" />
-      {/* White fur brim band */}
-      <rect x="0" y="30" width="44" height="10" rx="5" fill="#F5F5F5" />
-      {/* Subtle fur texture dots */}
-      <circle cx="8"  cy="35" r="2.8" fill="#E0E0E0" opacity="0.65" />
-      <circle cx="17" cy="35" r="2.8" fill="#E0E0E0" opacity="0.65" />
-      <circle cx="26" cy="35" r="2.8" fill="#E0E0E0" opacity="0.65" />
-      <circle cx="35" cy="35" r="2.8" fill="#E0E0E0" opacity="0.65" />
-      {/* White pom-pom at tip */}
-      <circle cx="18" cy="5"  r="6.5" fill="#F5F5F5" />
-      <circle cx="18" cy="5"  r="4.5" fill="white" />
-    </svg>
-  );
-}
-
-/**
- * SantaAvatar — anonymous emoji avatar for Secret Santa.
- * Color is derived deterministically from the alias string (stable per round).
- * Never shows real profile photos. Uses animal emoji + color circle.
- * Pass hat={true} during season for the festive hat overlay.
- */
-function santaAliasHue(alias: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < alias.length; i++) {
-    h ^= alias.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
-  }
-  return (h % 36) * 10; // 36 hues × 10° step
-}
-
-function SantaAvatar({ alias, emoji, size, border, hat }: {
-  alias: string;
-  emoji: string;
-  size: number;
-  border?: string;
-  hat?: boolean;
-}) {
-  const hue = santaAliasHue(alias);
-  const circle = (
-    <div style={{
-      width: size, height: size, borderRadius: '50%',
-      background: `hsl(${hue}, 55%, 82%)`,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: Math.round(size * 0.55),
-      ...(border ? { border } : {}),
-    }}>
-      {emoji || '🎅'}
-    </div>
-  );
-  if (!hat) return circle;
-  return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-      {circle}
-      <SantaHatOverlay size={size} />
-    </div>
-  );
-}
-
-// ── Seasonal snowflake overlay ──────────────────────────────────────────────
-// Hardcoded positions/timings (no Math.random) so re-renders don't reshuffle
-// the animation.  `pointer-events:none` everywhere — purely decorative.
-const SNOW_FLAKES = [
-  { left: '6%',  delay: '0s',    dur: '4.4s', op: 0.55, size: 11 },
-  { left: '19%', delay: '1.5s',  dur: '3.7s', op: 0.40, size: 9  },
-  { left: '34%', delay: '0.8s',  dur: '5.1s', op: 0.50, size: 12 },
-  { left: '50%', delay: '2.2s',  dur: '4.0s', op: 0.35, size: 10 },
-  { left: '65%', delay: '0.4s',  dur: '4.8s', op: 0.60, size: 11 },
-  { left: '79%', delay: '1.9s',  dur: '3.9s', op: 0.45, size: 9  },
-  { left: '92%', delay: '1.2s',  dur: '5.3s', op: 0.38, size: 10 },
-] as const;
-
-function SnowflakeOverlay({ height = 72 }: { height?: number }) {
-  return (
-    <div style={{
-      position: 'absolute', left: 0, right: 0, top: 0, height,
-      overflow: 'hidden', pointerEvents: 'none', userSelect: 'none', zIndex: 0,
-    }}>
-      {SNOW_FLAKES.map((f, i) => (
-        <span key={i} className="snowflake" style={{
-          position: 'absolute',
-          left: f.left, top: -12,
-          fontSize: f.size,
-          opacity: f.op,
-          color: 'rgba(180,220,245,.9)',
-          lineHeight: 1,
-          animation: `snowfall ${f.dur} ease-in ${f.delay} infinite`,
-        }}>❄</span>
-      ))}
-    </div>
-  );
-}
+// UserAvatar / SantaHatOverlay / SantaAvatar / santaAliasHue / SnowflakeOverlay
+// extracted to ./components/{UserAvatar,SantaHatOverlay,SantaAvatar,
+// SnowflakeOverlay}.tsx — see Phase 5b extraction pilot.
 
 // Frontend corpus for locale-aware alias rendering
 // Keys must match the API corpus exactly
