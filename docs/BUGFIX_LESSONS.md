@@ -5,6 +5,91 @@ New entries go at the top.
 
 ---
 
+## 2026-05-15 — Календарь «СЕГОДНЯ»/«ЗАВТРА»: original fix пропустил третий callsite (detail-endpoint жил с багом ~2 недели после patch'а list-endpoint)
+
+### Ошибка
+В рамках Phase 1 testing-roadmap (extraction `daysUntilFromUtcMidnight` в
+`services/calendar.ts` + unit-тесты) обнаружено, что fix `05df77f`
+(2026-04-30) пропатчил только **один** из трёх callsite'ов в
+`apps/api/src/routes/gift-notes.routes.ts`:
+
+- `line 122` — `GET /gift-occasions` (list): ✅ исправлено в `05df77f`
+- `line 241` — `GET /gift-occasions/:id` (detail): ❌ продолжало
+  использовать старую формулу `(nextDate.getTime() - Date.now()) /
+  (24 * 3600 * 1000)` ~2 недели после фикса
+- `line 724` — soonest pick (calendar widget): ✅ исправлено в `05df77f`
+
+Тот же баг, что был задокументирован в [BUGFIX_LESSONS 2026-04-30](#2026-04-30-—-календарь-бейдж-сегодня-вместо-завтра-вечером-накануне-события)
+— просто на другом маршруте. Юзер, открывший detail-экран вечером накануне
+события, видел «СЕГОДНЯ» вместо «ЗАВТРА», пока на listing-экране и в
+soonest-карточке всё показывалось корректно. Это та самая «непоследовательность
+внутри одной фичи», которую сложно отрепортить без специально подобранного
+сценария.
+
+### Root cause
+Изначальный фикс делался поиском `Date.now()` в **одном** релевантном
+файле + ручным правкой найденных мест. У `gift-notes.routes.ts` 3
+callsite'а одной и той же формулы; найдены были 2 из 3 (визуально
+пропущенный middle-callsite между ними).
+
+Корень — **multi-callsite фикс без extraction**. Когда одна и та же
+формула живёт в 3 местах файла, любой ручной фикс гарантирован пропустить
+≥1. Lesson 2026-04-30 уже зафиксировал правило «daysUntil считается как
+разница UTC-midnights», но не зафиксировал второе обязательное правило:
+**если формула повторяется ≥3 раз, она выносится в helper в первом же
+фиксе**, а не после второго инцидента.
+
+### Урок
+- **Multi-callsite фиксы без extraction почти всегда неполные.** Не
+  «найди-и-замени» руками три раза подряд — extract в helper, замени все
+  callsite'ы через import, тогда tsc + поиск unused имени гарантирует
+  100% покрытие.
+- **Test-driven discovery работает.** Этот баг проявил себя не в проде, а
+  в момент написания regression-теста для уже-задокументированного класса.
+  Если бы Phase 1 testing-roadmap не стартовал, баг прожил бы до
+  следующего жалобу-репорта.
+- **Когда видишь повторяющуюся формулу в одном файле, останавливайся и
+  выноси.** Это правило ровно про этот файл: `gift-notes.routes.ts` имел
+  3 копии identical-формулы — теперь все три зовут
+  `daysUntilFromUtcMidnight(target, now)` из `services/calendar.ts`.
+
+### Правило
+- **Любая формула / магическое число, встречающаяся ≥2 раза в одном файле
+  или в ≥2 файлах одного app, выносится в named helper при первом
+  касании.** Не «когда будет рефакторинг» — в том же PR.
+- **Bug-fix PR обязан включать grep-проверку.** Перед коммитом — `grep
+  -rn` по симптомной формуле / магическому числу по всему apps/. Если
+  результатов >1, фикс неполный, пока все не заменены на helper.
+- **Regression-тесты для каждого lesson — обязательны** (правило из
+  feedback_bugfix_lessons.md). Если бы тест существовал на L5 с
+  2026-04-30, dormant-bug на line 241 проявился бы при первом запуске.
+
+### Лучший код
+```ts
+// services/calendar.ts — единственный источник истины
+export function daysUntilFromUtcMidnight(target: Date, now: Date): number {
+  const todayUtcMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Math.round((target.getTime() - todayUtcMs) / 86400_000);
+}
+```
+
+```ts
+// gift-notes.routes.ts — все 3 callsite'а импортируют ровно один helper
+import { daysUntilFromUtcMidnight } from '../services/calendar';
+// ...
+const daysUntil = nextDate ? daysUntilFromUtcMidnight(nextDate, new Date()) : null;
+```
+
+### Discovery-метаданные
+- Найдено: 2026-05-15 при extraction для Phase 1 testing-roadmap.
+- Жил в проде: 2026-04-30 (после `05df77f`) → 2026-05-15 = ~15 дней.
+- Симптом: detail-экран события показывает badge «СЕГОДНЯ» вечером
+  накануне; список и soonest-карточка корректны.
+- Тестов на момент исходного фикса: 0 (что и позволило dormant-bug
+  прожить незамеченным).
+
+---
+
 ## 2026-05-10 — Бот периодически говорит на английском с русскоязычным юзером (lifecycle / pro-renewal / events / birthday / subscriber notifications) — резолвер локали без персистентного фоллбэка + захардкоженный `'ru'` в части путей
 
 ### Ошибка

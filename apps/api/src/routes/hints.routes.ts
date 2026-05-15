@@ -30,7 +30,7 @@
 
 import { Router } from 'express';
 import { prisma } from '@wishlist/db';
-import { t, type Locale } from '@wishlist/shared';
+import { t, type Locale, HINT_LOOKUP_WINDOW_MS } from '@wishlist/shared';
 
 import { asyncHandler } from '../lib/asyncHandler';
 import { getRequestLocale } from '../lib/locale';
@@ -218,7 +218,6 @@ export function registerHintsRouter(deps: HintsRouterDeps): Router {
       // Then the idempotent match runs over only the fresh window, and a
       // re-tap after 30 min creates a brand-new hint that the bot can find.
       const now = new Date();
-      const HINT_LOOKUP_WINDOW_MS = 30 * 60 * 1000;
       const lookupWindowStart = new Date(now.getTime() - HINT_LOOKUP_WINDOW_MS);
 
       const stale = await prisma.hint.updateMany({

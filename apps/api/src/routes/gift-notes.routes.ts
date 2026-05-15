@@ -41,6 +41,7 @@ import {
   getNextOccurrenceDate,
   computeReminderSchedule,
   buildReminderEpisodeKey,
+  daysUntilFromUtcMidnight,
 } from '../services/calendar';
 
 type TelegramUserShape = {
@@ -117,9 +118,10 @@ export function registerGiftNotesRouter(deps: GiftNotesRouterDeps): Router {
       },
       orderBy: { createdAt: 'desc' },
     });
+    const now = new Date();
     const mapped = occasions.map(o => {
       const nextDate = o.eventDate ? getNextOccurrenceDate(o.eventDate, o.recurrence) : null;
-      const daysUntil = nextDate ? Math.round((nextDate.getTime() - Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())) / (24 * 3600 * 1000)) : null;
+      const daysUntil = nextDate ? daysUntilFromUtcMidnight(nextDate, now) : null;
       return {
         ...o,
         eventDate: o.eventDate?.toISOString() ?? null,
@@ -238,7 +240,7 @@ export function registerGiftNotesRouter(deps: GiftNotesRouterDeps): Router {
     });
     if (!occasion || occasion.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
     const nextDate = occasion.eventDate ? getNextOccurrenceDate(occasion.eventDate, occasion.recurrence) : null;
-    const daysUntil = nextDate ? Math.round((nextDate.getTime() - Date.now()) / (24 * 3600 * 1000)) : null;
+    const daysUntil = nextDate ? daysUntilFromUtcMidnight(nextDate, new Date()) : null;
     let linkedWishlistItems: Array<{ id: string; title: string; priceText: string | null; imageUrl: string | null; sourceDomain: string | null }> = [];
     if (occasion.linkedWishlistId) {
       const items = await prisma.item.findMany({
@@ -721,7 +723,7 @@ export function registerGiftNotesRouter(deps: GiftNotesRouterDeps): Router {
       if (!o.eventDate) continue;
       const next = getNextOccurrenceDate(o.eventDate, o.recurrence);
       if (!next) continue;
-      const days = Math.round((next.getTime() - Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())) / (24 * 3600 * 1000));
+      const days = daysUntilFromUtcMidnight(next, new Date());
       if (days < 0 || days > 30) continue;
       if (!soonest || days < soonest.daysUntil) {
         soonest = { id: o.id, title: o.title, emoji: o.emoji, type: o.type, daysUntil: days, nextDate: next.toISOString(), ideasCount: o._count.ideas };

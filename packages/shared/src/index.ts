@@ -56,3 +56,23 @@ export function buildTgDeepLink(botUsername: string, payload?: string): string |
 export function buildTgShareUrl(url: string, text: string): string {
   return `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
 }
+
+// ─── Hints idempotency / lookup window ──────────────────────────────────────
+//
+// Producer (apps/api/src/routes/hints.routes.ts POST /tg/items/:id/hint) and
+// consumer (apps/bot/src/index.ts users_shared handler) synchronise through
+// the Hint row in Postgres. Both sides query "most recent SENT hint within
+// the last N minutes" — if those Ns drift, the consumer fails to find a
+// hint the producer just created (or considers idempotent), and the user
+// sees "Активный намёк не найден" on a fresh keyboard.
+//
+// 2026-05-03 prod bug: API used a 30-day idempotency window (the
+// `Hint.expiresAt` field) while bot used 30 min. A re-tap after a few hours
+// got the same 10-hour-old hintId from API, bot couldn't find it within
+// 30 min, hard-rejected. Window mismatch was masked for weeks by network
+// outages that prevented producer/consumer from talking reliably.
+//
+// Rule: any window that producer + consumer must agree on is ONE constant
+// imported by both. Magic numbers in `findFirst` are forbidden here —
+// they drift silently.
+export const HINT_LOOKUP_WINDOW_MS = 30 * 60 * 1000;

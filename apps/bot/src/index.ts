@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import https from 'node:https';
 import path from 'node:path';
 import { prisma, resolveReferralCode, tryCreateAttribution, markFirstBotStart, loadReferralConfig, persistResolvedBucket } from '@wishlist/db';
-import { t, pluralize, detectLocale, resolveEffectiveLocale, resolveLocaleWithSource, profileToLanguageSettings, resolveMarketBucket, LIFETIME_BILLING_PERIOD, PRO_LIFETIME_PERIOD_END_ISO, type Locale } from '@wishlist/shared';
+import { t, pluralize, detectLocale, resolveEffectiveLocale, resolveLocaleWithSource, profileToLanguageSettings, resolveMarketBucket, LIFETIME_BILLING_PERIOD, PRO_LIFETIME_PERIOD_END_ISO, HINT_LOOKUP_WINDOW_MS, type Locale } from '@wishlist/shared';
 import logger from './logger';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
@@ -1672,8 +1672,11 @@ if (!token) {
       'hint_users_shared_received',
     );
 
-    // Find sender's most recent active hint (created in last 30 min)
-    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
+    // Find sender's most recent active hint (created in the producer's
+    // idempotency window). HINT_LOOKUP_WINDOW_MS is shared with the API's
+    // POST /tg/items/:id/hint so producer and consumer never drift —
+    // see 2026-05-03 BUGFIX_LESSONS entry.
+    const lookupWindowStart = new Date(Date.now() - HINT_LOOKUP_WINDOW_MS);
     const sender = await prisma.user.findUnique({ where: { telegramId: senderTgId }, select: { id: true } });
     if (!sender) {
       await ctx.reply(t('bot_users_shared_no_profile', locale), Markup.removeKeyboard());
@@ -1681,7 +1684,7 @@ if (!token) {
     }
 
     const hint = await prisma.hint.findFirst({
-      where: { senderUserId: sender.id, status: 'SENT', createdAt: { gte: thirtyMinAgo } },
+      where: { senderUserId: sender.id, status: 'SENT', createdAt: { gte: lookupWindowStart } },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
