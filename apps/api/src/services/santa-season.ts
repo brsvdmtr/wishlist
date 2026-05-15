@@ -376,10 +376,20 @@ export async function sendSeasonalBroadcast(type: 'PROMO' | 'CLOSING_SOON', seas
  *   Nov 1  → PROMO         (the season opening on Nov 15 of the same year)
  *   Feb 1  → CLOSING_SOON  (the season started last November; key = year-1)
  *
- * Extracted from `maybeRunSeasonalEvents` so trigger-day logic is unit-testable
- * with fixed dates. The async event handler reads this predicate once and acts
- * on the result. Uses UTC (matches `getSeasonStartYear` / `getSeasonCalendar`)
- * so result is timezone-independent.
+ * Uses UTC (matches `getSeasonStartYear` / `getSeasonCalendar` which both
+ * already worked in UTC). Earlier the inline trigger check inside
+ * `maybeRunSeasonalEvents` used `Date#getMonth()` / `getDate()` (local time),
+ * which on the Vultr Amsterdam VPS (CET/CEST = UTC+1/+2) caused the broadcast
+ * to fire ~1–2 hours before the canonical season-year cutover. Switching to
+ * UTC here aligns the trigger with the canonical season key and removes the
+ * server-TZ dependency. The hourly cron has 24 attempts to land inside the
+ * trigger day; idempotency is guaranteed by SantaSeasonalBroadcastLog, so the
+ * net effect of the switch is "broadcast still fires once on calendar Nov 1
+ * UTC / Feb 1 UTC" rather than "broadcast fires 1–2 hours earlier".
+ *
+ * Extracted from `maybeRunSeasonalEvents` so the trigger-day logic is
+ * unit-testable with fixed dates. The async handler reads this predicate
+ * once and acts on the result.
  */
 export function isSeasonalEventTriggerDay(now: Date): 'PROMO' | 'CLOSING_SOON' | null {
   const month = now.getUTCMonth() + 1;

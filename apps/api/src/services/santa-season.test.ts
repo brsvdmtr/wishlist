@@ -141,10 +141,26 @@ describe('isSeasonalEventTriggerDay', () => {
     expect(isSeasonalEventTriggerDay(new Date('2027-02-15T00:00:00Z'))).toBeNull();
   });
 
-  it('uses UTC, not local time (server-TZ-independent)', () => {
-    // 2026-10-31 23:00 UTC is Oct 31 in UTC, even if the host is GMT+3 (Nov 1
-    // local time). Predicate must return null because UTC says Oct 31.
+  it('uses UTC, not local time — Oct 31 23:00 UTC = Nov 1 02:00 MSK → still null', () => {
+    // The Vultr Amsterdam VPS runs CET/CEST (UTC+1/+2). The old inline code
+    // used Date#getMonth()/getDate() (local), which would have returned PROMO
+    // here. The new UTC check correctly returns null because UTC date is still
+    // Oct 31. Locking this case prevents the regression of going back to local.
     expect(isSeasonalEventTriggerDay(new Date('2026-10-31T23:00:00Z'))).toBeNull();
+  });
+
+  it('uses UTC, not local time — Nov 1 23:59 UTC = Nov 2 02:59 MSK → still PROMO', () => {
+    // Symmetric: the last second of UTC Nov 1 is "Nov 2" in MSK / Amsterdam
+    // local. Predicate must still return PROMO because we made the canonical
+    // choice that "trigger day" means UTC calendar day. The hourly cron has
+    // 24 attempts; this is the last one of the UTC-Nov-1 window.
+    expect(isSeasonalEventTriggerDay(new Date('2026-11-01T23:59:00Z'))).toBe('PROMO');
+  });
+
+  it('uses UTC, not local time — Feb 2 00:00 UTC = Feb 2 03:00 MSK → already null', () => {
+    // The first second past UTC Feb 1 — predicate switches to null even though
+    // local Feb 2 wall clock is well past midnight in any positive offset.
+    expect(isSeasonalEventTriggerDay(new Date('2027-02-02T00:00:00Z'))).toBeNull();
   });
 });
 
