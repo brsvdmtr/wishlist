@@ -186,6 +186,13 @@ shared-резолвера, размноженный на 11+ callsite'ах.
   профиль из БД (один extra query per request) или прокидывает
   middleware-собранный профиль в `req.tgUserProfile`. Отдельная задача;
   blast radius — все синхронные API-ответы.
+- `apps/api/src/schedulers/events.ts:73-110` — title/body event-reminder
+  строки остались inline в `switch (locale)` для 6 локалей (~36
+  языко-зависимых литералов). Кнопка перенесена в `notif_res_reminder_btn_open`
+  в Round 3, title/body — нет. Все 6 локалей покрыты функционально
+  (никто не получает чужой язык), но архитектурно — anti-pattern
+  относительно других proactive сайтов. Follow-up: 6 i18n-ключей с
+  `{{title}}`/`{{days}}` плейсхолдерами × 6 локалей.
 
 ### Round 2 (2026-05-11) — закрытие code-review feedback (7.5 → 9+/10)
 Code-review subagent дал 7.5/10 с пятью should-fix замечаниями + nits.
@@ -240,6 +247,54 @@ Code-review subagent дал 7.5/10 с пятью should-fix замечаниям
   follow-up список выше.
 - Hindi/Arabic переводы новых ключей — не верифицированы native speakers.
   Текущие — best-effort. При жалобе от пользователя — поправить.
+
+### Round 3 (2026-05-15) — закрытие code-review iter 2 (8/10)
+Свежий sub-agent ревью на ту же ветку нашёл один MAJOR + минорные.
+Закрыто:
+
+- ✅ **`apps/api/src/services/santa-season.ts:325-360`** — broadcast
+  пайплайн перестал слать `textRu + textEn` блобом всем юзерам
+  (zh-CN/hi/es/ar получали два чужих языка одновременно).
+  Per-recipient resolve через
+  `resolveLocaleWithSource(profileToLanguageSettings(...))`; добавлены
+  ключи `santa_broadcast_promo` и `santa_broadcast_closing_soon` × 6
+  локалей. Триггерится Nov 1 PROMO / Feb 1 CLOSING_SOON — не активен
+  прямо сейчас (следующий запуск Nov 1, 2026), починен превентивно
+  пока контекст свежий.
+- ✅ **`apps/api/src/schedulers/events.ts:118`** — bilingual button
+  `locale === 'ru' ? '📱 Открыть' : 'Open'` заменён на
+  `t('notif_res_reminder_btn_open', locale)` (переиспользует
+  существующий 6-локальный ключ). zh-CN/hi/es/ar теперь получают
+  кнопку на своём языке. Inline title/body switches остались —
+  scope-deferred, см. «Известные оставшиеся».
+- ✅ **`apps/api/src/schedulers/birthday-reminders.ts:990-995`** —
+  схлопнут dead `if (isOwner) { fetch X } else { fetch X }` с
+  byte-identical selects на единичный fetch. Privacy / opt-out
+  branching ниже не меняется.
+- ✅ **`apps/api/src/schedulers/pro-renewal.ts:88-94`** — `dateFmtLocale`
+  расширен с `ru | en-US` до маппинга все 6 локалей (`ru-RU | zh-CN |
+  hi-IN | es-ES | ar | en-US`). Дата в pro-renewal reminder теперь в
+  локали получателя.
+- ✅ **Defensive test на empty-string `manualLanguage`** добавлен в
+  `i18n.resolver.test.ts` — закрывает оставшийся dirty-data класс
+  (раньше покрывался только `'pt-BR'` тестом).
+- ✅ **`packages/shared/src/i18n.ts:166` cast-safety комментарий**
+  переписан точнее: не "auto path", а «any non-'manual' value falls
+  through identically» — отражает реальную семантику резолвера.
+- ✅ **`apps/api/src/schedulers/reservations.ts:199-204` SYSTEM-комментарий**
+  обновлён: убрана претензия на «project canonical persisted-text
+  locale» (формальной политики нет) — заменено на «match existing
+  SYSTEM comments in this table».
+
+Отклонено (с обоснованием):
+- ❌ **MINOR: `group-gifts.routes.ts` localeSource не логируется.** Все
+  роуты (items / comments / reservations / internal / me) тоже не
+  логируют `source` — это консистентный паттерн для роутов (request-id
+  + trackEvent дают diagnostics). Source capture — паттерн scheduler'ов,
+  где нет request-id. Group-gifts матчит роут-паттерн.
+- ❌ **NIT: uppercase `manualLanguage` тест** — поведенчески уже
+  покрыт `'pt-BR'` тестом (оба фейлят `isSupportedLocale`); добавлять
+  второй тест с тем же эффектом — duplication.
 
 ### Acceptance — после деплоя
 - Юзер с Telegram RU + auto-mode получает RU lifecycle / promo /

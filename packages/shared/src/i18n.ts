@@ -165,10 +165,11 @@ export type LocaleProfileSlice = {
 export function profileToLanguageSettings(profile: LocaleProfileSlice): LanguageSettings | null {
   if (!profile) return null;
   // Casts are safe-at-runtime: `resolveLocaleWithSource` defends with
-  // `isSupportedLocale` on `manualLanguage`, and only branches on the literal
-  // 'manual' for `languageMode` — any unexpected DB value silently takes the
-  // auto path through live/persisted/legacy. Cast over runtime-guard at this
-  // boundary keeps the 14+ call sites a single line each.
+  // `isSupportedLocale` on `manualLanguage`, and the only check on
+  // `languageMode` is `=== 'manual'` — any non-'manual' value (including
+  // dirty / unknown strings) falls through identically to live / persisted /
+  // legacy / default-en. Cast over runtime-guard at this boundary keeps the
+  // 14+ call sites a single line each.
   return {
     languageMode: profile.languageMode as LanguageMode,
     manualLanguage: profile.manualLanguage as Locale | null,
@@ -1203,6 +1204,9 @@ const ru: Dict = {
   notif_batch_comments_word_one: 'новый комментарий',
   notif_batch_comments_word_few: 'новых комментария',
   notif_batch_comments_word_many: 'новых комментариев',
+  // Santa seasonal broadcast (sent to every user with telegramChatId on Nov 1 PROMO / Feb 1 CLOSING_SOON).
+  santa_broadcast_promo: '🎅 Тайный Санта скоро открывается! Подготовьте вишлист — обмен подарками начнётся 15 ноября.',
+  santa_broadcast_closing_soon: '⏰ Тайный Санта закроется 15 февраля. Успейте завершить обмен подарками!',
   // ── God Mode retention dashboard ──
   ret_title: '📊 Возврат пользователей',
   ret_comms: '✉️ Коммуникации',
@@ -3958,6 +3962,8 @@ const en: Dict = {
   notif_batch_comments_word_one: 'new comment',
   notif_batch_comments_word_few: 'new comments',
   notif_batch_comments_word_many: 'new comments',
+  santa_broadcast_promo: '🎅 Secret Santa is opening soon! Prepare your wishlist — the gift exchange starts November 15.',
+  santa_broadcast_closing_soon: '⏰ Secret Santa closes on February 15. Make sure to finish your gift exchange!',
   // ── God Mode retention dashboard ──
   ret_title: '📊 User retention',
   ret_comms: '✉️ Communications',
@@ -7610,6 +7616,8 @@ const zhCN: Dict = {
   notif_batch_comments_word_one: '条新评论',
   notif_batch_comments_word_few: '条新评论',
   notif_batch_comments_word_many: '条新评论',
+  santa_broadcast_promo: '🎅 神秘圣诞老人即将开启！准备好你的心愿单——礼物交换将于11月15日开始。',
+  santa_broadcast_closing_soon: '⏰ 神秘圣诞老人将于2月15日关闭。请确保完成你的礼物交换！',
   wb_promo_s3_title: '心愿单快完成了——这是你的奖励',
   wb_promo_s3_body: '你的列表已经很棒了。送你一个月Pro：',
   wb_promo_s2_title: '第一个愿望已添加——送你奖励',
@@ -9621,6 +9629,8 @@ const hi: Dict = {
   notif_batch_comments_word_one: 'नई टिप्पणी',
   notif_batch_comments_word_few: 'नई टिप्पणियाँ',
   notif_batch_comments_word_many: 'नई टिप्पणियाँ',
+  santa_broadcast_promo: '🎅 सीक्रेट सांता जल्द शुरू हो रहा है! अपनी विशलिस्ट तैयार करें — गिफ्ट एक्सचेंज 15 नवंबर को शुरू होगा।',
+  santa_broadcast_closing_soon: '⏰ सीक्रेट सांता 15 फरवरी को बंद होगा। अपना गिफ्ट एक्सचेंज पूरा करना न भूलें!',
   wb_promo_s3_title: 'विशलिस्ट लगभग तैयार — यह रहा आपका बोनस',
   wb_promo_s3_body: 'आपकी सूची बढ़िया स्थिति में है। एक महीने का Pro:',
   wb_promo_s2_title: 'पहली इच्छा जोड़ी — यह रहा बोनस',
@@ -11633,6 +11643,8 @@ const es: Dict = {
   notif_batch_comments_word_one: 'nuevo comentario',
   notif_batch_comments_word_few: 'nuevos comentarios',
   notif_batch_comments_word_many: 'nuevos comentarios',
+  santa_broadcast_promo: '🎅 ¡Santa Secreto está por abrir! Prepara tu wishlist — el intercambio de regalos empieza el 15 de noviembre.',
+  santa_broadcast_closing_soon: '⏰ Santa Secreto cierra el 15 de febrero. ¡Asegúrate de terminar tu intercambio de regalos!',
   wb_promo_s3_title: 'Tu wishlist casi está lista — aquí tienes tu bonus',
   wb_promo_s3_body: 'Tu lista está en muy buen punto. Un mes de Pro:',
   wb_promo_s2_title: 'Primer deseo añadido — aquí tienes tu bonus',
@@ -13645,6 +13657,8 @@ const ar: Dict = {
   notif_batch_comments_word_one: 'تعليق جديد',
   notif_batch_comments_word_few: 'تعليقات جديدة',
   notif_batch_comments_word_many: 'تعليقات جديدة',
+  santa_broadcast_promo: '🎅 سانتا السرّي يفتح قريباً! جهّز قائمة أمنياتك — تبادل الهدايا يبدأ في 15 نوفمبر.',
+  santa_broadcast_closing_soon: '⏰ سانتا السرّي يغلق في 15 فبراير. تأكد من إكمال تبادل الهدايا!',
   wb_promo_s3_title: 'قائمة أمنياتك شبه جاهزة — إليك مكافأتك',
   wb_promo_s3_body: 'قائمتك في حالة رائعة. إليك شهر Pro:',
   wb_promo_s2_title: 'تمت إضافة الأمنية الأولى — إليك مكافأتك',

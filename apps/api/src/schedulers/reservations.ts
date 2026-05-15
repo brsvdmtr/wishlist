@@ -198,9 +198,10 @@ export function startSmartReservationSchedulers(deps: SmartReservationSchedulerD
             });
             // SYSTEM comment text is persisted (not lazily rendered), so a single
             // locale at write-time is rendered identically to every later viewer.
-            // 'ru' is the project's canonical persisted-text locale. Out of scope
-            // for the 2026-05-10 send-locale resolver wave — proper fix is to
-            // store {key, params} and render at read-time per viewer locale.
+            // 'ru' picked to match existing SYSTEM comments in this table; project
+            // has no formal canonical-persisted-locale policy yet. Out of scope for
+            // the 2026-05-10 send-locale resolver wave — proper fix is to store
+            // {key, params} on Comment and render at read-time per viewer locale.
             await tx.comment.create({
               data: { itemId: meta.item.id, type: 'SYSTEM', text: t('api_system_auto_released', 'ru'), reservationEpoch: meta.item.reservationEpoch },
             });

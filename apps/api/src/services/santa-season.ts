@@ -37,7 +37,9 @@
 // (notifications/adminAlerts).
 
 import { prisma } from '@wishlist/db';
+import { t, resolveLocaleWithSource } from '@wishlist/shared';
 import { sendTgNotification } from '../telegram/botApi';
+import { profileToLanguageSettings } from './locale';
 import { sendAdminAlert } from '../notifications/adminAlerts';
 import logger from '../logger';
 
@@ -325,14 +327,10 @@ export async function sendSeasonalBroadcast(type: 'PROMO' | 'CLOSING_SOON', seas
   const BATCH      = 25;   // users per DB page
   const PAUSE_MS   = 1200; // ~20 req/s; Telegram allows 30 req/s per bot
 
-  // RU + EN in one message — we don't store per-user locale, so serve both languages.
-  const textRu = type === 'PROMO'
-    ? '🎅 Тайный Санта скоро открывается! Подготовьте вишлист — обмен подарками начнётся 15 ноября.'
-    : '⏰ Тайный Санта закроется 15 февраля. Успейте завершить обмен подарками!';
-  const textEn = type === 'PROMO'
-    ? '🎅 Secret Santa is opening soon! Prepare your wishlist — the gift exchange starts November 15.'
-    : '⏰ Secret Santa closes on February 15. Make sure to finish your gift exchange!';
-  const text = `${textRu}\n\n${textEn}`;
+  // Per-recipient locale via the canonical resolver chain — every user receives
+  // the broadcast in their own language. Was: hardcoded `textRu + textEn` blob
+  // sent to every user (so zh-CN/hi/es/ar speakers got two foreign languages).
+  const key = type === 'PROMO' ? 'santa_broadcast_promo' : 'santa_broadcast_closing_soon';
 
   let cursor: string | undefined;
   let totalSent = 0;
@@ -341,7 +339,7 @@ export async function sendSeasonalBroadcast(type: 'PROMO' | 'CLOSING_SOON', seas
   for (;;) {
     const users = await prisma.user.findMany({
       where:   { telegramChatId: { not: null } },
-      select:  { id: true, telegramChatId: true },
+      select:  { id: true, telegramChatId: true, profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } } },
       take:    BATCH,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       orderBy: { id: 'asc' },
@@ -351,7 +349,8 @@ export async function sendSeasonalBroadcast(type: 'PROMO' | 'CLOSING_SOON', seas
 
     for (const u of users) {
       if (!u.telegramChatId) continue;
-      await sendTgNotification(u.telegramChatId, text);
+      const { locale } = resolveLocaleWithSource(profileToLanguageSettings(u.profile));
+      await sendTgNotification(u.telegramChatId, t(key, locale));
       totalSent++;
     }
 

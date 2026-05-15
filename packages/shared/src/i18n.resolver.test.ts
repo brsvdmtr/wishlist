@@ -206,6 +206,8 @@ describe('resolver → t() integration coverage', () => {
     'notif_batch_comments_word_one',
     'notif_batch_comments_word_few',
     'notif_batch_comments_word_many',
+    'santa_broadcast_promo',
+    'santa_broadcast_closing_soon',
   ];
 
   for (const locale of SUPPORTED_LOCALES) {
