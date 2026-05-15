@@ -10,14 +10,14 @@
 |---|---|---|---|
 | 0 — Foundation (CI + vitest infra) | ✅ DONE | `ceeb92a` | +0 (infra) |
 | 1 — Regression tests for BUGFIX_LESSONS | ✅ DONE (4/8 closed in code, 4 deferred) | `6b76b1e` | +22 |
-| 2 — Service layer | 🚧 PARTIAL (11/14 services done) | `59c0068`, `3802b22` | +222 |
+| 2 — Service layer | ✅ DONE (14/14 services) | `59c0068`, `3802b22`, `75697b7` | +335 |
 | 3 — Schedulers | ⏳ PENDING | — | — |
 | 4 — Routes | ⏳ PENDING | — | — |
 | 5a — Bot | ⏳ PENDING | — | — |
 | 5b — Frontend pilot (L2/L3/L6/L8 UI regressions) | ⏳ DEFERRED until MiniApp.tsx extraction | — | — |
-| 6 — CI discipline gates | ✅ DONE | this commit | (rule-level) |
+| 6 — CI discipline gates | ✅ DONE | `586d056` | (rule-level) |
 
-**Test baseline after these commits:** 784 tests / 30 files / all green.
+**Test baseline:** 897 tests / 33 files / all green via `pnpm test`.
 **Dormant bug found and fixed during Phase 1:** `gift-notes.routes.ts:241`
 detail-endpoint had the L5 calendar TODAY/TOMORROW bug for ~15 days after
 the original fix shipped (`05df77f`) — see [BUGFIX_LESSONS 2026-05-15](BUGFIX_LESSONS.md#2026-05-15).
@@ -472,9 +472,9 @@ export default defineConfig({
   parallel test).
 - **L2/L3/L6/L8 (UI lessons)** — ⏳ deferred to Phase 5b. См. § 11.
 
-### Phase 2 — Services 🚧 PARTIAL (`59c0068`, `3802b22`)
+### Phase 2 — Services ✅ DONE (`59c0068`, `3802b22`, `75697b7`)
 
-**Готово (11 of 14 services):**
+**All 14 services covered:**
 
 | Service | LOC | Tests | Coverage |
 |---|---|---|---|
@@ -489,13 +489,11 @@ export default defineConfig({
 | `items.ts` | 274 | 36 | pure mappers + per-recipient locale fanout |
 | `entitlement.ts` | 329 | 54 | PLANS/SKU pin + getEffectiveEntitlements |
 | `referral-hooks.ts` | 241 | 18 | qualify + reward pipeline branching |
+| `url-import.ts` | 237 | 21 | capacity gate + parse states + image rollback |
+| `onboarding.ts` | 311 | 47 | eligibility matrix + completion idempotency |
+| `santa-season.ts` | 421 | 45 | cross-year math + deterministic alias gen |
 
-**Pending (3 of 14):**
-
-- `url-import.ts` (237 LOC) — marketplace adapter dispatch + HTTP error
-  handling.
-- `onboarding.ts` (311 LOC) — onboarding state machine.
-- `santa-season.ts` (421 LOC) — Secret Santa lifecycle + draw + reveal.
+**Total: 354 service tests covering 2 622 LOC of services.**
 
 ### Phase 3 — Schedulers ⏳ PENDING
 
