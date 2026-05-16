@@ -21,6 +21,13 @@ let trackEvent: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.useFakeTimers();
+  // Pin fake clock to a deterministic time inside the scheduler's MSK
+  // send-hour window (9–22). `useFakeTimers()` defaults to wall-clock time
+  // at setup, which makes these tests flake based on when CI / local runs
+  // happen: any run started between 23:00 and 08:59 MSK exits early at
+  // `birthday-reminders.ts:527` and never reaches findMany / heartbeat.
+  // 2026-05-16T09:00:00Z = 12:00 MSK — safely mid-window.
+  vi.setSystemTime(new Date('2026-05-16T09:00:00Z'));
   // Minimal-noise Prisma mock — every model returns the empty result that
   // forces the cron into "no candidates" early-exit. Real branches are
   // covered by integration tests.

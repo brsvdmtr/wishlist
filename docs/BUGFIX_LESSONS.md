@@ -5,6 +5,81 @@ New entries go at the top.
 
 ---
 
+## 2026-05-16 — Flaky CI: birthday-reminders test зависел от часа суток на момент запуска
+
+### Ошибка
+`src/schedulers/birthday-reminders.test.ts` блокировал деплой PRO-renewal
+фикса. На CI с момента 2026-05-15 14:44 UTC (последний успешный деплой)
+ничего не менялось в `birthday-reminders.{ts,test.ts}`, но запуск в
+2026-05-16 19:53 UTC падал на 1–3 тестах из 5 (`runs on hourly cadence`,
+`writes a ServiceHeartbeat row each tick`, `continues ticking after a
+failed cycle`) — с разным набором падений на каждом ретрае. Локально
+5/5 fail подряд (детерминистично в одно и то же время дня).
+
+### Root cause
+`scheduler birthday-reminders.ts:527` имеет early-exit guard:
+```ts
+if (todayMsk.hour < BIRTHDAY_SEND_HOUR_MSK_MIN  // 9
+ || todayMsk.hour > BIRTHDAY_SEND_HOUR_MSK_MAX) // 22
+{ return; }
+```
+
+В тестах `vi.useFakeTimers()` вызывается без `setSystemTime`, поэтому
+fake-clock инициализируется текущим wall-clock временем (vitest 2.1.9).
+В сценарии «advance HOURLY_MS», `new Date()` внутри scheduler возвращает
+wall-clock + 1h. Если wall-clock в момент `beforeEach` находится в окне
+22:00–08:59 MSK, после advance мы оказываемся в окне 23:00–09:59 — за
+пределами `9–22` window → scheduler early-exits → `findMany` ни разу не
+вызывается → heartbeat не апсёртится → assertions падают.
+
+Это flake, но не «настоящий» race condition — он детерминистичен внутри
+часа. Просто пилотный коммит `9946648` (test phase-3 batch 2) был
+протестирован днём, прошёл CI днём, и никто не заметил time-of-day
+зависимость. На следующий день CI трэйнула после 19 UTC (22 MSK) — там
+22 ещё проходит (`>22` false), но при advance(+1h) hour становится 23.
+
+### Урок
+- **`vi.useFakeTimers()` без `vi.setSystemTime(...)` — это implicit
+  зависимость от wall-clock на момент запуска.** Если код-under-test
+  читает `new Date()` / `Date.now()` И принимает решения на основе
+  HOURS / DAY-OF-WEEK / SEASON, fake-clock без pin **гарантированно**
+  flake'нет в каком-то поясе / часе суток.
+- **CI-flake с детерминистическим локальным воспроизведением —
+  ВСЕГДА не flake.** Когда тест 5/5 fail локально, но «иногда»
+  проходит CI — это time-of-day / TZ / env-var зависимость, а не
+  гонка. Гонка дала бы случайные результаты локально тоже.
+- **Поиск root cause: top-down от теста к коду.** Сначала проверил
+  microtask draining (`await Promise.resolve()` × 100) — не помогло.
+  Потом увидел early-exit guard в scheduler — там был ответ. Эта
+  последовательность правильная: gauge сначала test-infra (vitest
+  fake-timer semantics), потом тестируемый код.
+
+### Правило
+- **Каждый `vi.useFakeTimers()` в `beforeEach` обязан иметь
+  `vi.setSystemTime(new Date('YYYY-MM-DDTHH:MM:SSZ'))` рядом** — если
+  тестируемый код использует Date в логике (не только для логов).
+- **При флейке CI на тесте с `useFakeTimers`: первое подозреваемое —
+  time-of-day-dependent guard в коде**, а не race condition. Grep по
+  `new Date()` / `getHours()` / `getDay()` в файле scheduler-а — это
+  быстрый поиск.
+- **Не сразу скипать flaky-тест с `it.skip`** (правило из CLAUDE.md).
+  Сначала 5-10 минут на root-cause investigation — flake часто
+  раскрывается тривиально, и тест восстановим с +5 строками.
+
+### Лучший код
+```ts
+// birthday-reminders.test.ts — minimal fix
+beforeEach(() => {
+  vi.useFakeTimers();
+  // Pin to mid-window MSK time so the scheduler's send-hour guard
+  // (9–22 MSK at birthday-reminders.ts:527) doesn't early-exit.
+  vi.setSystemTime(new Date('2026-05-16T09:00:00Z'));
+  // ...
+});
+```
+
+---
+
 ## 2026-05-16 — Bot reminder «PRO истекает» открывал главный экран вместо paywall
 
 ### Ошибка
