@@ -32,8 +32,8 @@
 //   - pg_trgm GIN indexes (migration 20260516000000) accelerate the ILIKE
 //     paths. The service still works without the extension, just slower.
 
-import { prisma, Prisma } from '@wishlist/db';
-import type { Locale } from '@wishlist/shared';
+import { prisma } from '@wishlist/db';
+import { t, pluralize, type Locale } from '@wishlist/shared';
 import { getUserEntitlement } from './entitlement';
 import { hashShareToken } from './foreign-wishlist-access';
 
@@ -105,7 +105,40 @@ export interface SearchResult {
   wishlistId: string | null;
   itemId: string | null;
   score: number;
+  /**
+   * Structured flags for client-side smart filtering. Server-computed so the
+   * FE doesn't have to match on rendered (and localised) badge text. Keep
+   * additions here NARROW — every new flag is a contract the FE relies on.
+   */
+  meta: SearchResultMeta;
 }
+
+export interface SearchResultMeta {
+  /** True iff this row belongs to the requesting user's own scope. */
+  isOwn: boolean;
+  /** Items only: true iff status='ARCHIVED' at search time. */
+  archived: boolean;
+  /** Items only: priority bucket; null for non-item types. */
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | null;
+  /** Items only: has a non-empty URL field. */
+  hasUrl: boolean;
+  /** Items only: has a non-empty priceText. */
+  hasPrice: boolean;
+  /** Reservations only: hours-until-expiry, null if not a smart-res TTL row. */
+  hoursUntilExpiry: number | null;
+  /** Reservations only: true iff this row is a SecretReservation. */
+  isSecretReservation: boolean;
+}
+
+const EMPTY_META: SearchResultMeta = {
+  isOwn: false,
+  archived: false,
+  priority: null,
+  hasUrl: false,
+  hasPrice: false,
+  hoursUntilExpiry: null,
+  isSecretReservation: false,
+};
 
 export interface SearchGroup {
   type: SearchResultType;
@@ -570,6 +603,17 @@ function buildIlikePatterns(terms: string[]): string[] {
   return terms.map((t) => `%${escapeLikePattern(t)}%`);
 }
 
+/**
+ * Narrow a raw Priority enum value coming back from $queryRaw into the
+ * SearchResultMeta priority shape. Returns null on unknown / missing
+ * values so a future Prisma enum addition (or a stale row) can't silently
+ * misclassify high-priority items.
+ */
+function toPriority(value: string | null | undefined): 'LOW' | 'MEDIUM' | 'HIGH' | null {
+  if (value === 'LOW' || value === 'MEDIUM' || value === 'HIGH') return value;
+  return null;
+}
+
 /** Pick a thumbnail emoji deterministically per title (when no real image). */
 function emojiForTitle(title: string): string {
   const t = title.toLowerCase();
@@ -589,17 +633,17 @@ function emojiForTitle(title: string): string {
 }
 
 /** Map Prisma ItemStatus → user-facing badge tone and label. */
-function badgeForItem(status: string): { label: string | null; tone: SearchResult['badgeTone'] } {
+function badgeForItem(status: string, locale: Locale): { label: string | null; tone: SearchResult['badgeTone'] } {
   switch (status) {
     case 'RESERVED':
-      return { label: '🤝 бронь', tone: 'reserved' };
+      return { label: t('search_badge_reserved', locale), tone: 'reserved' };
     case 'PURCHASED':
     case 'COMPLETED':
-      return { label: '✓ подарено', tone: 'done' };
+      return { label: t('search_badge_done', locale), tone: 'done' };
     case 'ARCHIVED':
-      return { label: 'архив', tone: 'neutral' };
+      return { label: t('search_badge_archive', locale), tone: 'neutral' };
     case 'DELETED':
-      return { label: 'удалено', tone: 'neutral' };
+      return { label: t('search_badge_deleted', locale), tone: 'neutral' };
     default:
       return { label: null, tone: null };
   }
@@ -669,7 +713,7 @@ async function searchItemsGroup(ctx: SearchContext): Promise<{ total: number; ro
         OR lower(i.url) ILIKE ANY (${patterns}::text[])
       )
     ORDER BY
-      CASE WHEN lower(i.title) ILIKE ${`${ctx.rawNormalized}%`} THEN 0 ELSE 1 END,
+      CASE WHEN lower(i.title) ILIKE ${`${escapeLikePattern(ctx.rawNormalized)}%`} THEN 0 ELSE 1 END,
       i."updatedAt" DESC
     LIMIT ${ctx.perGroupLimit + 30}
   `;
@@ -687,13 +731,13 @@ async function searchItemsGroup(ctx: SearchContext): Promise<{ total: number; ro
     if (isOwn) score += 20;
     if (r.priority === 'HIGH') score += 5;
     if (r.status === 'AVAILABLE') score += 8;
-    const badge = badgeForItem(r.status);
+    const badge = badgeForItem(r.status, ctx.locale);
     const priceBadge = !badge.label && r.priceText
       ? { label: `${r.priceText} ${currencySymbol(r.currency)}`.trim(), tone: 'price' as const }
       : badge;
     const subtitleParts = [r.wishlistTitle];
     if (r.categoryName) subtitleParts.push(r.categoryName);
-    if (!isOwn) subtitleParts.push('у друга');
+    if (!isOwn) subtitleParts.push(t('search_subtitle_foreign', ctx.locale));
     scored.push({
       id: `item:${r.id}`,
       entityId: r.id,
@@ -715,6 +759,15 @@ async function searchItemsGroup(ctx: SearchContext): Promise<{ total: number; ro
       wishlistId: r.wishlistId,
       itemId: r.id,
       score,
+      meta: {
+        isOwn,
+        archived: r.status === 'ARCHIVED',
+        priority: toPriority(r.priority),
+        hasUrl: !!r.url && r.url.length > 0,
+        hasPrice: !!r.priceText && r.priceText.length > 0,
+        hoursUntilExpiry: null,
+        isSecretReservation: false,
+      },
     });
   }
   scored.sort((a, b) => b.score - a.score);
@@ -764,7 +817,7 @@ async function searchWishlistsGroup(ctx: SearchContext): Promise<{ total: number
       )
     GROUP BY w.id, p."displayName"
     ORDER BY
-      CASE WHEN lower(w.title) ILIKE ${`${ctx.rawNormalized}%`} THEN 0 ELSE 1 END,
+      CASE WHEN lower(w.title) ILIKE ${`${escapeLikePattern(ctx.rawNormalized)}%`} THEN 0 ELSE 1 END,
       w."updatedAt" DESC
     LIMIT ${ctx.perGroupLimit + 10}
   `;
@@ -775,8 +828,21 @@ async function searchWishlistsGroup(ctx: SearchContext): Promise<{ total: number
     const score = scoreTitleMatch(r.title, ctx.terms) * 100 + (isOwn ? 20 : 0);
     const itemCount = Number(r.itemCount);
     const subtitleParts: string[] = [];
-    subtitleParts.push(isOwn ? 'мой' : (r.ownerDisplayName ? `у ${r.ownerDisplayName}` : 'у друга'));
-    if (itemCount > 0) subtitleParts.push(`${itemCount} желаний`);
+    if (isOwn) {
+      subtitleParts.push(t('search_subtitle_own', ctx.locale));
+    } else if (r.ownerDisplayName) {
+      // "от {Name}" — owner display name doesn't translate per locale.
+      subtitleParts.push(r.ownerDisplayName);
+    } else {
+      subtitleParts.push(t('search_subtitle_foreign', ctx.locale));
+    }
+    if (itemCount > 0) {
+      // Localized wishes plural via the shared pluralize() helper — same
+      // bucket the FE uses for "wishes_one / wishes_few / wishes_many".
+      // Service-side pluralize is fine because the count itself is exact.
+      const word = pluralize(itemCount, t('wishes_one', ctx.locale), t('wishes_few', ctx.locale), t('wishes_many', ctx.locale), ctx.locale);
+      subtitleParts.push(`${itemCount} ${word}`);
+    }
     return {
       id: `wishlist:${r.id}`,
       entityId: r.id,
@@ -797,6 +863,7 @@ async function searchWishlistsGroup(ctx: SearchContext): Promise<{ total: number
       wishlistId: r.id,
       itemId: null,
       score,
+      meta: { ...EMPTY_META, isOwn },
     };
   });
   out.sort((a, b) => b.score - a.score);
@@ -840,7 +907,12 @@ async function searchCategoriesGroup(ctx: SearchContext): Promise<{ total: numbe
       entityId: r.id,
       type: 'category',
       title: r.name,
-      subtitle: `в «${r.wishlistTitle}»${itemCount ? ` · ${itemCount} желаний` : ''}`,
+      subtitle: (() => {
+        const base = t('search_subtitle_category_in_wishlist', ctx.locale, { wishlist: r.wishlistTitle });
+        if (!itemCount) return base;
+        const word = pluralize(itemCount, t('wishes_one', ctx.locale), t('wishes_few', ctx.locale), t('wishes_many', ctx.locale), ctx.locale);
+        return `${base} · ${itemCount} ${word}`;
+      })(),
       badge: null,
       badgeTone: null,
       thumbnailUrl: null,
@@ -856,6 +928,7 @@ async function searchCategoriesGroup(ctx: SearchContext): Promise<{ total: numbe
       wishlistId: r.wishlistId,
       itemId: null,
       score: scoreTitleMatch(r.name, ctx.terms) * 100,
+      meta: { ...EMPTY_META, isOwn },
     };
   });
   out.sort((a, b) => b.score - a.score);
@@ -910,19 +983,25 @@ async function searchReservationsGroup(ctx: SearchContext): Promise<{ total: num
     const score = scoreTitleMatch(r.itemTitle, ctx.terms) * 100;
     let badge: string | null = null;
     let badgeTone: SearchResult['badgeTone'] = 'reserved';
+    let hoursUntilExpiry: number | null = null;
     if (r.expiresAt && r.isSmart) {
       const hoursLeft = Math.max(0, Math.round((r.expiresAt.getTime() - Date.now()) / 3_600_000));
-      badge = hoursLeft < 48 ? `⏱ ${hoursLeft}ч` : `⏱ ${Math.round(hoursLeft / 24)}д`;
+      hoursUntilExpiry = hoursLeft;
+      // Localised relative duration. Hours < 48 → "{N} h"; otherwise days.
+      // Falls back to a digits-only badge if a locale's key is missing.
+      const hoursSuffix = t('time_hours_short', ctx.locale);
+      const daysSuffix = t('time_days_short', ctx.locale);
+      badge = hoursLeft < 48 ? `⏱ ${hoursLeft}${hoursSuffix}` : `⏱ ${Math.round(hoursLeft / 24)}${daysSuffix}`;
       badgeTone = hoursLeft < 24 ? 'warning' : 'reserved';
     } else {
-      badge = '🤝 бронь';
+      badge = t('search_badge_reserved', ctx.locale);
     }
     return {
       id: `reservation:${r.itemId}`,
       entityId: r.itemId,
       type: 'reservation',
       title: r.itemTitle,
-      subtitle: `для ${r.ownerDisplayName ?? 'друга'} · «${r.wishlistTitle}»`,
+      subtitle: `${t('search_subtitle_reservation_for', ctx.locale, { name: r.ownerDisplayName ?? t('search_subtitle_friend_name', ctx.locale) })} · «${r.wishlistTitle}»`,
       badge,
       badgeTone,
       thumbnailUrl: r.itemImageUrl,
@@ -934,6 +1013,7 @@ async function searchReservationsGroup(ctx: SearchContext): Promise<{ total: num
       wishlistId: r.wishlistId,
       itemId: r.itemId,
       score,
+      meta: { ...EMPTY_META, isOwn: true, hoursUntilExpiry, isSecretReservation: false },
     };
   });
   out.sort((a, b) => b.score - a.score);
@@ -965,6 +1045,7 @@ async function searchSecretReservationsGroup(ctx: SearchContext): Promise<{ tota
     LEFT JOIN "UserProfile" p ON p."userId" = w."ownerId"
     WHERE sr."reserverUserId" = ${ctx.scope.userId}
       AND sr.status = 'ACTIVE'
+      AND i.status NOT IN ('DELETED', 'ARCHIVED')
       AND (
         lower(i.title) ILIKE ANY (${patterns}::text[])
         OR lower(w.title) ILIKE ANY (${patterns}::text[])
@@ -979,18 +1060,19 @@ async function searchSecretReservationsGroup(ctx: SearchContext): Promise<{ tota
     entityId: r.id,
     type: 'reservation',
     title: r.itemTitle,
-    subtitle: `тайно · видишь только ты · «${r.wishlistTitle}»`,
-    badge: '🤫 тайная',
-    badgeTone: 'secret',
+    subtitle: `${t('search_subtitle_secret_only_you', ctx.locale)} · «${r.wishlistTitle}»`,
+    badge: t('search_badge_secret', ctx.locale),
+    badgeTone: 'secret' as const,
     thumbnailUrl: r.itemImageUrl,
     icon: r.itemImageUrl ? null : '🤫',
-    target: { screen: 'my-reservations', itemId: r.itemId, wishlistId: r.wishlistId, reservationId: r.id, secret: true },
-    accessState: 'available',
+    target: { screen: 'my-reservations' as const, itemId: r.itemId, wishlistId: r.wishlistId, reservationId: r.id, secret: true },
+    accessState: 'available' as const,
     matchedFields: ['title'],
     ownerUserId: r.ownerId,
     wishlistId: r.wishlistId,
     itemId: r.itemId,
     score: scoreTitleMatch(r.itemTitle, ctx.terms) * 100 + 5,
+    meta: { ...EMPTY_META, isOwn: true, isSecretReservation: true },
   }));
   return { total: out.length, rows: out.slice(0, ctx.perGroupLimit) };
 }
@@ -1031,7 +1113,7 @@ async function searchEventsGroup(ctx: SearchContext): Promise<{ total: number; r
       entityId: r.id,
       type: 'event',
       title: r.title,
-      subtitle: subtitleParts.join(' · ') || 'событие',
+      subtitle: subtitleParts.join(' · ') || t('search_subtitle_event_generic', ctx.locale),
       badge: r.eventDate ? dateLabel : null,
       badgeTone: 'neutral',
       thumbnailUrl: null,
@@ -1043,6 +1125,7 @@ async function searchEventsGroup(ctx: SearchContext): Promise<{ total: number; r
       wishlistId: r.linkedWishlistId,
       itemId: null,
       score: scoreTitleMatch(r.title, ctx.terms) * 100,
+      meta: { ...EMPTY_META, isOwn: true },
     };
   });
   return { total: out.length, rows: out.slice(0, ctx.perGroupLimit) };
@@ -1058,6 +1141,11 @@ function formatRuShortDate(d: Date): string {
 async function searchPeopleGroup(ctx: SearchContext): Promise<{ total: number; rows: SearchResult[] }> {
   if (ctx.scope.accessiblePeopleIds.length === 0) return { total: 0, rows: [] };
   const patterns = buildIlikePatterns(ctx.terms);
+  // SECURITY: exclude profiles whose owner set profileVisibility='NOBODY'
+  // AFTER the relation was formed. Mirror of public.routes.ts:489 +
+  // wishlists.routes.ts access-view, which both 404 in that case. Without
+  // this filter, the search would still surface displayName/username for
+  // someone who has explicitly hidden their profile.
   const rows = await prisma.$queryRaw<
     Array<{
       userId: string;
@@ -1070,6 +1158,7 @@ async function searchPeopleGroup(ctx: SearchContext): Promise<{ total: number; r
     SELECT p."userId", p."displayName", p.username, p."avatarThumbUrl", p."avatarPublic"
     FROM "UserProfile" p
     WHERE p."userId" = ANY (${ctx.scope.accessiblePeopleIds}::text[])
+      AND p."profileVisibility" <> 'NOBODY'
       AND (
         lower(coalesce(p."displayName", '')) ILIKE ANY (${patterns}::text[])
         OR lower(coalesce(p.username, '')) ILIKE ANY (${patterns}::text[])
@@ -1077,13 +1166,13 @@ async function searchPeopleGroup(ctx: SearchContext): Promise<{ total: number; r
     LIMIT ${ctx.perGroupLimit + 5}
   `;
   const out: SearchResult[] = rows.map((r) => {
-    const display = r.displayName || (r.username ? `@${r.username}` : 'Без имени');
+    const display = r.displayName || (r.username ? `@${r.username}` : t('search_subtitle_unnamed_person', ctx.locale));
     return {
       id: `user:${r.userId}`,
       entityId: r.userId,
       type: 'user',
       title: display,
-      subtitle: r.username ? `@${r.username}` : 'из твоих контактов',
+      subtitle: r.username ? `@${r.username}` : t('search_subtitle_from_contacts', ctx.locale),
       badge: null,
       badgeTone: null,
       thumbnailUrl: r.avatarPublic ? r.avatarThumbUrl : null,
@@ -1095,6 +1184,7 @@ async function searchPeopleGroup(ctx: SearchContext): Promise<{ total: number; r
       wishlistId: null,
       itemId: null,
       score: scoreTitleMatch(display, ctx.terms) * 100,
+      meta: EMPTY_META,
     };
   });
   return { total: out.length, rows: out.slice(0, ctx.perGroupLimit) };
@@ -1117,17 +1207,24 @@ async function searchAntiGiftGroup(ctx: SearchContext): Promise<{ total: number;
   ];
   if (profile.dontGiftComment) allItems.push(profile.dontGiftComment);
 
-  const out: SearchResult[] = [];
+  // IMPORTANT: walk the whole list to compute the true `total`, then slice
+  // to perGroupLimit at return. Iter-2 review caught this — previously the
+  // loop guard `out.length < ctx.perGroupLimit` stopped counting early, so
+  // Free user saw `pro_locked.total = N` (from countAntiGiftMatches which
+  // walks the full list) but on upgrade the dedicated anti-gift group
+  // reported `total = perGroupLimit` (truncated). Counts must agree across
+  // Free→PRO transition; the per-group limit only affects rendered rows.
+  const matched: SearchResult[] = [];
   const lc = ctx.rawNormalized;
-  for (let i = 0; i < allItems.length && out.length < ctx.perGroupLimit; i++) {
+  for (let i = 0; i < allItems.length; i++) {
     const v = allItems[i] ?? '';
     if (!v.toLowerCase().includes(lc) && !ctx.terms.some((t) => v.toLowerCase().includes(t))) continue;
-    out.push({
+    matched.push({
       id: `anti_gift:${i}:${ctx.scope.userId}`,
       entityId: null,
       type: 'anti_gift',
       title: v,
-      subtitle: 'из «что не стоит дарить» · видно только тебе',
+      subtitle: t('search_subtitle_anti_gift', ctx.locale),
       badge: null,
       badgeTone: 'danger',
       thumbnailUrl: null,
@@ -1139,9 +1236,10 @@ async function searchAntiGiftGroup(ctx: SearchContext): Promise<{ total: number;
       wishlistId: null,
       itemId: null,
       score: scoreTitleMatch(v, ctx.terms) * 90,
+      meta: { ...EMPTY_META, isOwn: true },
     });
   }
-  return { total: out.length, rows: out };
+  return { total: matched.length, rows: matched.slice(0, ctx.perGroupLimit) };
 }
 
 function searchSettingsGroup(ctx: SearchContext): { total: number; rows: SearchResult[] } {
@@ -1165,7 +1263,11 @@ function searchSettingsGroup(ctx: SearchContext): { total: number; rows: SearchR
       entityId: null,
       type: row.type === 'faq' ? 'faq' : row.type === 'action' ? 'action' : 'setting',
       title: localizedTitle,
-      subtitle: row.requiresPro && !ctx.scope.isPro ? 'PRO' : (row.type === 'faq' ? 'Помощь' : 'Настройки'),
+      subtitle: row.requiresPro && !ctx.scope.isPro
+        ? 'PRO'
+        : (row.type === 'faq'
+          ? t('search_subtitle_section_help', ctx.locale)
+          : t('search_subtitle_section_settings', ctx.locale)),
       badge: row.requiresPro ? '⭐ PRO' : null,
       badgeTone: row.requiresPro ? 'pro' : null,
       thumbnailUrl: null,
@@ -1177,6 +1279,7 @@ function searchSettingsGroup(ctx: SearchContext): { total: number; rows: SearchR
       wishlistId: null,
       itemId: null,
       score: 50 + scoreTitleMatch(localizedTitle, ctx.terms) * 30,
+      meta: EMPTY_META,
     });
   }
   out.sort((a, b) => b.score - a.score);
@@ -1189,63 +1292,127 @@ async function countProLockedHits(ctx: SearchContext): Promise<number> {
   // Aggregate count across PRO-only groups so the Free UI shows a single
   // safe paywall block. No titles / no owners / no IDs leak through this
   // path — only an integer.
+  //
+  // Conditions MUST match the PRO-side searchers exactly — otherwise the
+  // Free user is told "Found N matches in PRO" but on upgrade sees a
+  // different number, which breaks trust and analytics:
+  //   - searchReservationsGroup: rm.active AND item.status NOT IN
+  //     (DELETED, ARCHIVED) (joined via the standard Item filter).
+  //   - searchEventsGroup: o.status = 'ACTIVE'.
+  //   - searchSecretReservationsGroup: sr.status = 'ACTIVE'.
+  //   - searchAntiGiftGroup: scan over UserProfile.dontGift* fields.
   const patterns = buildIlikePatterns(ctx.terms);
   try {
-    const rows = await prisma.$queryRaw<Array<{ count: bigint }>>`
-      WITH r AS (
-        SELECT 1 FROM "ReservationMeta" rm
-        JOIN "Item" i ON i.id = rm."itemId"
-        WHERE rm."reserverUserId" = ${ctx.scope.userId}
-          AND rm.active = true
-          AND lower(i.title) ILIKE ANY (${patterns}::text[])
-      ),
-      e AS (
-        SELECT 1 FROM "GiftOccasion" o
-        WHERE o."ownerUserId" = ${ctx.scope.userId}
-          AND o.status = 'ACTIVE'
-          AND (
-            lower(o.title) ILIKE ANY (${patterns}::text[])
-            OR lower(coalesce(o."personName",'')) ILIKE ANY (${patterns}::text[])
-          )
-      )
-      SELECT (SELECT COUNT(*) FROM r) + (SELECT COUNT(*) FROM e) AS count
-    `;
-    return Number(rows[0]?.count ?? 0);
+    const [dbRows, antiGiftCount] = await Promise.all([
+      prisma.$queryRaw<Array<{ count: bigint }>>`
+        WITH r AS (
+          SELECT 1 FROM "ReservationMeta" rm
+          JOIN "Item" i ON i.id = rm."itemId"
+          JOIN "Wishlist" w ON w.id = i."wishlistId"
+          LEFT JOIN "UserProfile" p ON p."userId" = w."ownerId"
+          WHERE rm."reserverUserId" = ${ctx.scope.userId}
+            AND rm.active = true
+            AND i.status NOT IN ('DELETED', 'ARCHIVED')
+            AND (
+              lower(i.title) ILIKE ANY (${patterns}::text[])
+              OR lower(w.title) ILIKE ANY (${patterns}::text[])
+              OR lower(coalesce(p."displayName", '')) ILIKE ANY (${patterns}::text[])
+            )
+        ),
+        sr AS (
+          SELECT 1 FROM "SecretReservation" srr
+          JOIN "Item" i ON i.id = srr."itemId"
+          JOIN "Wishlist" w ON w.id = i."wishlistId"
+          LEFT JOIN "UserProfile" p ON p."userId" = w."ownerId"
+          WHERE srr."reserverUserId" = ${ctx.scope.userId}
+            AND srr.status = 'ACTIVE'
+            AND i.status NOT IN ('DELETED', 'ARCHIVED')
+            AND (
+              lower(i.title) ILIKE ANY (${patterns}::text[])
+              OR lower(w.title) ILIKE ANY (${patterns}::text[])
+              OR lower(coalesce(p."displayName", '')) ILIKE ANY (${patterns}::text[])
+            )
+        ),
+        e AS (
+          SELECT 1 FROM "GiftOccasion" o
+          WHERE o."ownerUserId" = ${ctx.scope.userId}
+            AND o.status = 'ACTIVE'
+            AND (
+              lower(o.title) ILIKE ANY (${patterns}::text[])
+              OR lower(coalesce(o."personName",'')) ILIKE ANY (${patterns}::text[])
+            )
+        )
+        SELECT (SELECT COUNT(*) FROM r) + (SELECT COUNT(*) FROM sr) + (SELECT COUNT(*) FROM e) AS count
+      `,
+      // Anti-gift is a JS-side scan over profile.dontGift* fields (not a
+      // separate table), so it can't merge into the CTE above.
+      countAntiGiftMatches(ctx),
+    ]);
+    return Number(dbRows[0]?.count ?? 0) + antiGiftCount;
   } catch {
     return 0;
   }
 }
 
-// ─── Group title localization (RU-first, fallback EN) ───────────────────────
+/** Mirrors searchAntiGiftGroup's matching but returns only a count. */
+async function countAntiGiftMatches(ctx: SearchContext): Promise<number> {
+  const profile = await prisma.userProfile.findUnique({
+    where: { userId: ctx.scope.userId },
+    select: { dontGiftPresets: true, dontGiftCustomItems: true, dontGiftComment: true },
+  });
+  if (!profile) return 0;
+  const all: string[] = [
+    ...(profile.dontGiftPresets ?? []),
+    ...(profile.dontGiftCustomItems ?? []),
+  ];
+  if (profile.dontGiftComment) all.push(profile.dontGiftComment);
+  let n = 0;
+  for (const v of all) {
+    const lc = v.toLowerCase();
+    if (lc.includes(ctx.rawNormalized) || ctx.terms.some((t) => lc.includes(t))) n++;
+  }
+  return n;
+}
+
+// ─── Group title localization ───────────────────────────────────────────────
+// Localized via i18n.ts (`search_result_type_*` keys, 6 locales). The emoji
+// prefix is API-side because it's a visual constant that doesn't translate,
+// and shipping it as part of the title keeps the FE renderer simple.
+
+const GROUP_EMOJI: Record<SearchResultType, string> = {
+  item: '🎁',
+  wishlist: '📋',
+  category: '🏷',
+  reservation: '🤝',
+  user: '👥',
+  event: '📅',
+  setting: '⚙',
+  anti_gift: '🚫',
+  faq: '💡',
+  action: '⚡',
+  pro_locked: '⭐',
+};
+
+const GROUP_I18N_KEY: Record<SearchResultType, string> = {
+  item: 'search_result_type_item',
+  wishlist: 'search_result_type_wishlist',
+  category: 'search_result_type_category',
+  reservation: 'search_result_type_reservation',
+  user: 'search_result_type_user',
+  event: 'search_result_type_event',
+  setting: 'search_result_type_setting',
+  anti_gift: 'search_result_type_anti_gift',
+  faq: 'search_result_type_faq',
+  // `action` reuses the settings label (action rows are settings-adjacent
+  // in the catalogue); separate emoji disambiguates visually.
+  action: 'search_result_type_setting',
+  // `pro_locked` uses the dedicated paywall title key.
+  pro_locked: 'search_paywall_title',
+};
 
 function groupTitle(type: SearchResultType, locale: Locale): string {
-  const ru: Record<SearchResultType, string> = {
-    item: '🎁 Желания',
-    wishlist: '📋 Вишлисты',
-    category: '🏷 Категории',
-    reservation: '🤝 Брони',
-    user: '👥 Люди',
-    event: '📅 События',
-    setting: '⚙ Настройки',
-    anti_gift: '🚫 Не дарить',
-    faq: '💡 Помощь',
-    action: '⚡ Действия',
-    pro_locked: '⭐ Найдено в PRO',
-  };
-  const en: Record<SearchResultType, string> = {
-    item: '🎁 Wishes',
-    wishlist: '📋 Wishlists',
-    category: '🏷 Categories',
-    reservation: '🤝 Reservations',
-    user: '👥 People',
-    event: '📅 Events',
-    setting: '⚙ Settings',
-    anti_gift: '🚫 Don’t gift',
-    faq: '💡 Help',
-    action: '⚡ Actions',
-    pro_locked: '⭐ Found in PRO',
-  };
-  return locale === 'ru' ? ru[type] : en[type];
+  const label = t(GROUP_I18N_KEY[type], locale);
+  return `${GROUP_EMOJI[type]} ${label}`;
 }
 
 // ─── Main entry point ───────────────────────────────────────────────────────
@@ -1319,7 +1486,9 @@ export async function performGlobalSearch(args: PerformSearchArgs): Promise<Sear
   const runReservations = allowed.has('reservation') && (isPro || godMode);
   const runEvents = allowed.has('event') && (isPro || godMode);
   const runAntiGift = allowed.has('anti_gift') && (isPro || godMode);
-  const runSecret = allowed.has('reservation') && (isPro || godMode); // secret res lives under "reservation"
+  // Secret reservations are merged into the 'reservation' group at the
+  // response layer (they share the same type tag). The runReservations
+  // gate covers both — no separate flag.
 
   const tasks: Array<{ type: SearchResultType; promise: Promise<{ total: number; rows: SearchResult[] }> }> = [];
   if (allowed.has('item')) tasks.push({ type: 'item', promise: searchItemsGroup(ctx) });
@@ -1334,7 +1503,7 @@ export async function performGlobalSearch(args: PerformSearchArgs): Promise<Sear
       type: 'reservation',
       promise: Promise.all([
         searchReservationsGroup(ctx),
-        runSecret ? searchSecretReservationsGroup(ctx) : Promise.resolve({ total: 0, rows: [] }),
+        searchSecretReservationsGroup(ctx),
       ]).then(([pub, sec]) => ({
         total: pub.total + sec.total,
         rows: [...sec.rows, ...pub.rows].sort((a, b) => b.score - a.score).slice(0, ctx.perGroupLimit),
@@ -1390,9 +1559,10 @@ export async function performGlobalSearch(args: PerformSearchArgs): Promise<Sear
   // requested (or `all` was requested) and the user is not PRO.
   let proLockedGroup: SearchGroup | null = null;
   if (!isPro && !godMode) {
-    const proWanted =
-      (args.types?.some((t) => PRO_GATED_TYPES.has(t)) ?? true) ||
-      (args.types == null || args.types.length === 0);
+    // "all types requested" = missing/empty args.types. "any PRO type
+    // requested" = at least one element in args.types is PRO-gated.
+    const noTypeFilter = !args.types || args.types.length === 0;
+    const proWanted = noTypeFilter || args.types!.some((t) => PRO_GATED_TYPES.has(t));
     if (proWanted) {
       try {
         const count = await countProLockedHits(ctx);
@@ -1405,8 +1575,8 @@ export async function performGlobalSearch(args: PerformSearchArgs): Promise<Sear
               id: 'pro_locked:aggregate',
               entityId: null,
               type: 'pro_locked',
-              title: 'Найдено в PRO-разделах',
-              subtitle: 'Совпадения в бронях и событиях. Открой PRO, чтобы быстро находить всё важное.',
+              title: t('search_paywall_title', args.locale),
+              subtitle: t('search_paywall_desc', args.locale),
               badge: '⭐ PRO',
               badgeTone: 'pro',
               thumbnailUrl: null,
@@ -1418,6 +1588,7 @@ export async function performGlobalSearch(args: PerformSearchArgs): Promise<Sear
               wishlistId: null,
               itemId: null,
               score: 0,
+              meta: EMPTY_META,
             }],
             hasMore: false,
           };
@@ -1469,8 +1640,3 @@ function emptyResponse(normalized: string, _userId: string, isPro: boolean): Sea
   };
 }
 
-// Keep TS happy when this module is imported only for type-side effects
-// during route stub generation. Suppresses the "unused import" lint without
-// pulling Prisma into the entry-point's bundle weight.
-const _PrismaInUse: typeof Prisma | null = null;
-void _PrismaInUse;

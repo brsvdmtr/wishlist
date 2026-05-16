@@ -8,6 +8,21 @@
 // the GET query string (necessary for execution) but never logged client-side
 // to telemetry. The server is responsible for never logging it either.
 
+/**
+ * Maximum length the FE may ship to the server as the `q` query parameter.
+ * Must stay in sync with `SEARCH_MAX_QUERY` in
+ * `apps/api/src/services/search.ts` — the API remains the source of truth
+ * (it trims/caps server-side regardless of what the FE sends), this
+ * mirrors the contract so the input field cap matches.
+ */
+export const SEARCH_MAX_QUERY = 80;
+/**
+ * Minimum length below which the FE skips dispatching a search. The server
+ * also short-circuits sub-MIN_QUERY queries; this constant just saves a
+ * round-trip on the way out.
+ */
+export const SEARCH_MIN_QUERY = 2;
+
 export type SearchResultType =
   | 'item'
   | 'wishlist'
@@ -48,6 +63,23 @@ export interface SearchResultTarget {
   secret?: boolean;
 }
 
+export interface SearchResultMeta {
+  /** True iff this row belongs to the requesting user's own scope. */
+  isOwn: boolean;
+  /** Items only: true iff status='ARCHIVED' at search time. */
+  archived: boolean;
+  /** Items only: priority bucket; null for non-item types. */
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | null;
+  /** Items only: has a non-empty URL field. */
+  hasUrl: boolean;
+  /** Items only: has a non-empty priceText. */
+  hasPrice: boolean;
+  /** Reservations only: hours-until-expiry, null if not a smart-res TTL row. */
+  hoursUntilExpiry: number | null;
+  /** Reservations only: true iff this row is a SecretReservation. */
+  isSecretReservation: boolean;
+}
+
 export interface SearchResult {
   id: string;
   entityId: string | null;
@@ -74,6 +106,8 @@ export interface SearchResult {
   wishlistId: string | null;
   itemId: string | null;
   score: number;
+  /** Structured flags for client-side smart filtering. Server-computed. */
+  meta: SearchResultMeta;
 }
 
 export interface SearchGroup {

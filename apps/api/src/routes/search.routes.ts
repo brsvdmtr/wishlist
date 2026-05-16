@@ -93,12 +93,24 @@ export function registerSearchRouter(deps: SearchRouterDeps): Router {
       const user = await getOrCreateTgUser(req.tgUser!);
       const locale = getRequestLocale(req);
 
+      // Strict validation: a FE bug or stale client sending an unknown type
+      // should surface as 400, not silently fall through to "search all".
+      // Silent fallthrough hides client drift and produces confusing
+      // analytics ("user filtered by X but server treated as no filter").
       const typesParam = parsed.data.types?.split(',').map((s) => s.trim()).filter(Boolean) ?? [];
       const allowedTypes: SearchResultType[] = [];
-      for (const t of typesParam) {
-        if ((ALL_TYPES as readonly string[]).includes(t)) {
-          allowedTypes.push(t as SearchResultType);
+      const unknownTypes: string[] = [];
+      for (const candidate of typesParam) {
+        if ((ALL_TYPES as readonly string[]).includes(candidate)) {
+          allowedTypes.push(candidate as SearchResultType);
+        } else {
+          unknownTypes.push(candidate);
         }
+      }
+      if (unknownTypes.length > 0) {
+        // Don't echo the user's bad input verbatim — return the canonical
+        // allowed list instead so the client can self-correct.
+        return res.status(400).json({ error: 'invalid_types', allowed: ALL_TYPES });
       }
 
       const startedAt = Date.now();

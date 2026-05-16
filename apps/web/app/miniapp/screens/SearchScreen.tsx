@@ -25,6 +25,8 @@ import React, {
 import { t, type Locale } from '@wishlist/shared';
 import {
   fetchSearch,
+  SEARCH_MAX_QUERY,
+  SEARCH_MIN_QUERY,
   type SearchResponse,
   type SearchResult,
   type SearchResultType,
@@ -38,7 +40,7 @@ import {
 } from '../lib/searchRecent';
 
 const DEBOUNCE_MS = 280;
-const MIN_QUERY = 2;
+const MIN_QUERY = SEARCH_MIN_QUERY;
 
 type TgFetch = (
   path: string,
@@ -300,7 +302,7 @@ export function SearchScreen(props: SearchScreenProps): React.JSX.Element {
             autoComplete="off"
             spellCheck={false}
             value={query}
-            onChange={(e) => setQuery(e.target.value.slice(0, 100))}
+            onChange={(e) => setQuery(e.target.value.slice(0, SEARCH_MAX_QUERY))}
             placeholder={t('search_placeholder', locale)}
             aria-label={t('search_title', locale)}
             style={styles.input}
@@ -695,35 +697,36 @@ function applySmartFilters(r: SearchResult, smartFilters: Set<string>): boolean 
   return true;
 }
 
+/**
+ * Smart-filter matchers operate on the server-emitted `meta` flags so the
+ * client doesn't need to parse localised badge / subtitle text. Each
+ * matcher returns true to KEEP the row.
+ */
 function matchSmartFilter(r: SearchResult, id: string): boolean {
   switch (id) {
     case 'available':
-      // Items: rely on absence of reserved/done badge tone.
       if (r.type !== 'item') return true;
-      return r.badgeTone !== 'reserved' && r.badgeTone !== 'done';
+      return r.badgeTone !== 'reserved' && r.badgeTone !== 'done' && !r.meta.archived;
     case 'with-price':
-      return r.badgeTone === 'price';
+      return r.meta.hasPrice;
     case 'no-price':
-      return r.type === 'item' && r.badgeTone !== 'price';
+      return r.type === 'item' && !r.meta.hasPrice;
     case 'high-prio':
-      // The server emits a prio dot in the icon; this is a heuristic until
-      // we plumb priority through SearchResult explicitly. Keeps client-side
-      // smart filter ergonomic without an extra round-trip.
-      return r.type !== 'item' || r.score >= 100;
+      return r.type !== 'item' || r.meta.priority === 'HIGH';
     case 'with-link':
-      return r.type !== 'item' || (r.matchedFields.includes('url') || r.matchedFields.includes('title'));
+      return r.type !== 'item' || r.meta.hasUrl;
     case 'archive':
-      return r.badge === 'архив' || r.badge === 'archive';
+      return r.meta.archived;
     case 'mine':
-      return r.ownerUserId === null || r.subtitle.includes('мой') || r.subtitle.includes('тобой') || r.subtitle.startsWith('Mine');
+      return r.meta.isOwn;
     case 'soon':
-      return typeof r.badge === 'string' && /ч$|h$/.test(r.badge);
+      return typeof r.meta.hoursUntilExpiry === 'number' && r.meta.hoursUntilExpiry < 48;
     case 'secret':
-      return r.badgeTone === 'secret';
+      return r.meta.isSecretReservation;
     case 'regular':
-      return r.badgeTone !== 'secret';
+      return r.type === 'reservation' && !r.meta.isSecretReservation;
     case 'subscribed':
-      return r.type === 'wishlist' && (r.subtitle.includes('подписан') || r.subtitle.includes('subscribed'));
+      return r.type === 'wishlist' && !r.meta.isOwn;
     default:
       return true;
   }

@@ -7167,12 +7167,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     // Foreign-wishlist access history — feeds global search.
     // Fire-and-forget; the endpoint REQUIRES Telegram initData via tgFetch,
     // so an unauth public guest call simply 401s and is dropped silently.
-    // sourceRef pins the share-token so a future regenerate revokes search.
-    void recordWishlistOpen(tgFetch, {
-      wishlistId: json.wishlist.id,
-      source: 'share_link',
-      sourceRef: resolvedViaShareToken ? param : null,
-    });
+    //
+    // Source pinning rules:
+    //   - Share-token path  → source='share_link', sourceRef=raw token.
+    //                         The server hashes it; later shareToken
+    //                         regenerate revokes FWA-pinned search access.
+    //   - Slug path         → source='direct_open', no sourceRef. The slug
+    //                         endpoint only serves PUBLIC_PROFILE wishlists,
+    //                         which don't need credential pins. Tagging
+    //                         this as 'share_link' would write a bogus pin
+    //                         (sourceRef=null) and silently drop the user
+    //                         from search scope on the next LINK_ONLY
+    //                         live-check.
+    void recordWishlistOpen(tgFetch, resolvedViaShareToken
+      ? { wishlistId: json.wishlist.id, source: 'share_link', sourceRef: param }
+      : { wishlistId: json.wishlist.id, source: 'direct_open' });
     return mappedItems;
   }, [apiBase, tgFetch]);
 

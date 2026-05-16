@@ -15,6 +15,10 @@ vi.mock('../lib/searchApi', () => ({
   fetchSearch: (...args: unknown[]) => fetchMock(...args),
   recordWishlistOpen: vi.fn(),
   fetchAccessView: vi.fn().mockResolvedValue(null),
+  // Mirror the real constants — SearchScreen imports them for the input cap
+  // and the min-query debounce gate.
+  SEARCH_MAX_QUERY: 80,
+  SEARCH_MIN_QUERY: 2,
 }));
 
 // Fresh localStorage shim per test.
@@ -129,6 +133,7 @@ describe('SearchScreen', () => {
             target: { screen: 'paywall', section: 'search' },
             accessState: 'pro_required',
             matchedFields: [], ownerUserId: null, wishlistId: null, itemId: null, score: 0,
+            meta: { isOwn: false, archived: false, priority: null, hasUrl: false, hasPrice: false, hoursUntilExpiry: null, isSecretReservation: false },
           }],
         },
       ],
@@ -159,6 +164,7 @@ describe('SearchScreen', () => {
             target: { screen: 'item-detail', itemId: 'abc', wishlistId: 'wl1' },
             accessState: 'available',
             matchedFields: ['title'], ownerUserId: 'u1', wishlistId: 'wl1', itemId: 'abc', score: 100,
+            meta: { isOwn: true, archived: false, priority: 'MEDIUM', hasUrl: true, hasPrice: true, hoursUntilExpiry: null, isSecretReservation: false },
           }],
         },
       ],
