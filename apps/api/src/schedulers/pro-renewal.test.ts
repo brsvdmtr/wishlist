@@ -83,6 +83,26 @@ describe('startProRenewalReminderScheduler', () => {
     expect(prisma.paymentEvent.create).toHaveBeenCalledOnce();
   });
 
+  // Regression — 2026-05-16. Reminder button used to open the home tab
+  // because the URL was passed bare. MiniApp.tsx reads `startapp=upgrade_pro`
+  // from window.location.search and surfaces the paywall sheet.
+  it('deep-links the button to the PRO paywall (?startapp=upgrade_pro)', async () => {
+    prisma.subscription.findMany
+      .mockResolvedValueOnce([{
+        id: 'sub1', userId: 'u1', billingPeriod: 'yearly',
+        currentPeriodEnd: new Date('2099-12-31'),
+        user: { id: 'u1', telegramChatId: 'chat', profile: { notifyMarketing: true, normalizedLocale: 'ru' } },
+      }])
+      .mockResolvedValueOnce([]);
+
+    start();
+    await vi.advanceTimersByTimeAsync(HOURLY_MS);
+
+    expect(sendLifecycleDM).toHaveBeenCalledOnce();
+    const webAppUrl = sendLifecycleDM.mock.calls[0]![3];
+    expect(webAppUrl).toBe('https://app.test/miniapp?startapp=upgrade_pro');
+  });
+
   it('skips users who opted out of marketing notifications', async () => {
     prisma.subscription.findMany
       .mockResolvedValueOnce([{

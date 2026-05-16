@@ -95,7 +95,14 @@ export function startProRenewalReminderScheduler(deps: ProRenewalSchedulerDeps):
           const fmtDate = sub.currentPeriodEnd.toLocaleDateString(dateFmtLocale, { day: 'numeric', month: 'long', year: 'numeric' });
           const text = t(w.key, locale, { date: fmtDate });
 
-          const outcome = await sendLifecycleDM(sub.user.telegramChatId, text, locale, MINI_APP_URL_FOR_DM);
+          // Deep-link the button to the PRO paywall so users land on the
+          // renew/upgrade screen, not the home tab. MiniApp.tsx reads
+          // `startapp` from window.location.search and maps `upgrade_pro`
+          // to `showUpsell('pro_main')` (paywall sheet with monthly /
+          // yearly / lifetime tiles). Matches the deep-link pattern used by
+          // schedulers/lifecycle.ts (S1–S4 win-back touches).
+          const webAppUrl = `${MINI_APP_URL_FOR_DM}?startapp=upgrade_pro`;
+          const outcome = await sendLifecycleDM(sub.user.telegramChatId, text, locale, webAppUrl);
           if (outcome === 'transient_failure') continue; // retry next hour
 
           // Persist idempotency marker (even on permanent failure — we've tried and

@@ -5,6 +5,82 @@ New entries go at the top.
 
 ---
 
+## 2026-05-16 — Bot reminder «PRO истекает» открывал главный экран вместо paywall
+
+### Ошибка
+Юзер с PRO-подпиской, не настроенной на авто-продление (yearly one-time
+или monthly с `cancelAtPeriodEnd=true`), получал DM от бота за 7 и за 1
+день до окончания периода:
+> ⏰ Твой PRO истекает завтра (17 мая 2026 г.). Открой приложение и
+> продли, чтобы сохранить доступ.
+
+Под текстом — inline-кнопка «Открыть WishBoard ✨». Тап открывал мини-апп
+**на главный экран `my-wishlists`**, а не на paywall. Пользователь не
+видел продления, не понимал, где его купить, и просто закрывал апп. Тот
+же баг затрагивал 7-day reminder (`bot_pro_renewal_7d`) и 1-day reminder
+(`bot_pro_renewal_1d`) — оба отправлялись через
+`schedulers/pro-renewal.ts`.
+
+### Root cause
+`schedulers/pro-renewal.ts:98` передавал в `sendLifecycleDM` голый
+`MINI_APP_URL_FOR_DM` без query-параметра `?startapp=...`. Mini App
+поддерживает deep-link `upgrade_pro` (`MiniApp.tsx:8948–8953`,
+`bootSetScreen('my-wishlists'); setTimeout(() => showUpsell('pro_main'),
+400)`), и `schedulers/lifecycle.ts:333` уже использует pattern
+`${MINI_APP_URL_FOR_DM}?startapp=${touch.deepLinkPayload}` — но
+PRO-renewal scheduler был написан **отдельно** от lifecycle scheduler и
+не получил тот же handling.
+
+Это не баг архитектуры — это упущенная консистентность между двумя
+schedulers, которые отправляют одинаковые «открой апп»-кнопки. Каждый
+из них самостоятельно решает, что подставить в URL.
+
+### Урок
+- **Inline-кнопка `web_app: { url }` в Telegram DM = всегда обязан
+  иметь deep-link payload, если цель не «открыть домашний экран».**
+  Голый URL допустим только для S0-сегмента (общий re-engagement),
+  где `my-wishlists` — это и есть цель. Для любой более конкретной
+  цели (paywall, item, calendar event) обязателен
+  `?startapp=<token>` + соответствующий branch в `MiniApp.tsx` boot
+  flow.
+- **Между несколькими schedulers, отправляющими «открой WishBoard»
+  кнопку, нужна общая мысленная модель: «что юзер увидит после
+  тапа?»**. Все callsite'ы `sendLifecycleDM` теперь должны
+  отвечать на этот вопрос явно — никаких «открою и разберусь».
+- **Пропущенный deep-link не валится в логи и не падает в тестах**
+  (DM всё равно «delivered», аналитика «reminder_sent_7d» всё равно
+  пишется) — только конверсия в renewal страдает молча. Это худший
+  класс багов: невидимый в метриках доставки, видимый только в
+  funnel-метриках paywall.
+
+### Правило
+- **Каждый callsite `sendLifecycleDM(..., webAppUrl)` обязан явно
+  определить deep-link payload или явно сослаться на причину его
+  отсутствия в комментарии.** Голый `MINI_APP_URL_FOR_DM` без
+  комментария — это red flag в code review.
+- **Test для scheduler-а, отправляющего DM, обязан проверять
+  итоговый webAppUrl** (4-й аргумент `sendLifecycleDM`), а не только
+  факт вызова. Добавлено в `pro-renewal.test.ts` —
+  `expect(webAppUrl).toBe('...?startapp=upgrade_pro')`.
+
+### Лучший код
+```ts
+// schedulers/pro-renewal.ts — после фикса
+const webAppUrl = `${MINI_APP_URL_FOR_DM}?startapp=upgrade_pro`;
+const outcome = await sendLifecycleDM(sub.user.telegramChatId, text, locale, webAppUrl);
+```
+
+```ts
+// MiniApp.tsx — already-existing handler, теперь действительно
+// получает сигнал.
+} else if (startParam === 'upgrade_pro') {
+  bootSetScreen('my-wishlists');
+  setTimeout(() => showUpsell('pro_main'), 400);
+}
+```
+
+---
+
 ## 2026-05-15 — Календарь «СЕГОДНЯ»/«ЗАВТРА»: original fix пропустил третий callsite (detail-endpoint жил с багом ~2 недели после patch'а list-endpoint)
 
 ### Ошибка
