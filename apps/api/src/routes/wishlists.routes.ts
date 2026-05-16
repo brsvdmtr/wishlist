@@ -76,6 +76,7 @@ import { generateUniqueShareToken } from '../wishlists/shareToken';
 import { generateUniqueSlug } from '../wishlists/slug';
 import { PLACEMENT_ORDER_BY } from '../placements/orderBy';
 import { ITEM_ORDER_BY } from '../sort';
+import { recordForeignWishlistAccess, checkForeignWishlistLiveAccess } from '../services/foreign-wishlist-access';
 import logger from '../logger';
 
 // Shape of the Telegram initData user object — duplicated from index.ts to
@@ -1084,6 +1085,11 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
         select: { id: true, wishlistId: true, createdAt: true },
       });
 
+      // Foreign-wishlist access history (feeds global search). Fire-and-forget;
+      // a write failure here must never block subscription success.
+      void recordForeignWishlistAccess({ userId: user.id, wishlistId, source: 'subscription' })
+        .catch(() => { /* non-critical */ });
+
       return res.json({ subscription: { id: sub.id, wishlistId: sub.wishlistId } });
     }),
   );
@@ -1098,6 +1104,176 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
       const user = await getOrCreateTgUser(req.tgUser!);
       await prisma.wishlistSubscription.deleteMany({ where: { wishlistId, subscriberId: user.id } });
       return res.json({ ok: true });
+    }),
+  );
+
+  // GET /tg/wishlists/:id/access-view — authenticated read of a FOREIGN wishlist
+  // by id. Used by the global-search "result click" flow when the user found
+  // a wishlist they once opened (via share link / curated / subscription /
+  // reservation / santa) and now wants to navigate back to it.
+  //
+  // Authz: parent tgRouter requires Telegram initData → req.tgUser. Caller's
+  // userId is taken from the resolved tg user, NEVER from the URL or body.
+  // Owner reads must use GET /wishlists/:id/items instead; this route 403s
+  // if the requester owns the wishlist (loud-failure makes the contract
+  // explicit — the frontend should not call this for own wishlists).
+  //
+  // Access gate: services/foreign-wishlist-access.ts#checkForeignWishlistLiveAccess
+  // enforces the strict revocation model — relation-grounded sources (sub /
+  // reservation / santa / profile / curated) pass on a current relation
+  // row; share_link / curated_selection FWA pins are compared to the
+  // current credential and dropped on mismatch.
+  wishlistsRouter.get(
+    '/wishlists/:id/access-view',
+    asyncHandler(async (req, res) => {
+      const wishlistId = req.params.id ?? '';
+      if (!wishlistId) return res.status(400).json({ error: 'Missing wishlist id' });
+
+      const user = await getOrCreateTgUser(req.tgUser!);
+      const check = await checkForeignWishlistLiveAccess(user.id, wishlistId);
+      if (!check.allowed) {
+        // Map the granular reasons to safe HTTP status. We DO NOT leak
+        // wishlist title, owner, items or any content here — the frontend
+        // shows a generic "no longer available" toast on any non-2xx.
+        if (check.reason === 'not_found') return res.status(404).json({ error: 'not_found' });
+        if (check.reason === 'own_wishlist') return res.status(409).json({ error: 'own_wishlist' });
+        // archived / drafts / private / no_relation / revoked → 403 with a
+        // single error tag. Telemetry can still distinguish via the tag.
+        return res.status(403).json({ error: 'access_denied', reason: check.reason });
+      }
+
+      const wishlist = await prisma.wishlist.findUnique({
+        where: { id: wishlistId },
+        select: {
+          id: true, slug: true, title: true, description: true, deadline: true,
+          dontGiftMode: true, dontGiftPresets: true, dontGiftCustomItems: true,
+          dontGiftComment: true,
+          smartReservationsEnabled: true, smartResTtlHours: true,
+          owner: {
+            select: {
+              firstName: true,
+              profile: { select: { displayName: true, username: true, profileVisibility: true, avatarThumbUrl: true, avatarPublic: true, dontGiftPresets: true, dontGiftCustomItems: true, dontGiftComment: true, dontGiftVisible: true } },
+            },
+          },
+          tags: { select: { id: true, name: true } },
+          categories: {
+            orderBy: [{ isDefault: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
+            select: { id: true, name: true, sortOrder: true, isDefault: true },
+          },
+        },
+      });
+      // checkForeignWishlistLiveAccess already verified existence; this is
+      // a TOCTOU safety net — return 404 rather than crashing if the row
+      // vanished between calls.
+      if (!wishlist) return res.status(404).json({ error: 'not_found' });
+
+      // Placement-based read — same shape as /public/share/:token so the
+      // frontend can drop this response into the existing guest-view
+      // parser (lib/searchApi.ts → MiniApp navigation calls
+      // loadGuestWishlist on the slug, OR consumes this directly).
+      const placements = await prisma.wishlistItemPlacement.findMany({
+        where: { wishlistId, item: { status: { in: [...ACTIVE_STATUSES] } } },
+        orderBy: PLACEMENT_ORDER_BY,
+        select: {
+          position: true,
+          categoryId: true,
+          item: {
+            select: {
+              id: true, title: true, description: true, url: true,
+              priceText: true, currency: true, commentOwner: true,
+              priority: true, deadline: true, imageUrl: true, status: true,
+              createdAt: true, updatedAt: true,
+              itemTags: { include: { tag: { select: { id: true, name: true } } } },
+              reservationEvents: {
+                where: { type: 'RESERVED' },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+                select: { comment: true, actorHash: true },
+              },
+            },
+          },
+        },
+      });
+
+      const ownerName =
+        wishlist.owner?.profile?.displayName?.trim() ||
+        wishlist.owner?.profile?.username?.trim() ||
+        wishlist.owner?.firstName?.trim() ||
+        null;
+      const ownerUsername =
+        wishlist.owner?.profile?.profileVisibility !== 'NOBODY'
+          ? wishlist.owner?.profile?.username ?? null
+          : null;
+      const ownerAvatarUrl = wishlist.owner?.profile?.avatarPublic
+        ? wishlist.owner?.profile?.avatarThumbUrl ?? null
+        : null;
+
+      // dontGift payload — same logic as /public/share/:token (per-wishlist
+      // override > profile default > hidden).
+      const tokenProfile = wishlist.owner?.profile;
+      let dontGift: { presets: string[]; customItems: string[]; comment: string | null } | null = null;
+      if (wishlist.dontGiftMode === 'local') {
+        const hasLocal =
+          wishlist.dontGiftPresets.length > 0 ||
+          wishlist.dontGiftCustomItems.length > 0 ||
+          !!wishlist.dontGiftComment;
+        if (hasLocal) {
+          dontGift = { presets: wishlist.dontGiftPresets, customItems: wishlist.dontGiftCustomItems, comment: wishlist.dontGiftComment ?? null };
+        }
+      } else if (wishlist.dontGiftMode !== 'hidden') {
+        const tokenDontGiftHasContent =
+          (tokenProfile?.dontGiftPresets?.length ?? 0) > 0 ||
+          (tokenProfile?.dontGiftCustomItems?.length ?? 0) > 0 ||
+          !!tokenProfile?.dontGiftComment;
+        if (tokenProfile?.dontGiftVisible && tokenDontGiftHasContent) {
+          dontGift = {
+            presets: tokenProfile.dontGiftPresets,
+            customItems: tokenProfile.dontGiftCustomItems,
+            comment: tokenProfile.dontGiftComment ?? null,
+          };
+        }
+      }
+
+      return res.json({
+        wishlist: {
+          id: wishlist.id,
+          slug: wishlist.slug,
+          title: wishlist.title,
+          description: wishlist.description,
+          deadline: wishlist.deadline,
+          ownerName,
+          ownerUsername,
+          ownerAvatarUrl,
+        },
+        items: placements.map((p) => ({
+          id: p.item.id,
+          title: p.item.title,
+          description: p.item.description,
+          url: p.item.url,
+          priceText: p.item.priceText,
+          commentOwner: p.item.commentOwner,
+          priority: p.item.priority,
+          deadline: p.item.deadline,
+          imageUrl: p.item.imageUrl,
+          status: p.item.status,
+          createdAt: p.item.createdAt,
+          updatedAt: p.item.updatedAt,
+          categoryId: p.categoryId,
+          position: p.position,
+          tags: p.item.itemTags.map((it) => it.tag),
+          reservedByDisplayName:
+            p.item.status === 'RESERVED' && p.item.reservationEvents?.length
+              ? (p.item.reservationEvents[0]?.comment ?? null)
+              : null,
+          reservedByActorHash:
+            p.item.status === 'RESERVED' && p.item.reservationEvents?.length
+              ? (p.item.reservationEvents[0]?.actorHash ?? null)
+              : null,
+        })),
+        tags: wishlist.tags,
+        categories: wishlist.categories,
+        dontGift,
+      });
     }),
   );
 

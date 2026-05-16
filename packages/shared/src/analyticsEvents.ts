@@ -197,6 +197,25 @@ export const ANALYTICS_EVENTS = [
   'birthday.owner_update_wishlist_opened',
   'birthday.owner_item_added',
   'birthday.owner_wishlist_made_public',
+
+  // ===== Global search =====
+  // See docs/design-system/mockups/proposed/global-search.html for the visual
+  // spec + privacy notes. RAW QUERY IS NEVER LOGGED — only queryLength and a
+  // SHA-1 hash of the normalized query for god-mode debugging.
+  'search.opened',
+  'search.query_started',
+  'search.query_completed',
+  'search.query_failed',
+  'search.result_clicked',
+  'search.filter_changed',
+  'search.empty_shown',
+  'search.recent_clicked',
+  'search.suggestion_clicked',
+  'search.paywall_shown',
+  'search.paywall_cta_clicked',
+  'search.clear_clicked',
+  'search.closed',
+  'search.access_recorded',
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];

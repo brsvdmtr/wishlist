@@ -1,0 +1,1332 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Global Search — proposal · WishBoard</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{
+  --wb-bg:#0F0F12;
+  --wb-bg-elev:#15151A;
+  --wb-surface:rgba(255,255,255,0.035);
+  --wb-surface-hover:rgba(255,255,255,0.06);
+  --wb-card:rgba(255,255,255,0.045);
+  --wb-card-strong:rgba(255,255,255,0.07);
+  --wb-nav-bg:rgba(15,15,18,0.72);
+  --wb-accent:#8B7BFF;
+  --wb-accent-strong:#B4A6FF;
+  --wb-accent-deep:#5B48E5;
+  --wb-accent-soft:rgba(139,123,255,0.14);
+  --wb-accent-soft-strong:rgba(139,123,255,0.30);
+  --wb-accent-glow:rgba(139,123,255,0.45);
+  --wb-success:#4ADE80;
+  --wb-success-soft:rgba(74,222,128,0.14);
+  --wb-warning:#FBBF24;
+  --wb-warning-soft:rgba(251,191,36,0.14);
+  --wb-danger:#FB7185;
+  --wb-danger-soft:rgba(251,113,133,0.14);
+  --wb-text:#FFFFFF;
+  --wb-text-secondary:#C7CAD1;
+  --wb-text-muted:#8F94A3;
+  --wb-border:rgba(255,255,255,0.06);
+  --wb-border-light:rgba(255,255,255,0.10);
+  --wb-border-strong:rgba(255,255,255,0.12);
+  --wb-prio-low:#6B7FD4; --wb-prio-low-soft:rgba(107,127,212,0.15);
+  --wb-prio-med:#FBBF24; --wb-prio-med-soft:rgba(251,191,36,0.18);
+  --wb-prio-high:#FB7185; --wb-prio-high-soft:rgba(251,113,133,0.18);
+  --wb-grad-accent:linear-gradient(135deg,#8B7BFF 0%,#B4A6FF 100%);
+  --wb-grad-accent-deep:linear-gradient(135deg,#8B7BFF,#5B48E5);
+  --wb-grad-mesh:
+    radial-gradient(ellipse 80% 60% at 12% 0%, rgba(139,123,255,0.22), transparent 55%),
+    radial-gradient(ellipse 60% 50% at 100% 20%, rgba(255,120,180,0.10), transparent 55%),
+    radial-gradient(ellipse 100% 70% at 50% 110%, rgba(139,123,255,0.10), transparent 65%);
+  --wb-grad-fade-from-bg:linear-gradient(180deg,transparent,#0F0F12 40%);
+  --wb-r-sm:7px; --wb-r-md:11px; --wb-r-lg:14px; --wb-r-input:16px;
+  --wb-r-xl:18px; --wb-r-xxl:22px; --wb-r-hero:26px; --wb-r-sheet:28px;
+  --wb-r-pill:9999px;
+  --wb-sh-elevated:0 2px 12px rgba(0,0,0,0.18);
+  --wb-sh-glow-cta:0 8px 24px rgba(139,123,255,0.40);
+  --wb-sh-glow-soft:0 4px 20px rgba(139,123,255,0.15);
+  --wb-sh-deep:0 8px 24px rgba(0,0,0,0.35);
+  --wb-sh-nav-floating:0 10px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08);
+  --wb-font-sans:-apple-system,BlinkMacSystemFont,'SF Pro Display','Inter','Segoe UI',sans-serif;
+}
+*{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body{ margin:0; padding:0; }
+body{
+  background:#0c0c0e;
+  color:var(--wb-text);
+  font-family:var(--wb-font-sans);
+  min-height:100vh;
+  padding:48px 24px 96px;
+  -webkit-font-smoothing:antialiased;
+}
+.page-head{ max-width:1240px; margin:0 auto 24px; text-align:center; }
+.page-head h1{
+  font-size:28px; font-weight:700; letter-spacing:-0.02em; margin:0 0 8px;
+}
+.page-head .meta{
+  display:inline-flex; gap:10px; align-items:center;
+  color:var(--wb-text-muted); font-size:13px;
+}
+.page-head .pill{
+  background:var(--wb-accent-soft); color:var(--wb-accent-strong);
+  border:1px solid var(--wb-accent-soft-strong);
+  border-radius:9999px; padding:3px 10px; font-size:11px; font-weight:650;
+  letter-spacing:0.2px;
+}
+.page-head p.lede{
+  max-width:780px; margin:14px auto 0; color:var(--wb-text-secondary);
+  font-size:14px; line-height:1.55;
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(375px,1fr));
+  gap:48px 32px;
+  max-width:1740px; margin:48px auto 0;
+}
+
+/* ─── Phone frame ─── */
+.phone{
+  position:relative;
+  width:375px; min-height:812px;
+  background:var(--wb-bg);
+  border-radius:44px;
+  overflow:hidden;
+  margin:0 auto;
+  box-shadow:
+    0 40px 80px rgba(0,0,0,0.6),
+    0 0 0 10px #1a1a1c,
+    0 0 0 12px #0a0a0b;
+}
+.phone::before{
+  content:''; position:absolute; inset:0;
+  background:var(--wb-grad-mesh); pointer-events:none;
+}
+.phone > *{ position:relative; z-index:1; }
+.phone-label{
+  position:absolute; top:14px; left:50%; transform:translateX(-50%);
+  background:rgba(0,0,0,0.7); backdrop-filter:blur(8px);
+  color:#fff; font-size:10px; font-weight:650; letter-spacing:0.6px;
+  text-transform:uppercase; padding:5px 12px; border-radius:9999px;
+  z-index:10; white-space:nowrap;
+}
+.status-bar{
+  height:48px; padding:16px 24px 0;
+  display:flex; align-items:flex-start; justify-content:space-between;
+  font-size:14px; font-weight:600;
+}
+.status-bar .icons{ display:flex; gap:5px; align-items:center; }
+.dot{ width:6px; height:6px; border-radius:50%; background:#fff; opacity:0.8; }
+
+.app{
+  padding:8px 16px 0;
+  display:flex; flex-direction:column;
+  height:calc(812px - 48px);
+}
+
+/* ─── Header (matches MiniApp.tsx home: 🔍 / title / ⚙) ─── */
+.head-row{
+  display:flex; align-items:center; gap:8px;
+  padding:6px 0 14px;
+}
+.head-btn{
+  width:40px; height:40px; border-radius:var(--wb-r-lg);
+  background:var(--wb-surface); border:1px solid var(--wb-border);
+  color:var(--wb-text); font-size:17px;
+  display:flex; align-items:center; justify-content:center;
+  backdrop-filter:blur(20px) saturate(140%);
+  flex-shrink:0;
+}
+.head-btn.active{ background:var(--wb-accent-soft); border-color:var(--wb-accent-soft-strong); color:var(--wb-accent-strong); }
+.head-title{ flex:1; text-align:center; overflow:hidden; }
+.head-title .t{
+  font-size:16px; font-weight:650; color:var(--wb-text); letter-spacing:-0.018em;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.head-title .s{
+  font-size:11px; color:var(--wb-text-muted); font-weight:500; margin-top:1px;
+}
+
+/* ─── Search header (the search screen — replaces home header) ─── */
+.search-head{
+  display:flex; align-items:center; gap:10px; padding:6px 0 12px;
+}
+.back-btn{
+  width:40px; height:40px; border-radius:var(--wb-r-lg);
+  background:var(--wb-surface); border:1px solid var(--wb-border);
+  color:var(--wb-text); display:flex; align-items:center; justify-content:center;
+  backdrop-filter:blur(20px) saturate(140%);
+  flex-shrink:0;
+}
+.search-input{
+  flex:1;
+  display:flex; align-items:center; gap:10px;
+  height:40px; padding:0 14px;
+  background:var(--wb-card); border:1px solid var(--wb-border);
+  border-radius:var(--wb-r-input);
+  color:var(--wb-text); font-size:15px; font-weight:500; letter-spacing:-0.012em;
+  backdrop-filter:blur(14px);
+}
+.search-input.focused{
+  background:var(--wb-card-strong);
+  border-color:var(--wb-accent);
+  box-shadow:0 0 0 4px var(--wb-accent-soft);
+}
+.search-input .ph{ color:var(--wb-text-muted); font-weight:450; flex:1; }
+.search-input .typed{ color:var(--wb-text); flex:1; }
+.search-input .typed .caret{
+  display:inline-block; width:1.5px; height:18px; background:var(--wb-accent);
+  margin-left:1px; vertical-align:-3px;
+  animation:blink 1s steps(1) infinite;
+}
+@keyframes blink{ 50%{ opacity:0; } }
+.search-input .glass{ color:var(--wb-text-muted); font-size:15px; }
+.search-input .clear{
+  width:22px; height:22px; border-radius:50%;
+  background:var(--wb-surface-hover); color:var(--wb-text-secondary);
+  display:flex; align-items:center; justify-content:center;
+  font-size:11px; line-height:0; flex-shrink:0;
+}
+
+/* ─── Filter chips row ─── */
+.chips-row{
+  display:flex; gap:8px; overflow-x:auto; padding:0 0 12px;
+  scrollbar-width:none; margin:0 -16px; padding-left:16px; padding-right:16px;
+}
+.chips-row::-webkit-scrollbar{ display:none; }
+.chip{
+  flex-shrink:0;
+  height:32px; padding:0 12px;
+  display:inline-flex; align-items:center; gap:6px;
+  background:var(--wb-card); border:1px solid var(--wb-border);
+  border-radius:var(--wb-r-pill);
+  color:var(--wb-text-secondary);
+  font-size:13px; font-weight:600; letter-spacing:-0.005em;
+  backdrop-filter:blur(14px);
+}
+.chip.active{
+  background:var(--wb-accent-soft-strong); border-color:var(--wb-accent);
+  color:#fff;
+}
+.chip .count{
+  font-size:11px; font-weight:700; opacity:0.85;
+  margin-left:2px;
+}
+.chip.pro::before{
+  content:'⭐'; font-size:10px; opacity:0.9;
+}
+
+/* ─── Smart filter chips (sub-row) ─── */
+.smart-chips{
+  display:flex; gap:6px; overflow-x:auto; padding:0 0 14px;
+  scrollbar-width:none; margin:0 -16px; padding-left:16px; padding-right:16px;
+}
+.smart-chips::-webkit-scrollbar{ display:none; }
+.smart-chip{
+  flex-shrink:0;
+  height:28px; padding:0 10px;
+  display:inline-flex; align-items:center; gap:5px;
+  background:var(--wb-surface); border:1px solid var(--wb-border);
+  border-radius:var(--wb-r-pill);
+  color:var(--wb-text-muted);
+  font-size:12px; font-weight:550;
+}
+.smart-chip.active{
+  background:var(--wb-accent-soft); border-color:var(--wb-accent-soft-strong);
+  color:var(--wb-accent-strong);
+}
+.smart-chip .x{ opacity:0.7; font-size:11px; }
+
+/* ─── Scroll area ─── */
+.scroll{
+  flex:1; overflow-y:auto; padding-bottom:90px;
+  scrollbar-width:none;
+}
+.scroll::-webkit-scrollbar{ display:none; }
+
+/* ─── Section header ─── */
+.section-h{
+  display:flex; align-items:center; justify-content:space-between;
+  margin:14px 4px 8px;
+}
+.section-h .l{
+  display:inline-flex; align-items:center; gap:8px;
+  font-size:11px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase;
+  color:var(--wb-text-muted);
+}
+.section-h .l .n{
+  background:var(--wb-surface); border-radius:var(--wb-r-sm);
+  padding:1px 6px; font-size:10px; font-weight:700; color:var(--wb-text-secondary);
+  letter-spacing:0;
+}
+.section-h .r{
+  font-size:12px; font-weight:600; color:var(--wb-accent-strong);
+}
+
+/* ─── Result card (generic glass row) ─── */
+.r-card{
+  background:var(--wb-card); border:1px solid var(--wb-border);
+  border-radius:var(--wb-r-xxl);
+  padding:12px;
+  display:flex; gap:12px; align-items:center;
+  margin-bottom:8px;
+  backdrop-filter:blur(14px);
+  position:relative;
+}
+.r-card .thumb{
+  width:48px; height:48px; border-radius:14px;
+  background:var(--wb-surface-hover);
+  display:flex; align-items:center; justify-content:center;
+  font-size:24px; flex-shrink:0;
+  position:relative;
+  overflow:hidden;
+}
+.r-card .thumb.accent{ background:linear-gradient(135deg,rgba(139,123,255,0.30),rgba(139,123,255,0.14)); }
+.r-card .thumb.success{ background:var(--wb-success-soft); color:var(--wb-success); }
+.r-card .thumb.warning{ background:var(--wb-warning-soft); color:var(--wb-warning); }
+.r-card .thumb.danger{ background:var(--wb-danger-soft); color:var(--wb-danger); }
+.r-card .thumb .prio-dot{
+  position:absolute; bottom:-2px; right:-2px;
+  width:14px; height:14px; border-radius:50%;
+  border:2px solid var(--wb-bg-elev);
+}
+.r-card .body{ flex:1; min-width:0; }
+.r-card .body .t{
+  font-size:15px; font-weight:650; color:var(--wb-text);
+  letter-spacing:-0.012em;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.r-card .body .t mark{
+  background:var(--wb-accent-soft); color:var(--wb-accent-strong);
+  border-radius:3px; padding:0 2px; font-weight:700;
+}
+.r-card .body .s{
+  display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+  font-size:12px; font-weight:550; color:var(--wb-text-muted);
+  margin-top:2px;
+  letter-spacing:-0.005em;
+}
+.r-card .body .s .sep{ opacity:0.5; }
+.r-card .badge{
+  display:inline-flex; align-items:center; gap:4px;
+  background:var(--wb-surface); color:var(--wb-text-secondary);
+  border:1px solid var(--wb-border);
+  font-size:11px; font-weight:650; padding:3px 8px;
+  border-radius:var(--wb-r-md); white-space:nowrap;
+  flex-shrink:0;
+}
+.r-card .badge.price{
+  background:var(--wb-accent-soft); color:var(--wb-accent-strong);
+  border-color:var(--wb-accent-soft-strong);
+}
+.r-card .badge.reserved{
+  background:var(--wb-warning-soft); color:var(--wb-warning);
+  border-color:rgba(251,191,36,0.30);
+}
+.r-card .badge.done{
+  background:var(--wb-success-soft); color:var(--wb-success);
+  border-color:rgba(74,222,128,0.30);
+}
+.r-card .badge.secret{
+  background:rgba(255,255,255,0.04); color:var(--wb-text-muted);
+  border:1px dashed var(--wb-border-strong);
+}
+.r-card .badge.pro{
+  background:var(--wb-grad-accent); color:#fff; border:none;
+  letter-spacing:0.2px;
+}
+.r-card .chev{ color:var(--wb-text-muted); font-size:16px; }
+.r-card.restricted .thumb,
+.r-card.restricted .body .t{ opacity:0.6; }
+.r-card.restricted::after{
+  content:''; position:absolute; inset:0;
+  border:1px dashed var(--wb-border-strong); border-radius:var(--wb-r-xxl);
+  pointer-events:none;
+}
+
+/* ─── PRO paywall block ─── */
+.pro-block{
+  margin:8px 0 0;
+  background:linear-gradient(135deg, rgba(139,123,255,0.18), rgba(139,123,255,0.06));
+  border:1px solid var(--wb-accent-soft-strong);
+  border-radius:var(--wb-r-xxl);
+  padding:16px 14px 14px;
+  position:relative;
+  backdrop-filter:blur(14px);
+}
+.pro-block .star{
+  position:absolute; top:-10px; left:14px;
+  background:var(--wb-grad-accent); color:#fff;
+  border-radius:var(--wb-r-md);
+  font-size:10px; font-weight:700; letter-spacing:0.4px;
+  padding:4px 8px;
+  box-shadow:var(--wb-sh-glow-soft);
+}
+.pro-block .t{
+  font-size:15px; font-weight:650; color:var(--wb-text);
+  letter-spacing:-0.012em; margin:4px 0 4px;
+}
+.pro-block .s{
+  font-size:13px; line-height:1.45;
+  color:var(--wb-text-secondary); font-weight:500;
+}
+.pro-block .blur-rows{
+  margin:12px 0;
+  display:flex; flex-direction:column; gap:6px;
+}
+.pro-block .blur-row{
+  height:14px; border-radius:7px;
+  background:rgba(255,255,255,0.06);
+  filter:blur(2px);
+}
+.pro-block .blur-row.short{ width:60%; }
+.pro-block .blur-row.mid{ width:80%; }
+.pro-block .actions{
+  display:flex; gap:8px; margin-top:10px;
+}
+.pro-block .btn-primary{
+  flex:1; height:40px; border-radius:var(--wb-r-xl);
+  background:var(--wb-grad-accent); color:#fff;
+  font-size:14px; font-weight:650; letter-spacing:-0.012em;
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  box-shadow:var(--wb-sh-glow-cta);
+  border:none;
+}
+.pro-block .btn-secondary{
+  height:40px; padding:0 14px; border-radius:var(--wb-r-xl);
+  background:var(--wb-surface); color:var(--wb-text-secondary);
+  border:1px solid var(--wb-border-light);
+  font-size:13px; font-weight:600;
+  display:flex; align-items:center; justify-content:center;
+}
+
+/* ─── Recent searches list ─── */
+.recents{
+  display:flex; flex-direction:column; gap:2px;
+  margin-top:4px;
+}
+.recent{
+  display:flex; align-items:center; gap:12px;
+  padding:11px 4px;
+  border-bottom:1px solid var(--wb-hairline, rgba(255,255,255,0.04));
+}
+.recent:last-child{ border-bottom:none; }
+.recent .ic{
+  width:32px; height:32px; border-radius:10px;
+  background:var(--wb-surface);
+  display:flex; align-items:center; justify-content:center;
+  color:var(--wb-text-muted); font-size:14px;
+  flex-shrink:0;
+}
+.recent .q{ flex:1; font-size:15px; font-weight:550; color:var(--wb-text-secondary); }
+.recent .x{
+  color:var(--wb-text-muted); font-size:16px;
+  width:28px; height:28px; display:flex; align-items:center; justify-content:center;
+}
+
+/* ─── Quick filters / suggestions tiles ─── */
+.tiles{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:4px; }
+.tile{
+  background:var(--wb-card); border:1px solid var(--wb-border);
+  border-radius:var(--wb-r-xl);
+  padding:14px 12px;
+  display:flex; flex-direction:column; gap:6px;
+  backdrop-filter:blur(14px);
+}
+.tile .em{ font-size:22px; line-height:1; }
+.tile .lbl{ font-size:13px; font-weight:650; color:var(--wb-text); letter-spacing:-0.005em; }
+.tile .h{ font-size:11px; font-weight:550; color:var(--wb-text-muted); }
+.tile.pro .h{ color:var(--wb-accent-strong); }
+
+/* ─── Big-state panels (empty / error / restricted / first-open) ─── */
+.big-state{
+  margin:auto; padding:24px 8px;
+  display:flex; flex-direction:column; align-items:center; text-align:center;
+  gap:8px;
+}
+.big-state .em-wrap{
+  width:80px; height:80px; border-radius:50%;
+  background:var(--wb-accent-soft); display:flex; align-items:center; justify-content:center;
+  font-size:38px; margin-bottom:6px;
+}
+.big-state .em-wrap.warn{ background:var(--wb-warning-soft); }
+.big-state .em-wrap.danger{ background:var(--wb-danger-soft); }
+.big-state .em-wrap.muted{ background:var(--wb-surface); }
+.big-state h3{
+  margin:0; font-size:19px; font-weight:650; letter-spacing:-0.02em; color:var(--wb-text);
+}
+.big-state p{
+  margin:0; max-width:280px;
+  font-size:14px; line-height:1.5; color:var(--wb-text-secondary); font-weight:500;
+}
+.big-state .cta-row{
+  margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; justify-content:center;
+}
+.big-state .cta-row .btn{
+  height:40px; padding:0 16px; border-radius:var(--wb-r-xl);
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:14px; font-weight:650; letter-spacing:-0.012em;
+  border:none;
+}
+.btn.primary{
+  background:var(--wb-grad-accent); color:#fff;
+  box-shadow:var(--wb-sh-glow-cta);
+}
+.btn.ghost{
+  background:var(--wb-surface); color:var(--wb-text-secondary);
+  border:1px solid var(--wb-border-light);
+}
+
+/* ─── Loading state ─── */
+.skeleton{
+  background:linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.08), rgba(255,255,255,0.04));
+  background-size:200% 100%;
+  animation:shimmer 1.4s linear infinite;
+  border-radius:8px;
+}
+@keyframes shimmer{ from{ background-position:200% 0; } to{ background-position:-200% 0; } }
+.sk-card{
+  display:flex; align-items:center; gap:12px;
+  padding:12px;
+  background:var(--wb-card); border:1px solid var(--wb-border);
+  border-radius:var(--wb-r-xxl);
+  margin-bottom:8px;
+  backdrop-filter:blur(14px);
+}
+.sk-thumb{ width:48px; height:48px; border-radius:14px; }
+.sk-lines{ flex:1; display:flex; flex-direction:column; gap:6px; }
+.sk-line{ height:12px; }
+.sk-line.short{ width:50%; }
+.sk-line.mid{ width:75%; }
+
+/* ─── Floating nav (background context) ─── */
+.fnav{
+  position:absolute; left:50%; bottom:24px; transform:translateX(-50%);
+  display:flex; gap:6px;
+  background:var(--wb-nav-bg); border:1px solid var(--wb-border-light);
+  border-radius:var(--wb-r-pill);
+  padding:6px;
+  backdrop-filter:blur(20px) saturate(160%);
+  box-shadow:var(--wb-sh-nav-floating);
+  z-index:5;
+}
+.fnav .ni{
+  height:40px; padding:0 14px;
+  display:inline-flex; align-items:center; gap:6px;
+  border-radius:var(--wb-r-pill);
+  font-size:12px; font-weight:550; color:var(--wb-text-secondary);
+}
+.fnav .ni.active{
+  background:var(--wb-grad-accent); color:#fff; font-weight:650;
+  box-shadow:0 4px 14px rgba(139,123,255,0.4);
+}
+
+/* ─── State note (designer notes inside the grid) ─── */
+.state-note{
+  max-width:375px; margin:12px auto 0;
+  background:rgba(255,255,255,0.03); border:1px solid var(--wb-border);
+  border-radius:14px; padding:12px 14px;
+  font-size:12.5px; line-height:1.55; color:var(--wb-text-secondary);
+}
+.state-note b{ color:var(--wb-text); font-weight:650; }
+.state-note code{
+  background:var(--wb-surface); padding:1px 5px; border-radius:5px;
+  font-size:11px; color:var(--wb-accent-strong);
+}
+
+/* ─── Section banner explaining states ─── */
+.section-banner{
+  max-width:1240px; margin:48px auto 0;
+  background:rgba(255,255,255,0.03);
+  border:1px solid var(--wb-border-light); border-radius:18px;
+  padding:18px 22px;
+}
+.section-banner h2{
+  margin:0 0 6px; font-size:18px; font-weight:700; letter-spacing:-0.015em;
+}
+.section-banner p{
+  margin:0; color:var(--wb-text-secondary); font-size:13.5px; line-height:1.55;
+}
+.section-banner ul{
+  margin:10px 0 0; padding:0 0 0 18px; font-size:13px; color:var(--wb-text-secondary);
+  line-height:1.7;
+}
+.section-banner code{
+  background:var(--wb-surface); padding:1px 5px; border-radius:5px;
+  font-size:11px; color:var(--wb-accent-strong);
+}
+
+/* RTL preview helpers */
+.rtl{ direction:rtl; }
+.rtl .head-row, .rtl .search-head{ direction:rtl; }
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>Global Search · WishBoard</h1>
+  <div class="meta">
+    <span class="pill">PROPOSED</span>
+    <span>v2.1 tokens</span>
+    <span>·</span>
+    <span>10 phone states</span>
+    <span>·</span>
+    <span>2026-05-16</span>
+  </div>
+  <p class="lede">
+    Кнопка 🔍 на главном экране открывает полноценный экран поиска: одно поле,
+    grouped результаты, фильтры по типам и smart-фильтры, recent searches,
+    PRO-paywall блок для Free, безопасные restricted-состояния. Один объединённый
+    проход — без MVP.
+  </p>
+</div>
+
+<div class="section-banner">
+  <h2>Что отрисовано</h2>
+  <p>
+    Каждый «телефон» = одно состояние нового экрана <code>search</code>. Шрифты/цвета —
+    исключительно токены v2.1 (<code>--wb-card</code>, <code>--wb-accent-soft</code>,
+    <code>--wb-r-xxl</code>, <code>650</code> вес, mesh backdrop). Иконки — emoji + Unicode-glyphs,
+    как требует <code>iconography</code>.
+  </p>
+  <ul>
+    <li><b>P1.</b> Главный экран — где живёт кнопка 🔍 (контекст входа).</li>
+    <li><b>P2.</b> First open — пусто, recent + quick filters.</li>
+    <li><b>P3.</b> Short query (1 символ) — подсказка «введи ещё букву».</li>
+    <li><b>P4.</b> Loading — skeleton-карточки.</li>
+    <li><b>P5.</b> Full results (Free) — grouped + PRO-paywall блок.</li>
+    <li><b>P6.</b> Filtered: только «Желания» + smart-chips.</li>
+    <li><b>P7.</b> Empty — ничего не нашли.</li>
+    <li><b>P8.</b> Restricted result — чужой вишлист недоступен.</li>
+    <li><b>P9.</b> Error — поиск временно не сработал.</li>
+    <li><b>P10.</b> PRO user — открыты брони, события, anti-gift.</li>
+    <li><b>P11.</b> RTL (ar) — для проверки arabic.</li>
+  </ul>
+</div>
+
+<div class="grid">
+
+<!-- ============================================================
+     P1. HOME — context entry (lupa button highlighted)
+   ============================================================ -->
+<div>
+  <div class="phone">
+    <div class="phone-label">P1 · Home (откуда заходим)</div>
+    <div class="status-bar"><span>9:41</span><span class="icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div>
+    <div class="app">
+      <div class="head-row">
+        <button class="head-btn active" aria-label="Search" style="box-shadow:0 0 0 4px var(--wb-accent-soft);">🔍</button>
+        <div class="head-title">
+          <div class="t">Мои вишлисты</div>
+          <div class="s">4 активных · ⭐ PRO</div>
+        </div>
+        <button class="head-btn" aria-label="Settings">⚙</button>
+      </div>
+
+      <div style="margin-top:8px;">
+        <div style="background:var(--wb-card); border:1px solid var(--wb-border); border-radius:var(--wb-r-hero); padding:16px; backdrop-filter:blur(14px);">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:52px; height:52px; border-radius:14px; background:linear-gradient(135deg,#8B7BFF,#B4A6FF); display:flex; align-items:center; justify-content:center; font-size:26px;">🎂</div>
+            <div style="flex:1;">
+              <div style="font-size:17px; font-weight:650; letter-spacing:-0.015em;">День рождения 2026</div>
+              <div style="font-size:12px; color:var(--wb-text-muted); margin-top:2px;">14 желаний · до 23 июня</div>
+            </div>
+          </div>
+        </div>
+        <div style="height:8px;"></div>
+        <div style="background:var(--wb-card); border:1px solid var(--wb-border); border-radius:var(--wb-r-xxl); padding:14px; backdrop-filter:blur(14px);">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:44px; height:44px; border-radius:12px; background:linear-gradient(135deg,#FBBF24,#F59E0B); display:flex; align-items:center; justify-content:center; font-size:22px;">🎄</div>
+            <div style="flex:1;">
+              <div style="font-size:15px; font-weight:650;">Новый год</div>
+              <div style="font-size:11px; color:var(--wb-text-muted); margin-top:2px;">6 желаний</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fnav">
+        <div class="ni active">🎁 Вишлисты</div>
+        <div class="ni">🤝 Брони</div>
+        <div class="ni">👤 Я</div>
+      </div>
+    </div>
+  </div>
+  <div class="state-note">
+    <b>Insertion point.</b> Текущая кнопка <code>MiniApp.tsx:12428</code> сейчас бросает toast.
+    Заменяем onClick → <code>setScreen('search')</code>. Кнопка получает focus-ring,
+    лёгкий <code>HapticFeedback.impactOccurred('light')</code>.
+  </div>
+</div>
+
+<!-- ============================================================
+     P2. FIRST OPEN — recents + quick filters
+   ============================================================ -->
+<div>
+  <div class="phone">
+    <div class="phone-label">P2 · First open</div>
+    <div class="status-bar"><span>9:41</span><span class="icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div>
+    <div class="app">
+      <div class="search-head">
+        <button class="back-btn" aria-label="Back">‹</button>
+        <div class="search-input focused">
+          <span class="glass">🔍</span>
+          <span class="ph">Искать желания, вишлисты, брони…</span>
+        </div>
+      </div>
+
+      <div class="chips-row">
+        <span class="chip active">Все</span>
+        <span class="chip">🎁 Желания</span>
+        <span class="chip">📋 Вишлисты</span>
+        <span class="chip">🤝 Брони <span class="count">PRO</span></span>
+        <span class="chip">👥 Люди</span>
+        <span class="chip">🏷 Категории</span>
+        <span class="chip">📅 События <span class="count">PRO</span></span>
+        <span class="chip">⚙ Настройки</span>
+      </div>
+
+      <div class="scroll">
+        <div class="section-h">
+          <span class="l">Недавние <span class="n">3</span></span>
+          <span class="r">Очистить</span>
+        </div>
+        <div class="recents">
+          <div class="recent"><div class="ic">🕘</div><div class="q">наушники</div><div class="x">×</div></div>
+          <div class="recent"><div class="ic">🕘</div><div class="q">день рождения</div><div class="x">×</div></div>
+          <div class="recent"><div class="ic">🕘</div><div class="q">катя</div><div class="x">×</div></div>
+        </div>
+
+        <div class="section-h"><span class="l">Быстрые фильтры</span></div>
+        <div class="tiles">
+          <div class="tile"><span class="em">⭐</span><span class="lbl">Важные желания</span><span class="h">priority high</span></div>
+          <div class="tile"><span class="em">🔗</span><span class="lbl">С ссылкой</span><span class="h">url есть</span></div>
+          <div class="tile pro"><span class="em">⏱</span><span class="lbl">Истекают скоро</span><span class="h">PRO · брони</span></div>
+          <div class="tile pro"><span class="em">🤫</span><span class="lbl">Мои тайные</span><span class="h">PRO · только мои</span></div>
+        </div>
+
+        <div class="section-h"><span class="l">Подсказки</span></div>
+        <div class="recents">
+          <div class="recent"><div class="ic">💡</div><div class="q" style="color:var(--wb-text);">Попробуй «др» — найдём дни рождения</div></div>
+          <div class="recent"><div class="ic">💡</div><div class="q" style="color:var(--wb-text);">«pro» — настройки и подписка</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="state-note">
+    Recent searches: <b>Free</b> хранит 3 последних, <b>PRO</b> до 10. На старте берём
+    localStorage, чтобы не плодить миграцию. Quick-tiles ведут на отфильтрованный поиск.
+    PRO-тайлы у Free → paywall sheet, не «недоступно».
+  </div>
+</div>
+
+<!-- ============================================================
+     P3. SHORT QUERY (1 char)
+   ============================================================ -->
+<div>
+  <div class="phone">
+    <div class="phone-label">P3 · 1 символ</div>
+    <div class="status-bar"><span>9:41</span><span class="icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div>
+    <div class="app">
+      <div class="search-head">
+        <button class="back-btn">‹</button>
+        <div class="search-input focused">
+          <span class="glass">🔍</span>
+          <span class="typed">н<span class="caret"></span></span>
+          <span class="clear">×</span>
+        </div>
+      </div>
+
+      <div class="chips-row">
+        <span class="chip active">Все</span>
+        <span class="chip">🎁 Желания</span>
+        <span class="chip">📋 Вишлисты</span>
+        <span class="chip">🤝 Брони <span class="count">PRO</span></span>
+      </div>
+
+      <div class="scroll">
+        <div class="big-state" style="margin-top:48px;">
+          <div class="em-wrap muted">✏️</div>
+          <h3>Введи минимум 2 символа</h3>
+          <p>Так поиск будет точнее. А пока — недавнее или быстрые фильтры.</p>
+        </div>
+
+        <div class="section-h" style="margin-top:32px;"><span class="l">Недавние</span></div>
+        <div class="recents">
+          <div class="recent"><div class="ic">🕘</div><div class="q">наушники</div><div class="x">×</div></div>
+          <div class="recent"><div class="ic">🕘</div><div class="q">день рождения</div><div class="x">×</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="state-note">
+    <b>2 char minimum.</b> Backend не дергаем. Recent остаются видимы как «next step».
+    debounce 250–350 ms всё равно вооружён — на случай быстрой набитой второй буквы.
+  </div>
+</div>
+
+<!-- ============================================================
+     P4. LOADING — skeleton
+   ============================================================ -->
+<div>
+  <div class="phone">
+    <div class="phone-label">P4 · Loading</div>
+    <div class="status-bar"><span>9:41</span><span class="icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div>
+    <div class="app">
+      <div class="search-head">
+        <button class="back-btn">‹</button>
+        <div class="search-input focused">
+          <span class="glass">🔍</span>
+          <span class="typed">наушни<span class="caret"></span></span>
+          <span class="clear">×</span>
+        </div>
+      </div>
+
+      <div class="chips-row">
+        <span class="chip active">Все</span>
+        <span class="chip">🎁 Желания</span>
+        <span class="chip">📋 Вишлисты</span>
+      </div>
+
+      <div class="scroll">
+        <div class="section-h"><span class="l">Желания</span></div>
+        <div class="sk-card"><div class="sk-thumb skeleton"></div><div class="sk-lines"><div class="sk-line skeleton mid"></div><div class="sk-line skeleton short"></div></div></div>
+        <div class="sk-card"><div class="sk-thumb skeleton"></div><div class="sk-lines"><div class="sk-line skeleton mid"></div><div class="sk-line skeleton short"></div></div></div>
+
+        <div class="section-h"><span class="l">Вишлисты</span></div>
+        <div class="sk-card"><div class="sk-thumb skeleton"></div><div class="sk-lines"><div class="sk-line skeleton mid"></div><div class="sk-line skeleton short"></div></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="state-note">
+    Skeleton показываем только при первом fetch. Replace на старые результаты при retype —
+    чтобы не было flash-empty между «наушн» и «наушник». AbortController отменяет
+    предыдущий запрос.
+  </div>
+</div>
+
+<!-- ============================================================
+     P5. FULL RESULTS (FREE) — grouped + PRO block
+   ============================================================ -->
+<div>
+  <div class="phone">
+    <div class="phone-label">P5 · Results · Free</div>
+    <div class="status-bar"><span>9:41</span><span class="icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div>
+    <div class="app">
+      <div class="search-head">
+        <button class="back-btn">‹</button>
+        <div class="search-input focused">
+          <span class="glass">🔍</span>
+          <span class="typed">наушники</span>
+          <span class="clear">×</span>
+        </div>
+      </div>
+
+      <div class="chips-row">
+        <span class="chip active">Все <span class="count">12</span></span>
+        <span class="chip">🎁 Желания <span class="count">5</span></span>
+        <span class="chip">📋 Вишлисты <span class="count">2</span></span>
+        <span class="chip">🏷 Категории <span class="count">1</span></span>
+        <span class="chip">👥 Люди <span class="count">1</span></span>
+        <span class="chip">🤝 Брони <span class="count">PRO</span></span>
+        <span class="chip">⚙ Настройки <span class="count">3</span></span>
+      </div>
+
+      <div class="scroll">
+        <div class="section-h">
+          <span class="l">🎁 Желания <span class="n">5</span></span>
+          <span class="r">Показать все ›</span>
+        </div>
+        <div class="r-card">
+          <div class="thumb accent">🎧<span class="prio-dot" style="background:var(--wb-prio-high);"></span></div>
+          <div class="body">
+            <div class="t">Sony WH-1000XM5 <mark>наушники</mark></div>
+            <div class="s">День рождения 2026 · Техника <span class="sep">·</span> доступно</div>
+          </div>
+          <span class="badge price">12 990 ₽</span>
+        </div>
+        <div class="r-card">
+          <div class="thumb">🎵</div>
+          <div class="body">
+            <div class="t"><mark>Наушники</mark> AirPods Pro</div>
+            <div class="s">Хочу на Новый год <span class="sep">·</span> 🤝 забронировано</div>
+          </div>
+          <span class="badge reserved">🤝 бронь</span>
+        </div>
+        <div class="r-card">
+          <div class="thumb success">✓</div>
+          <div class="body">
+            <div class="t">Беспроводные <mark>наушники</mark> Marshall</div>
+            <div class="s">Архив · 12 окт <span class="sep">·</span> подарено</div>
+          </div>
+          <span class="badge done">✓ готово</span>
+        </div>
+
+        <div class="section-h">
+          <span class="l">📋 Вишлисты <span class="n">2</span></span>
+          <span class="r">Показать все ›</span>
+        </div>
+        <div class="r-card">
+          <div class="thumb accent">🎂</div>
+          <div class="body">
+            <div class="t">День рождения 2026</div>
+            <div class="s">мой · 14 желаний <span class="sep">·</span> 3 совпадения</div>
+          </div>
+          <span class="chev">›</span>
+        </div>
+        <div class="r-card">
+          <div class="thumb" style="background:var(--wb-warning-soft); color:var(--wb-warning);">👤</div>
+          <div class="body">
+            <div class="t">Катя · Хочу на ДР</div>
+            <div class="s">я подписан <span class="sep">·</span> 1 совпадение</div>
+          </div>
+          <span class="chev">›</span>
+        </div>
+
+        <div class="section-h"><span class="l">🏷 Категории <span class="n">1</span></span></div>
+        <div class="r-card">
+          <div class="thumb">📦</div>
+          <div class="body">
+            <div class="t">Техника</div>
+            <div class="s">в «День рождения 2026» <span class="sep">·</span> 6 желаний</div>
+          </div>
+          <span class="chev">›</span>
+        </div>
+
+        <!-- PRO paywall block: safe, no titles leaked -->
+        <div class="section-h"><span class="l">⭐ Найдено в PRO</span></div>
+        <div class="pro-block">
+          <span class="star">⭐ PRO</span>
+          <div class="t">Совпадения в бронях, событиях и категориях</div>
+          <div class="s">Мы нашли 4 совпадения в твоих бронях, gift-календаре и «Что не дарить». Открой PRO, чтобы искать по ним.</div>
+          <div class="blur-rows">
+            <div class="blur-row mid"></div>
+            <div class="blur-row short"></div>
+            <div class="blur-row mid"></div>
+          </div>
+          <div class="actions">
+            <button class="btn-primary">Открыть PRO · 100 ⭐/мес</button>
+            <button class="btn-secondary">Искать без PRO</button>
+          </div>
+        </div>
+
+        <div class="section-h"><span class="l">⚙ Настройки</span></div>
+        <div class="r-card">
+          <div class="thumb">🔔</div>
+          <div class="body">
+            <div class="t">Уведомления о бронях</div>
+            <div class="s">Настройки <span class="sep">·</span> push + bot</div>
+          </div>
+          <span class="chev">›</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="state-note">
+    <b>Группировка</b> — 3 совпадения на группу + «Показать все ›». PRO-блок
+    показывается <b>только если у Free реально нашлись PRO-совпадения</b>. Никаких
+    title/owner-имён внутри блока — только обобщённое количество.
+  </div>
+</div>
+
+<!-- ============================================================
+     P6. FILTERED — Items only + smart-chips
+   ============================================================ -->
+<div>
+  <div class="phone">
+    <div class="phone-label">P6 · Filter · Желания + smart</div>
+    <div class="status-bar"><span>9:41</span><span class="icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div>
+    <div class="app">
+      <div class="search-head">
+        <button class="back-btn">‹</button>
+        <div class="search-input focused">
+          <span class="glass">🔍</span>
+          <span class="typed">наушники</span>
+          <span class="clear">×</span>
+        </div>
+      </div>
+
+      <div class="chips-row">
+        <span class="chip">Все</span>
+        <span class="chip active">🎁 Желания <span class="count">5</span></span>
+        <span class="chip">📋 Вишлисты</span>
+        <span class="chip">🤝 Брони</span>
+      </div>
+      <div class="smart-chips">
+        <span class="smart-chip active">Доступные <span class="x">×</span></span>
+        <span class="smart-chip">С ценой</span>
+        <span class="smart-chip">Важные</span>
+        <span class="smart-chip">С ссылкой</span>
+        <span class="smart-chip">Без цены</span>
+        <span class="smart-chip">Архив</span>
+      </div>
+
+      <div class="scroll">
+        <div class="section-h">
+          <span class="l">🎁 Желания <span class="n">3 из 5</span></span>
+          <span class="r" style="color:var(--wb-text-muted);">по релевантности</span>
+        </div>
+
+        <div class="r-card">
+          <div class="thumb accent">🎧<span class="prio-dot" style="background:var(--wb-prio-high);"></span></div>
+          <div class="body">
+            <div class="t">Sony WH-1000XM5 <mark>наушники</mark></div>
+            <div class="s">мой вишлист · доступно <span class="sep">·</span> sony.com</div>
+          </div>
+          <span class="badge price">12 990 ₽</span>
+        </div>
+        <div class="r-card">
+          <div class="thumb">🎵<span class="prio-dot" style="background:var(--wb-prio-med);"></span></div>
+          <div class="body">
+            <div class="t"><mark>Наушники</mark> JBL Tune 760</div>
+            <div class="s">мой вишлист «Дом» · доступно</div>
+          </div>
+          <span class="badge price">4 990 ₽</span>
+        </div>
+        <div class="r-card">
+          <div class="thumb">🎶</div>
+          <div class="body">
+            <div class="t">Вкладыши SoundPeats <mark>наушники</mark></div>
+            <div class="s">Катя · подписан <span class="sep">·</span> доступно</div>
+          </div>
+          <span class="badge">чужой</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="state-note">
+    <b>Smart-chips</b> зависят от выбранного типа: для Желаний — статус/цена/важность,
+    для Броней (PRO) — «Мои», «Истекают скоро», «Тайные», «Обычные». Свободно
+    комбинируются.
+  </div>
+</div>
+
+<!-- ============================================================
+     P7. EMPTY
+   ============================================================ -->
+<div>
+  <div class="phone">
+    <div class="phone-label">P7 · Empty</div>
+    <div class="status-bar"><span>9:41</span><span class="icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div>
+    <div class="app">
+      <div class="search-head">
+        <button class="back-btn">‹</button>
+        <div class="search-input focused">
+          <span class="glass">🔍</span>
+          <span class="typed">фларибрюмзельштоп</span>
+          <span class="clear">×</span>
+        </div>
+      </div>
+
+      <div class="chips-row">
+        <span class="chip active">Все</span>
+        <span class="chip">🎁 Желания</span>
+        <span class="chip">📋 Вишлисты</span>
+      </div>
+
+      <div class="scroll">
+        <div class="big-state" style="margin-top:80px;">
+          <div class="em-wrap">🔎</div>
+          <h3>Ничего не нашли</h3>
+          <p>Попробуй другое слово или проверь, нет ли опечатки. У нас нет каталога — мы ищем только в твоём пространстве WishBoard.</p>
+          <div class="cta-row">
+            <button class="btn primary">Создать желание</button>
+            <button class="btn ghost">Очистить поиск</button>
+          </div>
+        </div>
+
+        <div class="section-h" style="margin-top:48px;"><span class="l">Может, ты искал</span></div>
+        <div class="tiles">
+          <div class="tile"><span class="em">🎂</span><span class="lbl">День рождения</span><span class="h">из истории</span></div>
+          <div class="tile"><span class="em">🎄</span><span class="lbl">Новый год</span><span class="h">из истории</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="state-note">
+    Подсказки «Может, ты искал» дёргаем из recent + popular alias dictionary (<code>др</code>,
+    <code>днюха</code>, <code>бронь</code> — RU/EN). Без отправки raw-query в analytics.
+  </div>
+</div>
+
+<!-- ============================================================
+     P8. RESTRICTED — foreign wishlist no longer accessible
+   ============================================================ -->
+<div>
+  <div class="phone">
+    <div class="phone-label">P8 · Restricted result</div>
+    <div class="status-bar"><span>9:41</span><span class="icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div>
+    <div class="app">
+      <div class="search-head">
+        <button class="back-btn">‹</button>
+        <div class="search-input focused">
+          <span class="glass">🔍</span>
+          <span class="typed">катя</span>
+          <span class="clear">×</span>
+        </div>
+      </div>
+
+      <div class="chips-row">
+        <span class="chip active">Все <span class="count">3</span></span>
+        <span class="chip">📋 Вишлисты <span class="count">2</span></span>
+        <span class="chip">👥 Люди <span class="count">1</span></span>
+      </div>
+
+      <div class="scroll">
+        <div class="section-h"><span class="l">👥 Люди</span></div>
+        <div class="r-card">
+          <div class="thumb" style="background:linear-gradient(135deg,#F892C9,#F06AB4);">К</div>
+          <div class="body">
+            <div class="t"><mark>Катя</mark> Соколова</div>
+            <div class="s">@kate_s · я подписан</div>
+          </div>
+          <span class="chev">›</span>
+        </div>
+
+        <div class="section-h"><span class="l">📋 Вишлисты</span></div>
+        <div class="r-card">
+          <div class="thumb accent">🎂</div>
+          <div class="body">
+            <div class="t"><mark>Катя</mark>: ДР 2026</div>
+            <div class="s">я подписан · 8 желаний</div>
+          </div>
+          <span class="chev">›</span>
+        </div>
+
+        <!-- Restricted -->
+        <div class="r-card restricted">
+          <div class="thumb">🔒</div>
+          <div class="body">
+            <div class="t" style="color:var(--wb-text-secondary);">Вишлист больше недоступен</div>
+            <div class="s">владелец закрыл доступ или удалил ссылку</div>
+          </div>
+        </div>
+
+        <div class="section-h" style="margin-top:18px;"><span class="l">Подсказка</span></div>
+        <div style="background:var(--wb-warning-soft); border:1px solid rgba(251,191,36,0.30); border-radius:var(--wb-r-xxl); padding:12px 14px; color:var(--wb-text-secondary); font-size:13px; line-height:1.5;">
+          🛡 Мы храним только те чужие вишлисты, к которым у тебя есть активная связь:
+          подписка, бронь, общий Secret Santa. Если хозяин закрыл доступ — содержимое
+          не показываем, даже из истории.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="state-note">
+    <b>Restricted card</b> рендерится только если бэкенд вернёт <code>accessState='restricted'</code>.
+    Никогда не светим title/photo/owner. Клик → toast «Этот вишлист больше недоступен».
+  </div>
+</div>
+
+<!-- ============================================================
+     P9. ERROR
+   ============================================================ -->
+<div>
+  <div class="phone">
+    <div class="phone-label">P9 · Error</div>
+    <div class="status-bar"><span>9:41</span><span class="icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div>
+    <div class="app">
+      <div class="search-head">
+        <button class="back-btn">‹</button>
+        <div class="search-input focused">
+          <span class="glass">🔍</span>
+          <span class="typed">наушники</span>
+          <span class="clear">×</span>
+        </div>
+      </div>
+
+      <div class="chips-row">
+        <span class="chip active">Все</span>
+        <span class="chip">🎁 Желания</span>
+        <span class="chip">📋 Вишлисты</span>
+      </div>
+
+      <div class="scroll">
+        <div class="big-state" style="margin-top:80px;">
+          <div class="em-wrap danger">⚠️</div>
+          <h3>Поиск временно не сработал</h3>
+          <p>Попробуй ещё раз. Желания, вишлисты и брони никуда не делись.</p>
+          <div class="cta-row">
+            <button class="btn primary">Повторить</button>
+            <button class="btn ghost">Назад</button>
+          </div>
+        </div>
+
+        <div class="section-h" style="margin-top:36px;"><span class="l">Частично доступно</span></div>
+        <div style="background:rgba(255,255,255,0.03); border:1px solid var(--wb-border); border-radius:var(--wb-r-xxl); padding:12px 14px; font-size:13px; color:var(--wb-text-secondary);">
+          🟢 Желания и вишлисты — нашлись.<br>
+          🟡 Брони и события — не ответили, попробуем ещё раз через 5 сек.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="state-note">
+    Если одна группа поиска упала — отдаём остальные с <code>partial=true</code>.
+    UI рендерит то, что есть, и спокойный re-try по проблемной группе.
+  </div>
+</div>
+
+<!-- ============================================================
+     P10. PRO USER — full power: reservations / events / anti-gift
+   ============================================================ -->
+<div>
+  <div class="phone">
+    <div class="phone-label">P10 · Results · PRO</div>
+    <div class="status-bar"><span>9:41</span><span class="icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div>
+    <div class="app">
+      <div class="search-head">
+        <button class="back-btn">‹</button>
+        <div class="search-input focused">
+          <span class="glass">🔍</span>
+          <span class="typed">маша</span>
+          <span class="clear">×</span>
+        </div>
+      </div>
+
+      <div class="chips-row">
+        <span class="chip active">Все <span class="count">9</span></span>
+        <span class="chip">🤝 Брони <span class="count">3</span></span>
+        <span class="chip">👥 Люди <span class="count">1</span></span>
+        <span class="chip">📅 События <span class="count">2</span></span>
+        <span class="chip">🚫 Не дарить <span class="count">1</span></span>
+      </div>
+
+      <div class="scroll">
+        <div class="section-h">
+          <span class="l">🤝 Брони <span class="n">3</span></span>
+          <span class="r">Показать все ›</span>
+        </div>
+
+        <div class="r-card">
+          <div class="thumb accent">💍</div>
+          <div class="body">
+            <div class="t">Серебряные серьги для <mark>Маши</mark></div>
+            <div class="s">забронировано тобой · истекает через 18 ч</div>
+          </div>
+          <span class="badge reserved">⏱ 18ч</span>
+        </div>
+        <div class="r-card">
+          <div class="thumb">🤫</div>
+          <div class="body">
+            <div class="t">Книга «Тайные подарки <mark>Маши</mark>»</div>
+            <div class="s">тайная бронь · видишь только ты</div>
+          </div>
+          <span class="badge secret">🤫 тайная</span>
+        </div>
+        <div class="r-card">
+          <div class="thumb success">✓</div>
+          <div class="body">
+            <div class="t">Свеча из <mark>маша</mark>линой галереи</div>
+            <div class="s">подарено · 12 янв</div>
+          </div>
+          <span class="badge done">✓ готово</span>
+        </div>
+
+        <div class="section-h"><span class="l">📅 События <span class="n">2</span></span></div>
+        <div class="r-card">
+          <div class="thumb" style="background:linear-gradient(135deg,#FB7185,#F06AB4);">🎂</div>
+          <div class="body">
+            <div class="t">ДР <mark>Маши</mark></div>
+            <div class="s">12 июня · через 27 дней · бюджет до 5000 ₽</div>
+          </div>
+          <span class="chev">›</span>
+        </div>
+        <div class="r-card">
+          <div class="thumb" style="background:linear-gradient(135deg,#4ADE80,#10B981);">🎄</div>
+          <div class="body">
+            <div class="t">Годовщина · <mark>Маша</mark> + Слава</div>
+            <div class="s">3 февраля · напоминание за 7 дней</div>
+          </div>
+          <span class="chev">›</span>
+        </div>
+
+        <div class="section-h"><span class="l">🚫 Не дарить <span class="n">1</span></span></div>
+        <div class="r-card">
+          <div class="thumb danger">🚫</div>
+          <div class="body">
+            <div class="t"><mark>Маша</mark>: «не дарить шерсть» (anti-gift)</div>
+            <div class="s">из её anti-gift списка · видно только тебе</div>
+          </div>
+          <span class="chev">›</span>
+        </div>
+
+        <div class="section-h"><span class="l">👥 Люди</span></div>
+        <div class="r-card">
+          <div class="thumb" style="background:linear-gradient(135deg,#8B7BFF,#B4A6FF);">М</div>
+          <div class="body">
+            <div class="t"><mark>Маша</mark> Иванова</div>
+            <div class="s">@mashai · 3 общих события</div>
+          </div>
+          <span class="chev">›</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="state-note">
+    <b>PRO state.</b> Брони, события, anti-gift — открыты. <b>Тайная бронь</b> видна
+    только её автору (отдельная проверка по <code>SecretReservation.reserverUserId</code>),
+    никому больше.
+  </div>
+</div>
+
+<!-- ============================================================
+     P11. RTL — Arabic preview
+   ============================================================ -->
+<div>
+  <div class="phone rtl">
+    <div class="phone-label">P11 · RTL (ar)</div>
+    <div class="status-bar"><span>9:41</span><span class="icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div>
+    <div class="app">
+      <div class="search-head">
+        <button class="back-btn">›</button>
+        <div class="search-input focused">
+          <span class="glass">🔍</span>
+          <span class="ph">ابحث عن أمنية، قائمة، حجز…</span>
+        </div>
+      </div>
+
+      <div class="chips-row">
+        <span class="chip active">الكل</span>
+        <span class="chip">🎁 الأمنيات</span>
+        <span class="chip">📋 القوائم</span>
+        <span class="chip">🤝 الحجوزات</span>
+      </div>
+
+      <div class="scroll">
+        <div class="section-h"><span class="l">الأخيرة</span><span class="r">مسح</span></div>
+        <div class="recents">
+          <div class="recent"><div class="ic">🕘</div><div class="q">سماعات</div><div class="x">×</div></div>
+          <div class="recent"><div class="ic">🕘</div><div class="q">عيد ميلاد</div><div class="x">×</div></div>
+        </div>
+
+        <div class="section-h" style="margin-top:20px;"><span class="l">فلاتر سريعة</span></div>
+        <div class="tiles">
+          <div class="tile"><span class="em">⭐</span><span class="lbl">أمنيات مهمة</span><span class="h">priority</span></div>
+          <div class="tile pro"><span class="em">⏱</span><span class="lbl">تنتهي قريباً</span><span class="h">PRO</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="state-note">
+    RTL — chips/input/result cards адекватно ведут себя в <code>dir=rtl</code>:
+    chevron меняет сторону, list-row padding симметричный.
+  </div>
+</div>
+
+</div><!-- /grid -->
+
+<div class="section-banner">
+  <h2>Что НЕ показано (намеренно)</h2>
+  <p>
+    Мокап — это <b>выровненный визуальный язык</b>, не полный pixel-perfect
+    каждого кейса. Не показаны: long-query truncate, swipe-to-remove recent,
+    keyboard-up state, Telegram Premium-badge на user-row (берётся как и сейчас
+    из <code>UserProfile</code>), внутренний sheet «открой PRO» — он уже есть
+    в проекте (<code>UpsellSheet</code>), мы только вызываем его с
+    <code>context='search'</code>.
+  </p>
+</div>
+
+</body>
+</html>

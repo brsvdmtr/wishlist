@@ -217,6 +217,7 @@ model User {
   profileSubscriptions           ProfileSubscription[]          @relation("ProfileSubscriber")
   profileSubscribers             ProfileSubscription[]          @relation("ProfileTarget")
   secretReservations             SecretReservation[]
+  foreignWishlistAccesses        ForeignWishlistAccess[]
 
   // Birthday reminders — social notifications for own birthday (separate from GiftOccasion)
   birthdayDeliveriesAsBirthdayUser BirthdayReminderDelivery[] @relation("BirthdayDeliveriesAsBirthdayUser")
@@ -284,6 +285,7 @@ model Wishlist {
   santaParticipants     SantaParticipant[]      @relation("SantaLinkedWishlists")
   curatedSelections     CuratedSelection[]
   linkedGiftOccasions   GiftOccasion[]          @relation("GiftOccasionsLinkedWishlist")
+  foreignAccesses       ForeignWishlistAccess[]
 
   @@index([ownerId])
   @@index([ownerId, position])
@@ -1798,6 +1800,49 @@ model WishlistItemPlacement {
   @@index([itemId])
   @@index([wishlistId, position])
   @@index([categoryId])
+}
+
+// ─── Foreign wishlist access history ─────────────────────────────────────────
+// One row per (user, wishlist) the user has successfully opened that is NOT
+// their own. Used as the "scope source" for global-search results coming from
+// other people's wishlists: search runs against this set (intersected with
+// the user's explicit relation graph), then every hit is re-checked for
+// live access (archived / share-token / visibility / curated expiresAt /
+// block-list). This row is access HISTORY, never a permission grant.
+//
+// Writes are routed through services/foreign-wishlist-access.ts so the same
+// validation gate runs for every entry point (share link, curated, profile
+// view, subscription, reservation context).
+model ForeignWishlistAccess {
+  id             String   @id @default(cuid())
+  userId         String
+  wishlistId     String
+  // share_link | curated_selection | subscription | reservation | profile |
+  // santa | direct_open | unknown — free-text on purpose, callers pass the
+  // origin tag. New tags appear over time (e.g. group_gift) without a migration.
+  source         String
+  // Strict revocation pin for credential-based sources. Holds an opaque
+  // reference to the credential used to gain access at record time:
+  //   - source='share_link'        → SHA-256 of the shareToken in use
+  //   - source='curated_selection' → CuratedSelection.id used to open
+  //   - all other sources          → null (relation-grounded access is
+  //                                   validated against the live relation
+  //                                   table at check time, not via this ref).
+  // At search/access-check time the live access check drops rows whose
+  // sourceRef no longer matches the current credential — owner regenerated
+  // the shareToken, curated selection expired or was deactivated, etc.
+  sourceRef      String?
+  firstOpenedAt  DateTime @default(now())
+  lastOpenedAt   DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wishlist Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, wishlistId])
+  @@index([userId, lastOpenedAt])
+  @@index([wishlistId])
 }
 
 // ─── Maintenance Recovery ─────────────────────────────────────────────────────

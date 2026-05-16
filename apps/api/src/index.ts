@@ -75,6 +75,7 @@ import { registerBillingRouter } from './routes/billing.routes';
 import { registerItemsRouter } from './routes/items.routes';
 import { registerWishlistsRouter } from './routes/wishlists.routes';
 import { registerSantaRouter } from './routes/santa.routes';
+import { registerSearchRouter } from './routes/search.routes';
 import { startCleanupSchedulers } from './schedulers/cleanup';
 import { startBillingSchedulers } from './schedulers/billing';
 import { startReferralSchedulers } from './schedulers/referral';
@@ -673,6 +674,16 @@ const meRouter = registerMeRouter({
   ONE_TIME_SKUS,
 });
 tgRouter.use(meRouter);
+
+// ─── /tg/search + /tg/access/wishlist-opened sub-router ─────────────────────
+// Read-only GET + a fire-and-forget POST. Both use the parent tgRouter auth
+// chain. Per-endpoint rate-limit lives in the router itself
+// (categories `search` + `access.record`).
+const searchRouter = registerSearchRouter({
+  getOrCreateTgUser,
+  trackAnalyticsEvent,
+});
+tgRouter.use(searchRouter);
 
 // ─── /tg/referral/* sub-router (P5b split) ──────────────────────────────────
 // All 4 endpoints are GET-only (read), no path-scoped idempotency middleware

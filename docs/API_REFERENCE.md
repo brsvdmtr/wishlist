@@ -657,6 +657,13 @@ Requires `secret_reservation_unlock` add-on.
 | GET | `/tg/referral/stats` | Aggregated referral stats for godmode dashboard |
 | GET | `/tg/referral/rules-config` | Get public-facing referral rules (reward days, qualification window) |
 
+**Global Search:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/tg/search` | Global search across the user's accessible scope (own + connected foreign wishlists). Query params: `q` (2-80 chars, trimmed/lowercased server-side), `types` (csv of `item,wishlist,category,reservation,user,event,setting,anti_gift,faq,action`; omitted = all), `limit` (1-20, per-group). Returns `{ query, normalizedQuery, groups: [{type, title, total, items, hasMore}], partial, failedGroups, isPro }`. Rate-limit `search` (30/min/actor). **Raw query is never logged**: telemetry receives only `queryLength` + a SHA-1 prefix hash of the normalized form. PRO-gated result types (reservations / events / anti-gift / secret reservations) collapse to a single `pro_locked` aggregate count for Free users — no titles, owners, or IDs leak. Secret reservations are only ever surfaced to their reserver. See `docs/design-system/mockups/proposed/global-search.html` for the visual contract. |
+| POST | `/tg/access/wishlist-opened` | Fire-and-forget recorder for the `ForeignWishlistAccess` table (feeds the search scope). Body: `{ wishlistId, source? }` where source is one of `share_link / curated_selection / subscription / reservation / profile / santa / direct_open / unknown`. Returns 200 with `{ ok, reason }`; never throws, never used for permission checks (live access is re-validated at search time). Rate-limit `access.record` (60 / 5 min / actor). |
+
 ---
 
 ## Internal Routes (`/internal/*`)

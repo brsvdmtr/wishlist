@@ -51,6 +51,7 @@ import { getRequestLocale } from '../lib/locale';
 import { secureCompare } from '../lib/crypto';
 import { sendTgNotification } from '../telegram/botApi';
 import { profileToLanguageSettings, resolveUserFirstName } from '../services/locale';
+import { recordForeignWishlistAccess } from '../services/foreign-wishlist-access';
 import logger from '../logger';
 
 // Shape of the Telegram initData user object — duplicated from index.ts to
@@ -811,6 +812,10 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
         },
       });
 
+      // Foreign-wishlist access history (feeds global search). Fire-and-forget.
+      void recordForeignWishlistAccess({ userId: user.id, wishlistId: item.wishlistId, source: 'reservation' })
+        .catch(() => { /* non-critical */ });
+
       trackEvent('secret_res.created', user.id, { itemId: id, secretReservationId: created.id });
       return res.json({ id: created.id, alreadyReserved: false });
     }),
@@ -1271,6 +1276,11 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
           create: { itemId: id, reserverUserId: user.id, ...(smartResSnapshot ?? {}) },
           update: { active: true, endedAt: null, endReason: null, reminderSent: false, ...(smartResSnapshot ?? smartResCleanup) },
         }).catch((e) => logger.warn({ err: e }, 'reservationMeta upsert failed'));
+
+        // Foreign-wishlist access history (feeds global search). Fire-and-forget;
+        // helper short-circuits silently on own_wishlist / archived / private.
+        void recordForeignWishlistAccess({ userId: user.id, wishlistId: result.wishlistId, source: 'reservation' })
+          .catch(() => { /* non-critical */ });
       }
 
       trackAnalyticsEvent({ event: 'reservation.succeeded', userId: req.tgUser?.id != null ? String(req.tgUser.id) : undefined, props: { itemId: req.params.id } });

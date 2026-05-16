@@ -247,6 +247,10 @@ All categories are `actorHash`-keyed unless noted. Implemented in
 | `referral.{hour,day}` | 5 / 1 h · 20 / day | Defined; no public referral endpoints in Wave 1 |
 | `public.share.view` | 120 / 1 min per IP | Defined; existing `publicReadLimiter` covers today |
 | `health.deep` | 10 / 1 min per IP | Defined; not wired |
+| `santa.draw` | 3 / 10 min | `POST /tg/santa/campaigns/:id/draw` |
+| `santa.admin` | 10 / 1 min | Admin/season/global-config Santa endpoints |
+| `search` | 30 / 1 min | `GET /tg/search`. Tight enough to throttle typing-bursts that bypass FE debounce (≥280 ms), loose enough for normal typing. **Raw query is never logged** — telemetry receives `queryLength` + a SHA-1 prefix hash only. |
+| `access.record` | 60 / 5 min | `POST /tg/access/wishlist-opened` (fire-and-forget FWA recorder; feeds global search scope). |
 
 **Onboarding endpoints carry no narrow category** — only `global.auth` +
 `state.changing` apply. The Mini App may re-fire `/onboarding/start` on

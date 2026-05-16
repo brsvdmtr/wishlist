@@ -44,6 +44,7 @@
 import { Router } from 'express';
 import { prisma } from '@wishlist/db';
 
+import { recordForeignWishlistAccess } from '../services/foreign-wishlist-access';
 import { asyncHandler } from '../lib/asyncHandler';
 
 // Shape of the Telegram initData user object — duplicated from index.ts to
@@ -117,6 +118,23 @@ export function registerSelectionsArchiveRouter(deps: SelectionsArchiveRouterDep
         create: { curatedSelectionId: id, subscriberId: user.id },
       });
 
+      // Foreign-wishlist access history (feeds global search). The curated
+      // selection's underlying wishlist is what becomes searchable.
+      // sourceRef = selection id so a future deactivate / expiry revokes
+      // the FWA-pinned access at search/click time.
+      const selectionForFwa = await prisma.curatedSelection.findUnique({
+        where: { id },
+        select: { wishlistId: true },
+      });
+      if (selectionForFwa) {
+        void recordForeignWishlistAccess({
+          userId: user.id,
+          wishlistId: selectionForFwa.wishlistId,
+          source: 'curated_selection',
+          sourceRef: id,
+        }).catch(() => { /* non-critical */ });
+      }
+
       trackEvent('selection_subscribed', user.id, { selectionId: id });
       return res.json({ ok: true, subscribed: true });
     }),
@@ -167,7 +185,7 @@ export function registerSelectionsArchiveRouter(deps: SelectionsArchiveRouterDep
       const selection = await prisma.curatedSelection.findUnique({
         where: { shareToken: token },
         select: {
-          id: true, title: true, ownerId: true, expiresAt: true, deactivatedAt: true,
+          id: true, wishlistId: true, title: true, ownerId: true, expiresAt: true, deactivatedAt: true,
           owner: { select: { firstName: true, profile: { select: { displayName: true } } } },
           items: { orderBy: { position: 'asc' }, select: { id: true, title: true, priceText: true, currency: true, imageUrl: true, url: true, description: true, position: true } },
         },
@@ -192,6 +210,20 @@ export function registerSelectionsArchiveRouter(deps: SelectionsArchiveRouterDep
       // Track view — fire-and-forget
       prisma.curatedSelection.update({ where: { shareToken: token }, data: { viewCount: { increment: 1 } } }).catch(() => {});
       trackEvent('selection_viewed', user.id, { selectionId: selection.id });
+
+      // Foreign-wishlist access history (feeds global search). Recorded on
+      // VIEW (not just subscribe) so a user who opens a curated link and
+      // returns later still finds it through search even without subscribing.
+      // sourceRef = selection.id so deactivate/expiry revokes FWA-pinned
+      // access at search-time.
+      if (!isOwner) {
+        void recordForeignWishlistAccess({
+          userId: user.id,
+          wishlistId: selection.wishlistId,
+          source: 'curated_selection',
+          sourceRef: selection.id,
+        }).catch(() => { /* non-critical */ });
+      }
 
       const ownerName = selection.owner.profile?.displayName || selection.owner.firstName || null;
 

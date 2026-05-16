@@ -32,6 +32,49 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-05-16 — Global Search screen approved (mockup → ship)
+
+**Type:** approval
+
+**Decision.** The proposed `mockups/proposed/global-search.html` mockup is
+approved as the visual contract for the new in-Mini-App global search
+feature. It stays in `proposed/` because the screen is freshly extracted
+(`apps/web/app/miniapp/screens/SearchScreen.tsx`) and will move to
+`approved/` once it has soaked in production for one observation cycle —
+matching the `feedback_adoption_wave_pause.md` rule.
+
+**Context / why.** The 🔍 button on the home header previously fired a
+"coming soon" toast. The new screen renders 11 documented states (first
+open, short query, loading, full results, filter+smart-filter, empty,
+restricted, error, PRO user, paywall block, RTL) on v2.1 tokens — glass
+cards, accent violet, 18 px button radius, 22 px card radius, `650`
+weight. PRO gating uses an aggregate `pro_locked` block (no
+title/owner/ID leak) and routes Free users into the existing
+`ProUpsellSheet` with `context: 'pro_main'`.
+
+**Supersedes.** Nothing — first version.
+
+**Impact.**
+- New screen file: `apps/web/app/miniapp/screens/SearchScreen.tsx`.
+- New lib helpers: `apps/web/app/miniapp/lib/searchApi.ts`,
+  `apps/web/app/miniapp/lib/searchRecent.ts`.
+- New backend route: `apps/api/src/routes/search.routes.ts` (GET
+  `/tg/search` + POST `/tg/access/wishlist-opened`).
+- New backend services: `apps/api/src/services/search.ts`,
+  `apps/api/src/services/foreign-wishlist-access.ts`.
+- New `Screen` value `'search'` in `MiniApp.tsx`.
+- New rate-limit categories `search` (30 / 1 min) and `access.record`
+  (60 / 5 min).
+- New i18n keys (45 each in 6 locales).
+- New Prisma model `ForeignWishlistAccess` + pg_trgm GIN indexes
+  (migration `20260516000000`).
+- 14 new analytics events (`search.opened`,
+  `search.query_completed`, …). **Raw query never logged.**
+
+**Approved by.** Dmitry.
+
+---
+
 ## 2026-05-08 — Pro Lifetime: visible in every paywall sheet (not just `pro_main`)
 
 **Type:** scope-pivot

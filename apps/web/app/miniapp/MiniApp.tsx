@@ -18,6 +18,9 @@ import {
 } from '@wishlist/ui';
 import { AppearanceSettings } from './screens/AppearanceSettings';
 import { CalendarRoot } from './screens/calendar/CalendarRoot';
+import { SearchScreen } from './screens/SearchScreen';
+import type { SearchResult, AccessViewResponse } from './lib/searchApi';
+import { recordWishlistOpen, fetchAccessView } from './lib/searchApi';
 import { ProBadge } from './components/ProBadge';
 import { SantaHatOverlay } from './components/SantaHatOverlay';
 import { SnowflakeOverlay } from './components/SnowflakeOverlay';
@@ -316,7 +319,8 @@ type UpsellContext =
   | 'showcase'
   | 'appearance' // v2.1: theme/accent PRO gate
   | 'birthday_reminders_advanced' // birthday-reminders Pro features (audience EXTENDED, primary wishlist, custom message, advanced windows)
-  | 'pro_main'; // voluntary upgrade flow (Settings → connect_pro, bot deep-link upgrade_pro). Distinct from feature-gate contexts so analytics can separate "user proactively browsed PRO" from "user hit a limit". Lifetime tile shows in every context (since 2026-05-08).
+  | 'pro_main' // voluntary upgrade flow (Settings → connect_pro, bot deep-link upgrade_pro). Distinct from feature-gate contexts so analytics can separate "user proactively browsed PRO" from "user hit a limit". Lifetime tile shows in every context (since 2026-05-08).
+  | 'search'; // search-driven paywall: Free user found matches in PRO-only result types (reservations / events / anti-gift / smart filters). Distinct context so paywall conversion analytics attributes by entry source.
 
 // UpsellSheetState carries optional wishlistId for wishlist-scoped add-on offers
 type UpsellSheetState = { context: UpsellContext; wishlistId?: string } | null;
@@ -690,7 +694,7 @@ type GodStats = {
   generatedAt: string;
 };
 
-type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'changelog' | 'legal' | 'legal-doc' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-manual' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall' | 'gift-notes-onboarding'
+type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'changelog' | 'legal' | 'legal-doc' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-manual' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall' | 'gift-notes-onboarding' | 'search'
 | 'first-share-prompt'
 | 'group-gift-paywall' | 'group-gift-create' | 'group-gift-detail' | 'group-gift-join' | 'group-gift-chat'
 | 'curated-view'
@@ -2143,6 +2147,15 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
     emoji: '👑',
     title: t('paywall_hero_title', locale),
     subtitle: t('paywall_hero_sub', locale),
+    showTable: true,
+  },
+  // Search-driven paywall — Free user found matches in PRO-only result types
+  // (reservations / events / anti-gift / smart filters). Distinct from
+  // pro_main so paywall conversion analytics can attribute by entry source.
+  search: {
+    emoji: '🔍',
+    title: t('search_paywall_title', locale),
+    subtitle: t('search_paywall_desc', locale),
     showTable: true,
   },
 });
@@ -4792,6 +4805,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const themeSyncedFromServerRef = useRef(false);
   // Track which screen the user came from before opening settings (for correct back navigation)
   const [settingsOriginScreen, setSettingsOriginScreen] = useState<Screen>('my-wishlists');
+  // Same pattern for the global-search screen so back navigates to the
+  // originating screen (usually 'my-wishlists') and not a fallback.
+  const [searchOriginScreen, setSearchOriginScreen] = useState<Screen>('my-wishlists');
   const [firstSharePromptData, setFirstSharePromptData] = useState<{ wishlistId: string; wishlistTitle: string } | null>(null);
   const firstSharePromptShownRef = useRef(false);
 
@@ -7100,11 +7116,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     // (the share endpoint may 500 if shareToken column doesn't exist yet in DB)
     let json: GuestResponse | null = null;
     let resolved = false;
+    // Track whether the resolution went through the share-token path so we
+    // can pass the raw token to recordWishlistOpen below — the server hashes
+    // it into FWA.sourceRef for strict revocation enforcement.
+    let resolvedViaShareToken = false;
     try {
       const tokenRes = await fetch(`${apiBase}/public/share/${encodeURIComponent(param)}`, { cache: 'no-store' });
       if (tokenRes.ok) {
         json = await tokenRes.json() as GuestResponse;
         resolved = true;
+        resolvedViaShareToken = true;
       }
     } catch { /* network error — fall through to slug */ }
 
@@ -7143,8 +7164,52 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     // Load don't gift data for guest view
     setGuestDontGift((json as any).dontGift ?? null);
     setGuestDontGiftExpanded(true);
+    // Foreign-wishlist access history — feeds global search.
+    // Fire-and-forget; the endpoint REQUIRES Telegram initData via tgFetch,
+    // so an unauth public guest call simply 401s and is dropped silently.
+    // sourceRef pins the share-token so a future regenerate revokes search.
+    void recordWishlistOpen(tgFetch, {
+      wishlistId: json.wishlist.id,
+      source: 'share_link',
+      sourceRef: resolvedViaShareToken ? param : null,
+    });
     return mappedItems;
-  }, [apiBase]);
+  }, [apiBase, tgFetch]);
+
+  // Loader for the search-result-click flow on FOREIGN wishlists. Uses the
+  // authenticated /tg/wishlists/:id/access-view endpoint which enforces the
+  // strict access-revocation check (live relation OR matching FWA pin).
+  // Returns true on success, false on access denied / error.
+  const loadForeignWishlistById = useCallback(async (wishlistId: string): Promise<boolean> => {
+    const json: AccessViewResponse | null = await fetchAccessView(tgFetch, wishlistId);
+    if (!json) return false;
+    const priorityMap: Record<string, 1 | 2 | 3> = { LOW: 1, MEDIUM: 2, HIGH: 3 };
+    setGuestWl({
+      ...json.wishlist,
+      ownerName: json.wishlist.ownerName ?? null,
+      ownerAvatarUrl: json.wishlist.ownerAvatarUrl ?? null,
+      ownerUsername: json.wishlist.ownerUsername ?? null,
+    });
+    const mappedItems = json.items.map((i) => ({
+      id: i.id,
+      title: i.title,
+      description: i.description ?? null,
+      url: i.url || null,
+      price: i.priceText ? Number(i.priceText) || null : null,
+      imageUrl: i.imageUrl ?? null,
+      priority: priorityMap[i.priority] ?? 2,
+      position: i.position ?? 0,
+      status: i.status.toLowerCase() as 'available' | 'reserved' | 'purchased',
+      reservedByDisplayName: i.reservedByDisplayName,
+      reservedByActorHash: i.reservedByActorHash ?? null,
+      categoryId: i.categoryId ?? null,
+    }));
+    setGuestItems(mappedItems);
+    setGuestCategories(json.categories ?? []);
+    setGuestDontGift(json.dontGift);
+    setGuestDontGiftExpanded(true);
+    return true;
+  }, [tgFetch]);
 
   const loadComments = useCallback(async (itemId: string) => {
     try {
@@ -7877,6 +7942,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     } else if (screen === 'settings') {
       // Return to the screen the user came from; fall back to my-wishlists if unknown
       const origin = settingsOriginScreen && settingsOriginScreen !== 'settings' ? settingsOriginScreen : 'my-wishlists';
+      setScreen(origin);
+    } else if (screen === 'search') {
+      // Back from search → the screen the search was opened from.
+      const origin = searchOriginScreen && searchOriginScreen !== 'search' ? searchOriginScreen : 'my-wishlists';
       setScreen(origin);
     } else if (screen === 'my-wishlists' && santaWishlistPickerReturnId) {
       // P0: Return to Santa campaign after creating a new wishlist from the picker
@@ -12425,10 +12494,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
             return (
           <div style={{ display: 'flex', alignItems: 'center', padding: '6px 0 14px', gap: 8, position: 'relative', zIndex: 1 }}>
-            {/* 🔍 search (stub) */}
+            {/* 🔍 global search — opens the SearchScreen */}
             <button
-              onClick={() => pushToast(locale === 'ru' ? 'Поиск скоро будет доступен' : 'Search is coming soon', 'info')}
-              aria-label="Search"
+              onClick={() => {
+                try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.('light'); } catch { /* noop */ }
+                setSearchOriginScreen(screen);
+                setScreen('search');
+              }}
+              aria-label={t('search_title', locale)}
               style={{
                 width: 40, height: 40, borderRadius: 14, flexShrink: 0,
                 background: 'var(--wb-surface)', border: '1px solid var(--wb-border)',
@@ -17841,6 +17914,98 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           </div>
         </div>
       </BottomSheet>
+
+      {/* ══════════════════════════════════════════════
+          GLOBAL SEARCH
+          ══════════════════════════════════════════════ */}
+      {screen === 'search' && (
+        <SearchScreen
+          locale={locale}
+          isPro={planInfo.code === 'PRO'}
+          tgFetch={tgFetch}
+          pushToast={pushToast}
+          haptic={(kind) => {
+            try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.(kind); } catch { /* noop */ }
+          }}
+          trackEvent={(event, props) => trackEvent(event, props)}
+          onBack={() => {
+            const origin = searchOriginScreen && searchOriginScreen !== 'search' ? searchOriginScreen : 'my-wishlists';
+            setScreen(origin);
+          }}
+          onOpenPaywall={() => setUpsellSheet({ context: 'search' })}
+          onResultClick={(r: SearchResult) => {
+            const target = r.target;
+            // Settings / FAQ / legal / changelog / referral → straight setScreen + origin tracking.
+            if (target.screen === 'settings' || target.screen === 'faq' || target.screen === 'legal' || target.screen === 'changelog') {
+              setSettingsOriginScreen('my-wishlists');
+              setScreen(target.screen);
+              return;
+            }
+            if (target.screen === 'referral') {
+              setScreen('referral');
+              return;
+            }
+            if (target.screen === 'paywall') {
+              setUpsellSheet({ context: 'search' });
+              return;
+            }
+            if (target.screen === 'my-reservations') {
+              setScreen('my-reservations');
+              return;
+            }
+            if (target.screen === 'gift-notes' || target.screen === 'gift-notes-occasion') {
+              setScreen('gift-notes');
+              return;
+            }
+            // Item / wishlist / category / guest view — try to open the parent
+            // wishlist locally. We rely on `wishlists` state (owner) + the
+            // `subs` state (subscribed). Foreign wishlists not in either set
+            // require the user to open the original share/curated link; we
+            // surface a friendly toast in that case rather than failing.
+            if (target.wishlistId) {
+              const own = wishlists.find((w) => w.id === target.wishlistId);
+              if (own) {
+                void openWishlist(own);
+                return;
+              }
+              // Try subscribed list first — the slug-based loader is cheaper
+              // and gives identical visual output.
+              const subbed = subscriptions.find((s) => s.wishlist?.id === target.wishlistId);
+              if (subbed?.wishlist) {
+                setScreen('loading');
+                void loadGuestWishlist(subbed.wishlist.slug)
+                  .then(() => setScreen('guest-view'))
+                  .catch(() => {
+                    pushToast(t('search_no_access_to_result', locale), 'error');
+                    setScreen('my-wishlists');
+                  });
+                return;
+              }
+              // Last resort: authenticated /tg/wishlists/:id/access-view.
+              // Covers wishlists the user once opened via share-link or
+              // curated-link, but isn't currently subscribed to. The endpoint
+              // hard-rejects if the FWA pin no longer matches the credential.
+              setScreen('loading');
+              void loadForeignWishlistById(target.wishlistId)
+                .then((ok) => {
+                  if (ok) {
+                    setScreen('guest-view');
+                  } else {
+                    pushToast(t('search_no_access_to_result', locale), 'info');
+                    setScreen('my-wishlists');
+                  }
+                })
+                .catch(() => {
+                  pushToast(t('search_no_access_to_result', locale), 'error');
+                  setScreen('my-wishlists');
+                });
+              return;
+            }
+            // Public profile / actions without wishlistId — fall back to my-wishlists.
+            setScreen('my-wishlists');
+          }}
+        />
+      )}
 
       {/* ══════════════════════════════════════════════
           ARCHIVE  (mode: 'wishlist' | 'global')

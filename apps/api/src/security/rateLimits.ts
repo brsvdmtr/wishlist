@@ -38,7 +38,9 @@ export type CategoryName =
   | 'public.share.view'   // 120 / 1m   per ipHash (gentle — real guests)
   | 'health.deep'         // 10  / 1m   per ipHash (external probes)
   | 'santa.draw'          // 3   / 10m  per actorHash (irreversible expensive op; multi-tap guard)
-  | 'santa.admin';        // 10  / 1m   per actorHash (admin/season/global-config — admin gating)
+  | 'santa.admin'         // 10  / 1m   per actorHash (admin/season/global-config — admin gating)
+  | 'search'              // 30  / 1m   per actorHash (read-only GET /tg/search; tight enough to throttle typing-bursts that bypass FE debounce, loose enough for normal typing cadence)
+  | 'access.record';      // 60  / 5m   per actorHash (POST /tg/access/wishlist-opened — fire-and-forget FWA write)
 
 type CategoryConfig = {
   windowMs: number;
@@ -67,6 +69,8 @@ const CATEGORIES: Record<CategoryName, CategoryConfig> = {
   'health.deep':       { windowMs: 60 * 1000,          limit: 10,  keyKind: 'ip' },
   'santa.draw':        { windowMs: 10 * 60 * 1000,     limit: 3,   keyKind: 'actor' },
   'santa.admin':       { windowMs: 60 * 1000,          limit: 10,  keyKind: 'actor' },
+  'search':            { windowMs: 60 * 1000,          limit: 30,  keyKind: 'actor' },
+  'access.record':     { windowMs: 5 * 60 * 1000,      limit: 60,  keyKind: 'actor' },
 };
 
 // Cache one limiter instance per category. Counters are per-process; rebuilding
