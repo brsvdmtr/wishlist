@@ -26,6 +26,7 @@
  */
 
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -43,7 +44,15 @@ const BASE_URL = (process.env.WATCHDOG_BASE_URL ?? '').replace(/\/$/, '');
 const BOT_TOKEN = process.env.BOT_TOKEN ?? '';
 const CHAT_IDS = (process.env.ADMIN_ALERT_CHAT_IDS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const STATE_FILE = process.env.WATCHDOG_STATE_FILE ?? '/tmp/watchdog-state.json';
-const TIMEOUT_MS = Number(process.env.WATCHDOG_TIMEOUT_MS ?? 8000);
+// 15s — empirically safe for an SSR-rendered home page through nginx, with
+// headroom for a one-off DNS resolver miss. Bumped from 8s after the
+// 2026-05-17 02:25 UTC false alert: Vultr's primary recursive resolver
+// (108.61.10.10) was timing out ~5s for ~50% of queries, eating most of
+// the 8s window and triggering AbortError on the homepage probe even
+// though the app itself was healthy. The DNS-side fix is the resolvconf
+// override on the host (Quad9 first), but the watchdog should never have
+// alerted on a 5-second DNS hiccup either.
+const TIMEOUT_MS = Number(process.env.WATCHDOG_TIMEOUT_MS ?? 15000);
 const MAINTENANCE = (process.env.MAINTENANCE_MODE ?? '').toLowerCase() === 'true';
 
 if (!BASE_URL) {
@@ -53,18 +62,22 @@ if (!BASE_URL) {
 
 // ─── State ───────────────────────────────────────────────────────────────────
 
-/** @returns {{ wasDown: boolean, downSince: string | null, consecutiveHealthyChecks: number, botWasStale: boolean, botStaleSince: string | null }} */
+/** @returns {{ wasDown: boolean, downSince: string | null, consecutiveDownChecks: number, consecutiveHealthyChecks: number, firstDownSince: string | null, botWasStale: boolean, botStaleSince: string | null }} */
 function loadState() {
   try {
     const raw = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
     return {
-      wasDown: false, downSince: null, consecutiveHealthyChecks: 0,
+      wasDown: false, downSince: null,
+      consecutiveDownChecks: 0, consecutiveHealthyChecks: 0,
+      firstDownSince: null,
       botWasStale: false, botStaleSince: null,
       ...raw,
     };
   } catch {
     return {
-      wasDown: false, downSince: null, consecutiveHealthyChecks: 0,
+      wasDown: false, downSince: null,
+      consecutiveDownChecks: 0, consecutiveHealthyChecks: 0,
+      firstDownSince: null,
       botWasStale: false, botStaleSince: null,
     };
   }
@@ -126,28 +139,41 @@ async function runSql(query) {
  * works even when the API is completely unreachable.
  */
 async function createDowntimeExposures() {
+  // UUID generated in Node, not via Postgres RETURNING — `psql -t -A -c`
+  // appends the command-status row ("INSERT 0 1") to the RETURNING output,
+  // and the previous version's regex stripped only the trailing newline so
+  // the next query's FK saw "<uuid>\nINSERT 0 1" and exposures were never
+  // inserted (silent 0 ever since this code shipped — see ghost rows in
+  // MaintenanceIncident with exposureCount=0). 2026-05-17 fix.
+  const incidentId = randomUUID();
   try {
-    // Create incident
-    const incidentId = await runSql(
-      `INSERT INTO "MaintenanceIncident" (id, "startedAt", status, "lastMaintenanceSignalAt", "exposureCount", "notificationsSent", "createdAt", "updatedAt") VALUES (gen_random_uuid()::text, NOW(), 'active', NOW(), 0, 0, NOW(), NOW()) RETURNING id`,
+    const incidentInsert = await runSql(
+      `INSERT INTO "MaintenanceIncident" (id, "startedAt", status, "lastMaintenanceSignalAt", "exposureCount", "notificationsSent", "createdAt", "updatedAt") VALUES ('${incidentId}', NOW(), 'active', NOW(), 0, 0, NOW(), NOW())`,
     );
-    if (!incidentId) {
+    if (incidentInsert === null) {
       console.error('[watchdog] failed to create incident');
       return null;
     }
     console.log(`[watchdog] created incident: ${incidentId}`);
 
-    // Find users active in last 24h (from AnalyticsEvent) who have a telegramChatId
-    const insertedCount = await runSql(
-      `WITH active_users AS ( SELECT DISTINCT ae."userId" AS telegram_id FROM "AnalyticsEvent" ae WHERE ae."createdAt" > NOW() - INTERVAL '24 hours' AND ae."userId" IS NOT NULL ), eligible AS ( SELECT u.id, u."telegramChatId", au.telegram_id FROM active_users au JOIN "User" u ON u."telegramId" = au.telegram_id WHERE u."telegramChatId" IS NOT NULL ) INSERT INTO "MaintenanceExposure" (id, "incidentId", "userId", surface, locale, "telegramChatId", "firstSeenAt", "lastSeenAt", "createdAt", "updatedAt") SELECT gen_random_uuid()::text, '${incidentId}', e.id, 'miniapp', 'ru', e."telegramChatId", NOW(), NOW(), NOW(), NOW() FROM eligible e ON CONFLICT ("incidentId", "userId", surface) DO NOTHING RETURNING id`,
+    // Find users active in last 24h (from AnalyticsEvent) who have a telegramChatId.
+    // Use SELECT COUNT after INSERT instead of RETURNING for the same parsing reason.
+    const insertResult = await runSql(
+      `WITH active_users AS ( SELECT DISTINCT ae."userId" AS telegram_id FROM "AnalyticsEvent" ae WHERE ae."createdAt" > NOW() - INTERVAL '24 hours' AND ae."userId" IS NOT NULL ), eligible AS ( SELECT u.id, u."telegramChatId", au.telegram_id FROM active_users au JOIN "User" u ON u."telegramId" = au.telegram_id WHERE u."telegramChatId" IS NOT NULL ) INSERT INTO "MaintenanceExposure" (id, "incidentId", "userId", surface, locale, "telegramChatId", "firstSeenAt", "lastSeenAt", "createdAt", "updatedAt") SELECT gen_random_uuid()::text, '${incidentId}', e.id, 'miniapp', 'ru', e."telegramChatId", NOW(), NOW(), NOW(), NOW() FROM eligible e ON CONFLICT ("incidentId", "userId", surface) DO NOTHING`,
     );
+    if (insertResult === null) {
+      console.error('[watchdog] failed to insert exposures');
+      return incidentId;
+    }
 
-    const count = insertedCount ? insertedCount.split('\n').filter(Boolean).length : 0;
+    const count = await runSql(
+      `SELECT COUNT(*)::int FROM "MaintenanceExposure" WHERE "incidentId" = '${incidentId}'`,
+    );
+    const exposureCount = Number(count) || 0;
 
-    // Update exposure count on incident
-    await runSql(`UPDATE "MaintenanceIncident" SET "exposureCount" = ${count} WHERE id = '${incidentId}'`);
+    await runSql(`UPDATE "MaintenanceIncident" SET "exposureCount" = ${exposureCount} WHERE id = '${incidentId}'`);
 
-    console.log(`[watchdog] created ${count} exposure records for incident ${incidentId}`);
+    console.log(`[watchdog] created ${exposureCount} exposure records for incident ${incidentId}`);
     return incidentId;
   } catch (err) {
     console.error(`[watchdog] createDowntimeExposures error: ${err}`);
@@ -248,11 +274,21 @@ console.log(`[watchdog] health/deep: ${JSON.stringify(healthResult)} | web: ${JS
 if (isDown) {
   // Reset consecutive healthy counter whenever we see a failure
   state.consecutiveHealthyChecks = 0;
+  state.consecutiveDownChecks = (state.consecutiveDownChecks || 0) + 1;
+  if (!state.firstDownSince) state.firstDownSince = now;
 
-  if (!state.wasDown) {
-    // First failure — send alert
+  // Require 2 consecutive DOWN observations (~5 min apart) before promoting
+  // to an incident + Telegram alert. Each runChecks() already retries once
+  // after 5s, so a single false positive needs to survive BOTH retries on
+  // BOTH runs to escalate — a 10+ minute persistent failure floor. This
+  // change is a direct response to the 2026-05-17 02:25 UTC false alert
+  // caused by a flapping Vultr DNS resolver.
+  if (state.wasDown) {
+    saveState(state);
+    console.log('[watchdog] still down (alert already sent)');
+  } else if (state.consecutiveDownChecks >= 2) {
     state.wasDown = true;
-    state.downSince = now;
+    state.downSince = state.firstDownSince;
     saveState(state);
 
     if (MAINTENANCE) {
@@ -263,18 +299,27 @@ if (isDown) {
         !webResult.ok ? `• web homepage → ${webResult.status || webResult.error}` : '',
         tgRouteDown ? `• /api/tg/bootstrap → ${tgResult.status || tgResult.error} (MAINTENANCE_MODE stuck?)` : '',
       ].filter(Boolean).join('\n');
-      await sendAlert(`🔴 <b>Wishlistik DOWN</b> at ${now}\n\n${details}`);
+      await sendAlert(`🔴 <b>Wishlistik DOWN</b> at ${now}\n(persistent since ${state.firstDownSince})\n\n${details}`);
       console.log('[watchdog] alert sent: DOWN');
 
       // Create incident + exposure records for active users directly in DB.
       // API is unreachable so we bypass it entirely.
       const incidentId = await createDowntimeExposures();
       if (incidentId) state.incidentId = incidentId;
+      saveState(state);
     }
   } else {
-    console.log('[watchdog] still down (alert already sent)');
+    saveState(state);
+    console.log(`[watchdog] first DOWN observation, waiting for confirmation (consecutiveDownChecks=${state.consecutiveDownChecks}/2)`);
   }
 } else {
+  // Healthy check: clear any "first down" suspicion that didn't escalate.
+  if (state.consecutiveDownChecks > 0 && !state.wasDown) {
+    console.log(`[watchdog] transient blip cleared (was ${state.consecutiveDownChecks} consecutive DOWN, not promoted)`);
+  }
+  state.consecutiveDownChecks = 0;
+  state.firstDownSince = null;
+
   if (state.wasDown) {
     // Service is up but was down — track stability window
     state.consecutiveHealthyChecks = (state.consecutiveHealthyChecks || 0) + 1;
@@ -338,6 +383,11 @@ if (isDown) {
       // silent — normal path when there's no active incident
     }
 
+    // Persist the consecutiveDownChecks/firstDownSince reset above so a
+    // healthy run between two DOWN observations actually clears the
+    // counter (otherwise the file keeps the stale "1" and we'd promote
+    // on the next DOWN, defeating the whole 2-consecutive guard).
+    saveState(state);
     console.log('[watchdog] all healthy');
   }
 }

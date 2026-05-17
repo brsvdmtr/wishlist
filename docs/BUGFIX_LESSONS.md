@@ -5,6 +5,116 @@ New entries go at the top.
 
 ---
 
+## 2026-05-17 — Ложный watchdog-алерт «Wishlistik DOWN» из-за флапа Vultr DNS
+
+### Ошибка
+В 02:25:01 UTC прилетело Telegram-уведомление от админ-watchdog'а:
+```
+🔴 Wishlistik DOWN at 2026-05-17T02:25:01.152Z
+• web homepage → AbortError: This operation was aborted
+```
+К моменту инвестигации (6 часов спустя) приложение было полностью
+здорово, web/api/bot контейнеры не перезагружались, OOM/высокой
+нагрузки не было, в `docker logs wishlist-prod-web-1` за окно 02:00–02:40
+тишина. В `/var/log/watchdog.log` цепочка алерта длилась 15 минут:
+`02:25` DOWN → `02:30/02:35/02:40` recovery 1/2/3 → `02:40` RECOVERED.
+Реальный «инцидент» — одиночное окно проверки шириной < 5 минут.
+
+### Root cause
+`/etc/resolv.conf` начинался с `nameserver 108.61.10.10` (Vultr
+recursive resolver) — cloud-init пишет его в
+`/etc/network/interfaces.d/50-cloud-init`. Этот резолвер в момент
+инцидента (и до сих пор!) флапает: 10 подряд проб `host wishlistik.ru
+108.61.10.10` дают 5 успешных за <50ms и 5 тайм-аутов по 5s. glibc
+ждёт ответа 5s перед фолбэком на `9.9.9.9` (второй в списке).
+
+Watchdog имеет `WATCHDOG_TIMEOUT_MS=8000` и делает три fetch параллельно
+к `https://wishlistik.ru/...`. Если оба захода (первичный + один
+автоматический retry через 5s) попали в «slow DNS» — 5s DNS-резолва съели
+почти весь бюджет, `AbortError` срабатывает до того, как fetch успевает
+получить ответ от nginx. В `access.log` видно: первая проверка получила
+`GET / → 200 3223` за 5+s (под пределом), retry — `GET /` уже не дошёл
+до nginx (запись отсутствует), а `health/deep` + `tg/bootstrap` retry
+успели за <100ms потому что glibc DNS cache уже warm на `wishlistik.ru`.
+
+Все остальные следы (Next.js stack traces, system load, mem) — отвлечения.
+Никаких реальных проблем у приложения в это окно не было.
+
+Заодно нашёл побочный баг — `createDowntimeExposures()` использовал
+`INSERT … RETURNING id` через `psql -t -A -c`. psql добавляет к выводу
+строку `INSERT 0 1` (CommandStatus), а `.trim()` снимает только трейлинг
+newline. В результате incidentId получался как `"<uuid>\nINSERT 0 1"`,
+FK-инсерт `MaintenanceExposure` падал на этом же шаге, и **никаких
+exposure-записей не создавалось ни разу** с момента когда watchdog
+поселился в кроне. 8 ghost-инцидентов в `MaintenanceIncident` с
+`exposureCount=0, notificationsSent=0` подтверждают: если бы был
+реальный downtime, recovery-уведомления никому бы не ушли.
+
+### Урок
+- **Watchdog с тайм-аутом 8s в HTTP-пробе считал DNS-резолв одного
+  имени и сам HTTP-запрос одним и тем же бюджетом.** Один транзиентный
+  5s DNS-hiccup → false positive. Никакой запас не был заложен.
+- **«Первая неудача = инцидент» — слишком чувствительно.** Watchdog с
+  крон-частотой 5 минут должен требовать как минимум 2 подряд DOWN до
+  эскалации; запас в 10 минут детекции тут стоит дешевле, чем
+  систематическая 3 утра тревога на ровном месте.
+- **`psql -t -A -c "… RETURNING …"` НЕ возвращает только rows.** Он
+  всегда дописывает `CommandStatus` (`INSERT 0 1`, `UPDATE 5` и т.п.).
+  Это известное поведение psql, легко проглядеть при ручном парсинге.
+  Лучше генерить идентификаторы на стороне приложения и не полагаться
+  на RETURNING в shell-out скриптах.
+- **«0 exposures, 0 notifications» в подряд идущих инцидентах — это
+  не «инциденты были тривиальными».** Это бесшумный молчаливый баг,
+  который надо ловить операционным алертом («если новый incident, а
+  через 15 минут `exposureCount` всё ещё 0 — это баг»).
+
+### Правила
+- **Health probe budget ≥ `(worst-case DNS) + (worst-case TLS) + (worst-case
+  app reply) + headroom`.** Для нашего стека и текущей DNS-практики это
+  ≥ 15s. Жёстче — приглашаем регулярные false positives.
+- **На облачных VPS с управляемым DNS — НЕ доверяем DNS провайдера
+  один-на-один.** Ставим публичные резолверы (Quad9 / Cloudflare) первыми
+  через `/etc/resolvconf/resolv.conf.d/head`, провайдерский остаётся
+  фолбэком. Закрепляем через симлинк `/etc/resolv.conf →
+  /run/resolvconf/resolv.conf`, иначе DHCP/cloud-init перезатрёт.
+- **Любой watchdog, который шлёт алерт, требует ≥2 consecutive failed
+  checks.** Один retry внутри одного запуска не считается — он попадает
+  в то же DNS/network failure window.
+- **Никакого parsing RETURNING через `psql -t -A -c` в shell-скриптах.**
+  Либо генерим UUID на стороне Node/Python, либо отдельный `SELECT`
+  после `INSERT`. Если очень надо — `psql --no-psqlrc -At -c "INSERT … RETURNING id" | head -1`.
+
+### Лучший код
+- `ops/watchdog/health-watchdog.mjs`: `WATCHDOG_TIMEOUT_MS` дефолт
+  `8000 → 15000`; добавлено состояние `consecutiveDownChecks` +
+  `firstDownSince`, алерт + создание `MaintenanceIncident` промоутятся
+  только начиная со второго подряд DOWN; UUID для инцидента генерится
+  через `randomUUID()` в Node, отдельный `SELECT COUNT(*)` вместо
+  `INSERT … RETURNING`.
+- `ops/vultr/setup-dns.sh`: новый идемпотентный скрипт — кладёт Quad9 +
+  Cloudflare в `/etc/resolvconf/resolv.conf.d/head` и переключает
+  `/etc/resolv.conf` на симлинк к runtime-файлу. Безопасно перезапускать
+  при будущих переустановках сервера / миграциях.
+- `ops/nginx/scanner-block.conf.snippet`: добавлен exact-match
+  `location = /`, дропающий все методы кроме GET/HEAD. У нас нет
+  Server Actions в `apps/web/`, поэтому POST к `/` — это всегда сканер;
+  убирает 45+ Next.js стек-трейсов в день в `docker logs web`.
+- `MaintenanceIncident`: 8 ghost-строк (exposureCount=0) удалены вручную
+  на проде (см. § Postdeploy ниже).
+
+### Postdeploy
+- Vultr resolver (`108.61.10.10`) флапает прямо сейчас — после фикса
+  `host wishlistik.ru` стабильно отвечает <0.7s (10/10 проб). До фикса
+  было 5/10 timeout по 5s.
+- Watchdog state file `/tmp/watchdog-state.json` после первого нового
+  запуска подхватит дефолты для `consecutiveDownChecks`/`firstDownSince`
+  через destructuring в `loadState()`, чистить не нужно.
+- В кроне watchdog запускается каждые 5 минут — следующий запуск
+  поднимет обновлённый скрипт автоматически (через git pull в
+  `/opt/wishlist/`); nginx перечитывает конфиг вручную `nginx -s reload`.
+
+---
+
 ## 2026-05-16 — Flaky CI: birthday-reminders test зависел от часа суток на момент запуска
 
 ### Ошибка
