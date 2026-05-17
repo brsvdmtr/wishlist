@@ -15804,7 +15804,16 @@ const ar: Dict = {
 
 // ─── Dictionaries map ─────────────────────────────────────────────────────────
 
-const dicts: Record<Locale, Dict> = { ru, en, 'zh-CN': zhCN, hi, es, ar };
+/**
+ * Per-locale dictionaries.
+ *
+ * Exported (instead of file-private) **only** so the locale-coverage tests
+ * in `i18n.parity.test.ts` can iterate over keys and assert key parity +
+ * absence of English stubs in non-EN locales. Do NOT use this map for
+ * lookups in product code — always call `t(key, locale, params?)` so the
+ * interpolation + fallback rules stay consistent.
+ */
+export const dicts: Record<Locale, Dict> = { ru, en, 'zh-CN': zhCN, hi, es, ar };
 
 // ─── Interpolation ────────────────────────────────────────────────────────────
 
