@@ -783,10 +783,21 @@ export function monthLabelShort(monthIdx: number, locale: string): string {
 
 const MONTH_LABELS_RU_LONG = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 const MONTH_LABELS_EN_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+// Lowercase per Spanish (RAE) calendar convention.
+const MONTH_LABELS_ES_LONG = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const MONTH_LABELS_AR_LONG = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+const MONTH_LABELS_HI_LONG = ['जनवरी','फ़रवरी','मार्च','अप्रैल','मई','जून','जुलाई','अगस्त','सितंबर','अक्टूबर','नवंबर','दिसंबर'];
+const MONTH_LABELS_ZH_LONG = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
 
 export function monthLabelLong(monthIdx: number, locale: string): string {
-  if (locale === 'ru') return MONTH_LABELS_RU_LONG[monthIdx] ?? '';
-  return MONTH_LABELS_EN_LONG[monthIdx] ?? '';
+  const arr =
+    locale === 'ru' ? MONTH_LABELS_RU_LONG
+    : locale === 'es' ? MONTH_LABELS_ES_LONG
+    : locale === 'ar' ? MONTH_LABELS_AR_LONG
+    : locale === 'hi' ? MONTH_LABELS_HI_LONG
+    : locale === 'zh-CN' ? MONTH_LABELS_ZH_LONG
+    : MONTH_LABELS_EN_LONG;
+  return arr[monthIdx] ?? '';
 }
 
 const WEEKDAY_LABELS_RU = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];

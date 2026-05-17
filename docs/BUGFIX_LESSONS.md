@@ -5,6 +5,215 @@ New entries go at the top.
 
 ---
 
+## 2026-05-17 — iOS «замораживание» горизонтальной полосы chips на SearchScreen
+
+### Симптом
+В Mini App на iOS: поиск работает, но после нажатия на любую chip-у в
+горизонтальном scroll-контейнере (категория / фильтр / smart-chip) сам
+контейнер перестаёт принимать касания — выглядит как «заморозка»: можно
+тапать кнопку поиска, но провести пальцем по chips-row нельзя, ни одна
+chip не нажимается. Помогает только полное закрытие WebView. Android и
+Chrome desktop не воспроизводят.
+
+### Root cause
+Два независимых iOS WKWebView-quirks накладывались поверх друг друга на
+горизонтально-скроллящемся flex-row с inline-styles:
+
+1. **Отсутствие `-webkit-overflow-scrolling: touch`** на контейнерах
+   `chipsRow` и `smartChipsRow`. Без него iOS использует синхронный
+   scroll, который после первого touch-tap события на дочерней кнопке
+   входит в неопределённое состояние и игнорирует последующие touchstart
+   до scroll-reset.
+2. **Шорт-форма `border`** на самих chip-кнопках. iOS Safari при
+   `border: '1px solid X'` на focusable элементе внутри
+   overflow-x-scroll контейнера может терять touch-target hitbox
+   после первого re-render. Раскладка `borderWidth/Style/Color` в
+   long-form исправляет это.
+
+### Fix
+В `apps/web/app/miniapp/screens/SearchScreen.tsx`:
+
+- На `chipsRow` и `smartChipsRow`: добавили
+  `WebkitOverflowScrolling: 'touch'` и `touchAction: 'pan-x'` (iOS
+  знает, что row реагирует только на горизонтальный pan, всё остальное
+  пропускает дочерним элементам).
+- На `chip` и `smartChip` кнопках: добавили
+  `touchAction: 'manipulation'` (явный фолбэк, чтобы кнопки не пытались
+  претендовать на pan-y) и переписали `border` как `borderWidth /
+  borderStyle / borderColor` longhand.
+
+### Урок
+Inline-styles на горизонтальных scroll-контейнерах внутри Telegram Mini
+App нужно перепроверять под iOS WKWebView отдельно — Chrome devtools
+никогда не воспроизводит эти баги. Минимальная защитная троица:
+- контейнер: `WebkitOverflowScrolling: 'touch' + touchAction: 'pan-x'`
+- ребёнок-кнопка: `touchAction: 'manipulation' + border longhand`
+- желательно проверить на реальном iPhone в Telegram, не в Safari.
+
+### Правило
+Для любого нового горизонтального scroll-контейнера с тап-таргетами
+внутри Mini App: applying these three style props is mandatory в первой
+итерации, не «когда пользователь пожалуется». Эта тройка дешёвая, не
+ломает Android/desktop и закрывает класс багов целиком. Если pattern
+повторяется ещё раз — выносить в дизайн-токен/примитив.
+
+### Лучший код (паттерн)
+```tsx
+const scrollRow: React.CSSProperties = {
+  display: 'flex',
+  overflowX: 'auto',
+  WebkitOverflowScrolling: 'touch',
+  touchAction: 'pan-x',
+};
+const tapChip: React.CSSProperties = {
+  borderWidth: 1,
+  borderStyle: 'solid',
+  borderColor: 'var(--wb-border)',
+  touchAction: 'manipulation',
+};
+```
+
+---
+
+## 2026-05-17 (preventive) — Hardening watchdog после ложного алерта
+
+### Контекст
+Запись ниже («Ложный watchdog-алерт») закрыла root cause и три латентных
+бага одним PR'ом. Но осталось несколько системных слабостей, которые сами
+по себе ещё не выстрелили, но при следующем подобном инциденте могли бы
+дать второй ложный алерт или потерять детекцию настоящего downtime. Этот
+follow-up превентивно их закрывает — никаких новых багов в проде не было,
+просто apriori более прочная конструкция.
+
+### Что было слабым
+1. **State в `/tmp`.** `WATCHDOG_STATE_FILE` дефолтился на `/tmp/watchdog-state.json`.
+   `/tmp` чистится при reboot и иногда при background `tmpwatch` — то есть
+   dedup и счётчик «2 consecutive DOWN» могли молча обнулиться между cron-тиками,
+   и реальный outage сразу после reboot получил бы alert на первом же DOWN
+   (что не криминально), а dedup recover-флага потерялся бы (что хуже —
+   спам RECOVERY-алертов).
+2. **Не-атомарная запись.** `fs.writeFileSync(path, JSON.stringify(state))`
+   при crash посередине оставлял бы truncated JSON. На следующем тике
+   `JSON.parse` молча падал в `catch` → defaults → состояние «всё с нуля»
+   без предупреждения.
+3. **Никакой защиты от наложений cron.** Если SQL-проба зависала и тик
+   шёл > 5 минут, следующий cron стартовал бы поверх — два процесса
+   читали бы и переписывали один файл без координации, race на
+   `consecutiveDownChecks`.
+4. **Нет тестов на state-машину.** Изменения в counter logic ловились
+   только глазами и через ручной smoke-test после деплоя.
+5. **Нет операционного сигнала на «exposureCount = 0 после 15min».**
+   Latent bug `createDowntimeExposures` молча шёл месяц — если бы он
+   повторился в любой форме, мы бы не увидели до следующего реального
+   downtime.
+6. **Telegram-доставка best-effort без проверки.** `fetch().then(...)`
+   без чтения body, без `body.ok`, без обработки 429 retry_after.
+   Возможный 429 терялся и алерт уходил в /dev/null.
+7. **Нет `--check` режима в `setup-dns.sh`.** Operator не мог быстро
+   проверить, остался ли prod-сервер в правильной DNS-конфигурации без
+   риска что-то поменять.
+
+### Что починили
+- `ops/watchdog/state.mjs` — pure state machine + atomic `saveStateAtomic`
+  (tmp в той же директории → `fsync` → `rename` → `fsync` родительского dir).
+  `loadState` tolerant: missing → defaults, invalid JSON → defaults +
+  backup `<path>.corrupt-<ts>` + warning на stderr.
+- `health-watchdog.mjs` теперь импортирует transitions из state.mjs.
+  Default state path → `/var/lib/wishlist/watchdog/state.json` (отдельная
+  0700 dir, 0600 file). Dedicated subdir выбран специально, чтобы chmod
+  0700 в `ensureStateDir` не накрывал shared parent `/var/lib/wishlist/`.
+  One-time legacy fallback читает `/var/lib/wishlist/watchdog-state.json`
+  и `/tmp/watchdog-state.json` (newest-first); следующий save пишет уже
+  в новое место. Legacy файлы НЕ удаляются автоматически.
+- `ops/watchdog/run-health-watchdog.sh` — flock-обёртка. `flock -n` на
+  `/var/lock/wishlist-watchdog.lock`; если предыдущий тик не закончился,
+  новый чисто выходит 0 с одной log-строкой. Cron-line в
+  `ops/cron/root.crontab` обновлён.
+- Pure-logic тесты — `ops/watchdog/state.test.mjs`, 26 кейсов через
+  `node:test`. Запуск через `pnpm test:ops`. Покрытие: full lifecycle
+  (blip → suspicion → promote → recover), state-file round-trip,
+  corrupted-JSON → safe defaults + backup, zero-exposure dedup
+  (alert once, prune on recovery, prune on back-fill).
+- Zero-exposure детектор внутри watchdog'а: каждый тик SELECT по
+  `MaintenanceIncident` со status active/recovering, age ≥ 15 min, и
+  **живой** `COUNT(*)` из `MaintenanceExposure` (не cached column, потому
+  что cached column — это и есть бажный сигнал). Один Telegram-алерт
+  на incident, dedup в `state.zeroExposureAlertedIncidentIds`,
+  автоматическое pruning при recovery / back-fill.
+- `sendAlert` теперь проверяет HTTP status, `body.ok`, логирует
+  `error_code` и `description`. На 429 — один retry, respecting
+  `parameters.retry_after`. Никогда не throw'ит — иначе degraded
+  Telegram скрыл бы реальную причину alert'а.
+- `ops/vultr/setup-dns.sh` получил `--check` / `--apply` / interactive
+  parity с `setup-nginx.sh`. `--check` ничего не меняет, выходит non-zero
+  при дрейфе — годится для cron-мониторинга. Проверяет: симлинк, head-файл,
+  и **порядок резолверов в живом** `/etc/resolv.conf` (Quad9/Cloudflare
+  должны идти ДО `108.61.10.10`).
+
+### Правила
+- **State health-watchdog (и вообще любой dedup для алертов) живёт в
+  `/var/lib/<service>/`, не в `/tmp`.** `/tmp` это для эфемерного.
+- **Любая запись state-файла — атомарная через tmp + rename.** Никогда
+  `writeFileSync` напрямую в финальный путь.
+- **Любой cron-job чувствительный к state — запускается через
+  `flock -n`.** Non-blocking, чтобы новый запуск не наслаивался на
+  зависший предыдущий.
+- **Pure state transitions выносятся в отдельный модуль с
+  `node:test`-ами.** Refactor pre-fix → нельзя. State-машина без тестов
+  — это «надеемся что smoke-test ничего не пропустил».
+- **Любой alert-channel** (Telegram, Slack, email) проверяет HTTP status
+  AND application-level `ok`/error поле. Лучше «доставка упала, но я
+  залогировал в stderr» чем «отправил и забыл».
+- **Кешированные `*Count` колонки на бизнес-таблицах — подозрительные
+  по умолчанию.** Сверка с живым `COUNT(*)` должна быть в monitoring,
+  не в production debug session после инцидента.
+
+### Postdeploy
+- Применить на prod (вне этого коммита):
+  - `sudo /opt/wishlist/ops/vultr/setup-dns.sh --check` — должен пройти
+  - `sudo crontab /opt/wishlist/ops/cron/root.crontab` — обновить cron на
+    запуск через wrapper
+  - Первый запуск `/opt/wishlist/ops/watchdog/run-health-watchdog.sh`
+    создаст `/var/lib/wishlist/watchdog/state.json` и (если есть)
+    подхватит legacy `/var/lib/wishlist/watchdog-state.json` либо
+    `/tmp/watchdog-state.json` один раз. Старые файлы не удаляются —
+    проверить и удалить вручную после успешного первого save.
+- Локально: `pnpm test:ops` → 26 passed.
+
+### Сознательно не сделано
+- **SIGKILL race** между `sendAlert` и `saveStateAtomic` после промоушена
+  — inherited issue, маленькое последствие (incidentId теряется для
+  трекинга, recovery работает по status), не блокер.
+- **Per-process backoff** в zero-exposure детекторе шире 5 минут (e.g.
+  на час) — текущий dedup в state-файле уже не даёт спама.
+- **Полная замена `docker compose exec psql` на `pg_isready`/прямое
+  подключение** — отдельный рефакторинг, не относящийся к этой ветке.
+- **Recovery `UPDATE … WHERE status IN ('active','recovering')` не
+  фильтрует по `incidentId`** — это inherited поведение из старого кода
+  и оно может за один тик "закрыть" чужой одновременный incident.
+  В этом PR'е НЕ исправлено — это отдельный change, требующий аккуратно
+  пройтись по `services/maintenance` / API на API-стороне. Закрытие этого
+  follow-up'а должно идти отдельным diff'ом, не смешиваясь с watchdog
+  hardening'ом.
+
+### Поправки по результатам own-review pass перед PR
+- `evaluateZeroExposureAlerts` больше не атомарно «пометил alerted».
+  Pure-функция теперь возвращает только pruned-state + список `toAlert`,
+  caller вызывает `markZeroExposureAlerted(state, ids)` ТОЛЬКО ПОСЛЕ
+  успешной Telegram-доставки. Если канал лёг — следующий 5-мин тик
+  ретраит. Иначе один сетевой блип терял alert навсегда (до recovery).
+- `sendAlert` возвращает `boolean` — гранулярный per-chat успех
+  агрегируется через "≥1 чат принял = доставлено", чтобы один забаненный
+  бот в чате не валил alert для остальных.
+- `fetchZeroExposureCandidates` теперь отбрасывает строки с непарсящимся
+  `COUNT(*)` (через `Number.isFinite`), а не молча трактует как «0
+  exposures» — иначе один поломанный psql-output дал бы fake-zero alert.
+- `run-health-watchdog.sh` получил `WATCHDOG_REQUIRE_FLOCK=true` режим
+  для prod fail-closed: если `flock(1)` отсутствует и переменная
+  включена — wrapper выходит exit 2, а не запускается unguarded.
+
+---
+
 ## 2026-05-17 — Ложный watchdog-алерт «Wishlistik DOWN» из-за флапа Vultr DNS
 
 ### Ошибка

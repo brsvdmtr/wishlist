@@ -16,7 +16,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import type { Locale } from '@wishlist/shared';
+import { localeToBCP47, type Locale, t } from '@wishlist/shared';
 import { gradients } from '@wishlist/ui-tokens';
 import type { TgFetch } from './api';
 import * as api from './api';
@@ -509,7 +509,7 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
             const expanded = expandedId === idea.id;
             const hasDetails = !!(idea.imageUrl || idea.note || idea.link);
             const priceText = idea.price != null
-              ? `${idea.price.toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US')} ${idea.currency ?? ''}`.trim()
+              ? `${idea.price.toLocaleString(localeToBCP47(locale))} ${idea.currency ?? ''}`.trim()
               : null;
             const linkDomain = idea.link ? safeDomain(idea.link) : null;
             return (
@@ -633,7 +633,7 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
                         color: 'var(--wb-text-muted)', fontSize: 12,
                         cursor: 'pointer', fontFamily: 'inherit',
                       }}
-                    >{locale === 'ru' ? 'Свернуть' : 'Collapse'}</button>
+                    >{t('common_collapse', locale)}</button>
                   </div>
                 )}
               </div>

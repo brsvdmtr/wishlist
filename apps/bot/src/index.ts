@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import https from 'node:https';
 import path from 'node:path';
 import { prisma, resolveReferralCode, tryCreateAttribution, markFirstBotStart, loadReferralConfig, persistResolvedBucket } from '@wishlist/db';
-import { t, pluralize, detectLocale, resolveEffectiveLocale, resolveLocaleWithSource, profileToLanguageSettings, resolveMarketBucket, LIFETIME_BILLING_PERIOD, PRO_LIFETIME_PERIOD_END_ISO, HINT_LOOKUP_WINDOW_MS, type Locale } from '@wishlist/shared';
+import { t, pluralize, detectLocale, resolveEffectiveLocale, resolveLocaleWithSource, profileToLanguageSettings, resolveMarketBucket, localeToBCP47, LIFETIME_BILLING_PERIOD, PRO_LIFETIME_PERIOD_END_ISO, HINT_LOOKUP_WINDOW_MS, type Locale } from '@wishlist/shared';
 import logger from './logger';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
@@ -1320,7 +1320,7 @@ if (!token) {
         });
 
         const locale = getLocale(ctx);
-        const dateFmtLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
+        const dateFmtLocale = localeToBCP47(locale);
         const fmtDate = periodEnd.toLocaleDateString(dateFmtLocale, { day: 'numeric', month: 'long', year: 'numeric' });
         await ctx.reply(
           t('bot_pro_activated', locale, { date: fmtDate }),
@@ -1429,7 +1429,7 @@ if (!token) {
         });
 
         const locale = getLocale(ctx);
-        const dateFmtLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
+        const dateFmtLocale = localeToBCP47(locale);
         const fmtDate = periodEnd.toLocaleDateString(dateFmtLocale, { day: 'numeric', month: 'long', year: 'numeric' });
         await ctx.reply(
           t('bot_pro_activated_yearly', locale, { date: fmtDate }),
@@ -2161,7 +2161,7 @@ if (!token) {
         parseStatus: string;
       };
 
-      const priceFmtLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
+      const priceFmtLocale = localeToBCP47(locale);
       let msg = `${t('bot_import_success', locale)}\n\n`;
       msg += `<b>${escapeHtml(item.title)}</b>`;
       if (item.sourceDomain) msg += `\n🔗 ${escapeHtml(item.sourceDomain)}`;

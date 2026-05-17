@@ -77,24 +77,29 @@ const FILTER_OPTIONS: { type: FilterType; emoji: string; key: string }[] = [
 ];
 
 // Per-filter smart chips. Empty arrays = no smart chips for that filter.
-const SMART_CHIPS: Partial<Record<FilterType, { id: string; labelRu: string; labelEn: string; requiresPro?: boolean }[]>> = {
+// `labelKey` is an i18n key resolved via t() at render time — all 6 locales
+// are populated in `packages/shared/src/i18n.ts` (search_smart_*). Replacing
+// the previous `labelRu / labelEn` pair fixes the bug where zh-CN / hi /
+// es / ar users saw English chip labels even when their UI was fully
+// localised elsewhere.
+const SMART_CHIPS: Partial<Record<FilterType, { id: string; labelKey: string; requiresPro?: boolean }[]>> = {
   item: [
-    { id: 'available', labelRu: 'Доступные', labelEn: 'Available' },
-    { id: 'with-price', labelRu: 'С ценой', labelEn: 'With price' },
-    { id: 'no-price', labelRu: 'Без цены', labelEn: 'No price' },
-    { id: 'high-prio', labelRu: 'Важные', labelEn: 'High priority' },
-    { id: 'with-link', labelRu: 'С ссылкой', labelEn: 'With link' },
-    { id: 'archive', labelRu: 'Архив', labelEn: 'Archive' },
+    { id: 'available', labelKey: 'search_smart_available' },
+    { id: 'with-price', labelKey: 'search_smart_with_price' },
+    { id: 'no-price', labelKey: 'search_smart_no_price' },
+    { id: 'high-prio', labelKey: 'search_smart_high_prio' },
+    { id: 'with-link', labelKey: 'search_smart_with_link' },
+    { id: 'archive', labelKey: 'search_smart_archive' },
   ],
   reservation: [
-    { id: 'mine', labelRu: 'Мои', labelEn: 'Mine' },
-    { id: 'soon', labelRu: 'Истекают скоро', labelEn: 'Expiring soon', requiresPro: true },
-    { id: 'secret', labelRu: 'Тайные', labelEn: 'Secret', requiresPro: true },
-    { id: 'regular', labelRu: 'Обычные', labelEn: 'Regular' },
+    { id: 'mine', labelKey: 'search_smart_mine' },
+    { id: 'soon', labelKey: 'search_smart_soon', requiresPro: true },
+    { id: 'secret', labelKey: 'search_smart_secret', requiresPro: true },
+    { id: 'regular', labelKey: 'search_smart_regular' },
   ],
   wishlist: [
-    { id: 'mine', labelRu: 'Мои', labelEn: 'Mine' },
-    { id: 'subscribed', labelRu: 'Подписки', labelEn: 'Subscriptions' },
+    { id: 'mine', labelKey: 'search_smart_mine' },
+    { id: 'subscribed', labelKey: 'search_smart_subscribed' },
   ],
 };
 
@@ -366,7 +371,7 @@ export function SearchScreen(props: SearchScreenProps): React.JSX.Element {
                 }}
                 style={{ ...styles.smartChip, ...(isActive ? styles.smartChipActive : null) }}
               >
-                {locale === 'ru' ? sc.labelRu : sc.labelEn}
+                {t(sc.labelKey, locale)}
                 {sc.requiresPro && !isPro && <span style={{ marginLeft: 4, opacity: 0.7 }}>⭐</span>}
                 {isActive && <span style={styles.smartChipX}>×</span>}
               </button>
@@ -493,28 +498,28 @@ function FirstOpenState(props: {
         <span style={styles.sectionLabel}>{t('search_quick_filters_title', locale)}</span>
       </div>
       <div style={styles.tilesGrid}>
-        <button type="button" style={styles.tile} onClick={() => onRecentClick(locale === 'ru' ? 'важное' : 'important')}>
+        <button type="button" style={styles.tile} onClick={() => onRecentClick(t('search_tile_important_query', locale))}>
           <span style={styles.tileEm}>⭐</span>
-          <span style={styles.tileLbl}>{locale === 'ru' ? 'Важные желания' : 'Important wishes'}</span>
-          <span style={styles.tileHint}>priority high</span>
+          <span style={styles.tileLbl}>{t('search_tile_important_label', locale)}</span>
+          <span style={styles.tileHint}>{t('search_tile_important_hint', locale)}</span>
         </button>
-        <button type="button" style={styles.tile} onClick={() => onRecentClick(locale === 'ru' ? 'http' : 'http')}>
+        <button type="button" style={styles.tile} onClick={() => onRecentClick('http')}>
           <span style={styles.tileEm}>🔗</span>
-          <span style={styles.tileLbl}>{locale === 'ru' ? 'С ссылкой' : 'With link'}</span>
-          <span style={styles.tileHint}>url</span>
+          <span style={styles.tileLbl}>{t('search_tile_with_link_label', locale)}</span>
+          <span style={styles.tileHint}>{t('search_tile_with_link_hint', locale)}</span>
         </button>
-        <button type="button" style={{ ...styles.tile, ...(isPro ? null : styles.tileProMuted) }} onClick={() => isPro ? onRecentClick(locale === 'ru' ? 'бронь' : 'reservation') : onOpenPaywall()}>
+        <button type="button" style={{ ...styles.tile, ...(isPro ? null : styles.tileProMuted) }} onClick={() => isPro ? onRecentClick(t('search_tile_expiring_query', locale)) : onOpenPaywall()}>
           <span style={styles.tileEm}>⏱</span>
-          <span style={styles.tileLbl}>{locale === 'ru' ? 'Истекают скоро' : 'Expiring soon'}</span>
+          <span style={styles.tileLbl}>{t('search_tile_expiring_label', locale)}</span>
           <span style={{ ...styles.tileHint, color: 'var(--wb-accent-strong)' }}>
-            {isPro ? (locale === 'ru' ? 'брони' : 'reservations') : 'PRO'}
+            {isPro ? t('search_tile_expiring_hint_pro', locale) : 'PRO'}
           </span>
         </button>
-        <button type="button" style={{ ...styles.tile, ...(isPro ? null : styles.tileProMuted) }} onClick={() => isPro ? onRecentClick(locale === 'ru' ? 'тайные' : 'secret') : onOpenPaywall()}>
+        <button type="button" style={{ ...styles.tile, ...(isPro ? null : styles.tileProMuted) }} onClick={() => isPro ? onRecentClick(t('search_tile_secret_query', locale)) : onOpenPaywall()}>
           <span style={styles.tileEm}>🤫</span>
-          <span style={styles.tileLbl}>{locale === 'ru' ? 'Мои тайные' : 'My secret'}</span>
+          <span style={styles.tileLbl}>{t('search_tile_secret_label', locale)}</span>
           <span style={{ ...styles.tileHint, color: 'var(--wb-accent-strong)' }}>
-            {isPro ? (locale === 'ru' ? 'тайные брони' : 'secret reservations') : 'PRO'}
+            {isPro ? t('search_tile_secret_hint_pro', locale) : 'PRO'}
           </span>
         </button>
       </div>
@@ -822,6 +827,15 @@ const styles: Record<string, CSSProperties> = {
     margin: '0 -16px',
     scrollbarWidth: 'none',
     msOverflowStyle: 'none' as never,
+    // iOS WKWebView (Telegram): horizontal-scroll containers require explicit
+    // momentum scrolling AND `touch-action: pan-x` so that:
+    //   1. After tapping a chip (button onClick → state update → re-render),
+    //      iOS doesn't lose touch capture and freeze subsequent horizontal
+    //      drag-to-scroll gestures — the reported regression on iOS 17+.
+    //   2. The parent's vertical scroll doesn't compete with the row's
+    //      horizontal pan.
+    WebkitOverflowScrolling: 'touch' as never,
+    touchAction: 'pan-x',
   },
   chip: {
     flexShrink: 0,
@@ -831,7 +845,13 @@ const styles: Record<string, CSSProperties> = {
     alignItems: 'center',
     gap: 4,
     background: 'var(--wb-card)',
-    border: '1px solid var(--wb-border)',
+    // Use explicit borderWidth/Style/Color so chipActive can override
+    // `borderColor` without React's "mixing shorthand with longhand"
+    // warning (and avoid the iOS quirk where the warning produces a
+    // brief re-paint that exacerbates touch capture loss).
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'var(--wb-border)',
     borderRadius: 9999,
     color: 'var(--wb-text-secondary)',
     fontSize: 13,
@@ -842,6 +862,10 @@ const styles: Record<string, CSSProperties> = {
     backdropFilter: 'blur(14px)',
     WebkitBackdropFilter: 'blur(14px)' as never,
     whiteSpace: 'nowrap',
+    // Eliminate the 300 ms tap delay and prevent double-tap zoom on iOS
+    // — both are common causes of "first tap registers, second swipe
+    // doesn't" UX glitches on horizontal-scroll chip rows.
+    touchAction: 'manipulation',
   },
   chipActive: {
     background: 'var(--wb-accent-soft-strong)',
@@ -862,6 +886,9 @@ const styles: Record<string, CSSProperties> = {
     margin: '0 -16px',
     scrollbarWidth: 'none',
     msOverflowStyle: 'none' as never,
+    // Same iOS WKWebView fixes as chipsRow above.
+    WebkitOverflowScrolling: 'touch' as never,
+    touchAction: 'pan-x',
   },
   smartChip: {
     flexShrink: 0,
@@ -871,7 +898,11 @@ const styles: Record<string, CSSProperties> = {
     alignItems: 'center',
     gap: 5,
     background: 'var(--wb-surface)',
-    border: '1px solid var(--wb-border)',
+    // Same shorthand→longhand split as `chip` above so the active state can
+    // override `borderColor` cleanly without a React warning.
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'var(--wb-border)',
     borderRadius: 9999,
     color: 'var(--wb-text-muted)',
     fontSize: 12,
@@ -879,6 +910,7 @@ const styles: Record<string, CSSProperties> = {
     fontFamily: 'inherit',
     cursor: 'pointer',
     whiteSpace: 'nowrap',
+    touchAction: 'manipulation',
   },
   smartChipActive: {
     background: 'var(--wb-accent-soft)',

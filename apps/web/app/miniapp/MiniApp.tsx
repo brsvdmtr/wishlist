@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
-import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
+import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, localeToBCP47, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
 import {
   Banner, Button, Card, Chip, CounterBadge, FloatingNav, HeroCard, ListRow, LockedTile,
   PageTitle, PickerRow, SectionHeader,
@@ -162,16 +162,17 @@ const getPriorities = (locale: Locale) => [
   { value: 3, emoji: PRIO_EMOJI[3], label: t('priority_high', locale),   sub: t('priority_high_sub', locale) },
 ];
 
-/** Map app locale to Intl locale string for date/number formatting */
-const toIntlLocale = (locale: Locale): string => {
-  const map: Record<Locale, string> = { ru: 'ru-RU', en: 'en-US', 'zh-CN': 'zh-CN', hi: 'hi-IN', es: 'es-ES', ar: 'ar-SA' };
-  return map[locale];
-};
+// Locale → BCP-47 mapping is now centralised in `@wishlist/shared`
+// (`localeToBCP47`). Imported above. The previous local `toIntlLocale`
+// helper was a duplicate that already supported all 6 locales correctly —
+// it just lived in MiniApp.tsx, and meanwhile other files (search service,
+// schedulers, bot) shipped their own RU/EN-only ternaries. Consolidating
+// removes the duplication.
 
 const prioEmoji = (p: number) => PRIO_EMOJI[p] ?? '🙂';
 const fmtPrice = (p: number | null, locale: Locale = 'ru', currency: 'RUB' | 'USD' = 'RUB') => {
   if (!p) return null;
-  const formatted = p.toLocaleString(toIntlLocale(locale));
+  const formatted = p.toLocaleString(localeToBCP47(locale));
   return currency === 'USD' ? `${formatted} $` : `${formatted} ₽`;
 };
 
@@ -210,7 +211,7 @@ function formatRetryAfter(seconds: number, locale: Locale): string {
       : t('retry_hours_only', locale, { hours });
   }
   const d = new Date(Date.now() + seconds * 1000);
-  return t('retry_tomorrow', locale, { time: d.toLocaleTimeString(toIntlLocale(locale), { hour: '2-digit', minute: '2-digit' }) });
+  return t('retry_tomorrow', locale, { time: d.toLocaleTimeString(localeToBCP47(locale), { hour: '2-digit', minute: '2-digit' }) });
 }
 
 // ═══════════════════════════════════════════════════════
@@ -775,15 +776,120 @@ const inputStyle: React.CSSProperties = {
 // ═══════════════════════════════════════════════════════
 // RELEASE NOTES — update this array with each release
 // ═══════════════════════════════════════════════════════
-type ReleaseNote = { id: string; date: string; items: { ru: string; en: string }[] };
+//
+// Localisation contract: `ru` + `en` are REQUIRED for every item; the four
+// other supported locales (zh-CN, hi, es, ar) are optional and fall back
+// to `en` at render time. Older entries shipped before the 6-locale
+// expansion deliberately omit the optional fields — that's fine, they
+// degrade to EN for non-RU users exactly like before.
+type ReleaseNoteItem = {
+  ru: string;
+  en: string;
+  'zh-CN'?: string;
+  hi?: string;
+  es?: string;
+  ar?: string;
+};
+type ReleaseNote = { id: string; date: string; items: ReleaseNoteItem[] };
 const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    id: '2026-05-17',
+    date: '17.05.2026',
+    items: [
+      {
+        ru: '🔍 Глобальный поиск — теперь доступен в вашем боте! Тап по лупе на главном открывает поиск по всему: желаниям, вишлистам, категориям, людям, настройкам и FAQ',
+        en: '🔍 Global search — now available in your bot! Tap the magnifier on the home screen to search across everything: wishes, wishlists, categories, people, settings and FAQ',
+        'zh-CN': '🔍 全局搜索 — 现已在你的机器人中可用！点击主页上的放大镜可以搜索一切：心愿、清单、分类、联系人、设置和帮助',
+        hi: '🔍 ग्लोबल खोज — अब आपके बॉट में उपलब्ध! मुख्य स्क्रीन पर लूप टैप करके सब कुछ खोजें: विशेज़, विशलिस्ट, श्रेणियाँ, लोग, सेटिंग्स और मदद',
+        es: '🔍 Búsqueda global — ¡ya disponible en tu bot! Toca la lupa en la pantalla principal para buscar todo: deseos, listas, categorías, personas, ajustes y ayuda',
+        ar: '🔍 البحث الشامل — أصبح متاحًا الآن في بوتك! اضغط على العدسة في الشاشة الرئيسية للبحث في كل شيء: الأمنيات، القوائم، الفئات، الأشخاص، الإعدادات والمساعدة',
+      },
+      {
+        ru: '🎯 Группировка результатов и фильтры по типам — «Все / Желания / Вишлисты / Люди / Категории / Настройки», переключай в один тап',
+        en: '🎯 Grouped results with type filters — All / Wishes / Wishlists / People / Categories / Settings, switch in one tap',
+        'zh-CN': '🎯 按类型分组的结果和过滤器 —「全部 / 心愿 / 清单 / 联系人 / 分类 / 设置」，一键切换',
+        hi: '🎯 परिणाम समूह और टाइप फिल्टर — «सभी / विशेज़ / विशलिस्ट / लोग / श्रेणियाँ / सेटिंग्स», एक टैप में स्विच करें',
+        es: '🎯 Resultados agrupados con filtros por tipo — «Todos / Deseos / Listas / Personas / Categorías / Ajustes», cambia con un toque',
+        ar: '🎯 نتائج مجمّعة مع فلاتر حسب النوع — «الكل / الأمنيات / القوائم / الأشخاص / الفئات / الإعدادات»، التبديل بنقرة واحدة',
+      },
+      {
+        ru: '⚡ Smart-фильтры внутри типа: «доступные», «с ценой», «без цены», «с ссылкой», «важные», «архив»',
+        en: '⚡ Smart filters within each type: "available", "with price", "no price", "with link", "important", "archive"',
+        'zh-CN': '⚡ 类型内的智能过滤器：「可用」、「有价格」、「无价格」、「带链接」、「重要」、「归档」',
+        hi: '⚡ टाइप के अंदर स्मार्ट फिल्टर: «उपलब्ध», «कीमत के साथ», «बिना कीमत», «लिंक के साथ», «महत्वपूर्ण», «संग्रह»',
+        es: '⚡ Filtros inteligentes dentro de cada tipo: «disponibles», «con precio», «sin precio», «con enlace», «importantes», «archivo»',
+        ar: '⚡ فلاتر ذكية داخل كل نوع: «متاح»، «بسعر»، «بدون سعر»، «برابط»، «مهم»، «الأرشيف»',
+      },
+      {
+        ru: '🤫 Поиск по чужим вишлистам, которые ты когда-то открывал по ссылке, — найдём и снова откроем, пока доступ актуален; если владелец закрыл доступ — содержимое не покажем',
+        en: '🤫 Search across foreign wishlists you previously opened via a link — we find them and reopen as long as access is still live; if the owner closed access, we don\'t leak content',
+        'zh-CN': '🤫 搜索你之前通过链接打开过的其他人的清单 — 只要访问权限仍然有效，我们就会找到并重新打开；如果主人已关闭访问，则不显示内容',
+        hi: '🤫 उन दूसरों की विशलिस्ट में खोजें जिन्हें तुमने पहले लिंक से खोला था — जब तक एक्सेस सक्रिय है तब तक खोजेंगे और फिर खोलेंगे; अगर मालिक ने एक्सेस बंद कर दिया तो सामग्री नहीं दिखाएंगे',
+        es: '🤫 Busca en las listas de otros que abriste antes con un enlace — las encontramos y reabrimos mientras el acceso siga activo; si el propietario cerró el acceso, no mostramos el contenido',
+        ar: '🤫 ابحث في قوائم الآخرين التي فتحتها سابقاً عبر رابط — نجدها ونعيد فتحها طالما الوصول لا يزال متاحاً؛ إذا أغلق المالك الوصول، لا نُظهر المحتوى',
+      },
+      {
+        ru: '⭐ PRO: расширенный поиск по бронями, по календарю событий, по «что не стоит дарить» + smart-фильтры «истекают скоро», «тайные» и «мои»',
+        en: '⭐ PRO: extended search across reservations, the gift calendar, "don\'t gift" list + smart filters "expiring soon", "secret" and "mine"',
+        'zh-CN': '⭐ PRO：在预订、礼物日历和「不要送」列表中扩展搜索 + 智能过滤器「即将过期」、「秘密」和「我的」',
+        hi: '⭐ PRO: बुकिंग, गिफ्ट कैलेंडर और «न दें» सूची में विस्तारित खोज + स्मार्ट फिल्टर «जल्द समाप्त», «गुप्त» और «मेरे»',
+        es: '⭐ PRO: búsqueda ampliada en reservas, calendario de regalos y lista «no regalar» + filtros inteligentes «caducan pronto», «secreto» y «míos»',
+        ar: '⭐ PRO: بحث موسّع في الحجوزات، تقويم الهدايا، قائمة «لا تهدِ» + فلاتر ذكية «تنتهي قريباً»، «سرّي» و«لي»',
+      },
+      {
+        ru: '🔒 Поисковые запросы хранятся только на твоём устройстве — на сервер raw-запрос не уходит; тайные брони видны исключительно тебе и нигде больше не светятся',
+        en: '🔒 Search queries are stored only on your device — the raw query never reaches the server; secret reservations are only ever visible to you and surface nowhere else',
+        'zh-CN': '🔒 搜索查询仅存储在你的设备上 — 原始查询不会发送到服务器；秘密预订只有你能看到，不会在其他任何地方出现',
+        hi: '🔒 खोज क्वेरीज़ केवल तुम्हारे डिवाइस पर सहेजी जाती हैं — raw क्वेरी सर्वर तक नहीं पहुँचती; गुप्त बुकिंग केवल तुम्हें दिखती हैं और कहीं और सामने नहीं आतीं',
+        es: '🔒 Las búsquedas se guardan solo en tu dispositivo — la búsqueda en bruto nunca llega al servidor; las reservas secretas solo son visibles para ti y no aparecen en ningún otro lugar',
+        ar: '🔒 يتم تخزين استعلامات البحث على جهازك فقط — لا يصل الاستعلام الخام إلى الخادم أبداً؛ الحجوزات السرية مرئية لك وحدك ولا تظهر في أي مكان آخر',
+      },
+      {
+        ru: '🌍 Починили локализацию: русскоязычные пользователи больше не получают английские уведомления о бронях, напоминаниях и продлении Pro — все проактивные рассылки теперь идут на твоём языке',
+        en: '🌍 Localization fix: Russian-speaking users no longer receive English notifications about reservations, reminders and Pro renewal — every proactive message now goes out in your own language',
+        'zh-CN': '🌍 本地化修复：俄语用户不再收到关于预订、提醒和 Pro 续费的英文通知 — 所有主动消息现在以你的语言发送',
+        hi: '🌍 स्थानीयकरण फिक्स: रूसी-भाषी उपयोगकर्ताओं को अब बुकिंग, रिमाइंडर और Pro नवीनीकरण के बारे में अंग्रेज़ी सूचनाएँ नहीं मिलतीं — सभी सक्रिय संदेश अब तुम्हारी भाषा में जाते हैं',
+        es: '🌍 Corrección de localización: los usuarios rusoparlantes ya no reciben notificaciones en inglés sobre reservas, recordatorios y renovación de Pro — todos los mensajes proactivos ahora se envían en tu idioma',
+        ar: '🌍 إصلاح للترجمة: المستخدمون الناطقون بالروسية لم يعودوا يتلقون إشعارات إنجليزية عن الحجوزات والتذكيرات وتجديد Pro — كل الرسائل التلقائية الآن تُرسل بلغتك',
+      },
+      {
+        ru: '🎄 Сезонная рассылка Secret Santa теперь приходит на языке получателя, а не двуязычным блоком',
+        en: '🎄 The Secret Santa seasonal broadcast now arrives in the recipient\'s language instead of as a bilingual blob',
+        'zh-CN': '🎄 Secret Santa 季节性广播现在以收件人的语言发送，而不是双语合并',
+        hi: '🎄 Secret Santa सीज़नल ब्रॉडकास्ट अब प्राप्तकर्ता की भाषा में आता है, द्विभाषी ब्लॉक के रूप में नहीं',
+        es: '🎄 El anuncio estacional de Secret Santa ahora llega en el idioma del destinatario, no como bloque bilingüe',
+        ar: '🎄 إعلان Secret Santa الموسمي يصل الآن بلغة المتلقي بدلاً من مزيج ثنائي اللغة',
+      },
+    ],
+  },
   {
     id: '2026-05-09',
     date: '09.05.2026',
     items: [
-      { ru: '⭐ Pro навсегда — новый тариф: 2 490 ⭐ один раз и все Pro-возможности с тобой навсегда. Без продлений, без автосписаний, без напоминаний о платеже', en: '⭐ Pro Lifetime — a new tier: 2 490 ⭐ once and every Pro feature is yours forever. No renewals, no auto-charges, no payment reminders' },
-      { ru: '💎 Альтернатива месячному (100 ⭐) и годовому (800 ⭐) тарифам — для тех, кто уже понял, что Pro нравится, и хочет купить один раз и забыть про продления', en: '💎 An alternative to the monthly (100 ⭐) and yearly (800 ⭐) plans — for users who already know they love Pro and want to buy once and forget about renewals' },
-      { ru: '🛡 Если у тебя уже активен Pro навсегда, мы не дадим случайно списать звёзды за месячный или годовой тариф: лишний платёж аудируется, а твой Lifetime остаётся', en: '🛡 If Pro Lifetime is already active, we won\'t let an accidental monthly or yearly charge downgrade you: the extra payment is audited and your lifetime entitlement is preserved' },
+      {
+        ru: '⭐ Pro навсегда — новый тариф: 2 490 ⭐ один раз и все Pro-возможности с тобой навсегда. Без продлений, без автосписаний, без напоминаний о платеже',
+        en: '⭐ Pro Lifetime — a new tier: 2 490 ⭐ once and every Pro feature is yours forever. No renewals, no auto-charges, no payment reminders',
+        'zh-CN': '⭐ Pro 永久版 — 全新套餐：一次性 2 490 ⭐ 让所有 Pro 功能永远属于你。无需续费，无自动扣款，无付款提醒',
+        hi: '⭐ Pro हमेशा के लिए — नया प्लान: एक बार 2 490 ⭐ और सभी Pro सुविधाएँ तुम्हारी हमेशा के लिए। बिना नवीनीकरण, बिना ऑटो-कटौती, बिना भुगतान रिमाइंडर',
+        es: '⭐ Pro para siempre — nuevo plan: 2 490 ⭐ una sola vez y todas las funciones Pro son tuyas para siempre. Sin renovaciones, sin cargos automáticos, sin recordatorios de pago',
+        ar: '⭐ Pro للأبد — خطة جديدة: 2 490 ⭐ مرة واحدة وكل ميزات Pro لك للأبد. بدون تجديدات، بدون خصومات تلقائية، بدون تذكيرات دفع',
+      },
+      {
+        ru: '💎 Альтернатива месячному (100 ⭐) и годовому (800 ⭐) тарифам — для тех, кто уже понял, что Pro нравится, и хочет купить один раз и забыть про продления',
+        en: '💎 An alternative to the monthly (100 ⭐) and yearly (800 ⭐) plans — for users who already know they love Pro and want to buy once and forget about renewals',
+        'zh-CN': '💎 是月度（100 ⭐）和年度（800 ⭐）套餐的替代选择 — 适合那些已经知道自己喜欢 Pro、想要一次性买断、不再担心续费的用户',
+        hi: '💎 मासिक (100 ⭐) और वार्षिक (800 ⭐) प्लान का विकल्प — उन उपयोगकर्ताओं के लिए जो पहले से जानते हैं कि Pro पसंद है और एक बार खरीदकर नवीनीकरण के बारे में भूलना चाहते हैं',
+        es: '💎 Una alternativa a los planes mensual (100 ⭐) y anual (800 ⭐) — para usuarios que ya saben que les encanta Pro y quieren comprar una vez y olvidarse de las renovaciones',
+        ar: '💎 بديل لخطتي الشهرية (100 ⭐) والسنوية (800 ⭐) — للمستخدمين الذين يعرفون بالفعل أنهم يحبون Pro ويريدون الشراء مرة واحدة ونسيان التجديدات',
+      },
+      {
+        ru: '🛡 Если у тебя уже активен Pro навсегда, мы не дадим случайно списать звёзды за месячный или годовой тариф: лишний платёж аудируется, а твой Lifetime остаётся',
+        en: '🛡 If Pro Lifetime is already active, we won\'t let an accidental monthly or yearly charge downgrade you: the extra payment is audited and your lifetime entitlement is preserved',
+        'zh-CN': '🛡 如果你已激活 Pro 永久版，我们不会让误付的月度或年度费用降级你的套餐：多余的付款会被记录，你的永久权益保持不变',
+        hi: '🛡 अगर तुम्हारे पास Pro हमेशा के लिए सक्रिय है, तो हम गलती से मासिक या वार्षिक भुगतान को तुम्हारे प्लान को डाउनग्रेड नहीं करने देंगे: अतिरिक्त भुगतान का ऑडिट होगा और तुम्हारा Lifetime बना रहेगा',
+        es: '🛡 Si ya tienes Pro para siempre activo, no permitiremos que un cargo mensual o anual accidental te degrade: el pago extra se audita y tu Lifetime se conserva',
+        ar: '🛡 إذا كان Pro للأبد مفعّلاً لديك بالفعل، فلن ندع أي خصم شهري أو سنوي عرضي يخفّض خطتك: تتم مراجعة الدفعة الإضافية ويبقى اشتراك Lifetime كما هو',
+      },
     ],
   },
   {
@@ -2281,7 +2387,7 @@ function WishCardOwner({ item, onTap, onDelete, onComplete, locale, sourceLabel 
             <span>{item.title}</span>
             {(item.placementCount ?? 1) > 1 && (
               <Chip tone="accent" size="sm">
-                🔗 {locale === 'ru' ? 'В ' : 'In '}{item.placementCount}
+                🔗 {t('share_placement_count_prefix', locale)}{item.placementCount}
               </Chip>
             )}
           </div>
@@ -2513,7 +2619,7 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
           {item.title}
           {(item.placementCount ?? 1) > 1 && (
             <span
-              title={locale === 'ru' ? 'Общее желание — в нескольких списках' : 'Shared wish — in multiple wishlists'}
+              title={t('shared_wish_multi_title', locale)}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 3,
                 marginLeft: 6, padding: '1px 6px', borderRadius: 6,
@@ -2523,7 +2629,7 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
                 verticalAlign: 'baseline', whiteSpace: 'nowrap',
               }}
             >
-              🔗 {locale === 'ru' ? 'В ' : 'In '}{item.placementCount}
+              🔗 {t('share_placement_count_prefix', locale)}{item.placementCount}
             </span>
           )}
         </div>
@@ -2714,7 +2820,7 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
           {item.title}
           {(item.placementCount ?? 1) > 1 && (
             <span
-              title={locale === 'ru' ? 'Общее желание — в нескольких списках' : 'Shared wish — in multiple wishlists'}
+              title={t('shared_wish_multi_title', locale)}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 3,
                 marginLeft: 8, padding: '2px 8px', borderRadius: 8,
@@ -2723,7 +2829,7 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
                 verticalAlign: 'middle', whiteSpace: 'nowrap',
               }}
             >
-              🔗 {locale === 'ru' ? 'В ' : 'In '}{item.placementCount}
+              🔗 {t('share_placement_count_prefix', locale)}{item.placementCount}
             </span>
           )}
         </div>
@@ -3044,9 +3150,7 @@ function CommentsThread({
   /* ── Collapsed: accent CTA button per mockup ── */
   if (!expanded) {
     const badgeText = comments.length > 0
-      ? `${comments.length} ${locale === 'ru'
-          ? (comments.length % 10 === 1 && comments.length % 100 !== 11 ? 'новый' : 'новых')
-          : t('comments_badge_new', locale)}`
+      ? `${comments.length} ${pluralize(comments.length, t('comments_badge_new_one', locale), t('comments_badge_new', locale), t('comments_badge_new', locale), locale)}`
       : null;
     return (
       <button
@@ -3127,7 +3231,7 @@ function CommentsThread({
                 padding: '5px 12px', background: C.bg, borderRadius: 10, margin: '3px 0',
                 lineHeight: 1.4,
               }}>
-                {c.text} · {new Date(c.createdAt).toLocaleString(toIntlLocale(locale), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                {c.text} · {new Date(c.createdAt).toLocaleString(localeToBCP47(locale), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
               </div>
             ) : (
               <div
@@ -3199,7 +3303,7 @@ function CommentsThread({
                       fontSize: 11,
                       color: isMine(c) ? 'rgba(255,255,255,0.45)' : C.textMuted,
                     }}>
-                      {new Date(c.createdAt).toLocaleTimeString(toIntlLocale(locale), { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(c.createdAt).toLocaleTimeString(localeToBCP47(locale), { hour: '2-digit', minute: '2-digit' })}
                     </span>
                     <div style={{ display: 'flex', gap: 2 }}>
                       {/* Reply button — only on other users' top-level USER comments,
@@ -3853,15 +3957,19 @@ class MiniAppErrorBoundary extends React.Component<
   }
   render() {
     if (this.state.hasError) {
-      const isRu = typeof navigator !== 'undefined' && /^ru\b/i.test(navigator.language || '');
+      // ErrorBoundary renders before React locale context is available; detect
+      // from navigator.language as a best-effort fallback. `normalizeLocale`
+      // returns one of the 6 supported locales (or 'en').
+      const browserLang = typeof navigator !== 'undefined' ? (navigator.language || '') : '';
+      const fbLocale = normalizeLocale(browserLang);
       return (
         <div style={{ padding: 32, textAlign: 'center', color: '#fff', fontFamily: 'system-ui' }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>😕</div>
           <div style={{ fontSize: 16, marginBottom: 8 }}>
-            {isRu ? 'Что-то пошло не так' : 'Something went wrong'}
+            {t('error_boundary_title', fbLocale)}
           </div>
           <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 16, lineHeight: 1.5 }}>
-            {isRu ? 'Попробуйте перезагрузить приложение.' : 'Try reloading the app.'}
+            {t('error_boundary_body', fbLocale)}
           </div>
           <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginBottom: 16, fontFamily: 'monospace', wordBreak: 'break-all' }}>
             {this.state.error?.message}
@@ -3870,7 +3978,7 @@ class MiniAppErrorBoundary extends React.Component<
             onClick={() => window.location.reload()}
             style={{ padding: '10px 28px', borderRadius: 10, border: 'none', background: 'var(--wb-accent-strong, #B4A6FF)', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
           >
-            {isRu ? 'Перезагрузить' : 'Reload'}
+            {t('error_boundary_reload', fbLocale)}
           </button>
         </div>
       );
@@ -3893,7 +4001,6 @@ function SmartResSettingsContent({ wl, locale, onSave, onClose, doFetch }: { wl:
 
   const [obStep, setObStep] = React.useState(0);
   if (showOnboard) {
-    const isRu = locale === 'ru';
     const finishOnboard = () => {
       try { window.localStorage.setItem(onboardKey, '1'); } catch { /* ok */ }
       setShowOnboard(false);
@@ -3910,7 +4017,7 @@ function SmartResSettingsContent({ wl, locale, onSave, onClose, doFetch }: { wl:
     );
     const skipBtn = (
       <div style={{ textAlign: 'center', marginTop: 8 }}>
-        <span onClick={finishOnboard} style={{ fontSize: 12, color: C.textMuted, cursor: 'pointer' }}>{isRu ? 'Пропустить' : 'Skip'}</span>
+        <span onClick={finishOnboard} style={{ fontSize: 12, color: C.textMuted, cursor: 'pointer' }}>{t('sr_onboard_skip', locale)}</span>
       </div>
     );
 
@@ -3918,20 +4025,31 @@ function SmartResSettingsContent({ wl, locale, onSave, onClose, doFetch }: { wl:
       <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'center' }}>
         {dots}
         <div style={{ width: 80, height: 80, borderRadius: 24, background: `linear-gradient(145deg, rgba(74, 222, 128, 0.2), rgba(74, 222, 128, 0.08))`, border: '1px solid rgba(74, 222, 128, 0.2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, margin: '0 auto 16px' }}>✓</div>
-        <div style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 8, fontFamily: font }}>{isRu ? 'Умные брони подключены!' : 'Smart Reservations enabled!'}</div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 8, fontFamily: font }}>{t('sr_onboard_step1_title', locale)}</div>
         <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6, marginBottom: 20 }}>
-          {isRu ? <>Теперь бронирования на вишлисте <strong style={{ color: C.text }}>«{wl.title}»</strong> управляются автоматически.</> : <>Reservations on <strong style={{ color: C.text }}>"{wl.title}"</strong> are now managed automatically.</>}
+          {(() => {
+            // Inject the wishlist title with bold styling. The translation key uses
+            // {{title}} as a placeholder; we split on it to render <strong>.
+            const body = t('sr_onboard_step1_body', locale);
+            const idx = body.indexOf('{{title}}');
+            if (idx < 0) return body;
+            return (<>
+              {body.slice(0, idx)}
+              <strong style={{ color: C.text }}>{wl.title}</strong>
+              {body.slice(idx + '{{title}}'.length)}
+            </>);
+          })()}
         </div>
         <div style={{ background: C.card, borderRadius: 16, padding: 16, marginBottom: 24, textAlign: 'start' }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>{isRu ? 'Что включено' : 'What\'s included'}</div>
-          {[isRu ? 'Автоснятие зависших броней' : 'Auto-release of stale reservations', isRu ? 'Напоминания дарителям' : 'Reminders to gifters', isRu ? 'Продление и подтверждение брони' : 'Extend and confirm reservations'].map((text, i) => (
+          <div style={{ fontSize: 12, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>{t('sr_onboard_whats_included', locale)}</div>
+          {[t('smart_res_feature_auto_release', locale), t('smart_res_feature_reminders', locale), t('smart_res_feature_extend', locale)].map((text, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i > 0 ? `1px solid ${C.border}` : 'none' }}>
               <span style={{ color: C.green, fontSize: 16 }}>✓</span>
               <span style={{ fontSize: 14, color: C.text }}>{text}</span>
             </div>
           ))}
         </div>
-        {nextBtn(isRu ? 'Далее →' : 'Next →')}
+        {nextBtn(t('sr_onboard_next', locale))}
       </div>
     );
 
@@ -3939,19 +4057,27 @@ function SmartResSettingsContent({ wl, locale, onSave, onClose, doFetch }: { wl:
       <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'center' }}>
         {dots}
         <div style={{ fontSize: 36, marginBottom: 12 }}>⏱</div>
-        <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 8, fontFamily: font }}>{isRu ? 'Бронь с таймером' : 'Timed Reservation'}</div>
-        <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6, marginBottom: 20 }}>{isRu ? 'Когда кто-то бронирует подарок, запускается обратный отсчёт.' : 'When someone reserves a gift, a countdown starts.'}</div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 8, fontFamily: font }}>{t('sr_onboard_step2_title', locale)}</div>
+        <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6, marginBottom: 20 }}>{t('sr_onboard_step2_body', locale)}</div>
         <div style={{ background: C.card, borderRadius: 16, padding: 16, marginBottom: 16, textAlign: 'start' }}>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🎧</div>
             <div style={{ flex: 1 }}>
+              {/* Demo product name kept in EN (illustrative, brand-name). */}
               <div style={{ fontSize: 14, fontWeight: 600 }}>Sony WH-1000XM5</div>
-              <div style={{ fontSize: 12, color: C.accent, marginTop: 2 }}>✅ {isRu ? 'Забронировано' : 'Reserved'}</div>
+              <div style={{ fontSize: 12, color: C.accent, marginTop: 2 }}>✅ {t('reservations_reserved', locale)}</div>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textSec }}>
             <span>⏱</span>
-            <span>{isRu ? 'До' : 'Until'} <strong style={{ color: C.text }}>16 {isRu ? 'апреля' : 'Apr'}, 18:00</strong> · 2{isRu ? ' дн.' : 'd'} 23{isRu ? ' ч.' : 'h'}</span>
+            {/* Demo date — formatted via Intl for the active locale. */}
+            <span>{(() => {
+              const demoDate = new Date(2026, 3, 16, 18, 0);
+              const dateStr = new Intl.DateTimeFormat(localeToBCP47(locale), { day: 'numeric', month: 'long' }).format(demoDate);
+              return (<>
+                <strong style={{ color: C.text }}>{dateStr}, 18:00</strong> · 2{t('unit_days_short', locale)} 23{t('unit_hours_short', locale)}
+              </>);
+            })()}</span>
           </div>
           <div style={{ height: 4, borderRadius: 2, background: C.surfaceHover, marginTop: 8 }}>
             <div style={{ width: '40%', height: '100%', borderRadius: 2, background: C.accent }} />
@@ -3959,10 +4085,10 @@ function SmartResSettingsContent({ wl, locale, onSave, onClose, doFetch }: { wl:
         </div>
         <div style={{ padding: 12, background: C.bg, borderRadius: 12, marginBottom: 24 }}>
           <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.6 }}>
-            {isRu ? <>Ты выбираешь срок: <strong style={{ color: C.text }}>24ч</strong>, <strong style={{ color: C.text }}>48ч</strong>, <strong style={{ color: C.text }}>72ч</strong> или <strong style={{ color: C.text }}>7 дней</strong>. Даритель видит, сколько осталось.</> : <>You choose the duration: <strong style={{ color: C.text }}>24h</strong>, <strong style={{ color: C.text }}>48h</strong>, <strong style={{ color: C.text }}>72h</strong> or <strong style={{ color: C.text }}>7 days</strong>. The gifter sees the remaining time.</>}
+            {t('sr_onboard_step2_explainer_html', locale)}
           </div>
         </div>
-        {nextBtn(isRu ? 'Далее →' : 'Next →')}
+        {nextBtn(t('sr_onboard_next', locale))}
         {skipBtn}
       </div>
     );
@@ -3971,13 +4097,13 @@ function SmartResSettingsContent({ wl, locale, onSave, onClose, doFetch }: { wl:
       <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'center' }}>
         {dots}
         <div style={{ fontSize: 36, marginBottom: 12 }}>🔔</div>
-        <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 8, fontFamily: font }}>{isRu ? 'Без сюрпризов' : 'No surprises'}</div>
-        <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6, marginBottom: 20 }}>{isRu ? 'Бронь не слетает молча. Даритель всегда предупреждён.' : 'Reservations don\'t expire silently. The gifter is always warned.'}</div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 8, fontFamily: font }}>{t('sr_onboard_step3_title', locale)}</div>
+        <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6, marginBottom: 20 }}>{t('sr_onboard_step3_body', locale)}</div>
         <div style={{ background: C.card, borderRadius: 16, padding: '16px 16px 12px', marginBottom: 16, textAlign: 'start' }}>
           {[
-            { color: C.accent, label: isRu ? 'Бронь создана' : 'Reservation created', desc: isRu ? 'Даритель получает подтверждение с датой истечения' : 'Gifter gets confirmation with expiry date', hasLine: true },
-            { color: 'var(--wb-warning, #FBBF24)', label: isRu ? 'Напоминание' : 'Reminder', desc: isRu ? 'За 24ч до истечения — можно продлить или подтвердить' : '24h before expiry — can extend or confirm', hasLine: true },
-            { color: C.green, label: isRu ? 'Продлить или отпустить' : 'Extend or release', desc: isRu ? 'Даритель решает сам, а не пропадает молча' : 'Gifter decides, instead of disappearing silently', hasLine: false },
+            { color: C.accent, label: t('sr_event_created', locale), desc: t('sr_event_created_desc', locale), hasLine: true },
+            { color: 'var(--wb-warning, #FBBF24)', label: t('sr_event_reminder', locale), desc: t('sr_event_reminder_desc', locale), hasLine: true },
+            { color: C.green, label: t('sr_event_release', locale), desc: t('sr_event_release_desc', locale), hasLine: false },
           ].map((ev, i) => (
             <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -3993,10 +4119,10 @@ function SmartResSettingsContent({ wl, locale, onSave, onClose, doFetch }: { wl:
         </div>
         <div style={{ padding: 12, background: C.bg, borderRadius: 12, marginBottom: 24 }}>
           <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.6 }}>
-            {isRu ? <>Продление доступно до <strong style={{ color: C.text }}>2 раз</strong> — достаточно, чтобы успеть, но бронь не зависнет навсегда.</> : <>Extensions available up to <strong style={{ color: C.text }}>2 times</strong> — enough to make it, but the reservation won't hang forever.</>}
+            {t('sr_onboard_step3_explainer', locale)}
           </div>
         </div>
-        {nextBtn(isRu ? 'Далее →' : 'Next →')}
+        {nextBtn(t('sr_onboard_next', locale))}
         {skipBtn}
       </div>
     );
@@ -4006,26 +4132,26 @@ function SmartResSettingsContent({ wl, locale, onSave, onClose, doFetch }: { wl:
       <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'center' }}>
         {dots}
         <div style={{ fontSize: 36, marginBottom: 12 }}>🧹</div>
-        <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 8, fontFamily: font }}>{isRu ? 'Порядок без усилий' : 'Effortless order'}</div>
-        <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6, marginBottom: 20 }}>{isRu ? 'Если даритель не реагирует — бронь снимается автоматически. Желание возвращается в список.' : 'If the gifter doesn\'t respond — the reservation is auto-released. The wish returns to the list.'}</div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 8, fontFamily: font }}>{t('sr_onboard_step4_title', locale)}</div>
+        <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6, marginBottom: 20 }}>{t('sr_onboard_step4_body', locale)}</div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           <div style={{ flex: 1, background: 'rgba(251, 113, 133, 0.12)', borderRadius: 14, padding: '14px 12px', textAlign: 'center' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--wb-danger, #FB7185)', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 8 }}>{isRu ? 'Было' : 'Before'}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--wb-danger, #FB7185)', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 8 }}>{t('common_before', locale)}</div>
             <div style={{ fontSize: 22, marginBottom: 6 }}>😰</div>
-            <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.4 }}>{isRu ? 'Бронь зависла, подарок заблокирован' : 'Reservation stuck, gift blocked'}</div>
+            <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.4 }}>{t('sr_state_before_desc', locale)}</div>
           </div>
           <div style={{ flex: 1, background: 'rgba(74, 222, 128, 0.12)', borderRadius: 14, padding: '14px 12px', textAlign: 'center' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.green, textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 8 }}>{isRu ? 'Стало' : 'After'}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.green, textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 8 }}>{t('common_after', locale)}</div>
             <div style={{ fontSize: 22, marginBottom: 6 }}>😌</div>
-            <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.4 }}>{isRu ? 'Бронь снялась сама, желание снова доступно' : 'Reservation auto-released, wish available again'}</div>
+            <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.4 }}>{t('sr_state_after_desc', locale)}</div>
           </div>
         </div>
         <div style={{ background: C.card, borderRadius: 14, padding: 14, marginBottom: 24, textAlign: 'start' }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>{isRu ? 'Настройки по умолчанию' : 'Default settings'}</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>{t('sr_default_settings', locale)}</div>
           {[
-            { label: isRu ? 'Срок брони' : 'Reservation TTL', value: '72 ' + (isRu ? 'часа' : 'hours') },
-            { label: isRu ? 'Продление' : 'Extensions', value: isRu ? 'До 2 раз' : 'Up to 2 times' },
-            { label: isRu ? 'Напоминание' : 'Reminder', value: isRu ? 'За 24 часа' : '24 hours before' },
+            { label: t('sr_default_ttl_label', locale), value: t('sr_default_ttl_value', locale) },
+            { label: t('sr_default_ext_label', locale), value: t('sr_default_ext_value', locale) },
+            { label: t('sr_event_reminder', locale), value: t('sr_default_reminder_value', locale) },
           ].map((row, i) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 13, borderTop: i > 0 ? `1px solid ${C.border}` : 'none' }}>
               <span style={{ color: C.textSec }}>{row.label}</span>
@@ -4033,8 +4159,8 @@ function SmartResSettingsContent({ wl, locale, onSave, onClose, doFetch }: { wl:
             </div>
           ))}
         </div>
-        <Button variant="primary" onClick={finishOnboard}>⚙️ {isRu ? 'Настроить под себя' : 'Customize settings'}</Button>
-        <Button variant="secondary" onClick={finishOnboard} style={{ marginTop: 8 }}>{isRu ? 'Оставить по умолчанию' : 'Keep defaults'}</Button>
+        <Button variant="primary" onClick={finishOnboard}>⚙️ {t('sr_onboard_customize', locale)}</Button>
+        <Button variant="secondary" onClick={finishOnboard} style={{ marginTop: 8 }}>{t('sr_onboard_keep_defaults', locale)}</Button>
       </div>
     );
   }
@@ -6187,7 +6313,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const isNetwork = e instanceof TypeError;
       trackEvent('onboarding_try_import_exception', { error_type: isAbort ? 'timeout' : isNetwork ? 'network' : 'other' });
       if (isAbort) {
-        setOnboardingTryError(locale === 'ru' ? 'Не удалось загрузить страницу. Попробуйте другую ссылку.' : 'Could not load the page. Try a different link.');
+        setOnboardingTryError(t('error_load_page_try_another', locale));
       } else {
         setOnboardingTryError(isNetwork ? t('error_network', locale) : t('error_import_generic', locale));
       }
@@ -6977,7 +7103,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       }
       if (res.status === 409) {
         // Already placed — keep optimistic state, just toast.
-        pushToast(locale === 'ru' ? 'Уже добавлено в этот список' : 'Already in this wishlist', 'info');
+        pushToast(t('toast_already_in_wishlist', locale), 'info');
         return;
       }
       if (!res.ok) {
@@ -6986,7 +7112,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         return;
       }
       const json = await res.json() as { placementCount: number; targetWishlistTitle: string };
-      pushToast(locale === 'ru' ? `Добавлено в «${json.targetWishlistTitle}»` : `Added to "${json.targetWishlistTitle}"`, 'success');
+      pushToast(t('toast_added_to_wishlist', locale, { name: json.targetWishlistTitle }), 'success');
       setWishlists(prev => prev.map(wl => wl.id === targetWishlistId ? { ...wl, itemCount: wl.itemCount + 1 } : wl));
       if (currentWl) await loadItems(currentWl.id);
     } catch {
@@ -7009,9 +7135,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       });
       if (res.status === 409) {
         setPlacementsList(snapshot);
-        pushToast(locale === 'ru'
-          ? 'Это последний список — удалите желание целиком'
-          : 'This is the last wishlist — delete the wish instead', 'error');
+        pushToast(t('placements_last_wishlist_warning', locale), 'error');
         return;
       }
       if (!res.ok) {
@@ -7020,15 +7144,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         return;
       }
       const remaining = Math.max(0, snapshot.length - 1);
-      const remainingLabel = locale === 'ru'
-        ? `${remaining} ${pluralize(remaining, 'wishlist\u2019е', 'wishlist\u2019ах', 'wishlist\u2019ах', 'ru')}`
-        : `${remaining} wishlist${remaining === 1 ? '' : 's'}`;
-      pushToast(
-        locale === 'ru'
-          ? `Убрано из «${removed.wishlistTitle}». Осталось в ${remainingLabel}.`
-          : `Removed from "${removed.wishlistTitle}". Still in ${remainingLabel}.`,
-        'warning',
-      );
+      const remainingLabel = ((): string => {
+        switch (locale) {
+          case 'ru': return `${remaining} ${pluralize(remaining, 'wishlist\u2019е', 'wishlist\u2019ах', 'wishlist\u2019ах', 'ru')}`;
+          case 'zh-CN': return `${remaining} 个清单`;
+          case 'hi': return `${remaining} विशलिस्ट`;
+          case 'es': return `${remaining} ${remaining === 1 ? 'lista' : 'listas'}`;
+          case 'ar': return `${remaining} قائمة`;
+          default: return `${remaining} wishlist${remaining === 1 ? '' : 's'}`;
+        }
+      })();
+      pushToast(t('toast_removed_from_remaining', locale, { name: removed.wishlistTitle, remaining: remainingLabel }), 'warning');
       setWishlists(prev => prev.map(wl => wl.id === wishlistId ? { ...wl, itemCount: Math.max(0, wl.itemCount - 1) } : wl));
       if (currentWl) await loadItems(currentWl.id);
     } catch {
@@ -7557,7 +7683,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         });
         tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred?.('warning');
         const cancelledPeriodEnd = new Date(data.subscription.periodEnd).toLocaleDateString(
-          toIntlLocale(locale), { day: 'numeric', month: 'long', year: 'numeric' },
+          localeToBCP47(locale), { day: 'numeric', month: 'long', year: 'numeric' },
         );
         pushToast(t('cancel_success', locale, { date: cancelledPeriodEnd }), 'success');
         trackEvent('subscription_cancelled');
@@ -8214,16 +8340,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           return;
         }
 
-        const isRu = locale === 'ru';
         try {
           tg.showPopup({
-            title: isRu ? 'Несохранённые изменения' : 'Unsaved changes',
-            message: isRu
-              ? 'В желании есть несохранённые изменения. Сохранить их перед выходом?'
-              : 'You have unsaved changes. Save them before leaving?',
+            title: t('unsaved_changes_title', locale),
+            message: t('unsaved_changes_body', locale),
             buttons: [
-              { id: 'save', type: 'default', text: isRu ? 'Сохранить' : 'Save' },
-              { id: 'discard', type: 'destructive', text: isRu ? 'Не сохранять' : 'Discard' },
+              { id: 'save', type: 'default', text: t('save', locale) },
+              { id: 'discard', type: 'destructive', text: t('discard', locale) },
               { id: 'cancel', type: 'cancel' },
             ],
           }, (btnId?: string) => {
@@ -8540,9 +8663,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           tgFetch('/tg/maintenance-exposure', { method: 'POST', body: JSON.stringify({ surface: 'miniapp', locale }) }).catch(() => {});
         } else if (kind === 'unavailable' || msg === 'UNAVAILABLE' || (e instanceof Error && e.name === 'AbortError')) {
           // Network error / timeout — show connection error, not maintenance
-          setErrorMsg(locale === 'ru'
-            ? 'Нет подключения к интернету.\nПроверь сеть и попробуй ещё раз.'
-            : 'No internet connection.\nCheck your network and try again.');
+          setErrorMsg(t('error_no_internet', locale));
           setScreen('error');
         } else {
           setErrorMsg(t('error_load_failed', locale));
@@ -10178,7 +10299,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       if (res.ok) {
         setShowCuratedSuccess(false);
         setCuratedResult(null);
-        pushToast(locale === 'ru' ? 'Ссылка отключена' : 'Link disabled', 'success');
+        pushToast(t('toast_link_disabled', locale), 'success');
       }
     } catch { /* ignore */ }
   }, [tgFetch, pushToast, locale]);
@@ -10497,9 +10618,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         await loadItems(currentWl!.id);
         trackEvent('item_created', { wishlistId: currentWl!.id, placements: 1 + additionalIds.length });
         if (additionalIds.length > 0) {
-          pushToast(locale === 'ru'
-            ? `Добавлено в ${1 + additionalIds.length} списков`
-            : `Added to ${1 + additionalIds.length} wishlists`, 'success');
+          pushToast(t('toast_added_to_n_wishlists', locale, { count: 1 + additionalIds.length }), 'success');
         } else {
           pushToast(t('item_added', locale), 'success');
         }
@@ -11486,7 +11605,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
   const fmtDeadline = (d: string | null) => {
     if (!d) return null;
-    return new Date(d).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'long' });
+    return new Date(d).toLocaleDateString(localeToBCP47(locale), { day: 'numeric', month: 'long' });
   };
 
   // ─────────────────────────────────────────────────
@@ -11619,7 +11738,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {/* Loading hint */}
               {onboardingTryLoading && (
                 <div style={{ textAlign: 'center', fontSize: 12, color: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.6)', lineHeight: 1.5, animation: 'onb-fade 0.3s ease-in' }}>
-                  {locale === 'ru' ? 'Анализируем ссылку…' : 'Analyzing link…'}
+                  {t('analyzing_link', locale)}
                 </div>
               )}
 
@@ -11946,7 +12065,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div style={{ fontSize: 32, marginBottom: 8 }}>{item.emoji}</div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{t(item.titleKey, locale)}</div>
                   <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--wb-accent, #8B7BFF)', marginTop: 4 }}>
-                    {item.currency === 'RUB' ? `${item.amount.toLocaleString('ru-RU')} ₽` : `$${item.amount}`}
+                    {item.currency === 'RUB' ? `${item.amount.toLocaleString(localeToBCP47(locale))} ₽` : `$${item.amount}`}
                   </div>
                 </button>
               );
@@ -12221,9 +12340,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
       {/* ── LOADING — branded splash ── */}
       {screen === 'loading' && (() => {
-        const loadingTexts = locale === 'ru'
-          ? ['Открываем WishBot', 'Загружаем вишлисты', 'Почти готово']
-          : ['Opening WishBot', 'Loading wishlists', 'Almost ready'];
+        const loadingTexts = [
+          t('splash_loading_opening', locale),
+          t('splash_loading_wishlists', locale),
+          t('splash_loading_ready', locale),
+        ];
         return (
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -12320,9 +12441,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <div style={{ fontSize: 56, marginBottom: 16, filter: 'drop-shadow(0 0 16px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.3))' }}>🎁</div>
               <h1 style={{ fontSize: 24, fontWeight: 800, color: C.text, fontFamily: font, margin: '0 0 8px', textAlign: 'center' }}>WishBoard</h1>
               <p style={{ fontSize: 14, color: C.textMuted, textAlign: 'center', lineHeight: 1.6, margin: '0 0 24px' }}>
-                {locale === 'ru'
-                  ? 'Создавай вишлисты и делись с друзьями. Приложение работает внутри Telegram.'
-                  : 'Create wishlists and share with friends. The app works inside Telegram.'}
+                {t('splash_subtitle', locale)}
               </p>
 
               {/* Value bullets */}
@@ -12365,7 +12484,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <div style={{ fontSize: 48 }}>{isNetworkErr ? '📡' : '😕'}</div>
             <div style={{ fontSize: 18, fontWeight: 700, textAlign: 'center', color: C.text }}>
               {isNetworkErr
-                ? (locale === 'ru' ? 'Нет связи' : 'No connection')
+                ? t('error_no_connection', locale)
                 : t('error_loading', locale)}
             </div>
             <div style={{ fontSize: 15, color: C.textSec, textAlign: 'center', lineHeight: 1.5, whiteSpace: 'pre-line' }}>{errorMsg || t('error_unknown', locale)}</div>
@@ -12379,12 +12498,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 16, padding: 24 }}>
           <div style={{ fontSize: 48 }}>🔗</div>
           <div style={{ fontSize: 18, fontWeight: 700, textAlign: 'center', color: C.text }}>
-            {locale === 'ru' ? 'Ссылка недействительна' : 'Link expired'}
+            {t('error_link_expired', locale)}
           </div>
           <div style={{ fontSize: 15, color: C.textSec, textAlign: 'center', lineHeight: 1.5 }}>
-            {locale === 'ru'
-              ? 'Этот вишлист был удалён или ссылка больше не работает.'
-              : 'This wishlist has been deleted or the link no longer works.'}
+            {t('link_expired_body', locale)}
           </div>
           <Button
             variant="primary"
@@ -12392,7 +12509,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             style={{ marginTop: 8, width: 220 }}
             onClick={() => { setScreen('my-wishlists'); }}
           >
-            {locale === 'ru' ? 'Мои вишлисты' : 'My wishlists'}
+            {t('my_wishlists', locale)}
           </Button>
         </div>
       )}
@@ -12655,7 +12772,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               return days > 0 && days <= 14;
             }).length;
             const comingSoon = (label: string) => pushToast(
-              locale === 'ru' ? `Раздел «${label}» появится совсем скоро` : `"${label}" is coming soon`,
+              t('toast_section_coming_soon', locale, { label }),
               'info',
             );
             // Russian-first labels — mini-app's primary locale.
@@ -12669,7 +12786,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             const tiles = [
               {
                 n: totalWishes,
-                l: locale === 'ru' ? 'желаний' : 'wishes',
+                l: t('sort_label_wishes', locale),
                 tone: 'neutral' as const,
                 onClick: () => {
                   setAllItemsPriorityFilter(null);
@@ -12680,7 +12797,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               },
               {
                 n: totalReserved,
-                l: locale === 'ru' ? 'забронировано' : 'reserved',
+                l: t('sort_label_reserved', locale),
                 tone: 'accent' as const,
                 onClick: () => {
                   setAllItemsPriorityFilter(null);
@@ -12691,7 +12808,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               },
               {
                 n: totalGifted,
-                l: locale === 'ru' ? 'подарено' : 'gifted',
+                l: t('sort_label_gifted', locale),
                 tone: 'success' as const,
                 onClick: () => {
                   setAllItemsPriorityFilter(null);
@@ -12702,9 +12819,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               },
               {
                 n: expiringCount,
-                l: locale === 'ru' ? 'истекает' : 'expiring',
+                l: t('sort_label_expiring', locale),
                 tone: 'warning' as const,
-                onClick: () => comingSoon(locale === 'ru' ? 'Истекает' : 'Expiring'),
+                onClick: () => comingSoon(t('sort_button_expiring', locale)),
               },
             ];
             const toneColor = (tone: 'neutral' | 'accent' | 'success' | 'warning') =>
@@ -12866,7 +12983,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       await loadGuestWishlist(sub.wishlist.slug);
                       setScreen('guest-view');
                     } catch {
-                      pushToast(locale === 'ru' ? 'Не удалось загрузить. Проверь сеть.' : 'Failed to load. Check your connection.', 'error');
+                      pushToast(t('toast_load_failed_check_network', locale), 'error');
                       setScreen('my-wishlists');
                     }
                   }}
@@ -12902,17 +13019,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             setCuratedViewData(null);
                             setScreen('curated-view');
                           } else {
-                            pushToast(locale === 'ru' ? 'Не удалось загрузить' : 'Failed to load', 'error');
+                            pushToast(t('toast_load_failed_generic', locale), 'error');
                             setScreen('my-wishlists');
                           }
                         } catch {
-                          pushToast(locale === 'ru' ? 'Не удалось загрузить' : 'Failed to load', 'error');
+                          pushToast(t('toast_load_failed_generic', locale), 'error');
                           setScreen('my-wishlists');
                         }
                       }}
                       style={{ animation: `fadeIn 0.3s ease ${i * 0.08}s both` }}
                       title={cs.title}
-                      subtitle={`${cs.ownerName ? `${cs.ownerName} · ` : ''}${cs.itemCount} ${locale === 'ru' ? (cs.itemCount === 1 ? 'желание' : cs.itemCount < 5 ? 'желания' : 'желаний') : (cs.itemCount === 1 ? 'wish' : 'wishes')}`}
+                      subtitle={`${cs.ownerName ? `${cs.ownerName} · ` : ''}${cs.itemCount} ${pluralize(cs.itemCount, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}`}
                       trailing={<span style={{ fontSize: 20, color: C.textMuted }}>›</span>}
                     />
                   ))}
@@ -13836,7 +13953,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                           border: `1px solid ${item.meta?.reminderAt ? 'rgba(251,191,36,0.3)' : C.borderLight}`,
                                           background: item.meta?.reminderAt ? C.orangeSoft : 'transparent',
                                           color: item.meta?.reminderAt ? C.orange : C.textSec, cursor: 'pointer', fontFamily: font,
-                                        }}><span style={{ fontSize: 12 }}>🔔</span> {item.meta?.reminderAt ? new Date(item.meta.reminderAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short' }) : t('res_reminder_btn', locale)}</button>
+                                        }}><span style={{ fontSize: 12 }}>🔔</span> {item.meta?.reminderAt ? new Date(item.meta.reminderAt).toLocaleDateString(localeToBCP47(locale), { day: 'numeric', month: 'short' }) : t('res_reminder_btn', locale)}</button>
                                         <button onClick={() => {
                                           setResNoteText(item.meta?.note ?? '');
                                           setResNoteSheetItem(item);
@@ -13928,7 +14045,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     }
                     const fmtHistDate = (iso: string) => {
                       const d = new Date(iso);
-                      return d.toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long', year: 'numeric' }).replace(/ г\.?$/, '');
+                      return d.toLocaleDateString(localeToBCP47(locale), { day: 'numeric', month: 'long', year: 'numeric' }).replace(/ г\.?$/, '');
                     };
                     let gi = 0;
                     return Object.entries(groups).map(([ownerId, group]) => (
@@ -15050,6 +15167,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   {t('sr_paywall_demo_header', locale)}
                 </div>
                 <style>{`@keyframes srDotPulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.15); } }`}</style>
+                {/* Demo rows below intentionally bundle RU samples (RUB prices, Cyrillic names) vs EN samples (USD prices, English names).
+                    Other locales fall back to the EN sample — translating mock data to hi/es/ar/zh-CN provides no business value
+                    (samples are illustrative only; the real list above is fully localised via i18n). */}
                 {demoRow('🎧', 'Sony WH-1000XM5', locale === 'ru' ? 'Мама · 29 990 ₽ · 3 дня назад' : 'Mom · $299 · 3 days ago')}
                 {demoRow('📖', locale === 'ru' ? 'Мартин «Игра престолов»' : '"Game of Thrones" book', locale === 'ru' ? 'Алексей · 1 890 ₽ · 5 дней назад' : 'Alex · $19 · 5 days ago')}
                 {demoRow('☕', locale === 'ru' ? 'Кофемашина DeLonghi' : 'DeLonghi coffee machine', locale === 'ru' ? 'Катя · 54 990 ₽ · вчера' : 'Kate · $549 · yesterday')}
@@ -15394,7 +15514,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           {cat.name}
                         </div>
                         <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                          {catItemCount} {catItemCount === 1 ? (locale === 'ru' ? 'желание' : 'wish') : (locale === 'ru' ? 'желаний' : 'wishes')}
+                          {catItemCount} {pluralize(catItemCount, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}
                         </div>
                       </div>
                     </div>
@@ -15661,10 +15781,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div style={{ textAlign: 'center', padding: '48px 24px' }}>
                     <div style={{ fontSize: 48, marginBottom: 16 }}>📶</div>
                     <div style={{ fontSize: 16, fontWeight: 600, color: C.text, marginBottom: 8, lineHeight: 1.4 }}>
-                      {locale === 'ru' ? 'Похоже, интернет слишком медленный или соединение пропало' : 'Looks like the connection is too slow or lost'}
+                      {t('error_load_slow_or_lost_title', locale)}
                     </div>
                     <div style={{ fontSize: 14, color: C.textMuted, marginBottom: 20, lineHeight: 1.4 }}>
-                      {locale === 'ru' ? 'Попробуй ещё раз, когда сеть станет стабильнее' : 'Try again when you have a better connection'}
+                      {t('error_load_slow_or_lost_desc', locale)}
                     </div>
                     <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
                       <button
@@ -15686,7 +15806,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           cursor: 'pointer', fontFamily: font,
                         }}
                       >
-                        {locale === 'ru' ? 'Повторить' : 'Retry'}
+                        {t('retry', locale)}
                       </button>
                       <button
                         onClick={() => setScreen('my-wishlists')}
@@ -15696,7 +15816,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           cursor: 'pointer', fontFamily: font,
                         }}
                       >
-                        {locale === 'ru' ? 'Назад' : 'Back'}
+                        {t('back', locale)}
                       </button>
                     </div>
                   </div>
@@ -15709,10 +15829,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div style={{ textAlign: 'center', padding: '48px 24px' }}>
                     <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
                     <div style={{ fontSize: 16, fontWeight: 600, color: C.text, marginBottom: 8, lineHeight: 1.4 }}>
-                      {locale === 'ru' ? 'Не удалось загрузить желания' : 'Failed to load wishes'}
+                      {t('error_load_wishes_title', locale)}
                     </div>
                     <div style={{ fontSize: 14, color: C.textMuted, marginBottom: 20, lineHeight: 1.4 }}>
-                      {locale === 'ru' ? 'Проверь подключение к интернету и попробуй снова' : 'Check your internet connection and try again'}
+                      {t('error_load_wishes_desc', locale)}
                     </div>
                     <button
                       onClick={async () => {
@@ -15733,7 +15853,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         cursor: 'pointer', fontFamily: font,
                       }}
                     >
-                      {locale === 'ru' ? 'Повторить' : 'Retry'}
+                      {t('retry', locale)}
                     </button>
                   </div>
                 );
@@ -15882,7 +16002,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     color: 'var(--wb-text)', cursor: 'pointer',
                     letterSpacing: '-0.012em',
                   }}>
-                    <span style={{ width: 22, textAlign: 'center' }}>🔗</span> {locale === 'ru' ? 'Где размещено' : 'Where placed'}
+                    <span style={{ width: 22, textAlign: 'center' }}>🔗</span> {t('item_action_where_placed', locale)}
                     {((viewingItem as Item).placementCount ?? 1) > 1 && (
                       <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--wb-accent-strong)', fontWeight: 700, fontFeatureSettings: '"tnum"' }}>{(viewingItem as Item).placementCount}</span>
                     )}
@@ -15893,7 +16013,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     color: 'var(--wb-text)', cursor: 'pointer',
                     letterSpacing: '-0.012em',
                   }}>
-                    <span style={{ width: 22, textAlign: 'center' }}>🧬</span> {locale === 'ru' ? 'Создать копию' : 'Create copy'}
+                    <span style={{ width: 22, textAlign: 'center' }}>🧬</span> {t('item_action_create_copy', locale)}
                   </div>
                   {hasUserCategories && (
                     <div onClick={() => { setShowItemMenu(false); setShowCatPicker({ itemIds: [viewingItem!.id] }); }} style={{
@@ -16819,9 +16939,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         <span style={{ fontSize: 20 }}>🔔</span>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 14, fontWeight: 700, color: C.orange }}>
-                            {reminderDate.toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })}
-                            {locale === 'ru' ? ' в ' : ' at '}
-                            {reminderDate.toLocaleTimeString(locale === 'ru' ? 'ru-RU' : 'en-US', { hour: '2-digit', minute: '2-digit' }).replace(/^0/, '')}
+                            {reminderDate.toLocaleDateString(localeToBCP47(locale), { day: 'numeric', month: 'long' })}
+                            {t('datetime_separator_at', locale)}
+                            {reminderDate.toLocaleTimeString(localeToBCP47(locale), { hour: '2-digit', minute: '2-digit' }).replace(/^0/, '')}
                           </div>
                           <div style={{ fontSize: 12, color: C.textSec, marginTop: 2 }}>
                             {daysUntilReminder !== null && daysUntilReminder > 0
@@ -16995,7 +17115,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </div>
           ) : curatedViewData ? (() => {
             const sel = curatedViewData;
-            const expiryDate = new Date(sel.expiresAt).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'long', year: 'numeric' });
+            const expiryDate = new Date(sel.expiresAt).toLocaleDateString(localeToBCP47(locale), { day: 'numeric', month: 'long', year: 'numeric' });
             return (
               <>
                 <Chip tone="accent" size="md" style={{ marginBottom: 12 }}>
@@ -17009,7 +17129,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     fontSize: 14, color: 'var(--wb-text-secondary)',
                     marginBottom: 4, letterSpacing: '-0.005em',
                   }}>
-                    {locale === 'ru' ? 'от' : 'by'} <b style={{ fontWeight: 650, color: 'var(--wb-text)' }}>{sel.ownerName}</b>
+                    {t('curated_subtitle_by_owner', locale)} <b style={{ fontWeight: 650, color: 'var(--wb-text)' }}>{sel.ownerName}</b>
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
@@ -17017,7 +17137,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     fontSize: 14, color: 'var(--wb-text-secondary)',
                     letterSpacing: '-0.005em', fontFeatureSettings: '"tnum"',
                   }}>
-                    {sel.items.length} {locale === 'ru' ? (sel.items.length === 1 ? 'желание' : sel.items.length < 5 ? 'желания' : 'желаний') : (sel.items.length === 1 ? 'wish' : 'wishes')}
+                    {sel.items.length} {pluralize(sel.items.length, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}
                   </span>
                   <Chip tone="warning" size="md">
                     {t('curated_public_valid_until', locale, { date: expiryDate })}
@@ -17095,7 +17215,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                               fontSize: 13, fontWeight: 650, textDecoration: 'none',
                               letterSpacing: '-0.005em',
                             }}>
-                              {locale === 'ru' ? 'Открыть ссылку' : 'Open link'} ↗
+                              {t('open_link', locale)} ↗
                             </a>
                           )}
                         </div>
@@ -18585,7 +18705,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                               <span style={{ fontSize: 16 }}>✅</span>
                               <span style={{ fontSize: 13, fontWeight: 600, color: C.green, lineHeight: 1.3 }}>
                                 {promoPro.expiresAt
-                                  ? t('promo_success', locale, { date: new Date(promoPro.expiresAt).toLocaleDateString(toIntlLocale(locale), { day: '2-digit', month: '2-digit', year: 'numeric' }) })
+                                  ? t('promo_success', locale, { date: new Date(promoPro.expiresAt).toLocaleDateString(localeToBCP47(locale), { day: '2-digit', month: '2-digit', year: 'numeric' }) })
                                   : t('pro_forever', locale)}
                               </span>
                             </div>
@@ -18640,7 +18760,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                 const data = await r.json() as any;
                                 if (r.ok) {
                                   if (data.status === 'activated' || data.status === 'already_active') {
-                                    pushToast(data.status === 'already_active' ? t('promo_already_active', locale) : t('promo_success', locale, { date: new Date(data.expiresAt).toLocaleDateString(toIntlLocale(locale)) }), 'success');
+                                    pushToast(data.status === 'already_active' ? t('promo_already_active', locale) : t('promo_success', locale, { date: new Date(data.expiresAt).toLocaleDateString(localeToBCP47(locale)) }), 'success');
                                     if (input) input.value = '';
                                     loadWishlists().catch(() => {});
                                   } else if (data.status === 'accepted_for_paid') {
@@ -18934,7 +19054,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontSize: 13, color: C.textSec }}>{t('settings_next_renewal', locale)}</span>
                           <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
-                            {new Date(subscription.periodEnd).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'long', year: 'numeric' })}
+                            {new Date(subscription.periodEnd).toLocaleDateString(localeToBCP47(locale), { day: 'numeric', month: 'long', year: 'numeric' })}
                           </span>
                         </div>
                       </div>
@@ -18951,7 +19071,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           <span>⏳</span>
                           <span>
                             {t('settings_renewal_disabled', locale)}{' '}
-                            <strong>{new Date(subscription.periodEnd).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'long', year: 'numeric' })}</strong>.
+                            <strong>{new Date(subscription.periodEnd).toLocaleDateString(localeToBCP47(locale), { day: 'numeric', month: 'long', year: 'numeric' })}</strong>.
                           </span>
                         </div>
                       </div>
@@ -18967,7 +19087,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           <span style={{ fontSize: 15 }}>🎁</span>
                           <span style={{ fontSize: 13, fontWeight: 600, color: C.green, lineHeight: 1.3 }}>
                             {promoPro.expiresAt
-                              ? t('promo_success', locale, { date: new Date(promoPro.expiresAt).toLocaleDateString(toIntlLocale(locale), { day: '2-digit', month: '2-digit', year: 'numeric' }) })
+                              ? t('promo_success', locale, { date: new Date(promoPro.expiresAt).toLocaleDateString(localeToBCP47(locale), { day: '2-digit', month: '2-digit', year: 'numeric' }) })
                               : t('pro_forever', locale)}
                           </span>
                         </div>
@@ -19064,7 +19184,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             const data = await r.json() as any;
                             if (r.ok) {
                               if (data.status === 'activated' || data.status === 'already_active') {
-                                pushToast(t(data.status === 'already_active' ? 'promo_already_active' : 'promo_success', locale, { date: data.expiresAt ? new Date(data.expiresAt).toLocaleDateString(toIntlLocale(locale)) : '' }), 'success');
+                                pushToast(t(data.status === 'already_active' ? 'promo_already_active' : 'promo_success', locale, { date: data.expiresAt ? new Date(data.expiresAt).toLocaleDateString(localeToBCP47(locale)) : '' }), 'success');
                                 if (input) input.value = '';
                                 loadWishlists().catch(() => {});
                               } else if (data.status === 'accepted_for_paid') {
@@ -19098,7 +19218,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${C.border}` }}>
                     <span style={{ fontSize: 14, color: C.text }}>{t('profile_birthday', locale)}</span>
                     <span style={{ fontSize: 14, color: profileData.birthday ? C.text : C.textMuted }}>
-                      {profileData.birthday ? new Date(profileData.birthday).toLocaleDateString(toIntlLocale(locale), {
+                      {profileData.birthday ? new Date(profileData.birthday).toLocaleDateString(localeToBCP47(locale), {
                         day: 'numeric', month: 'long', ...(profileData.hideYear ? {} : { year: 'numeric' })
                       }) : '\u2014'}
                     </span>
@@ -20145,11 +20265,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         // for UX we show the month boundary, which is close enough.
         const now = new Date();
         const capResetDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-        const monthNamesRu = ['янв', 'февр', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сент', 'окт', 'нояб', 'дек'];
-        const monthNamesEn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const capResetLabel = locale === 'ru'
-          ? `${capResetDate.getDate()} ${monthNamesRu[capResetDate.getMonth()]}`
-          : `${monthNamesEn[capResetDate.getMonth()]} ${capResetDate.getDate()}`;
+        // Locale-aware short date — Intl picks the right order (day-first
+        // vs month-first) per locale automatically. Replaces a hand-rolled
+        // RU/EN ternary that broke for hi/es/ar/zh-CN users.
+        const capResetLabel = new Intl.DateTimeFormat(localeToBCP47(locale), { day: 'numeric', month: 'short' }).format(capResetDate);
 
         // Pending attribution cards (from history cache if loaded; otherwise a
         // placeholder derived from /me stats). For the main screen we only show
@@ -20461,9 +20580,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const fmtDate = (iso: string | null) => {
           if (!iso) return '';
           const d = new Date(iso);
-          return locale === 'ru'
-            ? `${d.getDate()} ${['янв','февр','мар','апр','мая','июн','июл','авг','сент','окт','нояб','дек'][d.getMonth()]}`
-            : `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]} ${d.getDate()}`;
+          return new Intl.DateTimeFormat(localeToBCP47(locale), { day: 'numeric', month: 'short' }).format(d);
         };
 
         return (
@@ -20874,12 +20991,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 const formatBirthday = (iso: string | null): string => {
                   if (!iso) return t('settings_coming_soon', locale);
                   const d = new Date(iso);
-                  const day = d.getUTCDate();
-                  const month = d.getUTCMonth();
-                  const months = locale === 'ru'
-                    ? ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря']
-                    : ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                  return `${day} ${months[month]}`;
+                  return new Intl.DateTimeFormat(localeToBCP47(locale), { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(d);
                 };
 
                 return (
@@ -21506,7 +21618,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         </div>
                         {!isOpen && (
                           <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                            {release.items.length} {locale === 'ru' ? (release.items.length === 1 ? 'изменение' : release.items.length < 5 ? 'изменения' : 'изменений') : (release.items.length === 1 ? 'change' : 'changes')}
+                            {release.items.length} {pluralize(release.items.length, t('changes_one', locale), t('changes_few', locale), t('changes_many', locale), locale)}
                           </div>
                         )}
                       </div>
@@ -21523,7 +21635,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                               <span style={{ color: C.accent, fontSize: 8, marginTop: 6, flexShrink: 0 }}>●</span>
                               <span style={{ fontSize: 14, color: C.textSec, lineHeight: 1.45 }}>
-                                {locale === 'ru' ? item.ru : item.en}
+                                {item[locale] ?? item.en}
                               </span>
                             </div>
                           ))}
@@ -21934,7 +22046,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       <BottomSheet isOpen={showCuratedSuccess && !!curatedResult} onClose={() => { setShowCuratedSuccess(false); setCuratedResult(null); }}>
         {curatedResult && (() => {
           const link = buildTgDeepLink(`cs_${curatedResult.shareToken}`);
-          const expiryDate = new Date(curatedResult.expiresAt).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'long', year: 'numeric' });
+          const expiryDate = new Date(curatedResult.expiresAt).toLocaleDateString(localeToBCP47(locale), { day: 'numeric', month: 'long', year: 'numeric' });
           return (
             <div style={{ textAlign: 'center', padding: '8px 0' }}>
               <div style={{
@@ -22541,7 +22653,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   {idea.link && <div style={{ fontSize: 12, color: C.accent, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{idea.link}</div>}
                   {idea.price != null && <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginTop: 4 }}>{idea.price.toLocaleString()} {idea.currency ?? '₽'}</div>}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-                    <span style={{ fontSize: 11, color: C.textMuted }}>{new Date(idea.createdAt).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'short' })}</span>
+                    <span style={{ fontSize: 11, color: C.textMuted }}>{new Date(idea.createdAt).toLocaleDateString(localeToBCP47(locale), { day: 'numeric', month: 'short' })}</span>
                     {idea.status === 'DONE' && <span style={{ fontSize: 11, color: 'var(--wb-success, #4ADE80)', fontWeight: 600 }}>✓ {t('gn_idea_status_selected', locale)}</span>}
                     {idea.status !== 'DONE' && <button onClick={async (e) => { e.stopPropagation(); await tgFetch(`/tg/gift-occasion-ideas/${idea.id}/complete`, { method: 'POST', idempotency: { action: `gift-occasion-idea.complete:${idea.id}` } }); await refreshOccasion(); pushToast(t('gn_idea_completed', locale), 'success'); }}
                       style={{ fontSize: 11, fontWeight: 600, color: 'var(--wb-success, #4ADE80)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, padding: 0 }}>✓ {t('gn_complete', locale)}</button>}
@@ -22724,7 +22836,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       </BottomSheet>
 
       {/* ── Copy item to wishlist picker (🧬 independent copy) — triggered from item-detail ── */}
-      <BottomSheet isOpen={showCopyPicker} onClose={() => { setShowCopyPicker(false); setCopyingItem(null); }} title={locale === 'ru' ? 'Создать отдельную копию' : 'Create independent copy'}>
+      <BottomSheet isOpen={showCopyPicker} onClose={() => { setShowCopyPicker(false); setCopyingItem(null); }} title={t('copy_sheet_title', locale)}>
         {(() => {
           const copyTargets = getWritableTargets(wishlists, { currentWlId: currentWl?.id, draftsWlId: draftsWishlistId });
           return (
@@ -22737,19 +22849,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           }}>
             <span style={{ fontSize: 18, flexShrink: 0, lineHeight: '22px' }}>🧬</span>
             <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.5 }}>
-              {locale === 'ru' ? (
-                <>
-                  <strong style={{ color: C.orange }}>Копия — независимое желание.</strong>{' '}
-                  Редактирование, бронь и комментарии не будут синхронизироваться с оригиналом.
-                  Если хочешь, чтобы желание было в нескольких wishlist&apos;ах как одно общее — используй «🔗 Где размещено».
-                </>
-              ) : (
-                <>
-                  <strong style={{ color: C.orange }}>A copy is an independent wish.</strong>{' '}
-                  Editing, reservations, and comments won&apos;t sync with the original.
-                  If you want one shared wish across multiple wishlists, use &ldquo;🔗 Where placed&rdquo;.
-                </>
-              )}
+              <strong style={{ color: C.orange }}>{t('copy_explainer_strong', locale)}</strong>{' '}
+              {t('copy_explainer_body', locale)}
             </div>
           </div>
           {copyTargets.map((wl) => (
@@ -22802,7 +22903,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       <BottomSheet
         isOpen={showPlacementsSheet}
         onClose={() => { setShowPlacementsSheet(false); setPlacementsForItem(null); setPlacementsList([]); }}
-        title={locale === 'ru' ? 'Где размещено' : 'Where placed'}
+        title={t('item_action_where_placed', locale)}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {placementsLoading && (
@@ -22851,8 +22952,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     </div>
                     <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
                       {placementsList.length > 1
-                        ? (locale === 'ru' ? 'Общее желание' : 'Shared wish')
-                        : (locale === 'ru' ? 'В одном wishlist' : 'In one wishlist')}
+                        ? t('shared_wish_label', locale)
+                        : t('single_wishlist_label', locale)}
                       {placementsForItem.price != null && ` · ${fmtPrice(placementsForItem.price, locale, placementsForItem.currency ?? 'RUB')}`}
                     </div>
                   </div>
@@ -22862,7 +22963,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 {placementsList.length > 0 && (
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: C.textSec, marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span>{locale === 'ru' ? 'Сейчас размещено' : 'Currently placed'}</span>
+                      <span>{t('placements_currently_placed', locale)}</span>
                       <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: C.accentSoft, color: C.accent, fontWeight: 800 }}>{placementsList.length}</span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -22892,13 +22993,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                               {p.wishlistTitle}
                               {p.isPrimary && (
                                 <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: C.accent }}>
-                                  {locale === 'ru' ? '• основной' : '• primary'}
+                                  {t('placements_primary_marker', locale)}
                                 </span>
                               )}
                             </div>
                             {(p.categoryName || p.position >= 0) && (
                               <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
-                                {p.categoryName ? `📂 ${p.categoryName}` : (locale === 'ru' ? 'Без категории' : 'No category')}
+                                {p.categoryName ? `📂 ${p.categoryName}` : t('placements_no_category', locale)}
                               </div>
                             )}
                           </div>
@@ -22912,7 +23013,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 {available.length > 0 && (
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: C.textSec, marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span>{locale === 'ru' ? 'Можно добавить' : 'Can add'}</span>
+                      <span>{t('placements_can_add', locale)}</span>
                       <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', color: C.textSec, fontWeight: 800 }}>{available.length}</span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -22948,9 +23049,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.05)', border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.12)',
                   fontSize: 11, color: C.textSec, lineHeight: 1.5,
                 }}>
-                  {locale === 'ru'
-                    ? 'Снимешь галочку — желание уйдёт из того wishlist\u2019а, но останется в остальных. Поставишь — появится в новом.'
-                    : 'Uncheck — the wish leaves that wishlist but stays in the others. Check — it appears in a new one.'}
+                  {t('multi_placement_checkbox_hint', locale)}
                 </div>
               </>
             );
@@ -22988,12 +23087,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               fontSize: 22, margin: '0 auto 12px', color: C.red,
             }}>⚠️</div>
             <div style={{ fontSize: 17, fontWeight: 700, color: C.text, textAlign: 'center', marginBottom: 8 }}>
-              {locale === 'ru' ? 'Это последнее размещение' : 'This is the last placement'}
+              {t('placements_last_placement', locale)}
             </div>
             <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5, textAlign: 'center', marginBottom: 16 }}>
-              {locale === 'ru'
-                ? `«${lastPlacementWarnItem.item?.title ?? ''}» больше нигде не размещено. Если убрать — желание будет удалено полностью. Комментарии и история статуса тоже исчезнут.`
-                : `"${lastPlacementWarnItem.item?.title ?? ''}" is not placed anywhere else. Remove it and the wish will be deleted completely, along with comments and status history.`}
+              {t('last_placement_warning_body', locale, { title: lastPlacementWarnItem.item?.title ?? '' })}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <button
@@ -23010,7 +23107,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   cursor: 'pointer', fontFamily: font,
                 }}
               >
-                {locale === 'ru' ? 'Удалить полностью' : 'Delete completely'}
+                {t('placements_delete_completely', locale)}
               </button>
               <button
                 onClick={() => setLastPlacementWarnItem(null)}
@@ -23024,7 +23121,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   cursor: 'pointer', fontFamily: font,
                 }}
               >
-                {locale === 'ru' ? 'Отмена' : 'Cancel'}
+                {t('cancel', locale)}
               </button>
             </div>
           </div>
@@ -23827,7 +23924,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     {cat.isDefault ? t('cat_uncategorized', locale) : cat.name}
                   </div>
                   <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                    {catItemCount} {catItemCount === 1 ? (locale === 'ru' ? 'желание' : 'wish') : (locale === 'ru' ? 'желаний' : 'wishes')}
+                    {catItemCount} {pluralize(catItemCount, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}
                   </div>
                 </div>
                 {isCurrent && <span style={{ color: C.accent, fontSize: 18 }}>✓</span>}
@@ -23942,7 +24039,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           )}
           {dgCustomItems.length >= 10 && (
             <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 16 }}>
-              {locale === 'ru' ? 'Максимум 10 пунктов' : 'Maximum 10 items'}
+              {t('category_max_items', locale)}
             </div>
           )}
 
@@ -24536,7 +24633,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           )}
           {(() => {
             const now = new Date();
-            const dtFmt = (d: Date) => d.toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' });
+            const dtFmt = (d: Date) => d.toLocaleDateString(localeToBCP47(locale), { day: 'numeric', month: 'long' });
             const presets: { key: ResReminderPreset; icon: string; label: string; desc: string }[] = [
               { key: '3d', icon: '⏰', label: t('res_reminder_3d', locale), desc: dtFmt(new Date(now.getTime() + 3 * 86400000)) },
               { key: '1w', icon: '📅', label: t('res_reminder_1w', locale), desc: dtFmt(new Date(now.getTime() + 7 * 86400000)) },
@@ -24729,7 +24826,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               Source: mockups/approved/wishlist-emoji-picker.html (Variant A) */}
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>
-              {locale === 'ru' ? 'Обложка' : 'Cover'}
+              {t('wishlist_cover_label', locale)}
             </label>
             <div
               onClick={() => setShowEmojiPicker(true)}
@@ -24753,10 +24850,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
-                  {locale === 'ru' ? 'Сменить смайлик' : 'Change emoji'}
+                  {t('emoji_change_button', locale)}
                 </div>
                 <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                  {locale === 'ru' ? 'Появится в шапке вишлиста и в списке' : 'Shown in the wishlist hero and list'}
+                  {t('emoji_change_hint', locale)}
                 </div>
               </div>
               <span style={{ color: C.textMuted, fontSize: 18, fontWeight: 300 }}>›</span>
@@ -24803,7 +24900,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       <BottomSheet
         isOpen={showEmojiPicker}
         onClose={() => { setShowEmojiPicker(false); setEmojiCustomMode(false); setEmojiCustomDraft(''); }}
-        title={locale === 'ru' ? 'Выбери смайлик' : 'Pick an emoji'}
+        title={t('emoji_picker_title', locale)}
       >
         {(() => {
           const PALETTE = ['🎁','🎂','🎄','💝','⭐','🦊','🐻','🍕','🎮','📚','🎧','🎨','🏠','✈️','⚽','🍰','💄','👟','📷','🎵'];
@@ -24820,9 +24917,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   fontSize: 13, color: 'var(--wb-text-secondary)', lineHeight: 1.5,
                   textAlign: 'center', padding: '4px 8px',
                 }}>
-                  {locale === 'ru'
-                    ? 'Открой клавиатуру смайликов на твоём устройстве и выбери любой 👇'
-                    : 'Open your device\'s emoji keyboard and pick any 👇'}
+                  {t('emoji_picker_open_keyboard_hint', locale)}
                 </div>
                 <input
                   ref={emojiCustomInputRef}
@@ -24833,7 +24928,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   autoCapitalize="none"
                   spellCheck={false}
                   autoFocus
-                  placeholder={locale === 'ru' ? 'Любой смайлик…' : 'Any emoji…'}
+                  placeholder={t('emoji_picker_placeholder', locale)}
                   // Controlled — always reset to '' so we can wipe invalid input.
                   value={emojiCustomDraft}
                   onChange={(e) => {
@@ -24853,12 +24948,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     //    punctuation. Reject, toast, keep previous override
                     //    (`renameWlEmoji` untouched), clear the draft so the
                     //    user can try again without manually deleting.
-                    pushToast(
-                      locale === 'ru'
-                        ? 'Сюда можно ставить только смайлики'
-                        : 'Only emojis are allowed here',
-                      'error',
-                    );
+                    pushToast(t('emoji_only_warning_toast', locale), 'error');
                     setEmojiCustomDraft('');
                   }}
                   style={{
@@ -24872,7 +24962,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   onClick={() => { setEmojiCustomMode(false); setEmojiCustomDraft(''); }}
                   style={{ color: 'var(--wb-text-muted)' }}
                 >
-                  ← {locale === 'ru' ? 'Назад к палитре' : 'Back to palette'}
+                  ← {t('emoji_picker_back_palette', locale)}
                 </Button>
               </div>
             );
@@ -24932,7 +25022,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     letterSpacing: '-0.005em',
                   }}
                 >
-                  {locale === 'ru' ? 'Свой ✎' : 'Custom ✎'}
+                  {t('emoji_custom_button', locale)}
                 </button>
               </div>
               <Button
@@ -24943,7 +25033,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 }}
                 style={{ marginTop: 4, color: 'var(--wb-text-muted)' }}
               >
-                {locale === 'ru' ? 'Сбросить (авто)' : 'Reset (auto)'}
+                {t('emoji_reset_auto', locale)}
               </Button>
             </div>
           );
@@ -25034,14 +25124,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <div style={{ fontSize: 20, flexShrink: 0, lineHeight: '24px' }}>🔗</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>
-                  {locale === 'ru'
-                    ? `Общее желание · ${editingItem.placementCount} ${pluralize(editingItem.placementCount ?? 0, 'wishlist', 'wishlist\u2019а', 'wishlist\u2019ов', locale)}`
-                    : `Shared wish · ${editingItem.placementCount} wishlists`}
+                  {t('shared_wish_count_header', locale, {
+                    count: String(editingItem.placementCount ?? 0),
+                    plural: pluralize(editingItem.placementCount ?? 0, 'wishlist', 'wishlist\u2019а', 'wishlist\u2019ов', locale),
+                  })}
                 </div>
                 <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.5, marginBottom: 8 }}>
-                  {locale === 'ru'
-                    ? 'Изменения названия, цены, ссылки, фото или статуса применятся во всех wishlist\u2019ах, где оно размещено.'
-                    : 'Changes to title, price, link, photo, or status will apply to all wishlists where it\u2019s placed.'}
+                  {t('multi_placement_shared_explainer', locale)}
                 </div>
                 <button
                   type="button"
@@ -25055,7 +25144,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     cursor: 'pointer', fontFamily: font,
                   }}
                 >
-                  {locale === 'ru' ? 'Управлять размещением →' : 'Manage placements →'}
+                  {t('item_action_manage_placements', locale)}
                 </button>
               </div>
             </div>
@@ -25078,13 +25167,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div style={{ width: 30, height: 30, borderRadius: 9, background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>📋</div>
                   <div style={{ flex: 1, fontSize: 14, color: C.text, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ownerWl.title}</div>
                   <div style={{ fontSize: 12, color: C.accent, fontWeight: 700, flexShrink: 0 }}>
-                    {locale === 'ru' ? 'Добавить в ещё →' : 'Add to more →'}
+                    {t('item_action_add_to_more', locale)}
                   </div>
                 </div>
                 <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6, lineHeight: 1.4 }}>
-                  {locale === 'ru'
-                    ? 'Только в одном wishlist\u2019е. Можно добавить в другие — желание станет общим.'
-                    : 'Only in one wishlist. Add to others to turn it into a shared wish.'}
+                  {t('multi_placement_single_explainer', locale)}
                 </div>
               </div>
             );
@@ -25145,6 +25232,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               } catch { return null; }
             })()}
             <div style={{ fontSize: 10, color: '#3a3a44', marginTop: 4 }}>
+              {/* RU-only key surfaces Cyrillic Яндекс Маркет / Ozon hints; other
+                  locales fall back to the global store list. Intentional split. */}
               {locale === 'ru' ? t('item_url_hint_ru', locale) : t('item_url_hint_global', locale)}
             </div>
           </div>
@@ -25327,7 +25416,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             return (
               <div>
                 <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--wb-text-muted)', marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: '0.7px' }}>
-                  {locale === 'ru' ? 'В каких wishlist\'ах разместить' : 'In which wishlists'}
+                  {t('multi_placement_title', locale)}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
                   {/* Current wishlist — always implicitly included, shown disabled-on */}
@@ -25350,7 +25439,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         {currentWl.title}
                       </span>
                       <span style={{ fontSize: 10, color: C.textMuted, flexShrink: 0 }}>
-                        {locale === 'ru' ? 'текущий' : 'current'}
+                        {t('multi_placement_current_tag', locale)}
                       </span>
                     </div>
                   )}
@@ -25398,17 +25487,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   }}>
                     <span style={{ fontSize: 16, flexShrink: 0, lineHeight: '20px' }}>🔗</span>
                     <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.5 }}>
-                      {locale === 'ru' ? (
-                        <>
-                          <strong style={{ color: C.text }}>Это будет одно общее желание.</strong>{' '}
-                          Если ты изменишь описание, цену, ссылку, статус или кто-то забронирует подарок — изменения применятся во всех выбранных wishlist&apos;ах. Порядок и категория в каждом wishlist могут отличаться.
-                        </>
-                      ) : (
-                        <>
-                          <strong style={{ color: C.text }}>This will be one shared wish.</strong>{' '}
-                          If you change description, price, link, status, or someone reserves it — changes will apply to all selected wishlists. Order and category in each wishlist may differ.
-                        </>
-                      )}
+                      <strong style={{ color: C.text }}>{t('shared_wish_explainer_strong', locale)}</strong>{' '}
+                      {t('shared_wish_explainer_body', locale)}
                     </div>
                   </div>
                 )}
@@ -25419,12 +25499,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.22)', borderRadius: 12,
                   }}>
                     <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4, color: C.text }}>
-                      🔒 {locale === 'ru' ? 'Новые wishlist\'ы — в Pro' : 'New wishlists — in Pro'}
+                      {t('multi_placement_pro_locked_title', locale)}
                     </div>
                     <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.5, marginBottom: 10 }}>
-                      {locale === 'ru'
-                        ? `На Free можно до ${planLimits.wishlists} wishlist\u2019ов. Общее желание — без ограничений.`
-                        : `Free plan allows up to ${planLimits.wishlists} wishlists. Shared wishes — unlimited.`}
+                      {t('multi_placement_pro_locked_desc', locale, { limit: planLimits.wishlists })}
                     </div>
                     <button
                       type="button"
@@ -25435,7 +25513,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         cursor: 'pointer', fontFamily: font,
                       }}
                     >
-                      {locale === 'ru' ? 'Узнать о Pro' : 'Learn about Pro'}
+                      {t('multi_placement_learn_pro', locale)}
                     </button>
                   </div>
                 )}
@@ -25773,28 +25851,28 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <div style={{ background: C.surface, borderRadius: 14, padding: '4px 16px' }}>
                 {isSelection && (() => {
                   const sel = linkMgmtDetailItem.data as LinkMgmtSelection;
-                  const created = new Date(sel.createdAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long', year: 'numeric' });
-                  const validUntil = new Date(sel.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long', year: 'numeric' });
+                  const created = new Date(sel.createdAt).toLocaleDateString(localeToBCP47(locale), { day: 'numeric', month: 'long', year: 'numeric' });
+                  const validUntil = new Date(sel.expiresAt).toLocaleDateString(localeToBCP47(locale), { day: 'numeric', month: 'long', year: 'numeric' });
                   const days = Math.ceil((new Date(sel.expiresAt).getTime() - Date.now()) / 86400000);
                   return (
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
-                        <span style={{ fontSize: 14, color: C.textMuted }}>{t('link_detail_created', locale, { date: '' }).replace('{{date}}', '').trim() || (locale === 'ru' ? 'Создана' : 'Created')}</span>
+                        <span style={{ fontSize: 14, color: C.textMuted }}>{t('link_created_label', locale)}</span>
                         <span style={{ fontSize: 14, color: C.text, fontWeight: 500 }}>{created}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
-                        <span style={{ fontSize: 14, color: C.textMuted }}>{locale === 'ru' ? 'Действует до' : 'Valid until'}</span>
+                        <span style={{ fontSize: 14, color: C.textMuted }}>{t('link_valid_until', locale)}</span>
                         <span style={{ fontSize: 14, color: C.text, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
                           {validUntil}
-                          <span style={{ fontSize: 12, color: C.textMuted, fontWeight: 400 }}>({days} {locale === 'ru' ? 'дн.' : 'd'})</span>
+                          <span style={{ fontSize: 12, color: C.textMuted, fontWeight: 400 }}>({days} {t('link_day_short', locale)})</span>
                         </span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
-                        <span style={{ fontSize: 14, color: C.textMuted }}>{locale === 'ru' ? 'Подписчики' : 'Subscribers'}</span>
+                        <span style={{ fontSize: 14, color: C.textMuted }}>{t('link_subscribers_label', locale)}</span>
                         <span style={{ fontSize: 14, color: C.text, fontWeight: 500 }}>{sel.subscriberCount}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0' }}>
-                        <span style={{ fontSize: 14, color: C.textMuted }}>{locale === 'ru' ? 'Просмотры' : 'Views'}</span>
+                        <span style={{ fontSize: 14, color: C.textMuted }}>{t('link_views_label', locale)}</span>
                         <span style={{ fontSize: 14, color: C.text, fontWeight: 500 }}>{sel.viewCount}</span>
                       </div>
                     </>
@@ -25805,11 +25883,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   return (
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
-                        <span style={{ fontSize: 14, color: C.textMuted }}>{locale === 'ru' ? 'Срок' : 'Expiry'}</span>
+                        <span style={{ fontSize: 14, color: C.textMuted }}>{t('link_expiry_label', locale)}</span>
                         <span style={{ fontSize: 14, color: C.text, fontWeight: 500 }}>{t('link_detail_no_expiry', locale)}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0' }}>
-                        <span style={{ fontSize: 14, color: C.textMuted }}>{locale === 'ru' ? 'Просмотры' : 'Views'}</span>
+                        <span style={{ fontSize: 14, color: C.textMuted }}>{t('link_views_label', locale)}</span>
                         <span style={{ fontSize: 14, color: C.text, fontWeight: 500 }}>{wl.viewCount}</span>
                       </div>
                     </>
@@ -25820,13 +25898,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   return (
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
-                        <span style={{ fontSize: 14, color: C.textMuted }}>{locale === 'ru' ? 'Срок' : 'Expiry'}</span>
+                        <span style={{ fontSize: 14, color: C.textMuted }}>{t('link_expiry_label', locale)}</span>
                         <span style={{ fontSize: 14, color: C.text, fontWeight: 500 }}>{t('link_detail_no_expiry', locale)}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0' }}>
-                        <span style={{ fontSize: 14, color: C.textMuted }}>{locale === 'ru' ? 'Видимость' : 'Visibility'}</span>
+                        <span style={{ fontSize: 14, color: C.textMuted }}>{t('link_visibility_label', locale)}</span>
                         <span style={{ fontSize: 14, color: 'var(--wb-success, #4ADE80)', fontWeight: 500 }}>
-                          {prof.profileVisibility === 'ALL' ? (locale === 'ru' ? 'Открыт для всех' : 'Public') : prof.profileVisibility === 'LINK_ONLY' ? (locale === 'ru' ? 'По ссылке' : 'Link only') : prof.profileVisibility}
+                          {prof.profileVisibility === 'ALL' ? t('visibility_public_label', locale) : prof.profileVisibility === 'LINK_ONLY' ? t('visibility_link_only_label', locale) : prof.profileVisibility}
                         </span>
                       </div>
                     </>
@@ -25837,13 +25915,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {/* Info hint for wishlist */}
               {isWishlist && (
                 <div style={{ background: 'rgba(96,165,250,0.08)', borderRadius: 12, padding: '12px 16px', fontSize: 13, color: '#60A5FA', lineHeight: 1.5 }}>
-                  {locale === 'ru' ? 'После отключения старая ссылка перестанет работать. При повторном шеринге создастся новая.' : 'After disabling, the old link will stop working. A new one will be created when you share again.'}
+                  {t('link_disable_warning', locale)}
                 </div>
               )}
               {/* Info hint for profile */}
               {isProfile && (
                 <div style={{ background: 'rgba(251,191,36,0.1)', borderRadius: 12, padding: '12px 16px', fontSize: 13, color: 'var(--wb-warning, #FBBF24)', lineHeight: 1.5 }}>
-                  {locale === 'ru' ? 'Закрытие профиля скроет его для всех, кто ещё не подписан. Подписчики сохранят доступ.' : 'Closing your profile will hide it from everyone not subscribed. Subscribers keep access.'}
+                  {t('profile_close_warning', locale)}
                 </div>
               )}
 
@@ -25853,7 +25931,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <button
                     onClick={async () => {
                       try { await navigator.clipboard.writeText(shareableLink!); } catch { /* ignore */ }
-                      pushToast(locale === 'ru' ? 'Ссылка скопирована' : 'Link copied', 'success');
+                      pushToast(t('toast_link_copied', locale), 'success');
                     }}
                     style={{ ...btnBase, width: '100%', padding: '14px 0', borderRadius: 14, fontSize: 15, fontWeight: 600, border: 'none', background: C.surface, color: C.text }}
                   >
@@ -26019,7 +26097,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         {(() => {
           const periodEndDate = subscription
             ? new Date(subscription.periodEnd).toLocaleDateString(
-                toIntlLocale(locale), { day: 'numeric', month: 'long', year: 'numeric' },
+                localeToBCP47(locale), { day: 'numeric', month: 'long', year: 'numeric' },
               )
             : null;
 
@@ -26453,9 +26531,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 8 }}>
           <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 4 }}>
-            {locale === 'ru'
-              ? 'Для какого вишлиста добавить слоты желаний?'
-              : 'Which wishlist should get extra item slots?'}
+            {t('addon_slots_prompt', locale)}
           </div>
           {wishlists.map(wl => {
             const extraSlots = addOns.extraItemsPerWishlist?.[wl.id] ?? 0;
@@ -27517,9 +27593,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       {renderSantaAlias(myAlias.adjectiveKey, myAlias.animalKey, locale) || myAlias.alias}
                     </div>
                     <div style={{ fontSize: 11.5, color: 'var(--wb-text-secondary)', marginTop: 3, letterSpacing: '-0.003em' }}>
-                      {locale === 'ru'
-                        ? 'Имя меняется автоматически в каждом новом раунде'
-                        : 'Name changes automatically each new round'}
+                      {t('santa_alias_changes_hint', locale)}
                     </div>
                   </div>
                 </div>
@@ -29602,9 +29676,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       {/* Warn if fewer than 2 active members — group has no draw effect */}
                       {group.activeCount < 2 && (
                         <div style={{ fontSize: 11, color: C.orange ?? C.textMuted, marginBottom: 6 }}>
-                          ⚠️ {locale === 'ru'
-                            ? 'Группа не влияет на жеребьёвку (нужно ≥ 2 активных участника)'
-                            : 'Group has no effect on draw (need ≥ 2 active members)'}
+                          ⚠️ {t('santa_group_min_warning', locale)}
                         </div>
                       )}
 
@@ -30109,7 +30181,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </button>
           </div>
 
-          {/* Mock wish cards hero (above mesh) */}
+          {/* Mock wish cards hero (above mesh). Same intentional bundle as the
+              sr_paywall demo rows around line 15129 — RU samples (RUB prices,
+              Cyrillic names) vs EN samples (GBP prices, English names); other
+              locales fall back to the EN sample, which is acceptable for
+              decorative illustration. */}
           <div style={{ paddingTop: 52, paddingBottom: 4, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: 0, position: 'relative', zIndex: 1 }}>
             {(locale === 'ru' ? [
               { emoji: '🎸', title: 'Гитара Fender', price: '45 000 ₽', rotate: -8, ty: 12 },
@@ -30695,7 +30771,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <div style={{ marginBottom: 16 }}>
                 <Banner tone={deadlinePassed ? 'danger' : 'warning'} icon={<span>{deadlinePassed ? '⚠️' : '⏰'}</span>}>
                   <div style={{ textAlign: 'center', fontWeight: 600 }}>
-                    {deadlinePassed ? t('gg_deadline_passed', locale) : deadlineDate.toLocaleDateString(locale === 'ru' ? 'ru-RU' : undefined)}
+                    {deadlinePassed ? t('gg_deadline_passed', locale) : deadlineDate.toLocaleDateString(localeToBCP47(locale))}
                   </div>
                 </Banner>
               </div>
@@ -31022,7 +31098,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 fontWeight inherits via outer style (deadline CTA needs emphasis). */}
             {deadlineDate && daysLeft != null && daysLeft > 0 && (
               <Banner tone="warning" icon="⏰" style={{ marginBottom: 14, fontWeight: 650 }}>
-                {t('gg_join_deadline', locale).replace('{{date}}', deadlineDate.toLocaleDateString(locale === 'ru' ? 'ru-RU' : undefined)).replace('{{days}}', String(daysLeft))}
+                {t('gg_join_deadline', locale).replace('{{date}}', deadlineDate.toLocaleDateString(localeToBCP47(locale))).replace('{{days}}', String(daysLeft))}
               </Banner>
             )}
 
@@ -31319,7 +31395,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             if (res.ok) {
               const json = await res.json() as { status: string; expiresAt?: string };
               trackEvent('promo_winback_redeemed', { segment: pr.segment, promoCode: pr.promoCode, status: json.status });
-              pushToast(t('promo_success', locale).replace('{{date}}', json.expiresAt ? new Date(json.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : undefined) : ''), 'success');
+              pushToast(t('promo_success', locale).replace('{{date}}', json.expiresAt ? new Date(json.expiresAt).toLocaleDateString(localeToBCP47(locale)) : ''), 'success');
               setShowPromoReward(null);
               setPromoWinbackEntry(null);
             } else {
@@ -31362,13 +31438,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 borderRadius: 14, padding: '14px 20px', marginBottom: 24,
               }}>
                 <div style={{ fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>
-                  {locale === 'ru' ? 'Промокод' : 'Promo code'}
+                  {t('promo_label', locale)}
                 </div>
                 <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--wb-accent, #8B7BFF)', letterSpacing: 2 }}>
                   {pr.promoCode}
                 </div>
                 <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>
-                  {locale === 'ru' ? '30 дней Pro бесплатно' : '30 days of Pro free'}
+                  {t('promo_subtitle', locale)}
                 </div>
               </div>
               <button
@@ -31384,7 +31460,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 }}
               >
                 {promoRewardActivating
-                  ? (locale === 'ru' ? 'Активируем…' : 'Activating…')
+                  ? t('promo_activating', locale)
                   : t('wb_promo_activate', locale)}
               </button>
               <button
@@ -33072,7 +33148,7 @@ function ShareScreen({ wishlist, itemCount, tgUser, ownerName, ownerAvatarUrl, o
 
   const fmtDeadline = (d: string | null) => {
     if (!d) return null;
-    return new Date(d).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'long' });
+    return new Date(d).toLocaleDateString(localeToBCP47(locale), { day: 'numeric', month: 'long' });
   };
 
   const copy = async () => {

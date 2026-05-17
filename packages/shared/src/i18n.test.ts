@@ -13,6 +13,7 @@ import {
   deriveMarketBucketFromCountry,
   deriveMarketBucketFromName,
   resolveMarketBucket,
+  localeToBCP47,
 } from './i18n';
 
 describe('deriveMarketBucket (single-signal language code)', () => {
@@ -255,5 +256,46 @@ describe('resolveMarketBucket (priority chain)', () => {
       timezone: 'Asia/Riyadh',
     });
     expect(r).toEqual({ bucket: 'ar', source: 'timezone' });
+  });
+});
+
+describe('localeToBCP47', () => {
+  // Maps the app's internal Locale (ru/en/zh-CN/hi/es/ar) to a BCP-47
+  // tag that Intl.DateTimeFormat / Intl.NumberFormat understands. Anchors
+  // the contract because the rest of the Mini App now relies on this
+  // helper for every date/number formatter call-site (single source of
+  // truth — see migration of pre-existing 14 inline ternaries).
+  it('returns BCP-47 tags for every supported locale', () => {
+    expect(localeToBCP47('ru')).toBe('ru-RU');
+    expect(localeToBCP47('en')).toBe('en-US');
+    expect(localeToBCP47('zh-CN')).toBe('zh-CN');
+    expect(localeToBCP47('hi')).toBe('hi-IN');
+    expect(localeToBCP47('es')).toBe('es-ES');
+    expect(localeToBCP47('ar')).toBe('ar-EG');
+  });
+
+  it('produces tags that Intl.DateTimeFormat accepts (smoke)', () => {
+    // Guards against silent typos in the mapping table — if any tag is
+    // malformed, this throws. We pick a fixed date and just exercise the
+    // formatter, not assert exact output (locale data differs per Node
+    // version).
+    const date = new Date(2026, 0, 15);
+    for (const loc of ['ru', 'en', 'zh-CN', 'hi', 'es', 'ar'] as const) {
+      expect(() => new Intl.DateTimeFormat(localeToBCP47(loc)).format(date)).not.toThrow();
+    }
+  });
+
+  it('ar locale produces Gregorian (NOT Hijri) month names', () => {
+    // Regression guard: `ar-SA` would silently default to the Islamic
+    // calendar (`28 شوال`), breaking Pro renewal reminders, calendar
+    // surfaces, and the SR onboarding demo date. The mapping picks
+    // `ar-EG` precisely to keep Gregorian months. Hijri month names
+    // include شوال / محرم / رمضان — assert none of them appear for a
+    // date that's clearly April (Gregorian: أبريل).
+    const date = new Date(2026, 3, 16); // 16 April 2026
+    const formatted = new Intl.DateTimeFormat(localeToBCP47('ar'), { day: 'numeric', month: 'long' }).format(date);
+    expect(formatted).not.toMatch(/شوال|محرم|رمضان|صفر|ربيع|جمادى|رجب|شعبان|ذو/);
+    // Sanity: should contain the Gregorian April name.
+    expect(formatted).toContain('أبريل');
   });
 });

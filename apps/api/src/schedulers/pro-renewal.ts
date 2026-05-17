@@ -24,7 +24,7 @@
 
 import type { PrismaClient } from '@wishlist/db';
 import type { Logger } from 'pino';
-import { t, resolveLocaleWithSource, LIFETIME_BILLING_PERIOD } from '@wishlist/shared';
+import { t, resolveLocaleWithSource, localeToBCP47, LIFETIME_BILLING_PERIOD } from '@wishlist/shared';
 import type { SendLifecycleDM } from '../services/lifecycle';
 import { profileToLanguageSettings } from '../services/locale';
 
@@ -85,13 +85,7 @@ export function startProRenewalReminderScheduler(deps: ProRenewalSchedulerDeps):
           const { locale, source: localeSource } = resolveLocaleWithSource(
             profileToLanguageSettings(sub.user.profile),
           );
-          const dateFmtLocale =
-            locale === 'ru' ? 'ru-RU'
-            : locale === 'zh-CN' ? 'zh-CN'
-            : locale === 'hi' ? 'hi-IN'
-            : locale === 'es' ? 'es-ES'
-            : locale === 'ar' ? 'ar'
-            : 'en-US';
+          const dateFmtLocale = localeToBCP47(locale);
           const fmtDate = sub.currentPeriodEnd.toLocaleDateString(dateFmtLocale, { day: 'numeric', month: 'long', year: 'numeric' });
           const text = t(w.key, locale, { date: fmtDate });
 
