@@ -214,7 +214,18 @@ async function runChecks() {
 }
 
 // ─── SQL helper (used for DB-side probes only — incidents/exposures/heartbeat) ──
-
+//
+// SHELL-ESCAPE WARNING: this helper only escapes double-quotes (`"` → `\"`)
+// before wrapping the query in shell-quoted `psql -c "…"`. The host shell
+// (bash inside docker compose exec) still interprets `$`, backticks, and
+// backslashes inside the resulting double-quoted string. Today's callers
+// all use static SQL with no shell metacharacters — `randomUUID()` output
+// is hex+hyphens, ZERO_EXPOSURE_MIN_AGE_MS becomes a plain integer literal,
+// and there is NO user-supplied input. If you add a caller that interpolates
+// anything else (especially anything reaching the user space), audit for
+// `$`, backticks, and `\` injection or switch to a `--csv`-from-stdin
+// pattern. Same applies if you ever route this through anything but
+// `docker compose exec -T`.
 async function runSql(query) {
   const { execSync } = await import('node:child_process');
   try {

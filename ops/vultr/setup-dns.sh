@@ -108,6 +108,13 @@ check_drift() {
     if [ "$target" != "$RUNTIME_FILE" ]; then
       echo "FAIL: $TARGET_LINK -> $target (expected $RUNTIME_FILE)"
       drift=1
+    elif [ ! -e "$TARGET_LINK" ]; then
+      # Symlink exists and points where we expect, but the target file is
+      # gone (e.g. resolvconf was uninstalled, or /run/resolvconf got
+      # cleaned). DNS is silently broken — the symlink check alone would
+      # have falsely reported "ok".
+      echo "FAIL: $TARGET_LINK is a dangling symlink ($target does not exist)"
+      drift=1
     else
       echo "ok: $TARGET_LINK -> $RUNTIME_FILE"
     fi

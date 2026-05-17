@@ -300,9 +300,11 @@ export function transitionOnHealthy(prev) {
     next.wasDown = false;
     next.downSince = null;
     next.consecutiveHealthyChecks = 0;
-    // Don't drop incidentId here — the recovery alert text might want it,
-    // and the zero-exposure tracker uses it. It's set to null when a NEW
-    // incident is created.
+    // Don't drop incidentId here — health-watchdog.mjs reads it to log
+    // which incident just recovered. It's overwritten (not nulled) when
+    // a new incident is created via createDowntimeExposures(). The
+    // zero-exposure tracker does NOT depend on this field — it queries
+    // MaintenanceIncident directly from the DB on every tick.
     return {
       state: next,
       recovered: true,
