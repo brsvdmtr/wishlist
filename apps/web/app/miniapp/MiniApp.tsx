@@ -778,6 +778,15 @@ const inputStyle: React.CSSProperties = {
 type ReleaseNote = { id: string; date: string; items: { ru: string; en: string }[] };
 const RELEASE_NOTES: ReleaseNote[] = [
   {
+    id: '2026-05-09',
+    date: '09.05.2026',
+    items: [
+      { ru: '⭐ Pro навсегда — новый тариф: 2 490 ⭐ один раз и все Pro-возможности с тобой навсегда. Без продлений, без автосписаний, без напоминаний о платеже', en: '⭐ Pro Lifetime — a new tier: 2 490 ⭐ once and every Pro feature is yours forever. No renewals, no auto-charges, no payment reminders' },
+      { ru: '💎 Альтернатива месячному (100 ⭐) и годовому (800 ⭐) тарифам — для тех, кто уже понял, что Pro нравится, и хочет купить один раз и забыть про продления', en: '💎 An alternative to the monthly (100 ⭐) and yearly (800 ⭐) plans — for users who already know they love Pro and want to buy once and forget about renewals' },
+      { ru: '🛡 Если у тебя уже активен Pro навсегда, мы не дадим случайно списать звёзды за месячный или годовой тариф: лишний платёж аудируется, а твой Lifetime остаётся', en: '🛡 If Pro Lifetime is already active, we won\'t let an accidental monthly or yearly charge downgrade you: the extra payment is audited and your lifetime entitlement is preserved' },
+    ],
+  },
+  {
     id: '2026-04-30',
     date: '30.04.2026',
     items: [
