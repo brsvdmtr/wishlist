@@ -3,34 +3,52 @@
  * health-watchdog.mjs
  *
  * Cron-runnable health watchdog for Wishlistik.
- * Checks /health/deep and the web homepage, deduplicates alerts via a state file,
- * sends one Telegram alert on first failure and one recovery alert on first success.
- * After recovery, triggers maintenance recovery notification flow:
- *   - Checks if 15-min stability window has passed
- *   - Sends recovery notifications to affected users
  *
- * Usage:
- *   node ops/watchdog/health-watchdog.mjs
+ * What it does on every tick (default cadence: every 5 min via cron):
+ *   1. Probe https://wishlistik.ru/api/health/deep, /, and /api/tg/bootstrap
+ *      in parallel. One automatic retry after 5s if any fail.
+ *   2. Apply the pure state machine in ./state.mjs to decide whether to
+ *      promote the suspicion into an incident (needs 2 consecutive DOWN
+ *      ticks; see PROMOTE_THRESHOLD) or to mark the incident as RECOVERED
+ *      (needs 3 consecutive healthy ticks; see RECOVERY_THRESHOLD).
+ *   3. If a new incident is promoted: send Telegram alert + write a
+ *      MaintenanceIncident row + populate MaintenanceExposure rows for the
+ *      last-24h-active user set (via direct docker-exec psql, since the API
+ *      is presumed down at this point).
+ *   4. Check live bot heartbeat (ServiceHeartbeat table). Separate dedup.
+ *   5. Detect zero-exposure incidents (status active|recovering, age > 15min,
+ *      live COUNT(*) of MaintenanceExposure = 0) — that pattern is the
+ *      "createDowntimeExposures silently failed" smell. Alert once per id.
  *
- * Env vars (can be set in a .env or passed directly):
- *   WATCHDOG_BASE_URL     — e.g. https://wishlistik.ru   (no trailing slash)
- *   BOT_TOKEN             — Telegram bot token
- *   ADMIN_ALERT_CHAT_IDS  — comma-separated chat IDs
- *   WATCHDOG_STATE_FILE   — path to state JSON (default: /tmp/watchdog-state.json)
- *   WATCHDOG_TIMEOUT_MS   — HTTP timeout in ms (default: 15000)
- *   MAINTENANCE_MODE      — if "true", skip alerting (planned downtime)
+ * Env vars (loaded from /opt/wishlist/.env if present, else current env):
+ *   WATCHDOG_BASE_URL     — e.g. https://wishlistik.ru (no trailing slash)
+ *   BOT_TOKEN             — Telegram bot token (used both for alerts and
+ *                            as X-INTERNAL-KEY on /api/internal/* calls)
+ *   ADMIN_ALERT_CHAT_IDS  — comma-separated chat IDs for alerts
+ *   WATCHDOG_STATE_FILE   — state JSON (default: /var/lib/wishlist/watchdog/state.json)
+ *   WATCHDOG_TIMEOUT_MS   — HTTP probe timeout, ms (default: 15000)
+ *   MAINTENANCE_MODE      — if "true", skip ALL alerting (planned downtime)
  *
- * Cron example (every 5 minutes):
- *   star/5 * * * * /usr/bin/node /opt/wishlist/ops/watchdog/health-watchdog.mjs
- *   (replace "star" with asterisk)
+ * Run via the flock wrapper to avoid overlapping cron runs:
+ *   star/5 * * * * /opt/wishlist/ops/watchdog/run-health-watchdog.sh
  */
 
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 
+import {
+  loadState,
+  saveStateAtomic,
+  transitionOnDown,
+  transitionOnHealthy,
+  evaluateZeroExposureAlerts,
+  markZeroExposureAlerted,
+  ZERO_EXPOSURE_MIN_AGE_MS,
+} from './state.mjs';
+
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-// Load .env from project root if present
+// Load .env from project root if present (best effort — explicit env wins).
 const envPath = new URL('../../.env', import.meta.url).pathname;
 if (fs.existsSync(envPath)) {
   const lines = fs.readFileSync(envPath, 'utf8').split('\n');
@@ -43,15 +61,29 @@ if (fs.existsSync(envPath)) {
 const BASE_URL = (process.env.WATCHDOG_BASE_URL ?? '').replace(/\/$/, '');
 const BOT_TOKEN = process.env.BOT_TOKEN ?? '';
 const CHAT_IDS = (process.env.ADMIN_ALERT_CHAT_IDS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-const STATE_FILE = process.env.WATCHDOG_STATE_FILE ?? '/tmp/watchdog-state.json';
-// 15s — empirically safe for an SSR-rendered home page through nginx, with
-// headroom for a one-off DNS resolver miss. Bumped from 8s after the
-// 2026-05-17 02:25 UTC false alert: Vultr's primary recursive resolver
-// (108.61.10.10) was timing out ~5s for ~50% of queries, eating most of
-// the 8s window and triggering AbortError on the homepage probe even
-// though the app itself was healthy. The DNS-side fix is the resolvconf
-// override on the host (Quad9 first), but the watchdog should never have
-// alerted on a 5-second DNS hiccup either.
+// /var/lib is the canonical place for variable, persistent app state on
+// Debian/Ubuntu. /tmp is wiped on boot and some distros also wipe it
+// periodically while up — bad for a dedup/state file that must survive a
+// kernel panic or VPS reboot.
+//
+// State file lives in a DEDICATED subdir (/var/lib/wishlist/watchdog/) so
+// that ensureStateDir's 0700 enforcement only affects this watchdog's own
+// directory — not the parent /var/lib/wishlist/, which other services may
+// share (uploads, future runtime files, etc.).
+//
+// The env var lets tests/dev override the full path. If env is set,
+// legacy-fallback below is disabled — the operator chose a path
+// explicitly.
+const STATE_FILE = process.env.WATCHDOG_STATE_FILE ?? '/var/lib/wishlist/watchdog/state.json';
+// Ordered list of one-time legacy fallback locations. Newest-first: if
+// data exists in BOTH locations, the more recently used one wins. The
+// first successful saveStateAtomic writes to STATE_FILE, after which the
+// legacy file is no longer consulted — but we DON'T delete the legacy
+// file (operator can review and unlink manually).
+const LEGACY_STATE_FILES = [
+  '/var/lib/wishlist/watchdog-state.json', // pre-2026-05-17 dedicated-subdir default
+  '/tmp/watchdog-state.json',              // original default (pre-/var/lib/)
+];
 const TIMEOUT_MS = Number(process.env.WATCHDOG_TIMEOUT_MS ?? 15000);
 const MAINTENANCE = (process.env.MAINTENANCE_MODE ?? '').toLowerCase() === 'true';
 
@@ -60,34 +92,99 @@ if (!BASE_URL) {
   process.exit(1);
 }
 
-// ─── State ───────────────────────────────────────────────────────────────────
+function loadStateWithLegacyFallback() {
+  if (fs.existsSync(STATE_FILE)) return loadState(STATE_FILE);
+  // If the operator pinned WATCHDOG_STATE_FILE explicitly, respect that and
+  // don't silently merge legacy data into the chosen location.
+  if (process.env.WATCHDOG_STATE_FILE) return loadState(STATE_FILE);
 
-/** @returns {{ wasDown: boolean, downSince: string | null, consecutiveDownChecks: number, consecutiveHealthyChecks: number, firstDownSince: string | null, botWasStale: boolean, botStaleSince: string | null }} */
-function loadState() {
-  try {
-    const raw = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-    return {
-      wasDown: false, downSince: null,
-      consecutiveDownChecks: 0, consecutiveHealthyChecks: 0,
-      firstDownSince: null,
-      botWasStale: false, botStaleSince: null,
-      ...raw,
-    };
-  } catch {
-    return {
-      wasDown: false, downSince: null,
-      consecutiveDownChecks: 0, consecutiveHealthyChecks: 0,
-      firstDownSince: null,
-      botWasStale: false, botStaleSince: null,
-    };
+  for (const legacyPath of LEGACY_STATE_FILES) {
+    if (legacyPath === STATE_FILE) continue;
+    if (!fs.existsSync(legacyPath)) continue;
+    const legacy = loadState(legacyPath);
+    console.warn(
+      `[watchdog] read state from legacy path ${legacyPath} → next save will land at ${STATE_FILE} (legacy file NOT deleted)`,
+    );
+    return legacy;
   }
+  return loadState(STATE_FILE);
 }
 
-function saveState(state) {
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state), 'utf8');
+// ─── Telegram delivery ───────────────────────────────────────────────────────
+
+/**
+ * Send a Telegram alert to every chat in ADMIN_ALERT_CHAT_IDS.
+ *
+ * Behavior (hardened 2026-05-17):
+ *   • Per-chat: check HTTP status AND Telegram's `ok` field.
+ *   • Log error_code / description on Telegram-side rejection.
+ *   • Respect retry_after on 429 — one retry, then give up (we are in cron
+ *     and have a hard deadline; never block the next tick).
+ *   • Never throw. A degraded delivery channel must not crash the watchdog.
+ *
+ * Returns whether at least one chat received the message. Callers that
+ * gate dedup state on successful delivery (zero-exposure alerts) read this.
+ *
+ * If alerting is not configured at all (no token / no chat ids), we return
+ * `true` — the operator chose to run without admin alerts, so we don't want
+ * to make every dedup retry forever in that mode.
+ *
+ * @param {string} text
+ * @returns {Promise<boolean>}
+ */
+async function sendAlert(text) {
+  if (!BOT_TOKEN || CHAT_IDS.length === 0) {
+    console.log('[watchdog] (no ADMIN_ALERT_CHAT_IDS configured, skipping alert)');
+    return true;
+  }
+  const results = await Promise.allSettled(CHAT_IDS.map((chatId) => sendOneAlert(chatId, text, /* attempt= */ 0)));
+  return results.some((r) => r.status === 'fulfilled' && r.value === true);
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+/** @returns {Promise<boolean>} true on confirmed delivery for this chat */
+async function sendOneAlert(chatId, text, attempt) {
+  let res;
+  try {
+    res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+  } catch (err) {
+    console.error(`[watchdog] telegram send failed (chatId=${chatId}, attempt=${attempt}): ${err}`);
+    return false;
+  }
+
+  let body;
+  try {
+    body = await res.json();
+  } catch {
+    body = null;
+  }
+
+  if (res.ok && body && body.ok === true) return true; // happy path
+
+  const description = body?.description ?? '(no description)';
+  const errorCode = body?.error_code ?? res.status;
+  const retryAfter = body?.parameters?.retry_after;
+
+  console.error(
+    `[watchdog] telegram rejected sendMessage (chatId=${chatId}, http=${res.status}, error_code=${errorCode}, attempt=${attempt}): ${description}`,
+  );
+
+  // One retry on 429 only — anything else (400 wrong chat id, 403 bot blocked,
+  // etc.) is permanent for this run.
+  if (res.status === 429 && typeof retryAfter === 'number' && retryAfter > 0 && attempt === 0) {
+    const sleepMs = Math.min(retryAfter * 1000, TIMEOUT_MS);
+    console.warn(`[watchdog] telegram 429 — retrying chatId=${chatId} after ${sleepMs}ms`);
+    await new Promise((r) => setTimeout(r, sleepMs));
+    return sendOneAlert(chatId, text, attempt + 1);
+  }
+  return false;
+}
+
+// ─── HTTP probes ─────────────────────────────────────────────────────────────
 
 async function fetchWithTimeout(url, opts = {}) {
   const controller = new AbortController();
@@ -102,23 +199,22 @@ async function fetchWithTimeout(url, opts = {}) {
   }
 }
 
-async function sendAlert(text) {
-  if (!BOT_TOKEN || CHAT_IDS.length === 0) {
-    console.log('[watchdog] (no ADMIN_ALERT_CHAT_IDS configured, skipping alert)');
-    return;
-  }
-  await Promise.allSettled(
-    CHAT_IDS.map((chatId) =>
-      fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
-      }),
-    ),
-  );
+async function runChecks() {
+  const [healthResult, webResult, tgResult] = await Promise.all([
+    fetchWithTimeout(`${BASE_URL}/api/health/deep`),
+    fetchWithTimeout(`${BASE_URL}/`),
+    // Check a /tg/ endpoint to detect stuck MAINTENANCE_MODE.
+    // Expected: 401 (no auth) = healthy. 503 = maintenance stuck. 0 = down.
+    // x-watchdog header lets the API skip error:* telemetry for these probes.
+    fetchWithTimeout(`${BASE_URL}/api/tg/bootstrap`, { headers: { 'x-watchdog': '1' } }),
+  ]);
+  const tgRouteDown = tgResult.status === 503 || tgResult.status === 502 || tgResult.status === 504 || tgResult.status === 0;
+  const isDown = !healthResult.ok || !webResult.ok || tgRouteDown;
+  return { healthResult, webResult, tgResult, tgRouteDown, isDown };
 }
 
-/** Run a SQL query directly against PostgreSQL via docker exec. Works even when API is down. */
+// ─── SQL helper (used for DB-side probes only — incidents/exposures/heartbeat) ──
+
 async function runSql(query) {
   const { execSync } = await import('node:child_process');
   try {
@@ -133,83 +229,52 @@ async function runSql(query) {
   }
 }
 
-/**
- * On first DOWN detection, create a MaintenanceIncident and exposure records
- * for all users active in the last 24h. This runs via direct DB access so it
- * works even when the API is completely unreachable.
- */
+// ─── Incident + exposure recording ───────────────────────────────────────────
+
 async function createDowntimeExposures() {
   // UUID generated in Node, not via Postgres RETURNING — `psql -t -A -c`
   // appends the command-status row ("INSERT 0 1") to the RETURNING output,
-  // and the previous version's regex stripped only the trailing newline so
-  // the next query's FK saw "<uuid>\nINSERT 0 1" and exposures were never
-  // inserted (silent 0 ever since this code shipped — see ghost rows in
-  // MaintenanceIncident with exposureCount=0). 2026-05-17 fix.
+  // which the prior code mis-parsed and silently dropped exposures for. See
+  // 2026-05-17 entry in docs/BUGFIX_LESSONS.md.
   const incidentId = randomUUID();
-  try {
-    const incidentInsert = await runSql(
-      `INSERT INTO "MaintenanceIncident" (id, "startedAt", status, "lastMaintenanceSignalAt", "exposureCount", "notificationsSent", "createdAt", "updatedAt") VALUES ('${incidentId}', NOW(), 'active', NOW(), 0, 0, NOW(), NOW())`,
-    );
-    if (incidentInsert === null) {
-      console.error('[watchdog] failed to create incident');
-      return null;
-    }
-    console.log(`[watchdog] created incident: ${incidentId}`);
-
-    // Find users active in last 24h (from AnalyticsEvent) who have a telegramChatId.
-    // Use SELECT COUNT after INSERT instead of RETURNING for the same parsing reason.
-    const insertResult = await runSql(
-      `WITH active_users AS ( SELECT DISTINCT ae."userId" AS telegram_id FROM "AnalyticsEvent" ae WHERE ae."createdAt" > NOW() - INTERVAL '24 hours' AND ae."userId" IS NOT NULL ), eligible AS ( SELECT u.id, u."telegramChatId", au.telegram_id FROM active_users au JOIN "User" u ON u."telegramId" = au.telegram_id WHERE u."telegramChatId" IS NOT NULL ) INSERT INTO "MaintenanceExposure" (id, "incidentId", "userId", surface, locale, "telegramChatId", "firstSeenAt", "lastSeenAt", "createdAt", "updatedAt") SELECT gen_random_uuid()::text, '${incidentId}', e.id, 'miniapp', 'ru', e."telegramChatId", NOW(), NOW(), NOW(), NOW() FROM eligible e ON CONFLICT ("incidentId", "userId", surface) DO NOTHING`,
-    );
-    if (insertResult === null) {
-      console.error('[watchdog] failed to insert exposures');
-      return incidentId;
-    }
-
-    const count = await runSql(
-      `SELECT COUNT(*)::int FROM "MaintenanceExposure" WHERE "incidentId" = '${incidentId}'`,
-    );
-    const exposureCount = Number(count) || 0;
-
-    await runSql(`UPDATE "MaintenanceIncident" SET "exposureCount" = ${exposureCount} WHERE id = '${incidentId}'`);
-
-    console.log(`[watchdog] created ${exposureCount} exposure records for incident ${incidentId}`);
-    return incidentId;
-  } catch (err) {
-    console.error(`[watchdog] createDowntimeExposures error: ${err}`);
+  const incidentInsert = await runSql(
+    `INSERT INTO "MaintenanceIncident" (id, "startedAt", status, "lastMaintenanceSignalAt", "exposureCount", "notificationsSent", "createdAt", "updatedAt") VALUES ('${incidentId}', NOW(), 'active', NOW(), 0, 0, NOW(), NOW())`,
+  );
+  if (incidentInsert === null) {
+    console.error('[watchdog] failed to create incident');
     return null;
   }
-}
+  console.log(`[watchdog] created incident: ${incidentId}`);
 
-/** Call an internal API endpoint (authenticated with BOT_TOKEN). */
-async function callInternalApi(path, method = 'POST') {
-  const url = `${BASE_URL}/api/internal${path}`;
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json', 'X-INTERNAL-KEY': BOT_TOKEN },
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    const body = await res.json().catch(() => ({}));
-    return { ok: res.ok, status: res.status, body };
-  } catch (err) {
-    return { ok: false, status: 0, body: {}, error: String(err) };
+  const insertResult = await runSql(
+    `WITH active_users AS ( SELECT DISTINCT ae."userId" AS telegram_id FROM "AnalyticsEvent" ae WHERE ae."createdAt" > NOW() - INTERVAL '24 hours' AND ae."userId" IS NOT NULL ), eligible AS ( SELECT u.id, u."telegramChatId", au.telegram_id FROM active_users au JOIN "User" u ON u."telegramId" = au.telegram_id WHERE u."telegramChatId" IS NOT NULL ) INSERT INTO "MaintenanceExposure" (id, "incidentId", "userId", surface, locale, "telegramChatId", "firstSeenAt", "lastSeenAt", "createdAt", "updatedAt") SELECT gen_random_uuid()::text, '${incidentId}', e.id, 'miniapp', 'ru', e."telegramChatId", NOW(), NOW(), NOW(), NOW() FROM eligible e ON CONFLICT ("incidentId", "userId", surface) DO NOTHING`,
+  );
+  if (insertResult === null) {
+    console.error('[watchdog] failed to insert exposures');
+    return incidentId;
   }
+
+  const count = await runSql(
+    `SELECT COUNT(*)::int FROM "MaintenanceExposure" WHERE "incidentId" = '${incidentId}'`,
+  );
+  if (count === null) {
+    console.error('[watchdog] failed to count exposures — leaving exposureCount at default 0; zero-exposure alert will fire if this is the bug');
+    return incidentId;
+  }
+  const exposureCount = Number(count);
+  if (!Number.isFinite(exposureCount)) {
+    console.error(`[watchdog] unparseable exposure count: ${JSON.stringify(count)}`);
+    return incidentId;
+  }
+  await runSql(`UPDATE "MaintenanceIncident" SET "exposureCount" = ${exposureCount} WHERE id = '${incidentId}'`);
+  console.log(`[watchdog] created ${exposureCount} exposure records for incident ${incidentId}`);
+  return incidentId;
 }
 
-/**
- * Check bot ServiceHeartbeat freshness via direct DB read. Bot writes its
- * heartbeat every 60s; if it's been quiet > 5 minutes the bot process is
- * almost certainly dead/wedged. Detects silent bot death that the
- * /api/health/deep probe can't see (API can be healthy with a dead bot).
- *
- * @returns {Promise<{ updatedAt: Date | null, ageSec: number | null, stale: boolean, error: string | null }>}
- */
+// ─── Bot heartbeat probe ─────────────────────────────────────────────────────
+
 async function checkBotHeartbeat() {
-  const STALE_THRESHOLD_SEC = 5 * 60; // 5 minutes
+  const STALE_THRESHOLD_SEC = 5 * 60;
   try {
     const result = await runSql(
       `SELECT EXTRACT(EPOCH FROM (NOW() - "updatedAt"))::int as age_sec, "updatedAt"::text as updated_at FROM "ServiceHeartbeat" WHERE "serviceName" = 'bot' LIMIT 1`,
@@ -230,151 +295,151 @@ async function checkBotHeartbeat() {
   }
 }
 
-// ─── Checks ──────────────────────────────────────────────────────────────────
+// ─── Zero-exposure detector ──────────────────────────────────────────────────
 
-async function runChecks() {
-  const [healthResult, webResult, tgResult] = await Promise.all([
-    fetchWithTimeout(`${BASE_URL}/api/health/deep`),
-    fetchWithTimeout(`${BASE_URL}/`),
-    // Check a /tg/ endpoint to detect stuck MAINTENANCE_MODE.
-    // Expected: 401 (no auth) = healthy. 503 = maintenance stuck. 0 = down.
-    // x-watchdog header lets the API skip error:* telemetry for these probes.
-    fetchWithTimeout(`${BASE_URL}/api/tg/bootstrap`, { headers: { 'x-watchdog': '1' } }),
-  ]);
+/**
+ * Pull the candidate set for evaluateZeroExposureAlerts from Postgres.
+ *   • Pivot on every open incident (active|recovering) that's >= 15min old.
+ *   • The exposureCount we feed in is the LIVE COUNT(*) of MaintenanceExposure,
+ *     NOT the cached MaintenanceIncident.exposureCount column — that column
+ *     IS the field we don't trust.
+ * Returns null on SQL failure (caller skips alerting and logs).
+ *
+ * @returns {Promise<null | Array<{ id: string, ageMs: number, exposureCount: number, status: string }>>}
+ */
+async function fetchZeroExposureCandidates() {
+  const minAgeSec = Math.floor(ZERO_EXPOSURE_MIN_AGE_MS / 1000);
+  const sql =
+    `SELECT i.id, ` +
+    `EXTRACT(EPOCH FROM (NOW() - i.\\"startedAt\\"))::bigint AS age_sec, ` +
+    `(SELECT COUNT(*) FROM \\"MaintenanceExposure\\" e WHERE e.\\"incidentId\\" = i.id) AS live_count, ` +
+    `i.status ` +
+    `FROM \\"MaintenanceIncident\\" i ` +
+    `WHERE i.status IN ('active','recovering') ` +
+    `AND i.\\"startedAt\\" <= NOW() - INTERVAL '${minAgeSec} seconds'`;
+  // runSql does its own quote-escaping; we pre-escape doubles so the inner
+  // shell-quoted command sees them literally.
+  const raw = await runSql(sql.replace(/\\"/g, '"'));
+  if (raw === null) return null;
+  if (raw === '') return [];
 
-  // /tg/bootstrap should return 401 (unauthorized) — that means the route is live.
-  // 503 = MAINTENANCE_MODE is stuck on. 502/504 = nginx can't reach the container.
-  // 0 = network error / timeout. Anything else (401, 400, etc.) = route is reachable = OK.
-  const tgRouteDown = tgResult.status === 503 || tgResult.status === 502 || tgResult.status === 504 || tgResult.status === 0;
-  const isDown = !healthResult.ok || !webResult.ok || tgRouteDown;
+  const rows = raw.split('\n').filter(Boolean);
+  const out = [];
+  for (const line of rows) {
+    const [id, ageSecStr, countStr, status] = line.split('|');
+    const ageSec = Number(ageSecStr);
+    const count = Number(countStr);
+    // Drop rows we can't parse cleanly. A parse failure here would have
+    // shown up as "ageMs=0 / exposureCount=0" before — which would NOT
+    // alert (age<15min filter), but if the age parsed and only count
+    // didn't, we'd have alerted on a fake-zero exposure. Be strict.
+    if (!id || !status || !Number.isFinite(ageSec) || !Number.isFinite(count)) {
+      console.warn(`[watchdog] zero-exposure probe: skipping unparseable row ${JSON.stringify(line)}`);
+      continue;
+    }
+    out.push({ id, ageMs: ageSec * 1000, exposureCount: count, status });
+  }
+  return out;
+}
 
-  return { healthResult, webResult, tgResult, tgRouteDown, isDown };
+// ─── Internal API caller (maintenance recovery flow) ─────────────────────────
+
+async function callInternalApi(path, method = 'POST') {
+  const url = `${BASE_URL}/api/internal${path}`;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'X-INTERNAL-KEY': BOT_TOKEN },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    const body = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, body };
+  } catch (err) {
+    return { ok: false, status: 0, body: {}, error: String(err) };
+  }
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-const state = loadState();
+let state = loadStateWithLegacyFallback();
 const now = new Date().toISOString();
 
 console.log(`[watchdog] ${now} checking ${BASE_URL} …`);
 
 let result = await runChecks();
-
-// Retry once after 5s to avoid false positives from transient network blips
 if (result.isDown) {
   console.log('[watchdog] first check failed, retrying in 5s…');
   await new Promise((r) => setTimeout(r, 5000));
   result = await runChecks();
 }
-
 const { healthResult, webResult, tgResult, tgRouteDown, isDown } = result;
-
-console.log(`[watchdog] health/deep: ${JSON.stringify(healthResult)} | web: ${JSON.stringify(webResult)} | tg: ${JSON.stringify(tgResult)} (down=${tgRouteDown}) | isDown: ${isDown}`);
+console.log(
+  `[watchdog] health/deep: ${JSON.stringify(healthResult)} | web: ${JSON.stringify(webResult)} | tg: ${JSON.stringify(tgResult)} (down=${tgRouteDown}) | isDown: ${isDown}`,
+);
 
 if (isDown) {
-  // Reset consecutive healthy counter whenever we see a failure
-  state.consecutiveHealthyChecks = 0;
+  const t = transitionOnDown(state, now);
+  state = t.state;
+  console.log(`[watchdog] ${t.log}`);
 
-  // Require 2 consecutive DOWN observations before promoting to an
-  // incident + Telegram alert. With a 5-min cron interval the floor for
-  // alert latency is ~5 minutes (when the first DOWN lands right before
-  // a tick) and the worst case is ~10 minutes. This is a direct response
-  // to the 2026-05-17 02:25 UTC false alert caused by a flapping Vultr
-  // DNS resolver — each runChecks() retries once after 5s, but both that
-  // retry and the actual fetch share the same DNS-failure window, so a
-  // single bad tick isn't enough signal.
-  if (state.wasDown) {
-    // Already promoted on a prior tick — don't keep growing the counter,
-    // it's only meaningful pre-promotion. Recovery flow uses
-    // consecutiveHealthyChecks instead.
-    saveState(state);
-    console.log('[watchdog] still down (alert already sent)');
-  } else {
-    state.consecutiveDownChecks = state.consecutiveDownChecks + 1;
-    if (!state.firstDownSince) state.firstDownSince = now;
-
-    if (state.consecutiveDownChecks >= 2) {
-      state.wasDown = true;
-      state.downSince = state.firstDownSince;
-      // Reset the pre-promotion counter so a future incident starts clean.
-      state.consecutiveDownChecks = 0;
-      saveState(state);
-
-      if (MAINTENANCE) {
-        console.log('[watchdog] MAINTENANCE_MODE=true — skipping alert');
-      } else {
-        const details = [
-          !healthResult.ok ? `• /api/health/deep → ${healthResult.status || healthResult.error}` : '',
-          !webResult.ok ? `• web homepage → ${webResult.status || webResult.error}` : '',
-          tgRouteDown ? `• /api/tg/bootstrap → ${tgResult.status || tgResult.error} (MAINTENANCE_MODE stuck?)` : '',
-        ].filter(Boolean).join('\n');
-        await sendAlert(`🔴 <b>Wishlistik DOWN</b> at ${now}\n(persistent since ${state.firstDownSince})\n\n${details}`);
-        console.log('[watchdog] alert sent: DOWN');
-
-        // Create incident + exposure records for active users directly in DB.
-        // API is unreachable so we bypass it entirely.
-        const incidentId = await createDowntimeExposures();
-        if (incidentId) state.incidentId = incidentId;
-        saveState(state);
-      }
+  if (t.promote) {
+    saveStateAtomic(STATE_FILE, state);
+    if (MAINTENANCE) {
+      console.log('[watchdog] MAINTENANCE_MODE=true — skipping alert');
     } else {
-      saveState(state);
-      console.log(`[watchdog] first DOWN observation, waiting for confirmation (consecutiveDownChecks=${state.consecutiveDownChecks}/2)`);
+      const details = [
+        !healthResult.ok ? `• /api/health/deep → ${healthResult.status || healthResult.error}` : '',
+        !webResult.ok ? `• web homepage → ${webResult.status || webResult.error}` : '',
+        tgRouteDown ? `• /api/tg/bootstrap → ${tgResult.status || tgResult.error} (MAINTENANCE_MODE stuck?)` : '',
+      ].filter(Boolean).join('\n');
+      await sendAlert(`🔴 <b>Wishlistik DOWN</b> at ${now}\n(persistent since ${state.downSince})\n\n${details}`);
+      console.log('[watchdog] alert sent: DOWN');
+
+      const incidentId = await createDowntimeExposures();
+      if (incidentId) state.incidentId = incidentId;
+      saveStateAtomic(STATE_FILE, state);
     }
+  } else {
+    saveStateAtomic(STATE_FILE, state);
   }
 } else {
-  // Healthy check: clear any "first down" suspicion that didn't escalate.
-  if (state.consecutiveDownChecks > 0 && !state.wasDown) {
-    console.log(`[watchdog] transient blip cleared (was ${state.consecutiveDownChecks} consecutive DOWN, not promoted)`);
+  const t = transitionOnHealthy(state);
+  state = t.state;
+  if (t.clearedTransientBlip) {
+    console.log(`[watchdog] transient blip cleared (not promoted)`);
   }
-  state.consecutiveDownChecks = 0;
-  state.firstDownSince = null;
-
-  if (state.wasDown) {
-    // Service is up but was down — track stability window
-    state.consecutiveHealthyChecks = state.consecutiveHealthyChecks + 1;
-    console.log(`[watchdog] recovery check ${state.consecutiveHealthyChecks}/3 (need 3 consecutive = ~15 min)`);
-
-    if (state.consecutiveHealthyChecks >= 3) {
-      // 3 consecutive healthy checks × 5-min cron = 15 minutes stable
-      const downSince = state.downSince ?? 'unknown';
-      state.wasDown = false;
-      state.downSince = null;
-      state.consecutiveHealthyChecks = 0;
-      saveState(state);
-
-      if (MAINTENANCE) {
-        console.log('[watchdog] MAINTENANCE_MODE=true — skipping recovery alert');
-      } else {
-        await sendAlert(`🟢 <b>Wishlistik RECOVERED</b> at ${now}\n(was down since ${downSince})`);
-        console.log('[watchdog] alert sent: RECOVERED');
-      }
-
-      // ─── Maintenance recovery notification flow ──────────────────────
-      // Mark incident as recovered directly in DB (reliable), then use API to send notifications
-      try {
-        // Mark any active/recovering incident as recovered via direct SQL
-        await runSql(
-          `UPDATE "MaintenanceIncident" SET status = 'recovered', "endedAt" = NOW(), "recoveryConfirmedAt" = NOW(), "updatedAt" = NOW() WHERE status IN ('active', 'recovering')`,
-        );
-
-        // Now use API to send recovery notifications (API is back up at this point)
-        const notifyRes = await callInternalApi('/maintenance/send-recovery-notifications');
-        if (notifyRes.ok) {
-          const { sent = 0, failed = 0 } = notifyRes.body;
-          console.log(`[watchdog] recovery notifications: ${sent} sent, ${failed} failed`);
-        } else {
-          console.error(`[watchdog] failed to send recovery notifications: ${JSON.stringify(notifyRes.body)}`);
-        }
-      } catch (err) {
-        console.error(`[watchdog] maintenance recovery flow error: ${err}`);
-      }
+  if (t.recovered) {
+    saveStateAtomic(STATE_FILE, state);
+    if (MAINTENANCE) {
+      console.log('[watchdog] MAINTENANCE_MODE=true — skipping recovery alert');
     } else {
-      saveState(state);
+      await sendAlert(`🟢 <b>Wishlistik RECOVERED</b> at ${now}\n(was down since ${t.downSinceForAlert})`);
+      console.log('[watchdog] alert sent: RECOVERED');
     }
+    try {
+      await runSql(
+        `UPDATE "MaintenanceIncident" SET status = 'recovered', "endedAt" = NOW(), "recoveryConfirmedAt" = NOW(), "updatedAt" = NOW() WHERE status IN ('active', 'recovering')`,
+      );
+      const notifyRes = await callInternalApi('/maintenance/send-recovery-notifications');
+      if (notifyRes.ok) {
+        const { sent = 0, failed = 0 } = notifyRes.body;
+        console.log(`[watchdog] recovery notifications: ${sent} sent, ${failed} failed`);
+      } else {
+        console.error(`[watchdog] failed to send recovery notifications: ${JSON.stringify(notifyRes.body)}`);
+      }
+    } catch (err) {
+      console.error(`[watchdog] maintenance recovery flow error: ${err}`);
+    }
+  } else if (state.wasDown) {
+    saveStateAtomic(STATE_FILE, state);
+    console.log(`[watchdog] ${t.log}`);
   } else {
-    // Check if there's an active incident that needs recovery (e.g., from a previous run)
-    // This handles the case where the watchdog wasn't running during the stability window
+    // Standard all-healthy path. Opportunistically advance the maintenance
+    // recovery flow if a prior incident is stuck in 'recovering' from a
+    // different watchdog session.
     try {
       const activeRes = await callInternalApi('/maintenance/active-incident', 'GET');
       if (activeRes.ok && activeRes.body.active && activeRes.body.status === 'recovering') {
@@ -392,32 +457,23 @@ if (isDown) {
     } catch {
       // silent — normal path when there's no active incident
     }
-
-    // Persist the consecutiveDownChecks/firstDownSince reset above so a
-    // healthy run between two DOWN observations actually clears the
-    // counter (otherwise the file keeps the stale "1" and we'd promote
-    // on the next DOWN, defeating the whole 2-consecutive guard).
-    saveState(state);
+    saveStateAtomic(STATE_FILE, state);
     console.log('[watchdog] all healthy');
   }
 }
 
-// ─── Bot heartbeat check ─────────────────────────────────────────────────────
-// Runs independently of the API/web isDown check above. Bot can die silently
-// while the API stays healthy (separate container, separate process).
-// Reuses the same dedup pattern: one alert on first stale, one on recovery.
+// ─── Bot heartbeat ───────────────────────────────────────────────────────────
 
 const heartbeat = await checkBotHeartbeat();
 console.log(`[watchdog] bot heartbeat: ageSec=${heartbeat.ageSec} stale=${heartbeat.stale} error=${heartbeat.error ?? 'none'}`);
 
 if (heartbeat.error && heartbeat.error !== 'no_row') {
-  // SQL probe failure — don't alert, but log. Could be transient docker exec hiccup.
   console.error('[watchdog] bot heartbeat probe error, skipping alert dedup');
 } else if (heartbeat.stale) {
   if (!state.botWasStale) {
     state.botWasStale = true;
     state.botStaleSince = now;
-    saveState(state);
+    saveStateAtomic(STATE_FILE, state);
     if (!MAINTENANCE) {
       const ageMin = heartbeat.ageSec ? Math.round(heartbeat.ageSec / 60) : 'unknown';
       const detail = heartbeat.error === 'no_row'
@@ -434,10 +490,56 @@ if (heartbeat.error && heartbeat.error !== 'no_row') {
     const staleSince = state.botStaleSince ?? 'unknown';
     state.botWasStale = false;
     state.botStaleSince = null;
-    saveState(state);
+    saveStateAtomic(STATE_FILE, state);
     if (!MAINTENANCE) {
       await sendAlert(`🟢 <b>Bot heartbeat RECOVERED</b> at ${now}\n(was stale since ${staleSince})`);
       console.log('[watchdog] alert sent: BOT RECOVERED');
     }
+  }
+}
+
+// ─── Zero-exposure incident detector ─────────────────────────────────────────
+// Runs last so a DB-side hiccup here doesn't block the primary health alert
+// above. Detects: MaintenanceIncident in active|recovering, started ≥15min
+// ago, with a LIVE COUNT(*) of MaintenanceExposure equal to 0. That's the
+// signature of the 2026-05-17 createDowntimeExposures bug — we want to know
+// if it ever happens again BEFORE the next 24h cycle of exposures expires.
+
+const candidates = await fetchZeroExposureCandidates();
+if (candidates === null) {
+  // SQL failure → cannot reason about exposure state at all. Don't touch
+  // dedup (so a back-filled-then-failed cycle doesn't strand alerts).
+  console.error('[watchdog] zero-exposure probe SQL failed, skipping');
+} else {
+  // Pruning of dedup (recovered / back-filled ids fall out) is safe to
+  // persist immediately — it can only ever release dedup slots, never
+  // suppress a new alert.
+  const { state: prunedState, toAlert } = evaluateZeroExposureAlerts(state, candidates);
+  state = prunedState;
+
+  if (toAlert.length === 0) {
+    saveStateAtomic(STATE_FILE, state);
+  } else if (MAINTENANCE) {
+    console.log(`[watchdog] MAINTENANCE_MODE=true — skipping zero-exposure alert for ${toAlert.length} incident(s)`);
+    saveStateAtomic(STATE_FILE, state);
+  } else {
+    const lines = toAlert.map((c) => {
+      const ageMin = Math.round(c.ageMs / 60_000);
+      return `• <code>${c.id}</code> (status=${c.status}, age=${ageMin}m)`;
+    }).join('\n');
+    const delivered = await sendAlert(
+      `⚠️ <b>MaintenanceIncident has zero exposures after 15m</b>\n\n` +
+      `This may indicate an exposure-recording bug, not necessarily zero affected users.\n\n` +
+      lines,
+    );
+    if (delivered) {
+      // Dedup ONLY after confirmed delivery. A failed Telegram send leaves
+      // the dedup untouched so the next 5-min tick retries.
+      state = markZeroExposureAlerted(state, toAlert.map((c) => c.id));
+      console.log(`[watchdog] zero-exposure alert sent for: ${toAlert.map((c) => c.id).join(', ')}`);
+    } else {
+      console.warn(`[watchdog] zero-exposure alert NOT delivered; will retry next tick for: ${toAlert.map((c) => c.id).join(', ')}`);
+    }
+    saveStateAtomic(STATE_FILE, state);
   }
 }

@@ -209,7 +209,7 @@ Cron is host-level. Source-of-truth in repo at `ops/cron/root.crontab`.
 
 | Cadence | Job | What it does |
 |---------|-----|--------------|
-| `*/5 * * * *` | `ops/watchdog/health-watchdog.mjs` | Pings `/api/health/deep`, alerts via Telegram bot. State at `/tmp/watchdog-state.json`. |
+| `*/5 * * * *` | `ops/watchdog/health-watchdog.mjs` | Pings `/api/health/deep`, alerts via Telegram bot. State at `/var/lib/wishlist/watchdog/state.json`. |
 | `0 3 * * *` | `ops/backup.sh` | Dumps DB + uploads + .env, gzips, sha256, uploads to `wishlist-s3`. Local 14d / S3 30d retention. |
 | `0 4 * * 0` | `docker system prune -af --filter "until=72h"` | Removes stopped containers, dangling images, build-cache items >72 h. **Never** uses `--volumes`. |
 
@@ -330,8 +330,10 @@ To fully revert, delete the `x-logging` anchor and the four `logging: *default-l
 | MARKETPLACE_PARSER_DISABLED | api | (empty) | Set to `1` to disable the marketplace orchestrator and route all marketplace URLs through the legacy parser |
 | NEXT_TELEMETRY_DISABLED | web | 1 | Disables Next.js anonymous telemetry collection |
 | WATCHDOG_BASE_URL | watchdog | (required) | Base URL to check, e.g. `https://wishlistik.ru` |
-| WATCHDOG_STATE_FILE | watchdog | /tmp/watchdog-state.json | State file for deduplicating alerts |
-| WATCHDOG_TIMEOUT_MS | watchdog | 8000 | HTTP timeout for watchdog checks |
+| WATCHDOG_STATE_FILE | watchdog | /var/lib/wishlist/watchdog/state.json | State file for deduplicating alerts |
+| WATCHDOG_TIMEOUT_MS | watchdog | 15000 | HTTP timeout for watchdog checks (bumped from 8000 after 2026-05-17 DNS-flap false alert) |
+| WATCHDOG_LOCK_FILE | watchdog | /var/lock/wishlist-watchdog.lock | Non-blocking flock lock file used by `run-health-watchdog.sh` |
+| WATCHDOG_REQUIRE_FLOCK | watchdog | true | Fail-closed if `flock(1)` is missing; only literal `false` allows unguarded dev fallback |
 | DNS_RESULT_ORDER | api | ipv4first | Node DNS order; Vultr uses IPv4 to Telegram from Docker |
 | RCLONE_REMOTE | backup | wishlist-s3:wishlist-backups | Selectel/S3 backup target |
 
@@ -532,22 +534,34 @@ Events that trigger alerts:
 
 ### Watchdog Script
 
-`ops/watchdog/health-watchdog.mjs` — cron-runnable Node.js script.
+`ops/watchdog/health-watchdog.mjs` — cron-runnable Node.js script, invoked
+via the flock wrapper `ops/watchdog/run-health-watchdog.sh` so two cron
+ticks can never race on the state file.
 
 **Setup on server:**
 ```bash
 # Install cron (runs every 5 minutes):
 crontab -e
 # Add (matches the production crontab on Vultr):
-*/5 * * * * /usr/bin/node /opt/wishlist/ops/watchdog/health-watchdog.mjs >> /var/log/watchdog.log 2>&1
+*/5 * * * * /opt/wishlist/ops/watchdog/run-health-watchdog.sh >> /var/log/watchdog.log 2>&1
 ```
+
+The wrapper takes a non-blocking `flock -n` on `WATCHDOG_LOCK_FILE`
+(default `/var/lock/wishlist-watchdog.lock`). If the previous tick is
+still running, the new invocation exits cleanly with `exit 0` and a log
+line — no queueing, no false incident.
+
+`WATCHDOG_REQUIRE_FLOCK` is `true` by default: if `flock(1)` is not on
+`PATH`, the wrapper refuses to run (`exit 2`) instead of silently
+degrading to an unguarded execution. Only the literal value `false`
+opts out — intended for dev/macOS hosts without `util-linux`.
 
 **Required env vars** (in `.env` or exported):
 - `WATCHDOG_BASE_URL=https://wishlistik.ru`
 - `BOT_TOKEN=...`
 - `ADMIN_ALERT_CHAT_IDS=...`
 
-**State file**: `/tmp/watchdog-state.json` — deduplicates repeated down/recovery alerts.
+**State file**: `/var/lib/wishlist/watchdog/state.json` — deduplicates repeated down/recovery alerts. Lives in a dedicated private directory `/var/lib/wishlist/watchdog/` (mode 0700, file 0600). The watchdog no longer uses `/tmp` as default, and it does NOT chmod the shared parent `/var/lib/wishlist/`. Legacy paths `/var/lib/wishlist/watchdog-state.json` and `/tmp/watchdog-state.json` are read once as fallback/migration if the new file is missing — the next save then writes to the new location; legacy files are not deleted.
 
 ### Nginx Maintenance Page
 

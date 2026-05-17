@@ -17,8 +17,12 @@
 # 37 GB after 4 days post-migration).
 
 # Health watchdog every 5 minutes — pings /api/health/deep, alerts via
-# Telegram bot if status flips. State file at /tmp/watchdog-state.json.
-*/5 * * * * node /opt/wishlist/ops/watchdog/health-watchdog.mjs >> /var/log/watchdog.log 2>&1
+# Telegram bot if status flips. Wrapper applies a non-blocking flock so a
+# slow tick (e.g. hung SQL probe) doesn't race with the next cron firing.
+# State file at /var/lib/wishlist/watchdog/state.json (dedicated 0700 dir,
+# persistent across reboots; previous defaults /tmp/ and
+# /var/lib/wishlist/ are auto-read once as legacy fallbacks).
+*/5 * * * * /opt/wishlist/ops/watchdog/run-health-watchdog.sh >> /var/log/watchdog.log 2>&1
 
 # Daily DB + uploads + .env backup at 03:00 UTC. Local retention 14d, S3
 # (Selectel) retention 30d. Script: /opt/wishlist/ops/backup.sh.
