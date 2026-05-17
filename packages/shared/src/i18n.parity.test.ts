@@ -103,40 +103,7 @@ const KNOWN_BACKLOG = new Set<string>([
   'faq_q_br_source',
   'faq_q_br_visibility',
   'faq_q_br_why_received',
-  'home_hdr_reservations_sub_active',
-  'home_hdr_reservations_sub_secret',
-  'home_hdr_reservations_title',
-  'home_hdr_welcome',
-  'home_hdr_welcome_fallback',
-  'home_hdr_wishes_noun_few',
-  'home_hdr_wishes_noun_many',
-  'home_hdr_wishes_noun_one',
-  'home_hdr_wishes_sub',
-  'home_hdr_wishes_title',
-  'home_hdr_wishes_wl_noun_few',
-  'home_hdr_wishes_wl_noun_many',
-  'home_hdr_wishes_wl_noun_one',
-  'locked_cta_unlock',
-  'locked_history_sub',
-  'locked_history_title',
-  'locked_items_sub',
-  'locked_items_title',
-  'locked_subs_sub',
-  'locked_subs_title',
-  'locked_wl_sub',
-  'locked_wl_title',
   'occasion_type_housewarming',
-  'onboarding_manual_page_title',
-  'onboarding_manual_placeholder',
-  'onboarding_manual_price_placeholder',
-  'onboarding_manual_submit',
-  'onboarding_path_catalog_badge',
-  'onboarding_path_catalog_desc',
-  'onboarding_path_catalog_title',
-  'onboarding_path_import_hint',
-  'onboarding_path_import_link',
-  'onboarding_path_subtitle',
-  'onboarding_path_title',
   'paywall_chip_unlock',
   'paywall_cta_monthly',
   'paywall_cta_yearly',
@@ -371,6 +338,7 @@ describe('i18n content audit — no untranslated English in non-EN locales', () 
     'showcase_pref_limit',                      // "{{count}}/300"
     'showcase_size_placeholder_clothing',       // "M / 46" — clothing size code
     'showcase_size_placeholder_other',          // "e.g. glasses -2.5" — example
+    'home_hdr_wishes_sub',                      // "{{count}} {{noun}} · {{wlCount}} {{wlNoun}}" — pure placeholder
   ]);
 
   // Spanish-specific: words that are spelled identically in Spanish and
