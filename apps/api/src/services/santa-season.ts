@@ -162,12 +162,20 @@ export async function getSantaSeasonInfo(userId: string, santaTestMode: boolean)
 // Corpus: 30 adjectives × 30 animals = 900 unique combinations per round.
 // adjectiveKey / animalKey are locale-independent; alias string is pre-rendered in RU.
 // Frontend re-renders in user's locale using the keys.
+//
+// Mirror dictionary: `apps/web/app/miniapp/MiniApp.tsx` has frontend
+// counterparts `SANTA_ADJ` and `SANTA_ANIMAL` with IDENTICAL data but slightly
+// different field NAMES (`ru_m` / `ru_f` on the frontend vs `m` / `f` here —
+// purely historical, kept for backward compat). When adding or fixing a
+// translation, update BOTH files. The locale-key-parity test in
+// `santa-season.test.ts` catches missing locale fields server-side but does
+// not cross-check the two files — keep them in sync by hand.
 
 export const SANTA_ADJECTIVES: Record<string, { m: string; f: string; en: string; 'zh-CN': string; hi: string; es_m: string; es_f: string; ar_m: string; ar_f: string }> = {
   sleepy: { m: 'Сонный', f: 'Сонная', en: 'Sleepy', 'zh-CN': '瞌睡的', hi: 'नींद वाला', es_m: 'Soñoliento', es_f: 'Soñolienta', ar_m: 'نعسان', ar_f: 'نعسانة' },
   nimble: { m: 'Ловкий', f: 'Ловкая', en: 'Nimble', 'zh-CN': '敏捷的', hi: 'फुर्तीला', es_m: 'Ágil', es_f: 'Ágil', ar_m: 'رشيق', ar_f: 'رشيقة' },
   quiet: { m: 'Тихий', f: 'Тихая', en: 'Quiet', 'zh-CN': '安静的', hi: 'शांत', es_m: 'Silencioso', es_f: 'Silenciosa', ar_m: 'هادئ', ar_f: 'هادئة' },
-  northern: { m: 'Северный', f: 'Северная', en: 'Northern', 'zh-CN': '北方的', hi: 'उत्तरीय', es_m: 'Norteño', es_f: 'Norteña', ar_m: 'شمالي', ar_f: 'شمالية' },
+  northern: { m: 'Северный', f: 'Северная', en: 'Northern', 'zh-CN': '北方的', hi: 'उत्तरी', es_m: 'Norteño', es_f: 'Norteña', ar_m: 'شمالي', ar_f: 'شمالية' },
   cheerful: { m: 'Весёлый', f: 'Весёлая', en: 'Cheerful', 'zh-CN': '快乐的', hi: 'खुशमिज़ाज', es_m: 'Alegre', es_f: 'Alegre', ar_m: 'مرح', ar_f: 'مرحة' },
   cunning: { m: 'Хитрый', f: 'Хитрая', en: 'Cunning', 'zh-CN': '狡黠的', hi: 'चालाक', es_m: 'Astuto', es_f: 'Astuta', ar_m: 'ماكر', ar_f: 'ماكرة' },
   kind: { m: 'Добрый', f: 'Добрая', en: 'Kind', 'zh-CN': '善良的', hi: 'दयालु', es_m: 'Bondadoso', es_f: 'Bondadosa', ar_m: 'طيب', ar_f: 'طيبة' },
@@ -179,7 +187,7 @@ export const SANTA_ADJECTIVES: Record<string, { m: string; f: string; en: string
   bright: { m: 'Яркий', f: 'Яркая', en: 'Bright', 'zh-CN': '明亮的', hi: 'चमकीला', es_m: 'Brillante', es_f: 'Brillante', ar_m: 'ساطع', ar_f: 'ساطعة' },
   curious: { m: 'Любопытный', f: 'Любопытная', en: 'Curious', 'zh-CN': '好奇的', hi: 'जिज्ञासु', es_m: 'Curioso', es_f: 'Curiosa', ar_m: 'فضولي', ar_f: 'فضولية' },
   patient: { m: 'Терпеливый', f: 'Терпеливая', en: 'Patient', 'zh-CN': '耐心的', hi: 'धैर्यवान', es_m: 'Paciente', es_f: 'Paciente', ar_m: 'صبور', ar_f: 'صبورة' },
-  playful: { m: 'Игривый', f: 'Игривая', en: 'Playful', 'zh-CN': '顽皮的', hi: 'खिलंदड़', es_m: 'Juguetón', es_f: 'Juguetona', ar_m: 'مرح', ar_f: 'مرحة' },
+  playful: { m: 'Игривый', f: 'Игривая', en: 'Playful', 'zh-CN': '顽皮的', hi: 'खिलंदड़', es_m: 'Juguetón', es_f: 'Juguetona', ar_m: 'لعوب', ar_f: 'لعوبة' },
   cozy: { m: 'Уютный', f: 'Уютная', en: 'Cozy', 'zh-CN': '舒适的', hi: 'आरामदायक', es_m: 'Acogedor', es_f: 'Acogedora', ar_m: 'دافئ', ar_f: 'دافئة' },
   peaceful: { m: 'Спокойный', f: 'Спокойная', en: 'Peaceful', 'zh-CN': '平和的', hi: 'शांतिप्रिय', es_m: 'Apacible', es_f: 'Apacible', ar_m: 'وديع', ar_f: 'وديعة' },
   golden: { m: 'Золотой', f: 'Золотая', en: 'Golden', 'zh-CN': '金色的', hi: 'सुनहरा', es_m: 'Dorado', es_f: 'Dorada', ar_m: 'ذهبي', ar_f: 'ذهبية' },
@@ -225,7 +233,7 @@ export const SANTA_ANIMALS: Record<string, { ru: string; gender: 'm' | 'f'; emoj
   toucan: { ru: 'тукан', gender: 'm', emoji: '🦜', en: 'Toucan', 'zh-CN': '巨嘴鸟', hi: 'टूकेन', es: 'Tucán', ar: 'طوقان' },
   armadillo: { ru: 'броненосец', gender: 'm', emoji: '🛡️', en: 'Armadillo', 'zh-CN': '犰狳', hi: 'आर्माडिलो', es: 'Armadillo', ar: 'أرماديللو' },
   cassowary: { ru: 'казуар', gender: 'm', emoji: '🐦', en: 'Cassowary', 'zh-CN': '鹤鸵', hi: 'कैसोवरी', es: 'Casuario', ar: 'شبنم' },
-  lynx: { ru: 'рысь', gender: 'f', emoji: '🐱', en: 'Lynx', 'zh-CN': '猞猁', hi: 'बबरशेर', es: 'Lince', ar: 'وشق' },
+  lynx: { ru: 'рысь', gender: 'f', emoji: '🐱', en: 'Lynx', 'zh-CN': '猞猁', hi: 'लिंक्स', es: 'Lince', ar: 'وشق' },
   okapi: { ru: 'окапи', gender: 'm', emoji: '🦌', en: 'Okapi', 'zh-CN': '霍加狓', hi: 'ओकापी', es: 'Okapi', ar: 'أوكابي' },
 };
 

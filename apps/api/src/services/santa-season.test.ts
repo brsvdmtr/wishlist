@@ -65,6 +65,7 @@ import {
   santaHashStr,
   santaShuffle,
   generateSantaAliases,
+  renderSantaAliasLocalized,
   sendSeasonalBroadcast,
   maybeRunSeasonalEvents,
   isSeasonalEventTriggerDay,
@@ -504,5 +505,109 @@ describe('maybeRunSeasonalEvents', () => {
     shared.globalConfig.mockRejectedValueOnce(new Error('DB down'));
     await expect(maybeRunSeasonalEvents(nov1)).resolves.toBeUndefined();
     expect(shared.loggerError).toHaveBeenCalled();
+  });
+});
+
+describe('renderSantaAliasLocalized — locale-aware alias rendering', () => {
+  // Locked-in behaviour for the 6 supported locales. Each branch has its own
+  // ordering / gender agreement quirks; a missing field would silently fall
+  // through to RU and ship Russian text to non-RU users. These tests anchor
+  // the contract so future locale additions can't quietly regress.
+
+  it('en: adjective + animal, English forms', () => {
+    expect(renderSantaAliasLocalized('brave', 'fox', 'en')).toBe('Brave Fox');
+    expect(renderSantaAliasLocalized('smart', 'panda', 'en')).toBe('Smart Panda');
+  });
+
+  it('zh-CN: adjective + animal with NO space (Chinese has no word separators)', () => {
+    expect(renderSantaAliasLocalized('brave', 'fox', 'zh-CN')).toBe('勇敢的狐狸');
+    expect(renderSantaAliasLocalized('sleepy', 'giraffe', 'zh-CN')).toBe('瞌睡的长颈鹿');
+  });
+
+  it('hi: adjective + animal with single space, no gender inflection', () => {
+    expect(renderSantaAliasLocalized('brave', 'fox', 'hi')).toBe('बहादुर लोमड़ी');
+    expect(renderSantaAliasLocalized('smart', 'panda', 'hi')).toBe('होशियार पांडा');
+  });
+
+  it('es: animal-first (post-nominal descriptive) with gender agreement', () => {
+    // fox is feminine → es_f form `Valiente`
+    expect(renderSantaAliasLocalized('brave', 'fox', 'es')).toBe('Zorra Valiente');
+    // bear is masculine → es_m form `Listo`
+    expect(renderSantaAliasLocalized('smart', 'bear', 'es')).toBe('Oso Listo');
+    // panda is feminine → es_f form `Lista`
+    expect(renderSantaAliasLocalized('smart', 'panda', 'es')).toBe('Panda Lista');
+  });
+
+  it('ar: noun-first then adjective (Arabic post-nominal) with gender agreement', () => {
+    // fox is feminine → ar_f form `شجاعة`
+    expect(renderSantaAliasLocalized('brave', 'fox', 'ar')).toBe('ثعلبة شجاعة');
+    // bear is masculine → ar_m form `ذكي`
+    expect(renderSantaAliasLocalized('smart', 'bear', 'ar')).toBe('دب ذكي');
+  });
+
+  it('default / unknown locale: falls back to Russian with gender agreement', () => {
+    // fox is feminine → f form `Смелая`
+    expect(renderSantaAliasLocalized('brave', 'fox', 'ru')).toBe('Смелая лиса');
+    expect(renderSantaAliasLocalized('brave', 'fox', 'fr')).toBe('Смелая лиса');
+    // bear is masculine → m form `Умный`
+    expect(renderSantaAliasLocalized('smart', 'bear', 'ru')).toBe('Умный медведь');
+  });
+
+  it('returns null for unknown adjective or animal key', () => {
+    expect(renderSantaAliasLocalized('not_an_adj', 'fox', 'en')).toBeNull();
+    expect(renderSantaAliasLocalized('brave', 'not_an_animal', 'en')).toBeNull();
+  });
+
+  it('every adjective × animal × locale combination produces a string', () => {
+    // Exhaustive smoke test: 30 × 30 × 6 = 5400 combinations. Locks against
+    // a future locale being added to the type but missing data on any key.
+    const locales = ['ru', 'en', 'zh-CN', 'hi', 'es', 'ar'] as const;
+    for (const adjKey of SANTA_ADJ_KEYS) {
+      for (const animalKey of SANTA_ANIMAL_KEYS) {
+        for (const loc of locales) {
+          const out = renderSantaAliasLocalized(adjKey, animalKey, loc);
+          expect(out).toBeTruthy();
+          expect(typeof out).toBe('string');
+          expect((out as string).length).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+});
+
+describe('SANTA dictionaries — locale-key parity', () => {
+  // Catches a future field rename / locale-block drop on either dictionary.
+  // Ensures every adjective has all 9 locale fields and every animal has 7.
+  it('every adjective has all 9 locale fields', () => {
+    for (const [key, adj] of Object.entries(SANTA_ADJECTIVES)) {
+      expect(adj.m, `${key}.m`).toBeTruthy();
+      expect(adj.f, `${key}.f`).toBeTruthy();
+      expect(adj.en, `${key}.en`).toBeTruthy();
+      expect(adj['zh-CN'], `${key}.zh-CN`).toBeTruthy();
+      expect(adj.hi, `${key}.hi`).toBeTruthy();
+      expect(adj.es_m, `${key}.es_m`).toBeTruthy();
+      expect(adj.es_f, `${key}.es_f`).toBeTruthy();
+      expect(adj.ar_m, `${key}.ar_m`).toBeTruthy();
+      expect(adj.ar_f, `${key}.ar_f`).toBeTruthy();
+    }
+  });
+
+  it('every animal has all 7 locale fields + gender + emoji', () => {
+    for (const [key, animal] of Object.entries(SANTA_ANIMALS)) {
+      expect(animal.ru, `${key}.ru`).toBeTruthy();
+      expect(animal.en, `${key}.en`).toBeTruthy();
+      expect(animal['zh-CN'], `${key}.zh-CN`).toBeTruthy();
+      expect(animal.hi, `${key}.hi`).toBeTruthy();
+      expect(animal.es, `${key}.es`).toBeTruthy();
+      expect(animal.ar, `${key}.ar`).toBeTruthy();
+      expect(animal.gender === 'm' || animal.gender === 'f', `${key}.gender`).toBe(true);
+      expect(animal.emoji, `${key}.emoji`).toBeTruthy();
+    }
+  });
+
+  it('SANTA_ADJ_KEYS and SANTA_ANIMAL_KEYS expose the full set', () => {
+    // 30 × 30 = 900 unique combos per round — verify the keyspace.
+    expect(SANTA_ADJ_KEYS.length).toBe(30);
+    expect(SANTA_ANIMAL_KEYS.length).toBe(30);
   });
 });
