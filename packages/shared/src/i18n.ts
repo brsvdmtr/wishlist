@@ -9326,6 +9326,18 @@ const zhCN: Dict = {
   onboarding_path_import_link: '已有链接？我们可以尝试自动添加',
   onboarding_path_subtitle: '选择添加首个心愿的方式',
   onboarding_path_title: '你想怎么开始？',
+  faq_a_br_disable: '设置 → 生日 → 切换你需要的开关。你可以单独关闭朋友提醒、自己的提醒，或他人生日的传入提醒。',
+  faq_a_br_mute_one: '在机器人通知中直接点击「🔕 别提醒我此人」。或前往 设置 → 生日 → 已静音的提醒。',
+  faq_a_br_no_wishlist: '朋友通知不会消失 — 而是打开你的个人主页。我们不会向他们承诺「稍后会出现」的心愿单。',
+  faq_a_br_received: '你订阅了他们的主页或公开心愿单，或在他们的公开心愿单中预订/评论过心愿。仅以明确关系为准 — 我们不使用查看或链接打开。',
+  faq_a_br_source: '仅来自你在个人主页中设置的内容。我们不会从 Telegram 或其他来源获取。',
+  faq_a_br_visibility: '遵循你的主页可见性设置。默认情况下年份隐藏 — 朋友只看到日和月。仅当你明确允许显示年份时，年龄才会被显示。',
+  faq_q_br_disable: '如何关闭生日提醒？',
+  faq_q_br_mute_one: '如何停止接收某个特定人的提醒？',
+  faq_q_br_no_wishlist: '如果我没有公开心愿单会怎样？',
+  faq_q_br_source: 'WishBoard 从哪里获取我的生日？',
+  faq_q_br_visibility: '谁能看到我的生日？',
+  faq_q_br_why_received: '为什么我收到了关于某人生日的通知？',
 };
 
 const hi: Dict = {
@@ -12053,6 +12065,18 @@ const hi: Dict = {
   onboarding_path_import_link: 'पहले से लिंक है? हम इसे ऑटो जोड़ने की कोशिश कर सकते हैं',
   onboarding_path_subtitle: 'पहली विश जोड़ने का तरीका चुनो',
   onboarding_path_title: 'शुरू कैसे करना है?',
+  faq_a_br_disable: 'सेटिंग्स → जन्मदिन → ज़रूरत के स्विच को टॉगल करो। तुम दोस्तों के रिमाइंडर, अपने रिमाइंडर, या दूसरों के जन्मदिन के बारे में आने वाले रिमाइंडर अलग-अलग बंद कर सकते हो।',
+  faq_a_br_mute_one: 'बॉट नोटिफ़िकेशन में «🔕 इस व्यक्ति के बारे में याद मत दिलाओ» पर टैप करो। या जाओ सेटिंग्स → जन्मदिन → म्यूट किए रिमाइंडर।',
+  faq_a_br_no_wishlist: 'दोस्त के लिए नोटिफ़िकेशन गायब नहीं होता — बल्कि वह तुम्हारी प्रोफ़ाइल खोलता है। हम उनसे ऐसी विशलिस्ट का वादा नहीं करते जो «बाद में आएगी»।',
+  faq_a_br_received: 'तुम उनकी प्रोफ़ाइल या पब्लिक विशलिस्ट को फॉलो करते हो, या उनकी पब्लिक विशलिस्ट से किसी विश को बुक/कमेंट किया है। केवल स्पष्ट संबंध गिने जाते हैं — हम व्यू या लिंक खोलने का इस्तेमाल नहीं करते।',
+  faq_a_br_source: 'केवल वही जो तुमने अपनी प्रोफ़ाइल में सेट किया है। हम इसे Telegram या किसी और स्रोत से नहीं लेते।',
+  faq_a_br_visibility: 'तुम्हारी प्रोफ़ाइल विज़िबिलिटी सेटिंग के अनुसार। डिफ़ॉल्ट रूप से वर्ष छिपा है — दोस्त सिर्फ़ दिन और महीना देखते हैं। उम्र तभी दिखेगी जब तुम वर्ष दिखाने की स्पष्ट अनुमति दो।',
+  faq_q_br_disable: 'जन्मदिन के रिमाइंडर कैसे बंद करूँ?',
+  faq_q_br_mute_one: 'किसी एक व्यक्ति के लिए रिमाइंडर कैसे बंद करूँ?',
+  faq_q_br_no_wishlist: 'अगर मेरी पब्लिक विशलिस्ट नहीं है तो क्या होगा?',
+  faq_q_br_source: 'WishBoard मेरा जन्मदिन कहाँ से लेता है?',
+  faq_q_br_visibility: 'मेरा जन्मदिन कौन देखता है?',
+  faq_q_br_why_received: 'मुझे किसी के जन्मदिन का नोटिफ़िकेशन क्यों मिला?',
 };
 
 const es: Dict = {
@@ -14781,6 +14805,18 @@ const es: Dict = {
   onboarding_path_import_link: '¿Ya tienes un enlace? Podemos intentar añadirlo automáticamente',
   onboarding_path_subtitle: 'Elige cómo añadir tu primer deseo',
   onboarding_path_title: '¿Cómo te gustaría empezar?',
+  faq_a_br_disable: 'Ajustes → Cumpleaños → activa o desactiva el interruptor que necesites. Puedes desactivar por separado los recordatorios de amigos, los tuyos, o los recordatorios entrantes sobre cumpleaños de otros.',
+  faq_a_br_mute_one: 'Toca «🔕 No recordarme sobre esta persona» directamente en la notificación del bot. O ve a Ajustes → Cumpleaños → Recordatorios silenciados.',
+  faq_a_br_no_wishlist: 'La notificación al amigo no desaparece — abre tu perfil en su lugar. No le prometemos una lista que «aparecerá más tarde».',
+  faq_a_br_received: 'Sigues su perfil o una lista pública, o reservaste/comentaste un deseo en su lista pública. Solo cuentan las relaciones explícitas — no usamos vistas ni aperturas de enlace.',
+  faq_a_br_source: 'Solo de lo que configuras en tu perfil. No lo sacamos de Telegram ni de ninguna otra fuente.',
+  faq_a_br_visibility: 'Sigue la visibilidad de tu perfil. Por defecto el año está oculto — los amigos solo ven día y mes. La edad solo aparece si autorizas mostrar el año explícitamente.',
+  faq_q_br_disable: '¿Cómo desactivo los recordatorios de cumpleaños?',
+  faq_q_br_mute_one: '¿Cómo dejo de recibir recordatorios de una persona en concreto?',
+  faq_q_br_no_wishlist: '¿Qué pasa si no tengo una lista pública?',
+  faq_q_br_source: '¿De dónde saca WishBoard mi cumpleaños?',
+  faq_q_br_visibility: '¿Quién ve mi cumpleaños?',
+  faq_q_br_why_received: '¿Por qué recibí una notificación sobre el cumpleaños de alguien?',
 };
 
 const ar: Dict = {
@@ -17512,6 +17548,18 @@ const ar: Dict = {
   onboarding_path_import_link: 'لديك رابط بالفعل؟ يمكننا محاولة إضافته تلقائياً',
   onboarding_path_subtitle: 'اختر طريقة إضافة أمنيتك الأولى',
   onboarding_path_title: 'كيف تريد أن تبدأ؟',
+  faq_a_br_disable: 'الإعدادات ← أعياد الميلاد ← بدّل المفتاح الذي تحتاجه. يمكنك إيقاف تذكيرات الأصدقاء أو تذكيرات نفسك أو التذكيرات الواردة عن أعياد ميلاد الآخرين كلٍ على حدة.',
+  faq_a_br_mute_one: 'اضغط «🔕 لا تذكّرني بهذا الشخص» مباشرة في إشعار البوت. أو اذهب إلى الإعدادات ← أعياد الميلاد ← التذكيرات المكتومة.',
+  faq_a_br_no_wishlist: 'لا يختفي إشعار الصديق — بل يفتح ملفك الشخصي بدلاً منه. لا نعده بقائمة «ستظهر لاحقاً».',
+  faq_a_br_received: 'أنت تتابع ملفه الشخصي أو قائمة عامة، أو حجزت/علّقت على أمنية من قائمته العامة. تُحتسب العلاقات الصريحة فقط — لا نستخدم المشاهدات أو فتح الروابط.',
+  faq_a_br_source: 'فقط مما تضعه في ملفك الشخصي. لا نأخذه من Telegram أو أي مصدر آخر.',
+  faq_a_br_visibility: 'تتبع إعداد ظهور ملفك الشخصي. افتراضياً تكون السنة مخفية — يرى الأصدقاء اليوم والشهر فقط. لا يُعرض عمرك إلا إذا سمحت صراحةً بعرض السنة.',
+  faq_q_br_disable: 'كيف أوقف تذكيرات أعياد الميلاد؟',
+  faq_q_br_mute_one: 'كيف أتوقف عن تلقي التذكيرات لشخص واحد محدد؟',
+  faq_q_br_no_wishlist: 'ماذا يحدث إذا لم تكن لديّ قائمة عامة؟',
+  faq_q_br_source: 'من أين يأخذ WishBoard تاريخ ميلادي؟',
+  faq_q_br_visibility: 'من يرى تاريخ ميلادي؟',
+  faq_q_br_why_received: 'لماذا تلقّيت إشعاراً عن عيد ميلاد شخص ما؟',
 };
 
 // ─── Dictionaries map ─────────────────────────────────────────────────────────
