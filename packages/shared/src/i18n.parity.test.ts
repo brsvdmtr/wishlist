@@ -55,64 +55,8 @@ const SUPPORTED_LOCALES: Locale[] = ['ru', 'en', 'zh-CN', 'hi', 'es', 'ar'];
 //   2. Remove the key from this set.
 //   3. Tests will now require the key to exist in ALL 6 locales.
 const KNOWN_BACKLOG = new Set<string>([
-  'addon_desc_group_gift_unlock',
-  'addon_title_group_gift_unlock',
-  'api_hint_tg_unreachable',
-  'api_invoice_desc_yearly',
-  'api_invoice_label_yearly',
-  'api_invoice_title_yearly',
-  'bot_cs_invite_msg',
-  'bot_cs_open_btn',
-  'bot_fallback_forward_template',
-  'bot_import_pro_btn',
-  'bot_import_pro_required',
-  'bot_pro_activated_yearly',
-  'bot_pro_renewal_1d',
-  'bot_pro_renewal_7d',
-  'changelog_empty_hint',
-  'changelog_empty_title',
-  'changelog_subtitle',
-  'changelog_title',
-  'error_import_generic',
-  'occasion_type_housewarming',
-  'res_cat_all',
-  'res_cat_group',
-  'res_cat_purchased',
-  'res_cat_secret',
-  'res_history_empty_hint',
-  'res_history_empty_title',
-  'res_pro_full_desc',
-  'res_pro_full_title',
-  'res_pro_upsell_btn',
-  'res_pro_upsell_desc',
-  'res_pro_upsell_detail_desc',
-  'res_pro_upsell_detail_title',
-  'res_pro_upsell_history_desc',
-  'res_pro_upsell_history_title',
-  'res_pro_upsell_title',
-  'res_purchased_confirm_body',
-  'res_purchased_confirm_title',
-  'res_purchased_confirm_yes',
-  'res_sort_activity',
-  'res_sort_date',
-  'res_sort_price_asc',
-  'res_sort_price_desc',
-  'res_sort_title',
-  'res_stat_active',
-  'res_stat_history',
-  'res_stat_secret',
-  'settings_changelog',
-  'wishes_filter_reserved',
-  'wishes_sec_by_priority',
-  'wishes_sec_reserved',
-  'wl_meta_comments_all',
-  'wl_meta_comments_subs',
-  'wl_meta_visibility_link',
-  'wl_meta_visibility_private',
-  'wl_meta_visibility_public',
-  'wl_stat_purchased',
-  'wl_stat_reserved',
-  'wl_stat_wishes',
+  // All historical gaps translated as of 2026-05-17 (waves 1-10).
+  // To add a new historical-gap exemption, document the reason inline.
 
 ]);
 
@@ -189,6 +133,11 @@ describe('i18n key parity — every key must exist in every locale', () => {
     // by default and doesn't need the "Russian version prevails" line in its
     // own language). See MiniApp.tsx:21709 — `showDisclaimer = locale !== 'ru'`.
     legal_locale_disclaimer: new Set<Locale>(['ru']),
+    // Bot fallback / Telegram-unreachable strings are intentionally empty in
+    // all 6 locales — the bot suppresses these messages when the value is empty
+    // (historical: the team didn't want to ship a generic fallback string).
+    bot_fallback_forward_template: new Set<Locale>(['ru', 'en', 'zh-CN', 'hi', 'es', 'ar']),
+    api_hint_tg_unreachable: new Set<Locale>(['ru', 'en', 'zh-CN', 'hi', 'es', 'ar']),
   };
 
   it('no empty-string values (with documented exemptions)', () => {
