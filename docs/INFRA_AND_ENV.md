@@ -334,6 +334,7 @@ To fully revert, delete the `x-logging` anchor and the four `logging: *default-l
 | WATCHDOG_TIMEOUT_MS | watchdog | 15000 | HTTP timeout for watchdog checks (bumped from 8000 after 2026-05-17 DNS-flap false alert) |
 | WATCHDOG_LOCK_FILE | watchdog | /var/lock/wishlist-watchdog.lock | Non-blocking flock lock file used by `run-health-watchdog.sh` |
 | WATCHDOG_REQUIRE_FLOCK | watchdog | true | Fail-closed if `flock(1)` is missing; only literal `false` allows unguarded dev fallback |
+| WATCHDOG_NODE_BIN | watchdog | node | Node executable used by `run-health-watchdog.sh` wrapper; override only for tests / dev sandboxes |
 | DNS_RESULT_ORDER | api | ipv4first | Node DNS order; Vultr uses IPv4 to Telegram from Docker |
 | RCLONE_REMOTE | backup | wishlist-s3:wishlist-backups | Selectel/S3 backup target |
 

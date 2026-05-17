@@ -142,10 +142,12 @@ node --test ops/watchdog/state.test.mjs
 
 30 tests cover state transitions, persistence (round-trip + corruption +
 parent-dir creation + no temp-file leaks + loose-mode pre-existing dir),
-zero-exposure dedup, and a source-grep contract that locks the default
-state path so a refactor can't silently move it back to `/tmp` or to
-the shared `/var/lib/wishlist/`. No external dependencies — pure
-`node:test`.
+zero-exposure dedup, and a source-grep contract that pins the default
+state path to `/var/lib/wishlist/watchdog/state.json` and explicitly
+forbids regressing it to the shared-parent form
+`/var/lib/wishlist/watchdog-state.json` (any other regression — e.g.
+back to `/tmp` — would fail the positive assertion as well). No
+external dependencies — pure `node:test`.
 
 ## Env vars
 
