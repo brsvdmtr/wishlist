@@ -55,8 +55,17 @@ else
 fi
 
 if [ ! -L "$TARGET_LINK" ] || [ "$(readlink "$TARGET_LINK")" != "$RUNTIME_FILE" ]; then
+  # Guard against a broken resolvconf install — without the runtime file
+  # the symlink would dangle and the sanity probe below would fail.
+  if [ ! -f "$RUNTIME_FILE" ]; then
+    echo "runtime file $RUNTIME_FILE does not exist after resolvconf -u; aborting before we break /etc/resolv.conf" >&2
+    exit 1
+  fi
   echo "switching $TARGET_LINK to symlink -> $RUNTIME_FILE"
-  cp -a "$TARGET_LINK" "${TARGET_LINK}.bak-$(date -u +%Y%m%d-%H%M%S)" 2>/dev/null || true
+  # Don't silence cp failures — we want to know about readonly /etc, EROFS,
+  # etc., even though we still continue to the symlink swap.
+  cp -a "$TARGET_LINK" "${TARGET_LINK}.bak-$(date -u +%Y%m%d-%H%M%S)" \
+    || echo "warn: failed to back up $TARGET_LINK (continuing anyway)" >&2
   ln -sf "$RUNTIME_FILE" "$TARGET_LINK"
 else
   echo "$TARGET_LINK already symlinked to $RUNTIME_FILE"

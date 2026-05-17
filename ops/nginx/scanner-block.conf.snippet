@@ -49,19 +49,12 @@ location ~ ^https?:// {
 # per day in container logs and could amplify a real outage by tying up
 # the SSR event loop. Exact-match location wins over the prefix "location
 # /" below it, so GET/HEAD still proxy normally; only POST/PUT/PATCH/DELETE
-# get dropped. 2026-05-17.
+# get dropped. Proxy params come from web-proxy.conf.snippet so this stays
+# in sync with the main `location /` block. 2026-05-17.
 location = / {
     if ($request_method !~ ^(GET|HEAD)$) {
         return 444;
     }
     proxy_pass http://127.0.0.1:3000;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_read_timeout 60s;
-    proxy_intercept_errors on;
+    include /opt/wishlist/ops/nginx/web-proxy.conf.snippet;
 }

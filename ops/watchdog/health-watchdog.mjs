@@ -17,7 +17,7 @@
  *   BOT_TOKEN             — Telegram bot token
  *   ADMIN_ALERT_CHAT_IDS  — comma-separated chat IDs
  *   WATCHDOG_STATE_FILE   — path to state JSON (default: /tmp/watchdog-state.json)
- *   WATCHDOG_TIMEOUT_MS   — HTTP timeout in ms (default: 8000)
+ *   WATCHDOG_TIMEOUT_MS   — HTTP timeout in ms (default: 15000)
  *   MAINTENANCE_MODE      — if "true", skip alerting (planned downtime)
  *
  * Cron example (every 5 minutes):
@@ -274,43 +274,53 @@ console.log(`[watchdog] health/deep: ${JSON.stringify(healthResult)} | web: ${JS
 if (isDown) {
   // Reset consecutive healthy counter whenever we see a failure
   state.consecutiveHealthyChecks = 0;
-  state.consecutiveDownChecks = (state.consecutiveDownChecks || 0) + 1;
-  if (!state.firstDownSince) state.firstDownSince = now;
 
-  // Require 2 consecutive DOWN observations (~5 min apart) before promoting
-  // to an incident + Telegram alert. Each runChecks() already retries once
-  // after 5s, so a single false positive needs to survive BOTH retries on
-  // BOTH runs to escalate — a 10+ minute persistent failure floor. This
-  // change is a direct response to the 2026-05-17 02:25 UTC false alert
-  // caused by a flapping Vultr DNS resolver.
+  // Require 2 consecutive DOWN observations before promoting to an
+  // incident + Telegram alert. With a 5-min cron interval the floor for
+  // alert latency is ~5 minutes (when the first DOWN lands right before
+  // a tick) and the worst case is ~10 minutes. This is a direct response
+  // to the 2026-05-17 02:25 UTC false alert caused by a flapping Vultr
+  // DNS resolver — each runChecks() retries once after 5s, but both that
+  // retry and the actual fetch share the same DNS-failure window, so a
+  // single bad tick isn't enough signal.
   if (state.wasDown) {
+    // Already promoted on a prior tick — don't keep growing the counter,
+    // it's only meaningful pre-promotion. Recovery flow uses
+    // consecutiveHealthyChecks instead.
     saveState(state);
     console.log('[watchdog] still down (alert already sent)');
-  } else if (state.consecutiveDownChecks >= 2) {
-    state.wasDown = true;
-    state.downSince = state.firstDownSince;
-    saveState(state);
-
-    if (MAINTENANCE) {
-      console.log('[watchdog] MAINTENANCE_MODE=true — skipping alert');
-    } else {
-      const details = [
-        !healthResult.ok ? `• /api/health/deep → ${healthResult.status || healthResult.error}` : '',
-        !webResult.ok ? `• web homepage → ${webResult.status || webResult.error}` : '',
-        tgRouteDown ? `• /api/tg/bootstrap → ${tgResult.status || tgResult.error} (MAINTENANCE_MODE stuck?)` : '',
-      ].filter(Boolean).join('\n');
-      await sendAlert(`🔴 <b>Wishlistik DOWN</b> at ${now}\n(persistent since ${state.firstDownSince})\n\n${details}`);
-      console.log('[watchdog] alert sent: DOWN');
-
-      // Create incident + exposure records for active users directly in DB.
-      // API is unreachable so we bypass it entirely.
-      const incidentId = await createDowntimeExposures();
-      if (incidentId) state.incidentId = incidentId;
-      saveState(state);
-    }
   } else {
-    saveState(state);
-    console.log(`[watchdog] first DOWN observation, waiting for confirmation (consecutiveDownChecks=${state.consecutiveDownChecks}/2)`);
+    state.consecutiveDownChecks = state.consecutiveDownChecks + 1;
+    if (!state.firstDownSince) state.firstDownSince = now;
+
+    if (state.consecutiveDownChecks >= 2) {
+      state.wasDown = true;
+      state.downSince = state.firstDownSince;
+      // Reset the pre-promotion counter so a future incident starts clean.
+      state.consecutiveDownChecks = 0;
+      saveState(state);
+
+      if (MAINTENANCE) {
+        console.log('[watchdog] MAINTENANCE_MODE=true — skipping alert');
+      } else {
+        const details = [
+          !healthResult.ok ? `• /api/health/deep → ${healthResult.status || healthResult.error}` : '',
+          !webResult.ok ? `• web homepage → ${webResult.status || webResult.error}` : '',
+          tgRouteDown ? `• /api/tg/bootstrap → ${tgResult.status || tgResult.error} (MAINTENANCE_MODE stuck?)` : '',
+        ].filter(Boolean).join('\n');
+        await sendAlert(`🔴 <b>Wishlistik DOWN</b> at ${now}\n(persistent since ${state.firstDownSince})\n\n${details}`);
+        console.log('[watchdog] alert sent: DOWN');
+
+        // Create incident + exposure records for active users directly in DB.
+        // API is unreachable so we bypass it entirely.
+        const incidentId = await createDowntimeExposures();
+        if (incidentId) state.incidentId = incidentId;
+        saveState(state);
+      }
+    } else {
+      saveState(state);
+      console.log(`[watchdog] first DOWN observation, waiting for confirmation (consecutiveDownChecks=${state.consecutiveDownChecks}/2)`);
+    }
   }
 } else {
   // Healthy check: clear any "first down" suspicion that didn't escalate.
@@ -322,7 +332,7 @@ if (isDown) {
 
   if (state.wasDown) {
     // Service is up but was down — track stability window
-    state.consecutiveHealthyChecks = (state.consecutiveHealthyChecks || 0) + 1;
+    state.consecutiveHealthyChecks = state.consecutiveHealthyChecks + 1;
     console.log(`[watchdog] recovery check ${state.consecutiveHealthyChecks}/3 (need 3 consecutive = ~15 min)`);
 
     if (state.consecutiveHealthyChecks >= 3) {

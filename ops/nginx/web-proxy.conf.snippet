@@ -1,0 +1,27 @@
+# ─── Shared proxy params for the Next.js web upstream ────────────────────────
+#
+# Used by both `location /` (catch-all) and `location = /` (homepage POST
+# block). Pulling these out of the per-location block prevents the two
+# from drifting when someone tweaks a single proxy_set_header or timeout.
+#
+# proxy_pass is intentionally NOT in this snippet — the upstream URL is
+# the only thing that varies (e.g. socket path vs IP:port in dev), and
+# nginx requires proxy_pass to be a direct directive of `location`, not
+# included.
+#
+# HOW TO USE:
+#   location / {
+#       proxy_pass http://127.0.0.1:3000;
+#       include /opt/wishlist/ops/nginx/web-proxy.conf.snippet;
+#   }
+# ─────────────────────────────────────────────────────────────────────────────
+
+proxy_http_version 1.1;
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection "upgrade";
+proxy_set_header Host $host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_read_timeout 60s;
+proxy_intercept_errors on;
