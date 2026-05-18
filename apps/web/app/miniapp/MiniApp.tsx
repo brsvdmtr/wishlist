@@ -5821,6 +5821,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     try {
       const res = await fetch(url, {
         ...init,
+        // Bypass the HTTP cache so the browser never sends If-None-Match and
+        // the server never returns 304. WebKit (iOS Telegram, Telegram desktop
+        // on macOS) sometimes passes 304 through to JS with empty body instead
+        // of substituting the cached one — and downstream loaders treat
+        // `!res.ok` as a load failure, surfacing a "Ошибка загрузки" toast.
+        // Server-side defense is `app.set('etag', false)` in apps/api; this is
+        // the client-side belt that survives any future re-introduction of
+        // server ETags (nginx tweak, route-level `res.set('ETag', ...)`, etc).
+        cache: init?.cache ?? 'no-store',
         signal: controller.signal,
         credentials: 'omit',
         headers: {

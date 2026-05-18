@@ -5,6 +5,104 @@ New entries go at the top.
 
 ---
 
+## 2026-05-18 — «Ошибка загрузки» тосты на экране Настроек (304 + `!res.ok`)
+
+### Симптом
+На экране «Настройки» Mini App стек из нескольких красных тостов
+«Ошибка загрузки», сам экран ниже заголовка пустой. Воспроизводилось
+у пользователей в Telegram desktop на macOS и в iOS Telegram, но не в
+Chrome desktop. В прод-логах за день: `/tg/me/profile` 7× статус 304,
+`/tg/me/subscriptions/meta` 6×, `/tg/me/showcase` 4×,
+`/tg/me/dont-gift` 2×. API при этом возвращал `{"ok":true}` на
+`/health`, миграции и контейнеры в порядке.
+
+### Root cause
+Цепочка из трёх независимых факторов, каждый по отдельности безвреден:
+
+1. **Express по умолчанию генерит weak ETag** на каждый JSON-ответ
+   (опция `etag: 'weak'`). Этот флаг нигде в репо не выставлялся явно,
+   мы наследовали default.
+2. **Браузер кэширует ETag и шлёт `If-None-Match`** на повторных
+   запросах. Сервер через middleware `fresh()` сравнивает ETag и при
+   совпадении возвращает `304 Not Modified` с пустым телом.
+3. **Лоадеры в `MiniApp.tsx` проверяют `if (!res.ok) throw …`** —
+   `loadProfile`, `loadShowcase`, `loadSettings`, `loadItems`, и ещё
+   ~7 других. `res.ok` истинно только для статусов 200-299, для **304
+   это `false`** (по спецификации Fetch API).
+4. Дополнительный fuel: на WebKit (iOS Telegram, Telegram desktop на
+   macOS) `fetch()` иногда передаёт 304 в JS с пустым телом вместо
+   прозрачной подмены кэшированного тела (WebKit bug 171052). Даже
+   если бы `res.ok` правильно обрабатывался, тело при таком 304 пусто
+   и `res.json()` упал бы.
+
+Итог: каждый GET, который ревалидировался как 304, превращался в
+«Ошибка загрузки» тост. Тап «Профиль» в нижней навигации одновременно
+зовёт `loadProfile` + `loadShowcase` — оба 304 — два тоста.
+
+### Fix
+Двухслойная защита, оба слоя в одном коммите:
+
+- **Server-side** (`apps/api/src/index.ts`): `app.set('etag', false)`
+  сразу после `trust proxy`. Express перестаёт ставить ETag, браузер
+  перестаёт слать `If-None-Match`, 304 не возникает в принципе.
+- **Client-side** (`apps/web/app/miniapp/MiniApp.tsx`, `tgFetch`):
+  `cache: init?.cache ?? 'no-store'` в опциях `fetch()`. Это belt
+  поверх server-side suspenders — даже если кто-то завтра поставит
+  `res.set('ETag', ...)` точечно, или nginx начнёт ставить ETag,
+  браузер не отправит `If-None-Match` и не получит 304.
+
+Регресс-тест: `apps/api/src/etag.test.ts` — поднимает зеркало
+bootstrap-конфига, делает запрос с `If-None-Match: W/"stale-value"`,
+ожидает 200 без ETag-заголовка в ответе.
+
+### Урок
+- Default-настройки фреймворков опасны на стыке с custom-клиентом.
+  Express ETag — это не «оптимизация которую мы включили», это «опция
+  которую забыли проверить». Любая «магия по умолчанию» во внешнем
+  фреймворке должна быть осознанно либо принята, либо отключена.
+- `res.ok` — это лёгкий, но **узкий** контракт. Он не покрывает 3xx
+  (304/301/302/etc), и если код полагается на «успех = `res.ok`», то
+  любая редирект-логика или conditional-GET ломает его молча.
+- WebKit/Safari + cache в WebView — отдельный класс quirks. То что в
+  Chrome работает, в Telegram WebView может быть тонко сломано.
+  Defense in depth (server + client) дешевле, чем диагностика после.
+
+### Правило
+1. **Любой новый GET-loader в Mini App** должен делать `if (res.status
+   < 200 || res.status >= 300)` либо использовать узкий контракт
+   `if (res.status !== 200)`. Никаких голых `!res.ok` для GET в новом
+   коде. Старые места оставляем — `tgFetch` теперь шлёт
+   `cache: 'no-store'` и 304 невозможен.
+2. **API ставит явный `app.set('etag', false)`** — фиксированный
+   контракт, не наследуем default. Если кому-то понадобится ETag
+   точечно, это будет осознанное решение с тестом и записью в
+   DESIGN_DECISIONS / API_SECURITY.
+3. **Любой новый middleware/настройка в API bootstrap** требует
+   проверки: «как это взаимодействует с Mini App fetch и его
+   `if (!res.ok)` паттерном?» В CLAUDE.md API rules уже есть подобная
+   чек-листина — этот пункт добавляется к defense-in-depth.
+
+### Лучший код (паттерн)
+
+```ts
+// apps/api/src/index.ts — bootstrap config, явный контракт:
+const app = express();
+app.set('trust proxy', 1);
+app.set('etag', false);  // см. docs/BUGFIX_LESSONS.md (2026-05-18)
+```
+
+```ts
+// apps/web/app/miniapp/MiniApp.tsx — tgFetch chokepoint:
+const res = await fetch(url, {
+  ...init,
+  cache: init?.cache ?? 'no-store',  // см. BUGFIX_LESSONS.md (2026-05-18)
+  signal: controller.signal,
+  // …
+});
+```
+
+---
+
 ## 2026-05-17 — iOS «замораживание» горизонтальной полосы chips на SearchScreen
 
 ### Симптом

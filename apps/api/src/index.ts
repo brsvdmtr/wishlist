@@ -177,6 +177,20 @@ const app = express();
 // and rate-limits incorrectly. Also silences ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
 app.set('trust proxy', 1);
 
+// Disable automatic ETag generation. Mini App loaders check `if (!res.ok)`,
+// which evaluates `false` for 304 (status is outside 200-299) — and on WebKit
+// (iOS Telegram, Telegram desktop on macOS) `fetch()` sometimes passes the 304
+// through to JS with empty body instead of transparently substituting the
+// cached body. The result: every conditional GET that revalidates as 304
+// surfaces as a "Ошибка загрузки" toast in the Mini App. State endpoints save
+// negligible bandwidth from 304s (responses are 200-500 bytes). Note: this
+// app-level flag does NOT affect `express.static` — the /uploads handler
+// generates its own ETags via `serve-static`, but `immutable` + 30d max-age
+// means clients never revalidate, so 304 doesn't happen in practice there.
+// Companion defense lives in the Mini App's `tgFetch` (cache: 'no-store') —
+// see docs/BUGFIX_LESSONS.md (2026-05-18) for the full chain.
+app.set('etag', false);
+
 // Middleware order MUST stay: cors → express.json → requestLogger → /uploads
 // → /health → maintenance gate → routers → error handler. See docs/BACKEND_MAP.md
 // § "Middleware Chain". The infrastructure pieces have moved into modules
