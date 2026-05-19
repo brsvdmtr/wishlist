@@ -253,6 +253,45 @@ suite('daily-activity rollup — real Postgres', () => {
     expect(after!.paywallViewed).toBe(1);
   });
 
+  it('drops events whose userId no longer exists in User (deleted users) — no FK violation', async () => {
+    // Regression: backfill on 2026-05-19 failed in prod with P2003 because
+    // AnalyticsEvent.userId is a soft pointer (no FK) — events outlive a
+    // hard-deleted User row. The aggregator must filter such events out
+    // before upserting UserDailyActivity (which DOES enforce FK on User).
+    // See docs/BUGFIX_LESSONS.md 2026-05-19 "rollup FK violation".
+    const db = getTestPrisma();
+    const day = new Date('2026-04-25T00:00:00.000Z');
+
+    // userA still exists; "ghost" is a cuid-shaped id that points to no User row.
+    const ghostId = 'c' + 'z'.repeat(24); // 25 chars, cuid-shaped, will never collide.
+    expect(await db.user.findUnique({ where: { id: ghostId } })).toBeNull();
+
+    await db.analyticsEvent.createMany({
+      data: [
+        // Valid: should be rolled up normally.
+        { event: 'wish.created', userId: userA, createdAt: new Date('2026-04-25T10:00:00.000Z') },
+        // Dangling: must be dropped before upsert, not crash the whole day.
+        { event: 'wish.created', userId: ghostId, createdAt: new Date('2026-04-25T11:00:00.000Z') },
+        { event: 'paywall.viewed', userId: ghostId, createdAt: new Date('2026-04-25T12:00:00.000Z') },
+      ],
+    });
+
+    // Must NOT throw — that was the bug.
+    const result = await aggregateDay(db, day, { logger: silentLogger });
+    expect(result.events).toBe(3); // all three were scanned
+    expect(result.users).toBe(1);  // ghost dropped before upsert; only userA remained
+
+    const rowA = await db.userDailyActivity.findUnique({
+      where: { userId_date: { userId: userA, date: day } },
+    });
+    expect(rowA!.createdRealWish).toBe(1);
+
+    const rowGhost = await db.userDailyActivity.findUnique({
+      where: { userId_date: { userId: ghostId, date: day } },
+    });
+    expect(rowGhost).toBeNull();
+  });
+
   it('aggregateDateRange covers an inclusive [from, to] window day-by-day', async () => {
     const db = getTestPrisma();
     const from = new Date('2026-04-21T00:00:00.000Z');

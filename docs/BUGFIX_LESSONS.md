@@ -5,6 +5,138 @@ New entries go at the top.
 
 ---
 
+## 2026-05-19 — `daily-activity` rollup падал на FK violation у удалённых users
+
+### Симптом
+
+Сразу после деплоя `0cf385a` (новый UserDailyActivity rollup) первый
+ручной prod-backfill упал:
+
+```
+[backfill-daily-activity] from=2026-02-19 to=2026-05-19 days=90
+[backfill-daily-activity] fatal:
+Invalid `prisma.userDailyActivity.upsert()` invocation:
+Foreign key constraint failed on the field: `UserDailyActivity_userId_fkey (index)`
+```
+
+Dry-run (`--dry-run --days 90`) проходил чисто: 90 дней, 64 user-day,
+152 events, ноль ошибок. Реальный backfill сразу 23503-нулся. Если бы
+не ручной gate перед записью, то же самое случилось бы со scheduler'ом
+на следующем hourly tick'е — и наполнение таблицы тихо бы стопалось.
+
+### Root cause
+
+`AnalyticsEvent.userId` — soft pointer:
+
+```prisma
+model AnalyticsEvent {
+  ...
+  userId    String?   // nullable, NO foreign key
+  ...
+}
+```
+
+(см. [schema.prisma:1369-1382](../packages/db/prisma/schema.prisma)).
+Когда `User` hard-удаляется, его строки в AnalyticsEvent остаются —
+это by design, чтобы god-mode сегментные запросы не теряли историю.
+
+Моя свежая `UserDailyActivity`, наоборот, объявлена с
+`ON DELETE CASCADE` FK на `User.id`:
+
+```sql
+CONSTRAINT "UserDailyActivity_userId_fkey"
+  FOREIGN KEY ("userId") REFERENCES "User"("id") ...
+```
+
+(см. [packages/db/prisma/migrations/20260520000000_add_user_daily_activity/migration.sql](../packages/db/prisma/migrations/20260520000000_add_user_daily_activity/migration.sql)).
+
+CASCADE решает будущие удаления, но не помогает на INSERT для уже
+удалённого user'а. На проде: 34 dangling cuid'а, 175 events за 90
+дней. Самые "толстые" 13 events на один ghost-id. После
+сегодняшней миграции [20260519180000_normalize_analyticsevent_userid](../packages/db/prisma/migrations/20260519180000_normalize_analyticsevent_userid/migration.sql)
+весь numeric-telegram-id мусор был зачищен в NULL, но dangling-cuid
+(удалённые после нормализации users) — отдельный класс данных.
+
+В `aggregateDay()` я брал `prisma.analyticsEvent.findMany` без
+проверки существования user'а и сразу шёл в `prisma.userDailyActivity.upsert` —
+первая попавшаяся осиротевшая строка ломала весь день, а с ним и
+всю range-операцию backfill'а.
+
+### Урок
+
+**`AnalyticsEvent.userId` ≠ валидный `User.id` живого user'а.** Это
+nullable soft pointer, который **может указывать на**:
+
+1. Существующий `User.id` (cuid) — happy path.
+2. `NULL` — анонимные / системные events.
+3. **Cuid удалённого user'а** — long tail, постоянно растёт.
+
+Любой код, который upsert'ит производную таблицу с FK на `User`, обязан
+явно фильтровать (3) до записи. Тест на чистом mock'е не ловит — у мока
+нет понятия FK. Нужен integration test против живого Postgres'а с
+заранее-известно-несуществующим userId в AnalyticsEvent.
+
+Дополнительный урок: **dry-run не покрывает write path'и**. Мой
+`--dry-run --days 90` пробежал чисто, потому что fatal жил в `upsert`,
+а `dryRun: true` ровно его и пропускал. То есть текущая семантика
+dry-run'а помогает оценить scale (объём rows / events), но не
+verify-ить, что write actually works. Это feature, не bug — но
+называть `dry-run` "проверкой готовности к real backfill" — leak of
+abstraction. См. правило ниже.
+
+### Правило
+
+1. **Любая новая таблица с FK на `User`, которая заполняется из
+   `AnalyticsEvent`, должна фильтровать `userId` через лукап в `User`
+   перед записью.** Шаблон:
+
+   ```ts
+   const candidateIds = Array.from(byUser.keys());
+   const existing = await prisma.user.findMany({
+     where: { id: { in: candidateIds } },
+     select: { id: true },
+   });
+   const validIds = new Set(existing.map((u) => u.id));
+   for (const id of candidateIds) if (!validIds.has(id)) byUser.delete(id);
+   ```
+
+2. **Drop-count должен попадать в логи и в return-shape** (`droppedUsers`
+   в `AggregateDayResult`), иначе массовая чистка users проедет молча.
+
+3. **Integration test обязателен** на dangling-userId case — unit-test
+   с mock-Prisma не отлавливает FK 23503. Тест должен создавать
+   `AnalyticsEvent` с cuid-shaped id, которого нет в `User`, и
+   утверждать, что `aggregateDay` не throw'ит, ghost-bucket дропается,
+   валидные users по-прежнему upsert'ятся. См.
+   [`apps/api/test/integration/daily-activity-rollup.test.ts`](../apps/api/test/integration/daily-activity-rollup.test.ts)
+   "drops events whose userId no longer exists in User".
+
+4. **Dry-run в backfill-скриптах НЕ доказывает, что real write
+   пройдёт.** Минимум, что dry-run проверяет — read path + range
+   шейп + распределение counters. Для real-write confidence нужен
+   integration test или ручной smoke на single day (`--from D --to D`,
+   not 90).
+
+### Лучший код
+
+`apps/api/src/services/daily-activity.service.ts`:
+- `aggregateDay` после `mapEventsToCounters` делает `prisma.user.findMany`
+  по distinct userIds бакета, выкидывает несуществующих, инкрементит
+  локальный `droppedUsers`.
+- `AggregateDayResult` теперь содержит `droppedUsers: number`.
+- Logger emits `droppedUsers` в каждом `[daily-activity] day aggregated`.
+
+`apps/api/src/scripts/backfill-daily-activity.ts`:
+- Per-day строка показывает `droppedUsers=N` если N > 0.
+- Финальный summary: `droppedUsers=<sum>` всегда.
+
+`apps/api/test/integration/daily-activity-rollup.test.ts`:
+- Новый тест "drops events whose userId no longer exists in User" с
+  cuid-shaped ghost id (`'c' + 'z'.repeat(24)`), assertion на отсутствие
+  throw + drop ghost-bucket + сохранение valid bucket.
+
+---
+
 ## 2026-05-19 — Survey recipient dry-run падал на двух raw-SQL запросах
 
 ### Симптом

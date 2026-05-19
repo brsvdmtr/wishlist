@@ -94,18 +94,22 @@ async function main(): Promise<void> {
 
   let totalUsers = 0;
   let totalEvents = 0;
+  let totalDropped = 0;
   for (const r of results) {
     totalUsers += r.users;
     totalEvents += r.events;
+    totalDropped += r.droppedUsers;
+    const droppedTag = r.droppedUsers > 0 ? ` droppedUsers=${r.droppedUsers}` : '';
     console.log(
       `[backfill-daily-activity] ${r.date.toISOString().slice(0, 10)}: ` +
-        `users=${r.users} events=${r.events}${r.dryRun ? ' [dry]' : ''}`,
+        `users=${r.users} events=${r.events}${droppedTag}${r.dryRun ? ' [dry]' : ''}`,
     );
   }
 
   console.log(
     `[backfill-daily-activity] done: days=${results.length} ` +
-      `userDayRows=${totalUsers} eventsScanned=${totalEvents}` +
+      `userDayRows=${totalUsers} eventsScanned=${totalEvents} ` +
+      `droppedUsers=${totalDropped}` +
       (args.dryRun ? ' [no writes]' : ''),
   );
 }

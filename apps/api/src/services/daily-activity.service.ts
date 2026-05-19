@@ -152,10 +152,18 @@ export type AggregateDayOptions = {
 export type AggregateDayResult = {
   /** UTC start-of-day Date that was aggregated. */
   date: Date;
-  /** Distinct users that had ≥1 tracked event on this day. */
+  /** Distinct users that had ≥1 tracked event on this day AND still exist in `User`. */
   users: number;
   /** Raw AnalyticsEvent rows scanned for this day. */
   events: number;
+  /**
+   * Distinct user-buckets dropped pre-upsert because their userId no longer
+   * resolves to a `User` row (hard-deleted account). `AnalyticsEvent.userId`
+   * is a soft pointer (no FK); `UserDailyActivity.userId` enforces FK, so
+   * we filter the gap explicitly. Surfaced for ops visibility — a sudden
+   * spike here means somebody bulk-deleted users, not a data corruption.
+   */
+  droppedUsers: number;
   /** Whether DB writes were skipped (dryRun=true). */
   dryRun: boolean;
 };
@@ -188,6 +196,29 @@ export async function aggregateDay(
 
   const byUser = mapEventsToCounters(rows);
 
+  // FK safety: AnalyticsEvent.userId is a soft pointer (nullable, no FK,
+  // matches schema.prisma:1369-1382). UserDailyActivity.userId DOES enforce
+  // a CASCADE FK on User. If a user got hard-deleted after their events
+  // landed in the log, the bucket survives in `byUser` here but the
+  // subsequent upsert would 23503 P2003. The 2026-05-19 prod backfill
+  // surfaced this with 34 dangling cuids over 175 events; see the
+  // matching entry in docs/BUGFIX_LESSONS.md.
+  let droppedUsers = 0;
+  if (byUser.size > 0) {
+    const candidateIds = Array.from(byUser.keys());
+    const existing = await prisma.user.findMany({
+      where: { id: { in: candidateIds } },
+      select: { id: true },
+    });
+    const validIds = new Set(existing.map((u) => u.id));
+    for (const id of candidateIds) {
+      if (!validIds.has(id)) {
+        byUser.delete(id);
+        droppedUsers += 1;
+      }
+    }
+  }
+
   if (!opts.dryRun) {
     for (const [userId, counters] of byUser) {
       const data: Prisma.UserDailyActivityUncheckedCreateInput = {
@@ -208,6 +239,7 @@ export async function aggregateDay(
       date: start.toISOString().slice(0, 10),
       users: byUser.size,
       events: rows.length,
+      droppedUsers,
       dryRun: !!opts.dryRun,
     },
     '[daily-activity] day aggregated',
@@ -217,6 +249,7 @@ export async function aggregateDay(
     date: start,
     users: byUser.size,
     events: rows.length,
+    droppedUsers,
     dryRun: !!opts.dryRun,
   };
 }
