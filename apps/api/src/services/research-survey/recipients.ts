@@ -371,7 +371,8 @@ async function classifyS8(userIds: string[], now: Date): Promise<{ userId: strin
 // proportionally to remaining eligible count.
 // Within each subtype: shuffle (seeded if provided), then take N.
 // ─────────────────────────────────────────────────────────────────────
-function stratifiedSample(
+/** @internal exposed for unit tests; not part of the module's public API. */
+export function stratifiedSample(
   pool: { userId: string; subtype: S8Subtype }[],
   localeByUser: Map<string, SurveyLocale>,
   cap: number,
