@@ -246,14 +246,17 @@ async function querySegmentS7(userIds: string[], now: Date): Promise<string[]> {
 
 async function querySegmentS5(userIds: string[]): Promise<string[]> {
   if (userIds.length === 0) return [];
+  // S5 = users who reserved at least one foreign item via ReservationMeta.
+  // `reserverUserId` lives on ReservationMeta (NOT ReservationEvent — that
+  // table only has `actorHash`). Owner is on Wishlist via Item.
   const rows = await prisma.$queryRaw<{ userId: string }[]>`
-    SELECT DISTINCT r."reserverUserId" AS "userId"
-    FROM "ReservationEvent" r
-    JOIN "Item" i ON i.id = r."itemId"
+    SELECT DISTINCT rm."reserverUserId" AS "userId"
+    FROM "ReservationMeta" rm
+    JOIN "Item" i ON i.id = rm."itemId"
     JOIN "Wishlist" w ON w.id = i."wishlistId"
-    WHERE r."reserverUserId" IS NOT NULL
-      AND r."reserverUserId" = ANY(${userIds}::text[])
-      AND w."ownerId" <> r."reserverUserId"
+    WHERE rm."active" = true
+      AND rm."reserverUserId" = ANY(${userIds}::text[])
+      AND w."ownerId" <> rm."reserverUserId"
   `;
   return rows.map((r) => r.userId);
 }
@@ -331,16 +334,20 @@ async function classifyS8(userIds: string[], now: Date): Promise<{ userId: strin
     },
   });
 
-  // Guest engagement check: ReservationMeta where ownerId = user AND active=true.
-  // Done in a separate query keyed on the inactive set to keep the user select narrow.
+  // Guest engagement check: does this inactive user (as wishlist owner) have
+  // any active foreign reservation? ReservationMeta doesn't store ownerId
+  // directly — the owner is on Wishlist via Item, so we join through.
   const inactiveIds = users.map((u) => u.id);
   const guestEngagedSet = new Set<string>();
   if (inactiveIds.length > 0) {
     const rows = await prisma.$queryRaw<{ ownerId: string }[]>`
-      SELECT DISTINCT r."ownerId"
-      FROM "ReservationMeta" r
-      WHERE r."ownerId" = ANY(${inactiveIds}::text[])
-        AND r."active" = true
+      SELECT DISTINCT w."ownerId"
+      FROM "ReservationMeta" rm
+      JOIN "Item" i ON i.id = rm."itemId"
+      JOIN "Wishlist" w ON w.id = i."wishlistId"
+      WHERE rm."active" = true
+        AND w."ownerId" = ANY(${inactiveIds}::text[])
+        AND w."ownerId" <> rm."reserverUserId"
     `;
     for (const r of rows) guestEngagedSet.add(r.ownerId);
   }

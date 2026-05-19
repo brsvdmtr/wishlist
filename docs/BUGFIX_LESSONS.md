@@ -5,6 +5,71 @@ New entries go at the top.
 
 ---
 
+## 2026-05-19 — Survey recipient dry-run падал на двух raw-SQL запросах
+
+### Симптом
+Первый dry-run `selectSurveyRecipients` на проде упал с
+```
+Raw query failed. Code: `42703`.
+Message: `column r.reserverUserId does not exist`
+```
+из `querySegmentS5`. Параллельно второй раздел (`classifyS8` → guest engagement)
+читал `ReservationMeta.ownerId`, которого тоже нет — но до него управление
+не доходило, потому что S5 валилась первой.
+
+Юнит-тесты по `stratifiedSample` (9 штук) проходили зелёным, а интеграционный
+смок по `selectSurveyRecipients` я не написал — там были `RC-*` пункты в
+плане, но реализован только `RC-9` (стратификация). Эти `prisma.$queryRaw`
+шаблоны на реальной схеме ни разу не запускались до прода.
+
+### Root cause
+`apps/api/src/services/research-survey/recipients.ts` имел два склеенных
+домысла на тему схемы:
+
+1. `querySegmentS5` собирал «гостевых резерверов» из `ReservationEvent`. У
+   `ReservationEvent` нет `reserverUserId` — там только `actorHash`.
+   Колонка `reserverUserId` живёт на `ReservationMeta` (см.
+   [schema.prisma:1698-1726](../packages/db/prisma/schema.prisma)).
+2. `classifyS8` для guest engagement читал `ReservationMeta.ownerId` —
+   такого столбца у `ReservationMeta` нет вообще. Owner лежит на
+   `Wishlist.ownerId` и достижим только через join `Item → Wishlist`.
+
+Корень обеих ошибок один: я предположил денормализацию там, где её нет.
+В реальной схеме reserver-ownership резолвится через item, а не через
+прямую ссылку на ReservationMeta.
+
+### Урок
+Прохожу глазами `schema.prisma` — это не то же самое, что прогнать
+запрос. Raw SQL никогда не получает помощи от Prisma при типизации
+полей; одна неверная буква = 500 в проде. Если query touches таблицы
+которые я лично не писал в текущем PR, нужен интеграционный тест,
+который этот SQL прогонит через реальную схему.
+
+### Правило
+Любой `prisma.$queryRaw` шаблон в новом сервисе должен сопровождаться
+интеграционным тестом, который вызывает обёртку (а не SQL напрямую) и
+ассертит `expect(rows.length).toBe(N)`. Тест должен ехать через CI
+Postgres service. Unit-тесты по чистым функциям внутри того же файла
+**не** покрывают raw-SQL — это разные слои.
+
+### Лучший код
+- `querySegmentS5` теперь джойнит `ReservationMeta → Item → Wishlist`,
+  фильтрует `rm.active = true`, `w."ownerId" <> rm."reserverUserId"`.
+- `classifyS8` guest-engagement подзапрос тоже идёт через джойн с
+  `Item → Wishlist`, плюс явный `w."ownerId" <> rm."reserverUserId"`
+  чтобы self-reservation не считалась за гостевое движение.
+- Новый
+  [`apps/api/test/integration/research-survey-recipients.test.ts`](../apps/api/test/integration/research-survey-recipients.test.ts):
+  9 тестов на S5 happy/self-reserve/inactive-meta, S8
+  activated_then_churned vs shared_no_guest_action, base-filter
+  exclusions (godMode / notifyMarketing / new-user-7d) + read-only
+  side-effect assertion. Auto-skip без `DATABASE_URL`, на CI едет на
+  настоящем Postgres.
+- При следующем dry-run эти ветки прогрелись бы локально, а не падали
+  бы 500 в проде на read-only команде.
+
+---
+
 ## 2026-05-19 — `AnalyticsEvent.userId` гетерогенное поле (cuid + telegramId)
 
 ### Симптом
