@@ -242,6 +242,8 @@ model User {
   // onboarding again when switching devices (was localStorage-only before,
   // which made every fresh client re-run the flow).
   calendarOnboardingSeenAt DateTime?
+
+  dailyActivity            UserDailyActivity[]
 }
 
 model Wishlist {
@@ -1379,6 +1381,41 @@ model AnalyticsEvent {
 
   @@index([event, createdAt])
   @@index([userId, event])
+}
+
+// Daily product-loop rollup — one row per (userId, UTC calendar day).
+// Source = AnalyticsEvent, which has a 90-day TTL. The aggregator runs
+// hourly and re-computes yesterday + today in UTC, idempotently upserting
+// by (userId, date). Survives the AnalyticsEvent TTL so D30/D60/D90
+// cohorts, share rate D7, guest→owner D7, reservation rate, and paywall
+// conversion stay queryable indefinitely. See:
+//   - apps/api/src/services/daily-activity.service.ts (event→field mapping)
+//   - apps/api/src/schedulers/daily-activity-rollup.ts (hourly cron)
+//   - apps/api/src/scripts/backfill-daily-activity.ts (one-shot backfill)
+//   - docs/research/core-loop-dashboard.md (SQL panels)
+model UserDailyActivity {
+  userId                String
+  date                  DateTime @db.Date // UTC calendar day
+  sessionStarted        Int      @default(0)
+  createdRealWish       Int      @default(0)
+  createdWishlist       Int      @default(0)
+  sharedWishlist        Int      @default(0)
+  guestOpened           Int      @default(0)
+  reservedItem          Int      @default(0)
+  convertedGuestToOwner Int      @default(0)
+  paywallViewed         Int      @default(0)
+  checkoutStarted       Int      @default(0)
+  paymentCompleted      Int      @default(0)
+  proActivated          Int      @default(0)
+  usedUrlImport         Int      @default(0)
+  usedHint              Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, date])
+  @@index([date])
 }
 
 // Santa-flow item reservation: tracks which wishlist items the giver has "claimed"

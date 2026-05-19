@@ -90,6 +90,7 @@ import { startLifecycleScheduler } from './schedulers/lifecycle';
 import { startProRenewalReminderScheduler } from './schedulers/pro-renewal';
 import { startBirthdayRemindersScheduler } from './schedulers/birthday-reminders';
 import { startResearchSurveySendScheduler } from './schedulers/research-survey-send';
+import { startDailyActivityRollupScheduler } from './schedulers/daily-activity-rollup';
 import { createSendLifecycleDM } from './services/lifecycle';
 import { daysUntilNextBirthday, pickBirthdayDisplayName } from './services/birthday-reminders';
 import {
@@ -1799,6 +1800,13 @@ startBirthdayRemindersScheduler({
 // tick so ops can toggle without restart. See
 // apps/api/src/schedulers/research-survey-send.ts.
 startResearchSurveySendScheduler({ logger });
+
+// Daily product-loop rollup. Hourly tick re-aggregates AnalyticsEvent
+// for yesterday + today (UTC) into UserDailyActivity. Idempotent upsert
+// on (userId, date); see services/daily-activity.service.ts and
+// docs/research/core-loop-dashboard.md. Survives the 90-day
+// AnalyticsEvent TTL so D60/D90 cohorts stay queryable.
+startDailyActivityRollupScheduler({ prisma, logger });
 
 // ─── Batch 4.1: Santa Campaign Chat ──────────────────────────────────────────
 
