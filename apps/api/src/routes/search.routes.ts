@@ -126,7 +126,10 @@ export function registerSearchRouter(deps: SearchRouterDeps): Router {
       // Telemetry — privacy-safe. We log a one-way SHA-1 hash of the
       // normalized query, NEVER the query itself. queryLength + resultCount
       // are aggregate.
-      const tgUserId = req.tgUser?.id != null ? String(req.tgUser.id) : undefined;
+      //
+      // userId is the internal cuid (`user.id` from getOrCreateTgUser earlier
+      // in this handler), NOT String(req.tgUser?.id). See docs/analytics-events.md
+      // § «userId column contract».
       const normalizedLen = response.normalizedQuery.length;
       const normalizedHash =
         normalizedLen >= 2
@@ -139,7 +142,7 @@ export function registerSearchRouter(deps: SearchRouterDeps): Router {
         try {
           trackAnalyticsEvent({
             event: 'search.query_completed',
-            userId: tgUserId,
+            userId: user.id,
             props: {
               queryLength: normalizedLen,
               normalizedQueryHash: normalizedHash,
