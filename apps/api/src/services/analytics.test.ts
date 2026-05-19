@@ -28,7 +28,7 @@ vi.mock('../logger', () => ({
   },
 }));
 
-import { trackEvent, trackAnalyticsEvent } from './analytics';
+import { trackEvent, trackAnalyticsEvent, trackProductEvent } from './analytics';
 import { ANALYTICS_EVENTS } from '@wishlist/shared';
 
 beforeEach(() => {
@@ -153,6 +153,76 @@ describe('trackAnalyticsEvent — allowlist + truncation', () => {
   it('swallows Prisma write errors', async () => {
     shared.create.mockRejectedValueOnce(new Error('DB locked'));
     expect(() => trackAnalyticsEvent({ event: knownEvent, userId: 'u1' })).not.toThrow();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(shared.loggerDebug).toHaveBeenCalled();
+  });
+});
+
+describe('trackProductEvent — typed taxonomy helper', () => {
+  it('persists a serverOnly event (payment.completed) from backend code', () => {
+    trackProductEvent({ event: 'payment.completed', userId: 'u1', props: { amount: 100 } });
+    expect(shared.create).toHaveBeenCalledOnce();
+    const args = shared.create.mock.calls[0]![0];
+    expect(args.data.event).toBe('payment.completed');
+    expect(args.data.userId).toBe('u1');
+    expect(args.data.props).toEqual({ amount: 100 });
+  });
+
+  it('persists a clientAllowed event (paywall.viewed)', () => {
+    trackProductEvent({ event: 'paywall.viewed', userId: 'u1', props: { plan: 'monthly' } });
+    expect(shared.create).toHaveBeenCalledOnce();
+    expect(shared.create.mock.calls[0]![0].data.event).toBe('paywall.viewed');
+  });
+
+  it('persists pro.activated and subscription.renewed (server-authoritative)', () => {
+    trackProductEvent({ event: 'pro.activated', userId: 'u1' });
+    trackProductEvent({ event: 'subscription.renewed', userId: 'u1' });
+    expect(shared.create).toHaveBeenCalledTimes(2);
+    expect(shared.create.mock.calls[0]![0].data.event).toBe('pro.activated');
+    expect(shared.create.mock.calls[1]![0].data.event).toBe('subscription.renewed');
+  });
+
+  it('silently drops events not in PRODUCT_EVENTS (defense in depth)', () => {
+    // Compile-time `event` is typed, but a caller reaching this through
+    // `any`-typed dispatch should still be rejected at runtime.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    trackProductEvent({ event: 'definitely_not_in_product_events' as any, userId: 'u1' });
+    expect(shared.create).not.toHaveBeenCalled();
+  });
+
+  it('does NOT accept legacy ANALYTICS_EVENTS names (wishlist.created)', () => {
+    // The typed helper is intentionally distinct from `trackAnalyticsEvent`.
+    // A legacy event name is not in PRODUCT_EVENTS and gets dropped here.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    trackProductEvent({ event: 'wishlist.created' as any, userId: 'u1' });
+    expect(shared.create).not.toHaveBeenCalled();
+  });
+
+  it('passes null userId through when not provided', () => {
+    trackProductEvent({ event: 'paywall.viewed' });
+    expect(shared.create).toHaveBeenCalledOnce();
+    expect(shared.create.mock.calls[0]![0].data.userId).toBeNull();
+  });
+
+  it('truncates long string props (300 char cap)', () => {
+    const long = 'x'.repeat(500);
+    trackProductEvent({ event: 'paywall.viewed', userId: 'u1', props: { msg: long } });
+    const stored = shared.create.mock.calls[0]![0].data.props;
+    expect(stored.msg.length).toBe(303);
+    expect(stored.msg.endsWith('...')).toBe(true);
+  });
+
+  it('replaces props with { _truncated: true } when serialised > 1024 bytes', () => {
+    const props: Record<string, string> = {};
+    for (let i = 0; i < 10; i++) props[`k${i}`] = 'a'.repeat(200);
+    trackProductEvent({ event: 'paywall.viewed', userId: 'u1', props });
+    expect(shared.create.mock.calls[0]![0].data.props).toEqual({ _truncated: true });
+  });
+
+  it('swallows Prisma write errors and logs debug', async () => {
+    shared.create.mockRejectedValueOnce(new Error('DB locked'));
+    expect(() => trackProductEvent({ event: 'paywall.viewed', userId: 'u1' })).not.toThrow();
     await Promise.resolve();
     await Promise.resolve();
     expect(shared.loggerDebug).toHaveBeenCalled();

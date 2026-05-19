@@ -219,3 +219,207 @@ export const ANALYTICS_EVENTS = [
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRODUCT EVENT TAXONOMY (typed registry, foundation for new events)
+//
+// `ANALYTICS_EVENTS` above is the LEGACY allowlist — kept untouched so existing
+// dashboards and `trackAnalyticsEvent`/`trackEvent` call-sites keep working.
+//
+// `PRODUCT_EVENTS` below is the NEW source-of-truth for product events going
+// forward. Every new event MUST land here with a descriptor declaring:
+//   • domain.action name
+//   • description
+//   • sources — `'server'` / `'client'` / `'bot'`. Drives the allowlist on
+//     `/tg/telemetry`: `serverOnly` events are HARD-DENIED on ingest, even if
+//     their legacy domain prefix would otherwise accept them. This is the
+//     core security invariant — clients must not be able to spoof revenue,
+//     entitlement, or PRO-status events.
+//   • pii — `'none'` (safe), `'hashed'` (only hashed identifiers in props),
+//     or `'userId-only'` (props reference the canonical user row, no raw PII).
+//
+// See `docs/analytics-events.md` for naming rules and adoption checklist.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ProductEventSource = 'server' | 'client' | 'bot';
+
+export interface ProductEventDescriptor {
+  readonly name: string;
+  readonly domain: string;
+  readonly action: string;
+  readonly description: string;
+  readonly sources: readonly ProductEventSource[];
+  readonly pii: 'none' | 'hashed' | 'userId-only';
+}
+
+// IMPORTANT — invariant maintained by `analyticsEvents.test.ts`:
+//   1. Every name matches `^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$` (domain.action,
+//      lowercase, single dot, snake_case allowed in segments).
+//   2. `domain` and `action` always match the parsed segments of `name`.
+//   3. No duplicate names across PRODUCT_EVENTS or vs. ANALYTICS_EVENTS legacy.
+//   4. `sources` is non-empty.
+// Breaking any of these fails CI at the snapshot test in `analyticsEvents.test.ts`.
+export const PRODUCT_EVENTS = [
+  // ── Revenue / entitlement (server-authoritative) ──
+  {
+    name: 'payment.completed',
+    domain: 'payment',
+    action: 'completed',
+    description:
+      'Successful Telegram Stars payment confirmed by the server. Authoritative input for revenue dashboards. NEVER trust a client-side mirror of this.',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'pro.activated',
+    domain: 'pro',
+    action: 'activated',
+    description:
+      'Pro entitlement granted (paid purchase, lifetime, referral reward, or admin grant). Server emits at the moment the entitlement row is written.',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'subscription.renewed',
+    domain: 'subscription',
+    action: 'renewed',
+    description:
+      'Auto-renewal of a recurring Pro subscription via Telegram Stars. Server-only — client cannot observe the renewal cycle.',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'subscription.expired',
+    domain: 'subscription',
+    action: 'expired',
+    description:
+      'Subscription crossed its currentPeriodEnd without renewal. Emitted by the expiry-sweep scheduler.',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'user.signup',
+    domain: 'user',
+    action: 'signup',
+    description:
+      'First-ever User row created from a Telegram auth payload. Server-side truth for cohort/funnel counts.',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'guest.converted_to_user',
+    domain: 'guest',
+    action: 'converted_to_user',
+    description:
+      'A previously anonymous guest session became an authenticated user. Server-only conversion signal.',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  // ── Paywall UI (client-allowed) ──
+  {
+    name: 'paywall.viewed',
+    domain: 'paywall',
+    action: 'viewed',
+    description:
+      'Paywall sheet rendered to the user. UI impression — emitted from the Mini App.',
+    sources: ['client'],
+    pii: 'none',
+  },
+  {
+    name: 'paywall.cta_clicked',
+    domain: 'paywall',
+    action: 'cta_clicked',
+    description:
+      'User tapped the primary CTA on a paywall (purchase/upgrade). Intent signal — does NOT prove payment.',
+    sources: ['client'],
+    pii: 'none',
+  },
+  // ── Other client-side product signals ──
+  {
+    name: 'wishlist.shared',
+    domain: 'wishlist',
+    action: 'shared',
+    description:
+      'Client-side native share completed (Telegram share sheet, copy-link success). Server emits a separate event for token generation.',
+    sources: ['client'],
+    pii: 'none',
+  },
+  {
+    name: 'user.session_started',
+    domain: 'user',
+    action: 'session_started',
+    description:
+      'Mini App opened and bootstrapped for a known user. Used to compute DAU / session-length.',
+    sources: ['client'],
+    pii: 'none',
+  },
+] as const satisfies readonly ProductEventDescriptor[];
+
+export type ProductEventName = (typeof PRODUCT_EVENTS)[number]['name'];
+
+const PRODUCT_EVENT_BY_NAME: ReadonlyMap<string, ProductEventDescriptor> = new Map(
+  PRODUCT_EVENTS.map((e) => [e.name, e]),
+);
+
+const ANALYTICS_EVENTS_SET: ReadonlySet<string> = new Set(ANALYTICS_EVENTS);
+
+/** Typed input for `trackProductEvent`. Compile-time guarantees the name is in
+ *  `PRODUCT_EVENTS`. Props remain free-form for now; per-event prop typings can
+ *  be added later via TS module augmentation without breaking call-sites. */
+export interface ProductEventInput<E extends ProductEventName = ProductEventName> {
+  event: E;
+  userId?: string;
+  props?: Record<string, unknown>;
+}
+
+/** True if the name is in either the new PRODUCT_EVENTS registry or the legacy
+ *  ANALYTICS_EVENTS allowlist. Use this for read paths that don't care about
+ *  source-permissions (e.g. validation in admin dashboards). */
+export function isKnownAnalyticsEvent(name: string): boolean {
+  return PRODUCT_EVENT_BY_NAME.has(name) || ANALYTICS_EVENTS_SET.has(name);
+}
+
+/** True if the name belongs to PRODUCT_EVENTS (new typed taxonomy). */
+export function isProductEvent(name: string): name is ProductEventName {
+  return PRODUCT_EVENT_BY_NAME.has(name);
+}
+
+/** Lookup the descriptor for a PRODUCT_EVENTS entry — used by helpers/tests. */
+export function getProductEvent(name: string): ProductEventDescriptor | undefined {
+  return PRODUCT_EVENT_BY_NAME.get(name);
+}
+
+/** True if `name` is a PRODUCT_EVENTS entry that lists `'client'` among
+ *  allowed sources. This is the ONLY check `/tg/telemetry` uses to grant
+ *  exact-match acceptance for the new taxonomy. Legacy prefix/exact lists
+ *  remain in place for old events. */
+export function isClientTelemetryAllowedEvent(name: string): boolean {
+  const d = PRODUCT_EVENT_BY_NAME.get(name);
+  return !!d && d.sources.includes('client');
+}
+
+/** True if `name` is a PRODUCT_EVENTS entry that lists `'server'` among
+ *  allowed sources. The backend product-event helper uses this to gate
+ *  `trackProductEvent` writes. */
+export function isServerProductEvent(name: string): boolean {
+  const d = PRODUCT_EVENT_BY_NAME.get(name);
+  return !!d && d.sources.includes('server');
+}
+
+/** True if `name` is a PRODUCT_EVENTS entry whose `sources` is EXACTLY
+ *  `['server']` — no client, no bot. `/tg/telemetry` hard-denies these
+ *  before consulting any prefix list, so a serverOnly event in a legacy
+ *  prefix-accepted domain (e.g. `payment.`) is still blocked at ingest.
+ *  This is the spoof-prevention invariant. */
+export function isServerOnlyProductEvent(name: string): boolean {
+  const d = PRODUCT_EVENT_BY_NAME.get(name);
+  return !!d && d.sources.length === 1 && d.sources[0] === 'server';
+}
+
+/** True if `name` is a PRODUCT_EVENTS entry that lists `'bot'` among allowed
+ *  sources. Used by the Telegram bot codepath when persisting handler-level
+ *  events (start command, callback queries). */
+export function isBotProductEvent(name: string): boolean {
+  const d = PRODUCT_EVENT_BY_NAME.get(name);
+  return !!d && d.sources.includes('bot');
+}

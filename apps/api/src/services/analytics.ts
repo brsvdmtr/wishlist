@@ -1,38 +1,45 @@
 // Analytics layer (P5s-5 — extracted from apps/api/src/index.ts).
 //
-// Two pure stateless helpers that wrap `prisma.analyticsEvent.create(...)`:
+// Three pure stateless helpers that wrap `prisma.analyticsEvent.create(...)`:
 //
-//   - `trackEvent(event, userId?, props?)` — logs every call (`logger.info`)
-//     and conditionally persists to `AnalyticsEvent` for events whose
-//     name matches the in-body prefix allowlist (feature_gate_hit_,
+//   - `trackEvent(event, userId?, props?)` — LEGACY. Logs every call
+//     (`logger.info`) and conditionally persists to `AnalyticsEvent` for events
+//     whose name matches the in-body prefix allowlist (feature_gate_hit_,
 //     onboarding_, demo_item_, gift_, first_share_prompt_,
 //     ready_share_prompt_, group_gift_, secret_res., showcase.,
 //     public_profile., error:). Persistence requires `userId`.
 //
-//   - `trackAnalyticsEvent({ event, userId?, props? })` — checks the
+//   - `trackAnalyticsEvent({ event, userId?, props? })` — LEGACY. Checks the
 //     `ANALYTICS_EVENTS` allowlist from `@wishlist/shared`, applies
 //     per-string truncation to props (300 chars) plus a 1024-byte total
 //     cap (replaces with `{ _truncated: true }` if exceeded), then
 //     persists. Silently drops events not in the allowlist.
 //
-// Both are fire-and-forget: Prisma write errors are swallowed via
+//   - `trackProductEvent({ event, userId?, props? })` — NEW typed entry point
+//     for the unified `domain.action` taxonomy in `PRODUCT_EVENTS`. The
+//     `event` parameter is statically constrained to `ProductEventName`, so
+//     a typo or undeclared event name fails the build. Use this for any new
+//     product event going forward; see `docs/analytics-events.md` for the
+//     adoption rules. Server-authoritative events (`payment.completed`,
+//     `pro.activated`, `subscription.*`, `user.signup`, `guest.converted_to_user`)
+//     MUST be written via this helper from backend code — `/tg/telemetry`
+//     hard-denies them on ingest, so a client cannot spoof them.
+//
+// All three are fire-and-forget: Prisma write errors are swallowed via
 // `.catch(...)` and logged at debug level. There is **no in-memory
 // buffer, no flush timer, no shutdown drain** — every call is an
 // independent atomic Prisma promise. This is intentional: each event
 // is either persisted or lost in isolation, and the catch-handler
 // downgrades any DB hiccup to a debug-log line so request paths never
 // fail because of analytics back-pressure.
-//
-// Bodies are byte-identical to their previous in-place definitions in
-// index.ts (lines 301–323 + 331 + 333–352).
-//
-// Strategy A: source moves here; routes/schedulers/services continue
-// receiving these via existing factory deps — signatures unchanged.
-// Index.ts imports both functions and continues threading them through
-// the 21 register*Router/start*Scheduler factory call-sites.
 
 import { prisma } from '@wishlist/db';
-import { ANALYTICS_EVENTS } from '@wishlist/shared';
+import {
+  ANALYTICS_EVENTS,
+  isProductEvent,
+  type ProductEventInput,
+  type ProductEventName,
+} from '@wishlist/shared';
 import logger from '../logger';
 
 // Allowlist sourced from @wishlist/shared so API + frontend + any other
@@ -84,4 +91,36 @@ export function trackAnalyticsEvent(params: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data: { event: params.event, userId: params.userId ?? null, props: props ? (props as any) : undefined },
   }).catch((e) => logger.debug({ err: e, event: params.event }, 'analytics write failed'));
+}
+
+// Typed entry point for the new PRODUCT_EVENTS taxonomy. The event name is
+// constrained at compile time, so undeclared names fail typecheck — this is
+// the foundation referenced in CLAUDE.md's analytics rule "new events must be
+// typed". Runtime allowlist check is a defense-in-depth pass for callers that
+// reach this through `any`-typed dispatch.
+//
+// IMPORTANT — server-authoritative events: this helper accepts ANY product
+// event regardless of source classification, because backend code is the
+// trusted producer for server/bot events. The HARD-DENY for client-spoofed
+// server events lives in `/tg/telemetry` (see telemetry.routes.ts) — that's
+// the network boundary, not this helper.
+export function trackProductEvent<E extends ProductEventName>(
+  input: ProductEventInput<E>,
+): void {
+  if (!isProductEvent(input.event)) return;
+  let props = input.props;
+  if (props) {
+    const cleaned: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(props)) {
+      cleaned[k] = typeof v === 'string' && v.length > 300 ? v.slice(0, 300) + '...' : v;
+    }
+    const ser = JSON.stringify(cleaned);
+    props = ser.length > 1024 ? { _truncated: true } : cleaned;
+  }
+  prisma.analyticsEvent
+    .create({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data: { event: input.event, userId: input.userId ?? null, props: props ? (props as any) : undefined },
+    })
+    .catch((e) => logger.debug({ err: e, event: input.event }, 'analytics write failed'));
 }

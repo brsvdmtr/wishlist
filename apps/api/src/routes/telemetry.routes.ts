@@ -16,6 +16,10 @@ import { Router, type Request } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { prisma } from '@wishlist/db';
+import {
+  isClientTelemetryAllowedEvent,
+  isServerOnlyProductEvent,
+} from '@wishlist/shared';
 
 import logger from '../logger';
 import { asyncHandler } from '../lib/asyncHandler';
@@ -26,6 +30,15 @@ import { asyncHandler } from '../lib/asyncHandler';
 // frontend additions: a new event with a known prefix flows through without a backend
 // deploy. Unknown events are dropped per-event — we never reject the whole batch,
 // because Zod all-or-nothing rejection masked ~40 telemetry 400s/day after 2026-04-13.
+//
+// Server-authoritative events (anything `isServerOnlyProductEvent` in the
+// PRODUCT_EVENTS taxonomy — `payment.completed`, `pro.activated`,
+// `subscription.renewed`, etc.) are HARD-DENIED first, BEFORE the prefix list
+// is consulted. This is the spoof-prevention invariant: even though
+// `payment.` is in the legacy prefix list, a client trying to send
+// `payment.completed` over `/tg/telemetry` will be silently dropped here. The
+// only legitimate writer of those events is the backend itself, via
+// `trackProductEvent` in services/analytics.ts.
 const ANALYTICS_EVENT_PREFIXES = [
   'miniapp.', 'miniapp_',
   'showcase.', 'public_profile.',
@@ -45,8 +58,32 @@ const ANALYTICS_EVENT_PREFIXES = [
 const ANALYTICS_EVENT_EXACT = new Set<string>([
   'api_server_error', 'pro_cta_clicked', 'error_boundary_triggered',
 ]);
-function isAllowedAnalyticsEvent(event: string): boolean {
+// Legacy server-authoritative events that live in ANALYTICS_EVENTS (not yet
+// migrated to PRODUCT_EVENTS). They MUST be hard-denied at ingest. Today these
+// are de-facto blocked because their domain prefix (`referral.`) isn't in
+// ANALYTICS_EVENT_PREFIXES — but a future prefix expansion would silently
+// re-open the door. Listing them here makes the guarantee explicit and
+// independent of prefix-list state.
+//
+// Migration path: when a legacy event moves into PRODUCT_EVENTS with
+// `sources: ['server']`, remove its entry from this set — the typed hard-deny
+// (isServerOnlyProductEvent) then takes over.
+const LEGACY_SERVER_ONLY_EVENTS = new Set<string>([
+  'referral.invitee_converted_to_paid',
+]);
+export function isAllowedAnalyticsEvent(event: string): boolean {
   if (event.length === 0 || event.length > 80) return false;
+  // Hard-deny #1: server-authoritative events from PRODUCT_EVENTS must never
+  // enter via `/tg/telemetry`, even if their domain prefix would accept the
+  // string. Order matters — this runs BEFORE the prefix and exact lists.
+  if (isServerOnlyProductEvent(event)) return false;
+  // Hard-deny #2: legacy server-authoritative events not yet in PRODUCT_EVENTS.
+  if (LEGACY_SERVER_ONLY_EVENTS.has(event)) return false;
+  // Allow: new typed taxonomy events whose `sources` includes `'client'`.
+  // This is the only path a NEW domain.action event can pass — no prefix
+  // expansion required when adding to PRODUCT_EVENTS.
+  if (isClientTelemetryAllowedEvent(event)) return true;
+  // Legacy paths — unchanged. Existing frontends keep sending the same names.
   if (ANALYTICS_EVENT_EXACT.has(event)) return true;
   return ANALYTICS_EVENT_PREFIXES.some(p => event.startsWith(p));
 }
