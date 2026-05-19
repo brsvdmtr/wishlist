@@ -99,6 +99,7 @@ suite('selectSurveyRecipients — segment SQL on real schema', () => {
       data: {
         wishlistId: w.id,
         title: 'Real item',
+        url: 'https://example.com/item',
         isDemo: false,
         status: 'AVAILABLE',
       },
