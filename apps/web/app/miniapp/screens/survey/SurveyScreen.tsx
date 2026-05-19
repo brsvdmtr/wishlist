@@ -14,11 +14,14 @@
 
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card, Sheet } from '@wishlist/ui';
 import { getCopy, formatTemplate, type SurveyLocale, type SurveyCopy } from './copy';
-import type { SurveyByInviteResponse, SurveyQuestionWire } from './types';
+import type { SurveyByInviteResponse, SurveyQuestionType, SurveyQuestionWire } from './types';
 import { loadSurveyByInvite, postAnswer, postComplete, postDismiss, type TgFetch } from './api';
+import { toggleSelection, canAdvance as logicCanAdvance } from './logic';
+
+const CAP_HIT_FLASH_MS = 2400;
 
 const MAX_ANSWER_TEXT_LENGTH = 500;
 
@@ -45,6 +48,14 @@ export function SurveyScreen({ inviteId, tgFetch, onExit, onCompleted }: SurveyS
   const [dismissOpen, setDismissOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Transient cap-hit warning state. Set when user tries to pick past
+  // maxSelections; cleared automatically after CAP_HIT_FLASH_MS so it
+  // doesn't linger after the user makes room.
+  const [capHitAt, setCapHitAt] = useState<number | null>(null);
+  const capHitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (capHitTimerRef.current) clearTimeout(capHitTimerRef.current);
+  }, []);
 
   // Locale fallback if data hasn't loaded yet — pick by browser hint.
   const localeFromData: SurveyLocale | null = data ? data.invite.locale : null;
@@ -95,31 +106,36 @@ export function SurveyScreen({ inviteId, tgFetch, onExit, onCompleted }: SurveyS
   const toggleOption = useCallback(
     (optionId: string) => {
       if (!question) return;
-      setSelections((prev) => {
-        const cur = prev[question.id] ?? [];
-        if (question.type === 'single' || question.type === 'nps') {
-          return { ...prev, [question.id]: [optionId] };
-        }
-        if (question.type === 'open') return prev;
-        // multi: toggle, enforce maxSelections cap
-        if (cur.includes(optionId)) {
-          return { ...prev, [question.id]: cur.filter((o) => o !== optionId) };
-        }
-        if (cur.length >= question.maxSelections) {
-          // drop the first selection (FIFO) so user can swap without unticking
-          return { ...prev, [question.id]: [...cur.slice(1), optionId] };
-        }
-        return { ...prev, [question.id]: [...cur, optionId] };
+      const cur = selections[question.id] ?? [];
+      const { next, capHit } = toggleSelection({
+        selected: cur,
+        optionId,
+        type: question.type,
+        maxSelections: question.maxSelections,
       });
+      if (capHit) {
+        setCapHitAt(Date.now());
+        if (capHitTimerRef.current) clearTimeout(capHitTimerRef.current);
+        capHitTimerRef.current = setTimeout(() => setCapHitAt(null), CAP_HIT_FLASH_MS);
+        return; // no state change — selection unchanged
+      }
+      setSelections((prev) => ({ ...prev, [question.id]: next }));
     },
-    [question],
+    [question, selections],
   );
 
   const canAdvance = useMemo(() => {
     if (!question) return false;
-    if (question.type === 'open') return true; // Q10 optional
-    return currentSelections.length >= 1;
+    return logicCanAdvance({ type: question.type, selected: currentSelections });
   }, [question, currentSelections]);
+
+  // Clear the cap-hit warning when the question changes (don't carry stale
+  // state forward).
+  const answeringIndex = phase.kind === 'answering' ? phase.index : -1;
+  useEffect(() => {
+    setCapHitAt(null);
+    if (capHitTimerRef.current) clearTimeout(capHitTimerRef.current);
+  }, [answeringIndex]);
 
   const goBack = useCallback(() => {
     if (phase.kind !== 'answering') return;
@@ -293,9 +309,24 @@ export function SurveyScreen({ inviteId, tgFetch, onExit, onCompleted }: SurveyS
           {copy.q[question.id]?.title ?? question.id}
         </h2>
         {question.type === 'multi' && (
-          <p style={{ color: 'var(--wb-text-secondary)', fontSize: 13, margin: '0 0 12px' }}>
-            {formatTemplate(copy.multiHint, { max: question.maxSelections })}
-          </p>
+          <div style={{ margin: '0 0 12px', minHeight: 22 }}>
+            <p style={{ color: 'var(--wb-text-secondary)', fontSize: 13, margin: 0 }}>
+              {formatTemplate(copy.multiHint, { max: question.maxSelections })}
+            </p>
+            {capHitAt !== null && (
+              <p
+                role="alert"
+                style={{
+                  color: 'var(--wb-text-warning, #f59e0b)',
+                  fontSize: 13,
+                  margin: '6px 0 0',
+                  transition: 'opacity 200ms ease',
+                }}
+              >
+                {formatTemplate(copy.multiCapHit, { max: question.maxSelections })}
+              </p>
+            )}
+          </div>
         )}
         {question.type === 'nps' && (
           <p style={{ color: 'var(--wb-text-secondary)', fontSize: 13, margin: '0 0 12px' }}>
@@ -318,9 +349,11 @@ export function SurveyScreen({ inviteId, tgFetch, onExit, onCompleted }: SurveyS
           />
         ) : (
           <OptionList
+            type={question.type}
             options={question.options}
             labels={copy.q[question.id]?.options ?? {}}
             selected={currentSelections}
+            atCap={question.type === 'multi' && currentSelections.length >= question.maxSelections}
             onToggle={toggleOption}
           />
         )}
@@ -383,23 +416,41 @@ export function SurveyScreen({ inviteId, tgFetch, onExit, onCompleted }: SurveyS
 // ─── Sub-components ────────────────────────────────────────────────────────
 
 function OptionList({
+  type,
   options,
   labels,
   selected,
+  atCap,
   onToggle,
 }: {
+  type: SurveyQuestionType;
   options: readonly string[];
   labels: Record<string, string>;
   selected: string[];
+  /** When type='multi' and selected.length === maxSelections, unselected
+   *  options render at reduced opacity so the cap state is visible at a glance. */
+  atCap: boolean;
   onToggle: (optionId: string) => void;
 }) {
+  // Indicator: circle for single/nps (radio-style), rounded square for multi
+  // (checkbox-style). Visually communicates "pick one" vs "pick several".
+  const isMulti = type === 'multi';
+  const indicatorRadius = isMulti ? 5 : 9;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div
+      role={isMulti ? 'group' : 'radiogroup'}
+      style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+    >
       {options.map((optionId) => {
         const isOn = selected.includes(optionId);
+        const isBlocked = isMulti && atCap && !isOn;
         return (
           <button
             key={optionId}
+            type="button"
+            role={isMulti ? 'checkbox' : 'radio'}
+            aria-checked={isOn}
+            aria-disabled={isBlocked}
             onClick={() => onToggle(optionId)}
             style={{
               display: 'flex',
@@ -414,15 +465,43 @@ function OptionList({
               textAlign: 'left',
               cursor: 'pointer',
               minHeight: 48,
-              transition: 'border-color 120ms ease, background 120ms ease',
+              opacity: isBlocked ? 0.55 : 1,
+              transition: 'border-color 120ms ease, background 120ms ease, opacity 120ms ease',
             }}
           >
-            <span aria-hidden style={{
-              display: 'inline-block', width: 18, height: 18, borderRadius: 9,
-              border: '1.5px solid ' + (isOn ? 'var(--wb-accent)' : 'var(--wb-border)'),
-              background: isOn ? 'var(--wb-accent)' : 'transparent',
-              flexShrink: 0,
-            }} />
+            <span
+              aria-hidden
+              style={{
+                display: 'inline-block',
+                width: 18,
+                height: 18,
+                borderRadius: indicatorRadius,
+                border: '1.5px solid ' + (isOn ? 'var(--wb-accent)' : 'var(--wb-border)'),
+                background: isOn ? 'var(--wb-accent)' : 'transparent',
+                flexShrink: 0,
+                position: 'relative',
+              }}
+            >
+              {isOn && isMulti && (
+                // Checkmark glyph for multi selection.
+                <svg
+                  viewBox="0 0 12 12"
+                  width={12}
+                  height={12}
+                  style={{ position: 'absolute', top: 2, left: 2, color: 'var(--wb-on-accent, #fff)' }}
+                  aria-hidden
+                >
+                  <path
+                    d="M2.5 6.5L5 9L9.5 3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
+            </span>
             <span>{labels[optionId] ?? optionId}</span>
           </button>
         );

@@ -40,13 +40,13 @@ at 150 with behavioral stratification). Expected response rate 15–25 %.
 | optionId | ru | en |
 |----------|-----|-----|
 | `curiosity` | Просто посмотреть | Just curious |
-| `gift_planning` | Искал что подарить кому-то | Looking for a gift idea |
-| `birthday_self` | Мой день рождения близко | My birthday is coming up |
+| `gift_planning` | Искал, что подарить кому-то | Looking for a gift idea |
+| `birthday_self` | Скоро мой день рождения | My birthday is coming up |
 | `holiday` | Новый год или другой праздник | New Year or another holiday |
 | `wedding` | Свадьба или крупное событие | Wedding or a major event |
 | `baby_registry` | Рождение ребёнка | New baby |
 | `friend_invite` | Друг прислал ссылку | A friend sent me a link |
-| `replace_other_tool` | Хотел заменить заметки/Excel | Wanted to replace notes/Excel |
+| `replace_other_tool` | Чтобы не вести список в заметках или Excel | Wanted to replace notes/Excel |
 | `other` | Другое | Other |
 
 ### Q2 — Occasion (single)
@@ -57,9 +57,24 @@ at 150 with behavioral stratification). Expected response rate 15–25 %.
 
 ### Q3 — Most useful (multi, max 2)
 
-`adding_items` · `url_import` · `share_link` · `reservations_anonymous` ·
-`multiple_wishlists` · `birthday_calendar` · `categories` · `hints` ·
-`pro_features` · `mini_app_in_telegram` · `nothing_special` · `other`
+UI: rounded-square checkbox indicator, "Выбери до 2 вариантов" hint, blocks
+the 3rd unselected option with a transient "Можно выбрать не больше 2 вариантов"
+warning.
+
+| optionId | ru (frozen by `copy.test.ts`) | en |
+|----------|-------|----|
+| `adding_items` | Быстро добавить желание | Easy to add wishes |
+| `url_import` | Добавить товар по ссылке | URL paste auto-fill |
+| `share_link` | Поделиться вишлистом с близкими | Share link |
+| `reservations_anonymous` | Скрытые брони без спойлеров | Anonymous reservations — no spoilers |
+| `multiple_wishlists` | Создать несколько вишлистов | Multiple wishlists |
+| `birthday_calendar` | Напоминания о днях рождения | Birthday calendar |
+| `categories` | Разложить желания по категориям | Categories |
+| `hints` | Получать подсказки и идеи | Hints / suggestions |
+| `pro_features` | PRO-возможности | PRO features |
+| `mini_app_in_telegram` | Удобно пользоваться внутри Telegram | Native Telegram feel |
+| `nothing_special` | Пока ничего не зацепило | Nothing in particular |
+| `other` | Другое | Other |
 
 ### Q4 — What blocked you (single)
 
@@ -168,6 +183,13 @@ emit of `survey.completed`).
 - **2026-05-19** — Q10 optional; explicit Skip button. Abandonment
   (close-tab without `/dismiss`) leaves `STARTED` so analytics can
   distinguish "explicit refusal" from "left mid-flow".
+- **2026-05-19 — post-smoke** — multi-choice UX fix: indicators are now
+  rounded-square (multi) vs circle (single/nps) so users don't read the
+  question as radio. 3rd click is *blocked* (no FIFO swap) and surfaces a
+  transient "не больше N" warning. Q3 ru labels rewritten away from
+  machine-translation feel ("Ссылка-делиться" → "Поделиться вишлистом с
+  близкими"); banned phrases now anti-regression-tested in
+  `apps/web/app/miniapp/screens/survey/copy.test.ts`.
 
 ---
 
