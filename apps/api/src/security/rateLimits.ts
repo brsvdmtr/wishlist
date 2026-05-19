@@ -40,7 +40,9 @@ export type CategoryName =
   | 'santa.draw'          // 3   / 10m  per actorHash (irreversible expensive op; multi-tap guard)
   | 'santa.admin'         // 10  / 1m   per actorHash (admin/season/global-config — admin gating)
   | 'search'              // 30  / 1m   per actorHash (read-only GET /tg/search; tight enough to throttle typing-bursts that bypass FE debounce, loose enough for normal typing cadence)
-  | 'access.record';      // 60  / 5m   per actorHash (POST /tg/access/wishlist-opened — fire-and-forget FWA write)
+  | 'access.record'       // 60  / 5m   per actorHash (POST /tg/access/wishlist-opened — fire-and-forget FWA write)
+  | 'research.read'       // 60  / 5m   per actorHash (GET /tg/research/* — survey load + progress)
+  | 'research.write';     // 30  / 5m   per actorHash (POST /tg/research/*/answer|complete|dismiss — 10 questions × ~1 answer + complete + dismiss ≈ 12 writes, generous headroom for retries)
 
 type CategoryConfig = {
   windowMs: number;
@@ -71,6 +73,8 @@ const CATEGORIES: Record<CategoryName, CategoryConfig> = {
   'santa.admin':       { windowMs: 60 * 1000,          limit: 10,  keyKind: 'actor' },
   'search':            { windowMs: 60 * 1000,          limit: 30,  keyKind: 'actor' },
   'access.record':     { windowMs: 5 * 60 * 1000,      limit: 60,  keyKind: 'actor' },
+  'research.read':     { windowMs: 5 * 60 * 1000,      limit: 60,  keyKind: 'actor' },
+  'research.write':    { windowMs: 5 * 60 * 1000,      limit: 30,  keyKind: 'actor' },
 };
 
 // Cache one limiter instance per category. Counters are per-process; rebuilding

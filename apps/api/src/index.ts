@@ -76,6 +76,7 @@ import { registerItemsRouter } from './routes/items.routes';
 import { registerWishlistsRouter } from './routes/wishlists.routes';
 import { registerSantaRouter } from './routes/santa.routes';
 import { registerSearchRouter } from './routes/search.routes';
+import { registerResearchSurveyRouter } from './routes/research-survey.routes';
 import { startCleanupSchedulers } from './schedulers/cleanup';
 import { startBillingSchedulers } from './schedulers/billing';
 import { startReferralSchedulers } from './schedulers/referral';
@@ -505,6 +506,14 @@ const billingIdem = (endpointKey: string) =>
     critical: true,
   });
 
+// ── Research surveys ─────────────────────────────────────────────────────────
+// Per-endpoint rate-limit + idempotency. The GET (loading the survey) also
+// transitions invite SENT→OPENED + emits survey.opened, so it's behind the
+// gentler 'research.read' limiter rather than the bare 'global.auth'.
+protectTgRoute('POST',   '/research/surveys/:surveyId/answer',   createRateLimiter('research.write'), idem('POST /tg/research/surveys/:surveyId/answer',   { category: 'research.write' }));
+protectTgRoute('POST',   '/research/surveys/:surveyId/complete', createRateLimiter('research.write'), idem('POST /tg/research/surveys/:surveyId/complete', { category: 'research.write', critical: true }));
+protectTgRoute('POST',   '/research/surveys/:surveyId/dismiss',  createRateLimiter('research.write'), idem('POST /tg/research/surveys/:surveyId/dismiss',  { category: 'research.write' }));
+
 // ── Wishlists ────────────────────────────────────────────────────────────────
 protectTgRoute('POST',   '/wishlists',                       createRateLimiter('wishlist.create'), idem('POST /tg/wishlists', { category: 'wishlist.create' }));
 protectTgRoute('PATCH',  '/wishlists/:id',                   idem('PATCH /tg/wishlists/:id', { category: 'wishlist.update' }));
@@ -705,6 +714,15 @@ const searchRouter = registerSearchRouter({
   trackAnalyticsEvent,
 });
 tgRouter.use(searchRouter);
+
+// ─── /tg/research/surveys/* sub-router ──────────────────────────────────────
+// 4 endpoints (GET by-invite + POST answer/complete/dismiss). Per-endpoint
+// rate-limit categories (research.read / research.write) and idempotency are
+// wired via protectTgRoute(...) further below.
+const researchSurveyRouter = registerResearchSurveyRouter({
+  getOrCreateTgUser,
+});
+tgRouter.use(researchSurveyRouter);
 
 // ─── /tg/referral/* sub-router (P5b split) ──────────────────────────────────
 // All 4 endpoints are GET-only (read), no path-scoped idempotency middleware

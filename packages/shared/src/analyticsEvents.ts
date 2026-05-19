@@ -353,6 +353,70 @@ export const PRODUCT_EVENTS = [
     sources: ['client'],
     pii: 'none',
   },
+  // ── Research surveys (all server-emitted; client never proxies these) ──
+  {
+    name: 'survey.invite_sent',
+    domain: 'survey',
+    action: 'invite_sent',
+    description:
+      'Bot DM with survey CTA delivered. Emitted by scheduler after successful sendTgBotMessage; failures emit survey.invite_failed instead.',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'survey.opened',
+    domain: 'survey',
+    action: 'opened',
+    description:
+      'User followed survey deep link and Mini App fetched the invite. State transition SENT/PENDING → OPENED.',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'survey.started',
+    domain: 'survey',
+    action: 'started',
+    description:
+      'User answered the first question. State transition OPENED → STARTED; ResearchSurveyResponse row created.',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'survey.question_answered',
+    domain: 'survey',
+    action: 'question_answered',
+    description:
+      'Single question answered (single/multi/nps/open). Props: questionId, optionIds[], hasText. One event per answer write; multi-choice ships all selected optionIds in one event.',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'survey.completed',
+    domain: 'survey',
+    action: 'completed',
+    description:
+      'All required questions answered and reward bookkeeping committed. Props: rewardKind (pro_30d | pro_30d_lifetime_noop), segmentId, segmentSubtype.',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'survey.dismissed',
+    domain: 'survey',
+    action: 'dismissed',
+    description:
+      'User explicitly closed the survey via "not now" CTA. Distinct from passive abandonment (which leaves status=OPENED/STARTED with completedAt=null).',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'survey.invite_failed',
+    domain: 'survey',
+    action: 'invite_failed',
+    description:
+      'Bot DM delivery failed terminally (403 / bot_blocked / other Telegram 4xx). State transition to FAILED; never retried.',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
 ] as const satisfies readonly ProductEventDescriptor[];
 
 export type ProductEventName = (typeof PRODUCT_EVENTS)[number]['name'];

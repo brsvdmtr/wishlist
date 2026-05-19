@@ -254,6 +254,69 @@ describe('PRODUCT_EVENTS — fixture snapshot', () => {
           ],
         },
         {
+          "action": "completed",
+          "domain": "survey",
+          "name": "survey.completed",
+          "pii": "userId-only",
+          "sources": [
+            "server",
+          ],
+        },
+        {
+          "action": "dismissed",
+          "domain": "survey",
+          "name": "survey.dismissed",
+          "pii": "userId-only",
+          "sources": [
+            "server",
+          ],
+        },
+        {
+          "action": "invite_failed",
+          "domain": "survey",
+          "name": "survey.invite_failed",
+          "pii": "userId-only",
+          "sources": [
+            "server",
+          ],
+        },
+        {
+          "action": "invite_sent",
+          "domain": "survey",
+          "name": "survey.invite_sent",
+          "pii": "userId-only",
+          "sources": [
+            "server",
+          ],
+        },
+        {
+          "action": "opened",
+          "domain": "survey",
+          "name": "survey.opened",
+          "pii": "userId-only",
+          "sources": [
+            "server",
+          ],
+        },
+        {
+          "action": "question_answered",
+          "domain": "survey",
+          "name": "survey.question_answered",
+          "pii": "userId-only",
+          "sources": [
+            "server",
+          ],
+        },
+        {
+          "action": "started",
+          "domain": "survey",
+          "name": "survey.started",
+          "pii": "userId-only",
+          "sources": [
+            "server",
+          ],
+        },
+        {
           "action": "session_started",
           "domain": "user",
           "name": "user.session_started",
