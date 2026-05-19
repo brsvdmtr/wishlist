@@ -95,6 +95,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.web
+      args:
+        # NEXT_PUBLIC_* consumed by client-side code must be passed as build
+        # args so `next build` can inline them. Server-component reads keep
+        # using the runtime `environment:` block below.
+        NEXT_PUBLIC_GLITCHTIP_DSN: ${NEXT_PUBLIC_GLITCHTIP_DSN:-}
+        NEXT_PUBLIC_APP_RELEASE: ${APP_RELEASE:-unknown}
     restart: unless-stopped
     stop_grace_period: 30s
     environment:

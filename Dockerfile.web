@@ -22,6 +22,17 @@ COPY . .
 RUN cd packages/db && pnpm install && cd ../..
 RUN pnpm db:generate
 RUN pnpm --filter @wishlist/shared build
+
+# Next.js inlines NEXT_PUBLIC_* into the CLIENT bundle at build time. Server
+# components keep reading runtime env (compose `environment:`), but anything
+# touched by `'use client'` code (e.g. apps/web/app/miniapp/sentry.ts which
+# initSentry() calls from MiniApp.tsx) needs these visible to `next build`.
+# Compose wires the values via build args; see docker-compose.prod.yml → web.
+ARG NEXT_PUBLIC_GLITCHTIP_DSN
+ARG NEXT_PUBLIC_APP_RELEASE
+ENV NEXT_PUBLIC_GLITCHTIP_DSN=$NEXT_PUBLIC_GLITCHTIP_DSN
+ENV NEXT_PUBLIC_APP_RELEASE=$NEXT_PUBLIC_APP_RELEASE
+
 RUN pnpm build:web
 
 # Runner
