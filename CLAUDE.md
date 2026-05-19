@@ -15,7 +15,7 @@ This project is a **Telegram Mini App** (`apps/web/app/miniapp/`). It runs insid
 
 ### Post-deploy health check (MANDATORY after every deploy)
 
-After deploying to prod, **always** run these checks via `ssh timeweb`:
+After deploying to prod, **always** run these checks via `ssh vultr`:
 
 ```bash
 # 1. Failed migrations (must return 0 rows)
@@ -57,13 +57,13 @@ API and bot log to stdout (for `docker logs`) **and** to a rotated JSON file on 
 - **Host dirs (both owned by uid 1001):** `/opt/wishlist/logs/api/` and `/opt/wishlist/logs/bot/`
 - **First-time host setup (run once per host):**
   ```bash
-  ssh timeweb 'sudo mkdir -p /opt/wishlist/logs/api /opt/wishlist/logs/bot && sudo chown -R 1001:1001 /opt/wishlist/logs'
+  ssh vultr 'sudo mkdir -p /opt/wishlist/logs/api /opt/wishlist/logs/bot && sudo chown -R 1001:1001 /opt/wishlist/logs'
   ```
 - **Rotation**: `pino-roll` — daily rollover, 100 MB size cap, 14-file retention (~1.4 GB/service worst case).
 - **Filename**: `api.log.YYYY-MM-DD` / `bot.log.YYYY-MM-DD` (current day is the latest).
 - **Query example** — find error-level entries on the API around a specific time:
   ```bash
-  ssh timeweb 'jq -c "select(.level >= 50)" /opt/wishlist/logs/api/api.log.2026-04-18 | head'
+  ssh vultr 'jq -c "select(.level >= 50)" /opt/wishlist/logs/api/api.log.2026-04-18 | head'
   ```
 - **Disable** (per-service): set `LOG_FILE_PATH_API=` or `LOG_FILE_PATH_BOT=` in `/opt/wishlist/.env` (empty value falls through to stdout-only).
 
