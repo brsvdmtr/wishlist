@@ -31,6 +31,13 @@ const suite = SKIP ? describe.skip : describe;
 // shared DB.
 const PREFIX = 'int-dailyact';
 
+// Cuid-shaped "ghost" id used by the FK-safety test below. Defined at
+// file scope so cleanup hooks can reset it across runs — the CI test job
+// runs vitest twice (once for `pnpm test`, once for `pnpm test:coverage`)
+// against the SAME Postgres, and the first run's ghost-id events outlive
+// the userId-scoped beforeEach because no User row ever owned this id.
+const GHOST_ID = 'c' + 'z'.repeat(24);
+
 if (SKIP) {
   // eslint-disable-next-line no-console
   console.warn('[integration] DATABASE_URL not set — skipping daily-activity-rollup tests');
@@ -46,12 +53,13 @@ suite('daily-activity rollup — real Postgres', () => {
   async function cleanOwnData() {
     const db = getTestPrisma();
     // Order matters: UserDailyActivity FK → User; AnalyticsEvent.userId is
-    // a soft pointer (no FK) but we still scope by our test users.
+    // a soft pointer (no FK) but we still scope by our test users +
+    // the ghost id used by the FK-safety test.
     await db.userDailyActivity.deleteMany({
       where: { user: { telegramId: { startsWith: PREFIX } } },
     });
     await db.analyticsEvent.deleteMany({
-      where: { userId: { in: [userA, userB].filter(Boolean) } },
+      where: { userId: { in: [userA, userB, GHOST_ID].filter(Boolean) } },
     });
     await db.user.deleteMany({ where: { telegramId: { startsWith: PREFIX } } });
   }
@@ -73,7 +81,13 @@ suite('daily-activity rollup — real Postgres', () => {
   beforeEach(async () => {
     const db = getTestPrisma();
     await db.userDailyActivity.deleteMany({ where: { userId: { in: [userA, userB] } } });
-    await db.analyticsEvent.deleteMany({ where: { userId: { in: [userA, userB] } } });
+    // GHOST_ID has no User row so userDailyActivity.deleteMany above can't
+    // touch it (and there should never be a UDA row for it anyway). We
+    // still scope events by the three known ids — see comment on
+    // GHOST_ID at top of file.
+    await db.analyticsEvent.deleteMany({
+      where: { userId: { in: [userA, userB, GHOST_ID] } },
+    });
   });
 
   it('rolls up multiple AnalyticsEvent rows into one UserDailyActivity row per user', async () => {
@@ -262,17 +276,16 @@ suite('daily-activity rollup — real Postgres', () => {
     const db = getTestPrisma();
     const day = new Date('2026-04-25T00:00:00.000Z');
 
-    // userA still exists; "ghost" is a cuid-shaped id that points to no User row.
-    const ghostId = 'c' + 'z'.repeat(24); // 25 chars, cuid-shaped, will never collide.
-    expect(await db.user.findUnique({ where: { id: ghostId } })).toBeNull();
+    // userA still exists; GHOST_ID is cuid-shaped but points to no User row.
+    expect(await db.user.findUnique({ where: { id: GHOST_ID } })).toBeNull();
 
     await db.analyticsEvent.createMany({
       data: [
         // Valid: should be rolled up normally.
         { event: 'wish.created', userId: userA, createdAt: new Date('2026-04-25T10:00:00.000Z') },
         // Dangling: must be dropped before upsert, not crash the whole day.
-        { event: 'wish.created', userId: ghostId, createdAt: new Date('2026-04-25T11:00:00.000Z') },
-        { event: 'paywall.viewed', userId: ghostId, createdAt: new Date('2026-04-25T12:00:00.000Z') },
+        { event: 'wish.created', userId: GHOST_ID, createdAt: new Date('2026-04-25T11:00:00.000Z') },
+        { event: 'paywall.viewed', userId: GHOST_ID, createdAt: new Date('2026-04-25T12:00:00.000Z') },
       ],
     });
 
@@ -280,6 +293,7 @@ suite('daily-activity rollup — real Postgres', () => {
     const result = await aggregateDay(db, day, { logger: silentLogger });
     expect(result.events).toBe(3); // all three were scanned
     expect(result.users).toBe(1);  // ghost dropped before upsert; only userA remained
+    expect(result.droppedUsers).toBe(1); // surfaces the ghost in the result shape
 
     const rowA = await db.userDailyActivity.findUnique({
       where: { userId_date: { userId: userA, date: day } },
@@ -287,7 +301,7 @@ suite('daily-activity rollup — real Postgres', () => {
     expect(rowA!.createdRealWish).toBe(1);
 
     const rowGhost = await db.userDailyActivity.findUnique({
-      where: { userId_date: { userId: ghostId, date: day } },
+      where: { userId_date: { userId: GHOST_ID, date: day } },
     });
     expect(rowGhost).toBeNull();
   });
