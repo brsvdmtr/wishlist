@@ -3617,6 +3617,10 @@ const ru: Dict = {
   search_expired_desc: 'Доступ к вишлисту истёк.',
   search_no_access_to_result: 'Результат больше недоступен',
   search_partial_warning: 'Часть результатов временно недоступна. Попробуй ещё раз.',
+
+  // ── Research survey — invite DM (Wave 1: pmf-discovery) ──
+  research_survey_invite_message: 'Привет! Мы делаем короткое исследование WishBoard — займёт меньше 2 минут. За ответы — месяц PRO бесплатно. Откроешь?',
+  research_survey_invite_btn: 'Пройти опрос',
 };
 
 const en: Dict = {
@@ -6592,6 +6596,10 @@ const en: Dict = {
   search_expired_desc: 'Access to the wishlist has expired.',
   search_no_access_to_result: 'This result is no longer available',
   search_partial_warning: 'Some results are temporarily unavailable. Try again.',
+
+  // ── Research survey — invite DM (Wave 1: pmf-discovery) ──
+  research_survey_invite_message: 'Hi! We are running a short WishBoard study — under 2 minutes. As a thank-you we will give you a free month of PRO. Take part?',
+  research_survey_invite_btn: 'Take the survey',
 };
 
 // ─── Additional locale dictionaries ──────────────────────────────────────────

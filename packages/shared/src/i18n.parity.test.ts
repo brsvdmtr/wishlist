@@ -58,6 +58,13 @@ const KNOWN_BACKLOG = new Set<string>([
   // All historical gaps translated as of 2026-05-17 (waves 1-10).
   // To add a new historical-gap exemption, document the reason inline.
 
+  // Research survey Wave 1 (pmf-discovery, 2026-05-19): ships ru/en only.
+  // The send scheduler skips users whose computed locale isn't ru or en
+  // (see apps/api/src/services/research-survey/locale.ts), so non-ru/en
+  // dicts intentionally have no value. Translations will land before the
+  // next survey wave; see docs/research/survey-pmf-v1.md for status.
+  'research_survey_invite_message',
+  'research_survey_invite_btn',
 ]);
 
 describe('i18n key parity — every key must exist in every locale', () => {

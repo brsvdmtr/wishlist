@@ -409,8 +409,44 @@ function buildProgress(answeredQuestionIds: string[]): ProgressInfo {
   return { answered, totalRequired: requiredSet.size, canComplete };
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Ops helper — seed PENDING invites for an ACTIVE survey.
+// Idempotent: pre-existing invites for the same (surveyId, userId) are
+// skipped silently. Returns the number of rows actually inserted.
+// ─────────────────────────────────────────────────────────────────────
+export interface SeedInviteRow {
+  userId: string;
+  segmentId: string;
+  segmentSubtype: string | null;
+  locale: string;
+}
+
+export async function seedInvites(params: {
+  surveyId: string;
+  rows: SeedInviteRow[];
+}): Promise<{ inserted: number; skipped: number }> {
+  if (params.rows.length === 0) return { inserted: 0, skipped: 0 };
+  const result = await prisma.researchSurveyInvite.createMany({
+    data: params.rows.map((r) => ({
+      surveyId: params.surveyId,
+      userId: r.userId,
+      segmentId: r.segmentId,
+      segmentSubtype: r.segmentSubtype,
+      locale: r.locale,
+      status: 'PENDING' as const,
+    })),
+    skipDuplicates: true,
+  });
+  return {
+    inserted: result.count,
+    skipped: params.rows.length - result.count,
+  };
+}
+
 export { ACTIVE_SURVEY };
 export type { SurveyDefinition } from './survey-pmf-v1';
 export { getQuestion, listQuestionIds } from './survey-pmf-v1';
 export { validateAnswer, MAX_ANSWER_TEXT_LENGTH } from './validation';
 export { resolveSurveyLocale, type SurveyLocale } from './locale';
+export { selectSurveyRecipients } from './recipients';
+export type { RecipientSelection, SelectionInput, SelectionReport, SegmentId, S8Subtype } from './recipients';

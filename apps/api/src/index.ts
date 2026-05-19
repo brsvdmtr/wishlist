@@ -89,6 +89,7 @@ import { startEventSchedulers } from './schedulers/events';
 import { startLifecycleScheduler } from './schedulers/lifecycle';
 import { startProRenewalReminderScheduler } from './schedulers/pro-renewal';
 import { startBirthdayRemindersScheduler } from './schedulers/birthday-reminders';
+import { startResearchSurveySendScheduler } from './schedulers/research-survey-send';
 import { createSendLifecycleDM } from './services/lifecycle';
 import { daysUntilNextBirthday, pickBirthdayDisplayName } from './services/birthday-reminders';
 import {
@@ -1791,6 +1792,13 @@ startBirthdayRemindersScheduler({
   getEffectiveEntitlements, tgActorHash, trackEvent,
   BIRTHDAY_REMINDERS_ENABLED,
 });
+
+// Research survey send scheduler.
+// Disabled by default. Gated by RESEARCH_SURVEY_SEND_ENABLED + the
+// presence of RESEARCH_SURVEY_ACTIVE_SLUG; both are evaluated on every
+// tick so ops can toggle without restart. See
+// apps/api/src/schedulers/research-survey-send.ts.
+startResearchSurveySendScheduler({ logger });
 
 // ─── Batch 4.1: Santa Campaign Chat ──────────────────────────────────────────
 

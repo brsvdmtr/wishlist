@@ -14,6 +14,7 @@
 //   comment-reply        — crpl_<itemId>__c_<commentId>
 //   reservation-reminder — rrem_<itemId>__m_<reservationMetaId>
 //   event-reminder       — evnt_<occasionId>
+//   research-survey      — srvy_<inviteId>
 //
 // MINI_APP_URL fallback chain matches every other call site in index.ts:
 //   1. process.env.MINI_APP_URL (preferred, set in prod)
@@ -36,4 +37,8 @@ export function buildReservationReminderDeepLink(itemId: string, reservationMeta
 
 export function buildEventReminderDeepLink(occasionId: string): string {
   return `${getMiniAppUrl()}?startapp=evnt_${encodeURIComponent(occasionId)}`;
+}
+
+export function buildSurveyDeepLink(inviteId: string): string {
+  return `${getMiniAppUrl()}?startapp=srvy_${encodeURIComponent(inviteId)}`;
 }
