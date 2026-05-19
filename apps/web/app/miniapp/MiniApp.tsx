@@ -19,6 +19,7 @@ import {
 import { AppearanceSettings } from './screens/AppearanceSettings';
 import { CalendarRoot } from './screens/calendar/CalendarRoot';
 import { SearchScreen } from './screens/SearchScreen';
+import { SurveyScreen } from './screens/survey/SurveyScreen';
 import type { SearchResult, AccessViewResponse } from './lib/searchApi';
 import { recordWishlistOpen, fetchAccessView } from './lib/searchApi';
 import { ProBadge } from './components/ProBadge';
@@ -37,7 +38,7 @@ import {
   SECURITY_TOAST_CODES,
   CLIENT_BUG_CODES,
 } from './idempotency';
-import { parseReservationReminderPayload, parseEventReminderPayload, looksLikeId } from './startParam';
+import { parseReservationReminderPayload, parseEventReminderPayload, parseSurveyInvitePayload, looksLikeId } from './startParam';
 
 // ═══════════════════════════════════════════════════════
 // TELEGRAM TYPES
@@ -705,7 +706,8 @@ type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-d
 | 'secret-reservation-detail' | 'secret-reservation-paywall'
 | 'showcase-editor' | 'showcase-preview'
 | 'referral' | 'referral-history'
-| 'calendar';
+| 'calendar'
+| 'research-survey';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' | 'warning' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -5403,6 +5405,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [santaCreateMinBudget, setSantaCreateMinBudget] = useState('');
   const [santaCreateMaxBudget, setSantaCreateMaxBudget] = useState('');
   const [santaCreateCurrency, setSantaCreateCurrency] = useState<'RUB' | 'USD'>('RUB');
+  // Research survey deep-link state — populated from srvy_<inviteId> startParam.
+  const [surveyInviteId, setSurveyInviteId] = useState<string | null>(null);
   // Join (from deep link)
   const [santaJoinToken, setSantaJoinToken] = useState<string | null>(null);
   const [santaJoinPreview, setSantaJoinPreview] = useState<SantaJoinPreview | null>(null);
@@ -8863,6 +8867,24 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             bootSetScreen('drafts');
           })
           .catch(handleErr);
+      } else if (startParam && startParam.startsWith('srvy_')) {
+        // Research survey deep link: srvy_<inviteId>. Land directly on the
+        // survey screen; SurveyScreen owns its own load + state. On exit we
+        // route back to my-wishlists rather than wherever the user was,
+        // since this deep link always lands the Mini App fresh.
+        const parsed = parseSurveyInvitePayload(startParam);
+        if (parsed.kind !== 'ok') {
+          trackEvent('research_survey_deeplink_malformed', { payload: startParam });
+          loadWishlists()
+            .then(() => { trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current }); bootSetScreen('my-wishlists'); })
+            .catch(handleErr);
+        } else {
+          setSurveyInviteId(parsed.inviteId);
+          // Eager load of wishlists in the background so onExit lands fast.
+          loadWishlists().catch(() => {});
+          trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
+          bootSetScreen('research-survey');
+        }
       } else if (startParam && startParam.startsWith('crpl_')) {
         // Comment-reply deep link: crpl_<itemId>__c_<commentId>
         // Opens the mini app directly to the item, expands comments, scrolls + highlights
@@ -30210,6 +30232,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           onBack={() => setScreen('settings')}
           onShowToast={(text, kind = 'info') => pushToast(text, kind)}
           subscreenBackRef={calendarSubscreenBackRef}
+        />
+      )}
+
+      {/* ── Research survey — Wave 1 pmf-discovery. Deep-link entry only. ── */}
+      {screen === 'research-survey' && surveyInviteId && (
+        <SurveyScreen
+          inviteId={surveyInviteId}
+          tgFetch={tgFetch}
+          onExit={() => {
+            setSurveyInviteId(null);
+            setScreen('my-wishlists');
+          }}
         />
       )}
 

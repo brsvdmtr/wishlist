@@ -10,6 +10,7 @@
 //   comment-reply        — crpl_<itemId>__c_<commentId>
 //   reservation-reminder — rrem_<itemId>__m_<reservationMetaId>
 //   event-reminder       — evnt_<occasionId>
+//   research-survey      — srvy_<inviteId>
 
 // Cuid-shape guard reused by every deep-link parser. cuids are
 // `^[a-z0-9]{20,30}$` in practice, but the looser regex below also accepts
@@ -59,4 +60,22 @@ export function parseEventReminderPayload(payload: string): EventReminderPayload
 
   if (!looksLikeId(occasionId)) return { kind: 'malformed' };
   return { kind: 'ok', occasionId };
+}
+
+export type SurveyInvitePayload =
+  | { kind: 'ok'; inviteId: string }
+  | { kind: 'malformed' };
+
+export function parseSurveyInvitePayload(payload: string): SurveyInvitePayload {
+  if (!payload.startsWith('srvy_')) return { kind: 'malformed' };
+
+  let inviteId: string;
+  try {
+    inviteId = decodeURIComponent(payload.slice('srvy_'.length));
+  } catch {
+    return { kind: 'malformed' };
+  }
+
+  if (!looksLikeId(inviteId)) return { kind: 'malformed' };
+  return { kind: 'ok', inviteId };
 }

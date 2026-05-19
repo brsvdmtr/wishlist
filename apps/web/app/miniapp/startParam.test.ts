@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseReservationReminderPayload, parseEventReminderPayload } from './startParam';
+import { parseReservationReminderPayload, parseEventReminderPayload, parseSurveyInvitePayload } from './startParam';
 
 describe('parseReservationReminderPayload', () => {
   it('parses a well-formed rrem_<itemId>__m_<metaId> payload', () => {
@@ -126,5 +126,34 @@ describe('parseEventReminderPayload', () => {
     ]) {
       expect(parseEventReminderPayload(other)).toEqual({ kind: 'malformed' });
     }
+  });
+});
+
+describe('parseSurveyInvitePayload', () => {
+  it('parses a well-formed srvy_<inviteId> payload', () => {
+    const result = parseSurveyInvitePayload('srvy_cmaa1bb2ccdd');
+    expect(result).toEqual({ kind: 'ok', inviteId: 'cmaa1bb2ccdd' });
+  });
+
+  it('round-trips the wire format produced by buildSurveyDeepLink', () => {
+    const inviteId = 'cmaa1bb2ccdd';
+    const wirePayload = `srvy_${encodeURIComponent(inviteId)}`;
+    expect(parseSurveyInvitePayload(wirePayload)).toEqual({ kind: 'ok', inviteId });
+  });
+
+  it('rejects payload without srvy_ prefix', () => {
+    expect(parseSurveyInvitePayload('rrem_cmaa1bb2ccdd__m_cmm9zz8yyxx')).toEqual({ kind: 'malformed' });
+    expect(parseSurveyInvitePayload('evnt_cmaa1bb2ccdd')).toEqual({ kind: 'malformed' });
+  });
+
+  it('rejects payloads whose decoded id fails the cuid-shape regex', () => {
+    expect(parseSurveyInvitePayload('srvy_id%20with%20space')).toEqual({ kind: 'malformed' });
+    expect(parseSurveyInvitePayload('srvy_short')).toEqual({ kind: 'malformed' });
+    expect(parseSurveyInvitePayload(`srvy_${'a'.repeat(50)}`)).toEqual({ kind: 'malformed' });
+  });
+
+  it('rejects undecodable percent-encoded payloads', () => {
+    const result = parseSurveyInvitePayload('srvy_%E0%A4%A');
+    expect(result).toEqual({ kind: 'malformed' });
   });
 });
