@@ -1370,6 +1370,10 @@ model AnalyticsEvent {
   userId    String?
   props     Json? // structured event properties for god-mode queries (variant_key, etc.)
   createdAt DateTime @default(now())
+  // GIN(props jsonb_path_ops) is applied OUT OF BAND — see
+  // docs/ops/analytics-index.md + ops/migrations/2026-05-19-analytics-props-gin-index.sql.
+  // Do NOT add it as @@index here: Prisma wraps migrations in BEGIN/COMMIT
+  // and CREATE INDEX CONCURRENTLY is rejected inside a transaction.
 
   @@index([event, createdAt])
   @@index([userId, event])

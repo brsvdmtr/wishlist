@@ -1,0 +1,56 @@
+-- AnalyticsEvent.props GIN index (jsonb_path_ops) — applied out-of-band.
+--
+-- Why this is NOT a Prisma migration:
+--   Prisma wraps each migration.sql in BEGIN; ... COMMIT;. PostgreSQL
+--   refuses `CREATE INDEX CONCURRENTLY` inside any transaction block
+--   (errcode 25001 / 0A000). The 20260516000000 migration already
+--   flagged this for follow-up; this is that follow-up.
+--
+-- What it does:
+--   Builds a GIN index on AnalyticsEvent.props using jsonb_path_ops
+--   so god-mode queries that filter by JSON containment (@>) can skip
+--   the seq scan. The current dashboard uses `props->>'k' = 'v'`,
+--   which does NOT hit a GIN index (text-extraction operator). The
+--   runbook covers the rewrite to `props @> '{"k":"v"}'::jsonb`.
+--
+-- Why jsonb_path_ops (not the default jsonb_ops):
+--   - ~30% smaller on disk, faster lookups
+--   - Supports @>, @?, @@ — the only operators god mode actually needs
+--   - We do not run `props ? 'key'` or `props ?|` anywhere in apps/api
+--     today (verified 2026-05-19)
+--   - If a future analytics query needs key-existence (?), reopen the
+--     decision: rewrite to @>, or add a second jsonb_ops GIN
+--
+-- HOW TO RUN — full instructions: docs/ops/analytics-index.md.
+--   Required mode: psql autocommit ON (psql default).
+--   DO NOT wrap in BEGIN/COMMIT.
+--   DO NOT pass `--single-transaction` or `-1` to psql.
+--   DO NOT run through Prisma or any transaction-wrapped migration runner.
+--   DO NOT wrap in a `DO $$ ... END $$` block — DO bodies are
+--     transactional, and CONCURRENTLY index ops cannot run inside a
+--     transaction.
+--
+-- Lock profile:
+--   CREATE INDEX CONCURRENTLY takes ShareUpdateExclusiveLock on
+--   AnalyticsEvent — blocks DDL and other CONCURRENTLY builds on the
+--   same table, but allows INSERT / SELECT / UPDATE / DELETE in
+--   parallel. Writes are NOT blocked. Matches the hard constraint of
+--   this change.
+--
+-- Failure mode:
+--   If the build is interrupted (cancel, OOM, disk full), Postgres
+--   leaves an INVALID index behind. THIS SCRIPT DOES NOT CLEAN IT UP.
+--   The operator must drop it manually with `DROP INDEX CONCURRENTLY`
+--   before re-applying — see "Invalid cleanup" in
+--   docs/ops/analytics-index.md.
+--   Why manual: `DROP INDEX CONCURRENTLY` is also non-transactional,
+--   so any in-script conditional cleanup (e.g. a DO $$ ... $$ block
+--   that drops invalid indexes) would itself fail with 25001/0A000.
+--   Keeping cleanup manual keeps the apply path unambiguously safe.
+--
+-- Rollback:
+--   DROP INDEX CONCURRENTLY IF EXISTS "idx_analytics_event_props_gin";
+--   (same non-transactional constraint as above)
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "idx_analytics_event_props_gin"
+    ON "AnalyticsEvent" USING gin ("props" jsonb_path_ops);
