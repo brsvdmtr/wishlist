@@ -1,7 +1,7 @@
 # Documentation Index — WishBoard
 
 > Start here. All documentation for the WishBoard Telegram Mini App project.
-> Last updated: 2026-05-03 · Branch: main
+> Last updated: 2026-05-20 · Branch: main
 
 ---
 
@@ -37,7 +37,7 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 | Doc | Status | What it covers |
 |-----|--------|---------------|
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | primary | Product overview, system diagram, module responsibilities, auth layers, design decisions |
-| [DATA_MODEL.md](./DATA_MODEL.md) | primary | All 51 Prisma models, 30 enums, relationships, key behaviors |
+| [DATA_MODEL.md](./DATA_MODEL.md) | primary | All 78 Prisma models, 38 enums, relationships, key behaviors |
 | [ACCESS_MATRIX.md](./ACCESS_MATRIX.md) | primary | Auth tiers, role definitions, PRO vs FREE limits, data visibility rules |
 
 ### Backend
@@ -54,7 +54,7 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 
 | Doc | Status | What it covers |
 |-----|--------|---------------|
-| [FRONTEND_MAP.md](./FRONTEND_MAP.md) | primary | All 36 screens, state management, design system, PRO upsell system, patterns |
+| [FRONTEND_MAP.md](./FRONTEND_MAP.md) | primary | All 61 screens, state management, design system, PRO upsell system, patterns |
 | [FRONTEND_API_MAP.md](./FRONTEND_API_MAP.md) | secondary | Per-screen API call map (~100+ calls). Detailed companion to FRONTEND_MAP + API_REFERENCE |
 
 ### Telegram Integration

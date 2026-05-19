@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-05-20 — Counter refresh + CURRENT_PRODUCT_STATE.md added to doc-guard
+
+**6 docs + 1 script** to clear `scripts/doc-guard.sh` failures on every push to `main`. Counts had drifted past commits `06332cd` (research-survey: 4 Prisma models + 2 enums) and `7a70069` (Mini App `research-survey` screen), plus earlier 2026-05 commits that bumped totals without refreshing the counters.
+
+- **INDEX.md, DATA_MODEL.md, FRONTEND_MAP.md, CURRENT_PRODUCT_STATE.md** — counter strings bumped to current truth: **78 Prisma models, 38 enums, 61 screens** (derived from `packages/db/prisma/schema.prisma` and the `type Screen` union in `apps/web/app/miniapp/MiniApp.tsx:699-710`). `Last updated` bumped to 2026-05-20 on each.
+- **DESIGN_DECISIONS.md** — two `RU+EN` occurrences (lines 489, 891) paraphrased to `Russian + English` so the `RU+EN` stale-pattern check passes. Substance unchanged.
+- **scripts/doc-guard.sh** — four hardcoded count assertions (`51 Prisma models, 30 enums`, `51 models`, `36 screens` × 2) bumped to current truth. Added two new assertions against `CURRENT_PRODUCT_STATE.md` (`78 Prisma models` and `61 screens`) so future drift surfaces here too — the previous drift hid for ~3 weeks because that doc wasn't on the guard's truth-marker list.
+- **Deferred:** previous canonical strings (`51 models`, `30 enums`, `36 screens`) were NOT added to `stale_patterns` — they appear in this changelog and `RECOVERY_RUNBOOK.md` history; adding them would require per-file excludes. A "compute counts dynamically" refactor of `doc-guard.sh` was also considered and deferred — out of scope for this maintenance pass.
+- **CHANGELOG_DOCS.md** — this entry
+
+---
+
 ## 2026-05-15 — Weekly Documentation Update
 
 **6 docs touched** to reflect 11 commits since the 2026-05-08 update (`ac8bca6` Pro Lifetime feature already refreshed MONETIZATION/SERVICES/DATA_MODEL § Subscription billingPeriod in-flight):

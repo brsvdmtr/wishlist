@@ -1,8 +1,8 @@
 # Data Model — Wishlist Telegram Mini App
 
-_Last updated: 2026-05-15_
+_Last updated: 2026-05-20_
 
-> **73 models, 36 enums** (PostgreSQL 16, managed by Prisma ORM)
+> **78 models, 38 enums** (PostgreSQL 16, managed by Prisma ORM)
 
 ---
 

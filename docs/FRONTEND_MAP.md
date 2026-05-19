@@ -1,6 +1,6 @@
 # FRONTEND_MAP.md — Frontend Architecture
 
-> Date: 2026-05-15. Verified from source code.
+> Date: 2026-05-20. Verified from source code.
 
 ---
 
@@ -41,7 +41,7 @@ packages/shared/src/
 
 `MiniApp.tsx` manages navigation exclusively through a `useState<Screen>` hook. There is no routing library.
 
-### Screen Type Union (59 screens)
+### Screen Type Union (61 screens)
 
 ```typescript
 type Screen =

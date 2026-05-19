@@ -2,7 +2,7 @@
 
 Production feature inventory for the Wishlist Telegram Mini App.
 
-**Last updated:** 2026-05-15
+**Last updated:** 2026-05-20
 
 ---
 
@@ -42,8 +42,8 @@ See also: `docs/MONETIZATION.md`
 
 ## Scale
 
-- **73 Prisma models**, **36 enums**
-- **59 screens** in the Mini App
+- **78 Prisma models**, **38 enums**
+- **61 screens** in the Mini App
 - **14 add-on SKUs**
 
 ## Lifecycle & Retention

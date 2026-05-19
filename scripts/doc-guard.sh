@@ -63,20 +63,28 @@ done
 # -----------------------------
 # Required current truth markers
 # -----------------------------
-if ! grep -q "51 Prisma models, 30 enums" docs/INDEX.md; then
+if ! grep -q "78 Prisma models, 38 enums" docs/INDEX.md; then
   fail "docs/INDEX.md does not contain updated model/enum count"
 fi
 
-if ! grep -q "51 models" docs/DATA_MODEL.md; then
-  fail "docs/DATA_MODEL.md does not confirm 51 models"
+if ! grep -q "78 models" docs/DATA_MODEL.md; then
+  fail "docs/DATA_MODEL.md does not confirm 78 models"
 fi
 
-if ! grep -q "36 screens" docs/INDEX.md; then
+if ! grep -q "61 screens" docs/INDEX.md; then
   fail "docs/INDEX.md does not contain updated screen count"
 fi
 
-if ! grep -q "36 screens" docs/FRONTEND_MAP.md; then
-  fail "docs/FRONTEND_MAP.md does not contain 36 screens"
+if ! grep -q "61 screens" docs/FRONTEND_MAP.md; then
+  fail "docs/FRONTEND_MAP.md does not contain 61 screens"
+fi
+
+if ! grep -q "78 Prisma models" docs/CURRENT_PRODUCT_STATE.md; then
+  fail "docs/CURRENT_PRODUCT_STATE.md does not confirm 78 Prisma models"
+fi
+
+if ! grep -q "61 screens" docs/CURRENT_PRODUCT_STATE.md; then
+  fail "docs/CURRENT_PRODUCT_STATE.md does not confirm 61 screens"
 fi
 
 if ! grep -Eq "Long polling|long polling" docs/ARCHITECTURE.md; then
