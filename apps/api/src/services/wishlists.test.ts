@@ -25,6 +25,7 @@ import {
   DRAFTS_ITEM_LIMIT,
   reassignPrimaryBeforeWishlistDelete,
   createGetOrCreateDraftsWishlist,
+  evaluateGuestConversion,
 } from './wishlists';
 
 beforeEach(() => {
@@ -139,5 +140,95 @@ describe('createGetOrCreateDraftsWishlist', () => {
     await factory('user-3');
 
     expect(trackEvent.mock.calls[0]![2]).toMatchObject({ isFirstAnyWishlist: false });
+  });
+});
+
+describe('evaluateGuestConversion', () => {
+  it('emits with source=referral when user has referredByUserId on first wishlist', () => {
+    expect(
+      evaluateGuestConversion({
+        existingRegularWishlistCount: 1,
+        referredByUserId: 'inviter_42',
+        firstAcquisitionSource: null,
+      }),
+    ).toEqual({ emit: true, source: 'referral' });
+  });
+
+  it('emits with source=share_link when first-touch was share_link', () => {
+    expect(
+      evaluateGuestConversion({
+        existingRegularWishlistCount: 1,
+        referredByUserId: null,
+        firstAcquisitionSource: 'share_link',
+      }),
+    ).toEqual({ emit: true, source: 'share_link' });
+  });
+
+  it.each([
+    'curated_selection',
+    'public_profile',
+    'shared',
+  ])('emits with source=%s when first-touch matches the bounded list', (src) => {
+    expect(
+      evaluateGuestConversion({
+        existingRegularWishlistCount: 1,
+        referredByUserId: null,
+        firstAcquisitionSource: src,
+      }),
+    ).toEqual({ emit: true, source: src });
+  });
+
+  it('referral wins over acquisition source when both present', () => {
+    expect(
+      evaluateGuestConversion({
+        existingRegularWishlistCount: 1,
+        referredByUserId: 'inviter_42',
+        firstAcquisitionSource: 'share_link',
+      }),
+    ).toEqual({ emit: true, source: 'referral' });
+  });
+
+  it('does NOT emit on 2nd+ wishlist (existingRegular > 1)', () => {
+    expect(
+      evaluateGuestConversion({
+        existingRegularWishlistCount: 2,
+        referredByUserId: 'inviter_42',
+        firstAcquisitionSource: 'share_link',
+      }),
+    ).toEqual({ emit: false });
+  });
+
+  it('does NOT emit for organic / direct users (no referral, no shared-content acquisition)', () => {
+    expect(
+      evaluateGuestConversion({
+        existingRegularWishlistCount: 1,
+        referredByUserId: null,
+        firstAcquisitionSource: null,
+      }),
+    ).toEqual({ emit: false });
+    expect(
+      evaluateGuestConversion({
+        existingRegularWishlistCount: 1,
+        referredByUserId: null,
+        firstAcquisitionSource: 'direct',
+      }),
+    ).toEqual({ emit: false });
+    expect(
+      evaluateGuestConversion({
+        existingRegularWishlistCount: 1,
+        referredByUserId: null,
+        firstAcquisitionSource: 'organic',
+      }),
+    ).toEqual({ emit: false });
+  });
+
+  it('does NOT emit if existingRegular is 0 (defensive — shouldn`t happen in practice)', () => {
+    expect(
+      evaluateGuestConversion({
+        existingRegularWishlistCount: 0,
+        referredByUserId: 'x',
+        firstAcquisitionSource: 'share_link',
+      }),
+    ).toEqual({ emit: false });
   });
 });

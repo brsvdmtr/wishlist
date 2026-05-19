@@ -38,6 +38,7 @@
 import type { PrismaClient } from '@wishlist/db';
 import type { Logger } from 'pino';
 import { LIFETIME_BILLING_PERIOD } from '@wishlist/shared';
+import { trackProductEvent } from '../services/analytics';
 
 // Minimal structural type for getUserEntitlement — handlers in this file
 // only access `.isPro`. Mirrors index.ts:533 return type narrowed.
@@ -63,18 +64,44 @@ export function startBillingSchedulers(deps: BillingSchedulerDeps): void {
   // currentPeriodEnd (so they would never match anyway), but the explicit
   // billingPeriod !== 'lifetime' guard makes the contract obvious and survives
   // any future tweak to the sentinel date.
+  //
+  // Two-step (findMany → updateMany) instead of a single updateMany so each
+  // expiring row gets a subscription.expired product-event emit. The findMany
+  // snapshot pre-write is intentional: per-row emit needs (userId, planCode,
+  // billingPeriod) which a bulk updateMany doesn't return. Race-safe under
+  // multiple scheduler ticks: the updateMany filter is idempotent (already-
+  // EXPIRED rows don't re-match), and a duplicate emit on the same row in a
+  // borderline tick is acceptable (downstream funnels dedupe by subscriptionId
+  // anyway).
   setInterval(async () => {
     try {
-      const expired = await prisma.subscription.updateMany({
+      const expiringRows = await prisma.subscription.findMany({
         where: {
           status: { in: ['ACTIVE', 'CANCELLED'] },
           currentPeriodEnd: { lte: new Date() },
           NOT: { billingPeriod: LIFETIME_BILLING_PERIOD },
         },
+        select: { id: true, userId: true, planCode: true, billingPeriod: true, currentPeriodEnd: true },
+      });
+      if (expiringRows.length === 0) return;
+      const expired = await prisma.subscription.updateMany({
+        where: { id: { in: expiringRows.map((s) => s.id) } },
         data: { status: 'EXPIRED' },
       });
       if (expired.count > 0) {
         logger.info({ count: expired.count }, 'billing: expired subscriptions');
+      }
+      for (const row of expiringRows) {
+        trackProductEvent({
+          event: 'subscription.expired',
+          userId: row.userId,
+          props: {
+            subscriptionId: row.id,
+            planCode: row.planCode,
+            billingPeriod: row.billingPeriod,
+            expiredAt: row.currentPeriodEnd.toISOString(),
+          },
+        });
       }
     } catch (err) {
       logger.error({ err }, 'billing expiry check failed');

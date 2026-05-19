@@ -77,6 +77,8 @@ import { generateUniqueSlug } from '../wishlists/slug';
 import { PLACEMENT_ORDER_BY } from '../placements/orderBy';
 import { ITEM_ORDER_BY } from '../sort';
 import { recordForeignWishlistAccess, checkForeignWishlistLiveAccess } from '../services/foreign-wishlist-access';
+import { trackProductEvent } from '../services/analytics';
+import { evaluateGuestConversion } from '../services/wishlists';
 import logger from '../logger';
 
 // Shape of the Telegram initData user object — duplicated from index.ts to
@@ -727,6 +729,44 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
       if (existingRegular === 1) trackEvent('first_regular_wishlist_created', user.id, { wishlistId: wishlist.id, source: 'manual', platform: 'miniapp' });
 
       trackAnalyticsEvent({ event: 'wishlist.created', userId: user.id, props: { source: 'miniapp' } });
+
+      // Guest → user conversion. A visitor who arrived via a share link or
+      // referral and then creates their FIRST own wishlist has materially
+      // converted from a passive guest into an active owner. Decision rule
+      // is extracted to `evaluateGuestConversion` in services/wishlists.ts
+      // so it's unit-testable without spinning up the full router. Both
+      // signals (referredByUserId, firstAcquisitionSource) live on
+      // UserProfile, not User — one read covers both.
+      if (existingRegular === 1) {
+        try {
+          const profile = await prisma.userProfile.findUnique({
+            where: { userId: user.id },
+            select: {
+              referredByUserId: true,
+              firstAcquisitionSource: true,
+              firstAcquisitionMedium: true,
+            },
+          });
+          const decision = evaluateGuestConversion({
+            existingRegularWishlistCount: existingRegular,
+            referredByUserId: profile?.referredByUserId ?? null,
+            firstAcquisitionSource: profile?.firstAcquisitionSource ?? null,
+          });
+          if (decision.emit) {
+            trackProductEvent({
+              event: 'guest.converted_to_user',
+              userId: user.id,
+              props: {
+                source: decision.source,
+                medium: profile?.firstAcquisitionMedium ?? null,
+                platform: 'miniapp',
+              },
+            });
+          }
+        } catch (err) {
+          logger.warn({ err, userId: user.id }, 'guest.converted_to_user attribution check failed');
+        }
+      }
 
       // Referral: mark firstWishlist milestone + drive qualify/reward pipeline
       // if this user was referred. Fire-and-forget; never blocks the response.

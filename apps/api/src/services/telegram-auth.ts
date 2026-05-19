@@ -42,6 +42,7 @@ import { prisma } from '@wishlist/db';
 import { secureCompare } from '../lib/crypto';
 import logger from '../logger';
 import { recordIpEvent } from '../security/ipThrottle';
+import { trackProductEvent } from './analytics';
 
 export type TelegramUser = {
   id: number;
@@ -146,7 +147,7 @@ export async function getOrCreateTgUser(tgUser: TelegramUser) {
   const lastName = tgUser.last_name ?? null;
   const username = tgUser.username ?? null;
   const isPremium = tgUser.is_premium === true;
-  return prisma.user.upsert({
+  const user = await prisma.user.upsert({
     where: { telegramId: String(tgUser.id) },
     update: {
       telegramChatId: String(tgUser.id),
@@ -164,4 +165,27 @@ export async function getOrCreateTgUser(tgUser: TelegramUser) {
       isPremium,
     },
   });
+  // First-ever creation is detected by createdAt === updatedAt at ms precision —
+  // Prisma's upsert evaluates @default(now()) and @updatedAt in the same INSERT,
+  // so values are identical on the create branch. On the update branch
+  // updatedAt is strictly later than createdAt by the round-trip + any prior
+  // touches, so equality is a reliable "just-created" signal. Race-safe: only
+  // one of two concurrent first-time upserts wins the INSERT; the other takes
+  // the UPDATE branch and won't satisfy this equality.
+  //
+  // Defensive: if either timestamp is absent (older test mocks, edge-case
+  // partial rows), skip the emit rather than throw on `.getTime()`. False
+  // negatives are acceptable; a crash inside the auth path is not.
+  if (
+    user.createdAt instanceof Date &&
+    user.updatedAt instanceof Date &&
+    user.createdAt.getTime() === user.updatedAt.getTime()
+  ) {
+    trackProductEvent({
+      event: 'user.signup',
+      userId: user.id,
+      props: { source: 'telegram', isPremium },
+    });
+  }
+  return user;
 }

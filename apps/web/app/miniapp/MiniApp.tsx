@@ -5727,6 +5727,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     });
   }, [screen, viewingItem?.id, trackBirthdayAttributedEvent]);
 
+  // Trigger ref shared between `showUpsell` (sets 'auto' for server-driven 402
+  // opens) and the `paywall.viewed` effect below (consumes + resets). Direct
+  // `setUpsellSheet(...)` callers don't touch this ref and the effect emits
+  // them as trigger='tap'.
+  const upsellTriggerRef = useRef<'auto' | 'tap'>('tap');
+  const lastPaywallEmittedContextRef = useRef<string | null>(null);
+
   /** Show context-aware PRO upsell sheet with anti-spam throttling.
    *  auto=true (402 response): max 1 auto-show per session + 30s cooldown.
    *  explicit tap: always shows. */
@@ -5738,10 +5745,29 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       upsellAutoShownThisSession.current = true;
     }
     upsellLastShownRef.current[context] = now;
+    upsellTriggerRef.current = opts?.auto ? 'auto' : 'tap';
     setUpsellSheet({ context, wishlistId: opts?.wishlistId });
     trackEvent(`pro_entrypoint_viewed_${context}`);
     try { tgRef.current?.WebApp?.HapticFeedback?.impactOccurred?.('light'); } catch { /* ok */ }
   }, [trackEvent]);
+
+  // Unified PRODUCT_EVENTS `paywall.viewed` emit. Fires once on every
+  // transition null → set of upsellSheet, regardless of whether the sheet was
+  // opened via `showUpsell` (throttled auto/tap path) or by a direct
+  // `setUpsellSheet({ context })` call in JSX.
+  useEffect(() => {
+    const ctx = upsellSheet?.context ?? null;
+    if (!ctx) { lastPaywallEmittedContextRef.current = null; return; }
+    if (lastPaywallEmittedContextRef.current === ctx) return;
+    lastPaywallEmittedContextRef.current = ctx;
+    trackEvent('paywall.viewed', {
+      context: ctx,
+      surface: 'pro_upsell_sheet',
+      trigger: upsellTriggerRef.current,
+      wishlistId: upsellSheet?.wishlistId,
+    });
+    upsellTriggerRef.current = 'tap';
+  }, [upsellSheet?.context, upsellSheet?.wishlistId, trackEvent]);
 
   const pushToast = useCallback((message: string, kind: Toast['kind']) => {
     const toast: Toast = { id: crypto.randomUUID(), message, kind };
@@ -11197,6 +11223,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           setSecretPaywallReturnItem(item);
           setScreen('secret-reservation-paywall');
           trackEvent('secret_res.paywall_open', { itemId: item.id, trigger: 'create_attempt' });
+          trackEvent('paywall.viewed', { context: 'secret_reservation', surface: 'screen', trigger: 'auto' });
           return null;
         }
         if (err.error === 'own_item') {
@@ -11422,6 +11449,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       setSecretPaywallReturnItem(item);
       setScreen('secret-reservation-paywall');
       trackEvent('secret_res.paywall_open', { itemId: item.id, trigger: 'cta_tap' });
+      trackEvent('paywall.viewed', { context: 'secret_reservation', surface: 'screen', trigger: 'tap' });
       return;
     }
     // First time → show onboarding; after "got it" open confirm sheet
@@ -15259,7 +15287,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <StickyCTAFade bottom="calc(86px + env(safe-area-inset-bottom, 0px))" style={{ zIndex: 50, position: 'fixed' as const }}>
               <button
                 disabled={addonCheckoutLoading}
-                onClick={() => void handleBuyAddon('secret_reservation_unlock')}
+                onClick={() => {
+                  trackEvent('paywall.cta_clicked', { context: 'secret_reservation', surface: 'screen', sku: 'secret_reservation_unlock' });
+                  void handleBuyAddon('secret_reservation_unlock');
+                }}
                 style={{ width: '100%', padding: '16px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${secretColor} 0%, #C4A7FF 100%)`, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: '0 8px 24px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: addonCheckoutLoading ? 0.6 : 1 }}
               >
                 {addonCheckoutLoading ? '…' : t('sr_paywall_cta', locale, { price: secretAccess.priceXtr })}
@@ -17399,8 +17430,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           tgUser={tgUser}
           ownerName={resolveOwnerName(profileData, tgUser)}
           ownerAvatarUrl={profileData?.avatarUrl ?? null}
-          onCopied={() => pushToast(t('share_copied', locale), 'success')}
-          onShared={() => setScreen('wishlist-detail')}
+          onCopied={() => {
+            pushToast(t('share_copied', locale), 'success');
+            trackEvent('wishlist.shared', { method: 'copy_link', wishlistId: currentWl.id, surface: 'share_screen' });
+          }}
+          onShared={() => {
+            trackEvent('wishlist.shared', { method: 'telegram_share', wishlistId: currentWl.id, surface: 'share_screen' });
+            setScreen('wishlist-detail');
+          }}
           locale={locale}
           buildTgDeepLink={buildTgDeepLink}
           isPro={planInfo.code === 'PRO'}
@@ -26090,7 +26127,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           setUpsellSheet(null);
         }}
         onUpgrade={(plan) => {
-          if (upsellSheet) trackEvent(`pro_cta_clicked_${upsellSheet.context}`, { plan });
+          if (upsellSheet) {
+            trackEvent(`pro_cta_clicked_${upsellSheet.context}`, { plan });
+            // Unified PRODUCT_EVENTS taxonomy emit. Coexists with the legacy
+            // per-context event above so existing dashboards keep working.
+            trackEvent('paywall.cta_clicked', {
+              context: upsellSheet.context,
+              plan,
+              surface: 'pro_upsell_sheet',
+            });
+          }
           void handleUpgradeToPro(plan);
         }}
         checkoutLoading={checkoutLoading}
@@ -32890,15 +32936,23 @@ function ReadySharePromptSheet({ data, locale, tgUser, tgFetch, buildTgDeepLink,
 
   const handleShare = () => {
     if (!shareLink) return;
+    // Legacy intent event preserved verbatim.
     trackEvent('ready_share_prompt_share', { wishlistId: data.wishlistId, itemsCount: data.itemsCount, entry: 'ready_wishlist_2plus' });
     const ownerName = tgUser?.first_name ?? '';
     const intro = ownerName ? `${t('share_intro', locale, { name: ownerName })}\n\n` : '';
     const shareText = `${intro}\u{1f381} ${data.wishlistTitle}\n${t('share_cta', locale)}`;
     const tgShareUrl = `https://t.me/share/url?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(shareText)}`;
+    let opened = false;
     try {
       window.Telegram?.WebApp.openTelegramLink(tgShareUrl);
+      opened = true;
     } catch {
-      window.open(tgShareUrl, '_blank');
+      const fallback = window.open(tgShareUrl, '_blank');
+      opened = !!fallback;
+    }
+    if (opened) {
+      // Success-only emit — `wishlist.shared` measures completion, not intent.
+      trackEvent('wishlist.shared', { method: 'telegram_share', wishlistId: data.wishlistId, surface: 'ready_share_prompt' });
     }
     onClose();
   };
@@ -33015,9 +33069,12 @@ function FirstSharePromptScreen({ data, shownRef, locale, tgUser, tgFetch, build
 
   const copy = async () => {
     if (!shareLink) return;
+    // Legacy "intent" event fires regardless of success — pre-existing semantics.
     trackEvent('first_share_prompt_copy_link', { wishlistId: data.wishlistId, entry: 'first_regular_wish' });
+    let copied = false;
     try {
       await navigator.clipboard.writeText(shareLink);
+      copied = true;
     } catch {
       const ta = document.createElement('textarea');
       ta.value = shareLink;
@@ -33025,8 +33082,15 @@ function FirstSharePromptScreen({ data, shownRef, locale, tgUser, tgFetch, build
       document.body.appendChild(ta);
       ta.focus();
       ta.select();
-      try { document.execCommand('copy'); } catch { /* ignore */ }
+      try {
+        copied = document.execCommand('copy');
+      } catch { /* ignore */ }
       document.body.removeChild(ta);
+    }
+    if (copied) {
+      // Success-only emit — `wishlist.shared` measures actual completion, not
+      // intent. Mirrors the ShareScreen contract (onCopied fires post-success).
+      trackEvent('wishlist.shared', { method: 'copy_link', wishlistId: data.wishlistId, surface: 'first_share_prompt' });
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -33034,15 +33098,24 @@ function FirstSharePromptScreen({ data, shownRef, locale, tgUser, tgFetch, build
 
   const shareTg = () => {
     if (!shareLink) return;
+    // Legacy intent event preserved verbatim.
     trackEvent('first_share_prompt_share_telegram', { wishlistId: data.wishlistId, entry: 'first_regular_wish' });
     const ownerName = tgUser?.first_name ?? '';
     const intro = ownerName ? `${t('share_intro', locale, { name: ownerName })}\n\n` : '';
     const shareText = `${intro}\u{1f381} ${data.wishlistTitle}\n${t('share_cta', locale)}`;
     const tgShareUrl = `https://t.me/share/url?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(shareText)}`;
+    let opened = false;
     try {
       window.Telegram?.WebApp.openTelegramLink(tgShareUrl);
+      opened = true;
     } catch {
-      window.open(tgShareUrl, '_blank');
+      const fallback = window.open(tgShareUrl, '_blank');
+      opened = !!fallback;
+    }
+    if (opened) {
+      // Success-only emit. Failure (popup blocker, Telegram bridge throws AND
+      // window.open returns null) is recorded only by the legacy intent event.
+      trackEvent('wishlist.shared', { method: 'telegram_share', wishlistId: data.wishlistId, surface: 'first_share_prompt' });
     }
     // Close prompt after opening share dialog — user returns to wishlist-detail
     onSkip();

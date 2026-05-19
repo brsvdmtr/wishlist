@@ -30,6 +30,64 @@ import { prisma } from '@wishlist/db';
 
 export const DRAFTS_ITEM_LIMIT = 50;
 
+// First-touch acquisition sources that indicate the user arrived via SHARED
+// content (someone else's wishlist link, a curated selection, a public
+// profile, a referral). When such a user later creates their first OWN
+// wishlist, that's the moment they convert from passive guest to active
+// owner — the canonical guest.converted_to_user signal.
+//
+// Bounded list so organic /miniapp openers (firstAcquisitionSource null or
+// 'direct') don't get mis-attributed as converted guests. Update with care:
+// adding a source here changes the conversion-funnel definition.
+const SHARED_CONTENT_ACQUISITION_SOURCES: ReadonlySet<string> = new Set([
+  'share_link',
+  'referral',
+  'curated_selection',
+  'public_profile',
+  'shared',
+]);
+
+export type GuestConversionInput = {
+  /** Number of regular wishlists the user owns AFTER this create (so 1 = the just-created one). */
+  existingRegularWishlistCount: number;
+  /** Set if the user was attributed to an inviter (referral program). */
+  referredByUserId: string | null | undefined;
+  /** First-touch firstAcquisitionSource from UserProfile. */
+  firstAcquisitionSource: string | null | undefined;
+};
+
+export type GuestConversionDecision =
+  | { emit: true; source: 'referral' | 'share_link' | 'curated_selection' | 'public_profile' | 'shared' }
+  | { emit: false };
+
+/**
+ * Pure decision rule: should we emit `guest.converted_to_user` for this
+ * create-wishlist call?
+ *
+ * Emit when this is the user's FIRST regular wishlist AND they arrived via
+ * shared content (explicit referral or one of the bounded acquisition
+ * sources). Always returns false for the 2nd+ wishlist create and for
+ * organic / direct-acquisition users.
+ *
+ * Referral attribution wins over the acquisition source when both are
+ * present — the referral pointer is the more authoritative signal because
+ * it survives even if the first-touch beacon misfired.
+ */
+export function evaluateGuestConversion(input: GuestConversionInput): GuestConversionDecision {
+  if (input.existingRegularWishlistCount !== 1) return { emit: false };
+
+  if (input.referredByUserId) {
+    return { emit: true, source: 'referral' };
+  }
+
+  const src = input.firstAcquisitionSource ?? null;
+  if (src && SHARED_CONTENT_ACQUISITION_SOURCES.has(src)) {
+    return { emit: true, source: src as GuestConversionDecision extends { source: infer S } ? S : never };
+  }
+
+  return { emit: false };
+}
+
 /**
  * Before deleting a wishlist, make sure shared wishes (items placed in THIS wishlist
  * as their legacy primary + also placed in other wishlists) don't get cascaded away.

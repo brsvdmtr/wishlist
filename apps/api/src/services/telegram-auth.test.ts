@@ -11,6 +11,7 @@ import * as crypto from 'node:crypto';
 const shared = vi.hoisted(() => ({
   upsert: vi.fn(),
   recordIpEvent: vi.fn(),
+  trackProductEvent: vi.fn(),
 }));
 
 vi.mock('@wishlist/db', () => ({
@@ -19,6 +20,10 @@ vi.mock('@wishlist/db', () => ({
 
 vi.mock('../security/ipThrottle', () => ({
   recordIpEvent: shared.recordIpEvent,
+}));
+
+vi.mock('./analytics', () => ({
+  trackProductEvent: shared.trackProductEvent,
 }));
 
 import {
@@ -34,7 +39,17 @@ import {
 beforeEach(() => {
   shared.upsert.mockReset();
   shared.recordIpEvent.mockReset();
+  shared.trackProductEvent.mockReset();
 });
+
+// Shape of the user row returned by prisma.user.upsert that getOrCreateTgUser
+// reads timestamps from. Helper builds a row where createdAt === updatedAt
+// (just-created) or with a delta (existing user touched).
+function userRow(opts: { id: string; justCreated: boolean }) {
+  const created = new Date('2026-05-01T12:00:00.000Z');
+  const updated = opts.justCreated ? created : new Date('2026-05-02T12:00:00.000Z');
+  return { id: opts.id, createdAt: created, updatedAt: updated };
+}
 
 // ─── Helpers to build a valid initData payload ──────────────────────────────
 
@@ -153,7 +168,7 @@ describe('getOrCreateTgUser', () => {
       username: 'maria_iv',
       is_premium: true,
     };
-    shared.upsert.mockResolvedValueOnce({ id: 'u_internal' });
+    shared.upsert.mockResolvedValueOnce(userRow({ id: 'u_internal', justCreated: false }));
 
     await getOrCreateTgUser(tgUser);
 
@@ -169,7 +184,7 @@ describe('getOrCreateTgUser', () => {
   });
 
   it('coerces missing last_name / username to null (not undefined)', async () => {
-    shared.upsert.mockResolvedValueOnce({ id: 'u_min' });
+    shared.upsert.mockResolvedValueOnce(userRow({ id: 'u_min', justCreated: false }));
 
     await getOrCreateTgUser({ id: 1, first_name: 'X' });
 
@@ -180,7 +195,7 @@ describe('getOrCreateTgUser', () => {
   });
 
   it('treats explicit is_premium:false the same as missing (false)', async () => {
-    shared.upsert.mockResolvedValueOnce({ id: 'u_np' });
+    shared.upsert.mockResolvedValueOnce(userRow({ id: 'u_np', justCreated: false }));
 
     await getOrCreateTgUser({ id: 2, first_name: 'X', is_premium: false });
 
@@ -188,13 +203,37 @@ describe('getOrCreateTgUser', () => {
   });
 
   it('treats empty first_name string as null (Telegram quirk)', async () => {
-    shared.upsert.mockResolvedValueOnce({ id: 'u_e' });
+    shared.upsert.mockResolvedValueOnce(userRow({ id: 'u_e', justCreated: false }));
 
     await getOrCreateTgUser({ id: 3, first_name: '' });
 
     const arg = shared.upsert.mock.calls[0]![0];
     expect(arg.update.firstName).toBeNull();
     expect(arg.create.firstName).toBeNull();
+  });
+
+  it('emits user.signup product event ONCE when createdAt === updatedAt (first-ever upsert)', async () => {
+    shared.upsert.mockResolvedValueOnce(userRow({ id: 'u_new', justCreated: true }));
+
+    await getOrCreateTgUser({ id: 99, first_name: 'Newbie', is_premium: true });
+
+    expect(shared.trackProductEvent).toHaveBeenCalledOnce();
+    const call = shared.trackProductEvent.mock.calls[0]![0];
+    expect(call.event).toBe('user.signup');
+    expect(call.userId).toBe('u_new');
+    expect(call.props).toMatchObject({ source: 'telegram', isPremium: true });
+    // Privacy: must never carry raw Telegram first_name / username / etc.
+    expect(call.props).not.toHaveProperty('firstName');
+    expect(call.props).not.toHaveProperty('username');
+    expect(call.props).not.toHaveProperty('telegramId');
+  });
+
+  it('does NOT emit user.signup on subsequent upserts (createdAt < updatedAt)', async () => {
+    shared.upsert.mockResolvedValueOnce(userRow({ id: 'u_existing', justCreated: false }));
+
+    await getOrCreateTgUser({ id: 100, first_name: 'Returning' });
+
+    expect(shared.trackProductEvent).not.toHaveBeenCalled();
   });
 });
 

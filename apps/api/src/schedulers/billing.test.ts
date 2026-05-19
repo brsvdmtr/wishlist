@@ -4,13 +4,17 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { Logger } from 'pino';
 import type { PrismaClient } from '@wishlist/db';
+
+const analytics = vi.hoisted(() => ({ trackProductEvent: vi.fn() }));
+vi.mock('../services/analytics', () => analytics);
+
 import { startBillingSchedulers } from './billing';
 
 const HOURLY_MS = 60 * 60 * 1000;
 const fakeLogger = (): Logger => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), fatal: vi.fn(), trace: vi.fn(), child: vi.fn() } as unknown as Logger);
 
 let prisma: {
-  subscription: { updateMany: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn> };
+  subscription: { updateMany: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> };
   promoRedemption: { updateMany: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> };
   degradationState: { findMany: ReturnType<typeof vi.fn>; upsert: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
   wishlist: { findMany: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; updateMany: ReturnType<typeof vi.fn>; deleteMany: ReturnType<typeof vi.fn> };
@@ -20,10 +24,12 @@ let getUserEntitlement: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.useFakeTimers();
+  analytics.trackProductEvent.mockReset();
   prisma = {
     subscription: {
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
       findFirst: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
     },
     promoRedemption: {
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
@@ -66,19 +72,67 @@ function start() {
 
 describe('billing: subscription expiry', () => {
   it('flips ACTIVE/CANCELLED subs past currentPeriodEnd to EXPIRED', async () => {
+    prisma.subscription.findMany.mockResolvedValueOnce([
+      { id: 's1', userId: 'u1', planCode: 'PRO', billingPeriod: 'monthly', currentPeriodEnd: new Date('2026-05-18T00:00:00Z') },
+    ]);
+    prisma.subscription.updateMany.mockResolvedValueOnce({ count: 1 });
+
     start();
     await vi.advanceTimersByTimeAsync(HOURLY_MS);
-    expect(prisma.subscription.updateMany).toHaveBeenCalled();
-    const arg = prisma.subscription.updateMany.mock.calls[0]![0];
-    expect(arg.where.status).toEqual({ in: ['ACTIVE', 'CANCELLED'] });
-    expect(arg.data).toEqual({ status: 'EXPIRED' });
+
+    expect(prisma.subscription.findMany).toHaveBeenCalled();
+    const findArg = prisma.subscription.findMany.mock.calls[0]![0];
+    expect(findArg.where.status).toEqual({ in: ['ACTIVE', 'CANCELLED'] });
+
+    expect(prisma.subscription.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: 'EXPIRED' } }),
+    );
   });
 
-  it('excludes lifetime subs', async () => {
+  it('excludes lifetime subs from the findMany filter', async () => {
     start();
     await vi.advanceTimersByTimeAsync(HOURLY_MS);
-    const arg = prisma.subscription.updateMany.mock.calls[0]![0];
+    const arg = prisma.subscription.findMany.mock.calls[0]![0];
     expect(arg.where.NOT).toEqual({ billingPeriod: 'lifetime' });
+  });
+
+  it('emits subscription.expired ONCE per expiring row with non-PII props', async () => {
+    prisma.subscription.findMany.mockResolvedValueOnce([
+      { id: 's1', userId: 'u1', planCode: 'PRO', billingPeriod: 'monthly', currentPeriodEnd: new Date('2026-05-18T00:00:00Z') },
+      { id: 's2', userId: 'u2', planCode: 'PRO', billingPeriod: 'yearly',  currentPeriodEnd: new Date('2026-05-17T00:00:00Z') },
+    ]);
+    prisma.subscription.updateMany.mockResolvedValueOnce({ count: 2 });
+
+    start();
+    await vi.advanceTimersByTimeAsync(HOURLY_MS);
+
+    expect(analytics.trackProductEvent).toHaveBeenCalledTimes(2);
+    const events = analytics.trackProductEvent.mock.calls.map((c) => c[0]);
+    for (const ev of events) {
+      expect(ev.event).toBe('subscription.expired');
+      expect(ev.props).toMatchObject({
+        planCode: 'PRO',
+        billingPeriod: expect.any(String),
+        subscriptionId: expect.any(String),
+        expiredAt: expect.any(String),
+      });
+      // Privacy: no title/description/Telegram identifiers — same rule as
+      // payment.completed and other server-only events.
+      expect(ev.props).not.toHaveProperty('title');
+      expect(ev.props).not.toHaveProperty('description');
+      expect(ev.props).not.toHaveProperty('telegramId');
+    }
+    expect(events.map((e) => e.userId).sort()).toEqual(['u1', 'u2']);
+  });
+
+  it('does not emit subscription.expired when nothing is expiring', async () => {
+    prisma.subscription.findMany.mockResolvedValueOnce([]);
+
+    start();
+    await vi.advanceTimersByTimeAsync(HOURLY_MS);
+
+    expect(prisma.subscription.updateMany).not.toHaveBeenCalled();
+    expect(analytics.trackProductEvent).not.toHaveBeenCalled();
   });
 });
 
@@ -259,7 +313,7 @@ describe('billing: degradation archive → purge', () => {
 
 describe('billing: error containment', () => {
   it('each of the four jobs swallows its own errors', async () => {
-    prisma.subscription.updateMany.mockRejectedValue(new Error('sub'));
+    prisma.subscription.findMany.mockRejectedValue(new Error('sub'));
     prisma.promoRedemption.updateMany.mockRejectedValue(new Error('promo'));
     prisma.degradationState.findMany.mockRejectedValue(new Error('grace'));
 

@@ -14,6 +14,7 @@ import path from 'node:path';
 import { prisma, resolveReferralCode, tryCreateAttribution, markFirstBotStart, loadReferralConfig, persistResolvedBucket } from '@wishlist/db';
 import { t, pluralize, detectLocale, resolveEffectiveLocale, resolveLocaleWithSource, profileToLanguageSettings, resolveMarketBucket, localeToBCP47, LIFETIME_BILLING_PERIOD, PRO_LIFETIME_PERIOD_END_ISO, HINT_LOOKUP_WINDOW_MS, type Locale } from '@wishlist/shared';
 import logger from './logger';
+import { emitPaymentAnalytics } from './analytics';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
 // but also support running from within apps/bot (pnpm -C apps/bot start).
@@ -1277,6 +1278,19 @@ if (!token) {
           ? new Date(payment.subscription_expiration_date * 1000)
           : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
+        // Snapshot prior state BEFORE the upsert so the analytics branch is
+        // unambiguous: hadActivePriorSub distinguishes a fresh activation
+        // (pro.activated) from a renewal of an already-active Pro user
+        // (subscription.renewed). Without this snapshot the upsert collapses
+        // both paths into one row, and we can't tell them apart from the
+        // post-write state alone.
+        const priorMonthly = await prisma.subscription.findUnique({
+          where: { userId_planCode: { userId: user.id, planCode: 'PRO' } },
+          select: { id: true, status: true, currentPeriodEnd: true },
+        });
+        const hadActivePriorSub =
+          !!priorMonthly && priorMonthly.status === 'ACTIVE' && priorMonthly.currentPeriodEnd > now;
+
         await prisma.$transaction(async (tx) => {
           const sub = await tx.subscription.upsert({
             where: { userId_planCode: { userId: user.id, planCode: 'PRO' } },
@@ -1317,6 +1331,14 @@ if (!token) {
               rawPayload: JSON.stringify(payment),
             },
           });
+        });
+
+        emitPaymentAnalytics({
+          userId: user.id,
+          payload: payment,
+          planCode: 'PRO',
+          billingPeriod: 'monthly',
+          hadActivePriorSub,
         });
 
         const locale = getLocale(ctx);
@@ -1386,6 +1408,9 @@ if (!token) {
           ? existingSub.currentPeriodEnd
           : now;
         const periodEnd = new Date(startFrom.getTime() + YEARLY_MS);
+        // Snapshot prior state for the renewed-vs-activated branch decision.
+        const hadActivePriorSubYearly =
+          !!existingSub && existingSub.status === 'ACTIVE' && existingSub.currentPeriodEnd > now;
 
         await prisma.$transaction(async (tx) => {
           const sub = await tx.subscription.upsert({
@@ -1426,6 +1451,14 @@ if (!token) {
               rawPayload: JSON.stringify(payment),
             },
           });
+        });
+
+        emitPaymentAnalytics({
+          userId: user.id,
+          payload: payment,
+          planCode: 'PRO',
+          billingPeriod: 'yearly',
+          hadActivePriorSub: hadActivePriorSubYearly,
         });
 
         const locale = getLocale(ctx);
@@ -1478,6 +1511,12 @@ if (!token) {
         const existingSub = await prisma.subscription.findUnique({
           where: { userId_planCode: { userId: user.id, planCode: 'PRO' } },
         });
+        // Lifetime is a state transition, not a renewal: treat any prior
+        // active monthly/yearly as "already Pro" → emit subscription.renewed,
+        // else pro.activated. We never emit pro.activated for an
+        // already-lifetime user (the LIFETIME guard above returned early).
+        const hadActivePriorSubLifetime =
+          !!existingSub && existingSub.status === 'ACTIVE' && existingSub.currentPeriodEnd > now;
 
         await prisma.$transaction(async (tx) => {
           const sub = await tx.subscription.upsert({
@@ -1518,6 +1557,14 @@ if (!token) {
               rawPayload: JSON.stringify(payment),
             },
           });
+        });
+
+        emitPaymentAnalytics({
+          userId: user.id,
+          payload: payment,
+          planCode: 'PRO',
+          billingPeriod: 'lifetime',
+          hadActivePriorSub: hadActivePriorSubLifetime,
         });
 
         const locale = getLocale(ctx);
@@ -1638,6 +1685,15 @@ if (!token) {
               update: { [creditInfo.key]: { increment: creditInfo.amount } },
             });
           }
+        });
+
+        emitPaymentAnalytics({
+          userId: user.id,
+          payload: payment,
+          planCode: null,
+          billingPeriod: 'addon',
+          hadActivePriorSub: false,
+          skuCode,
         });
 
         const locale = getLocale(ctx);
