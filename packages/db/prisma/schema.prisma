@@ -203,6 +203,8 @@ model User {
   promoRedemptions               PromoRedemption[]
   degradationState               DegradationState?
   lifecycleTouches               LifecycleTouch[]
+  researchSurveyInvites          ResearchSurveyInvite[]
+  researchSurveyResponses        ResearchSurveyResponse[]
   giftOccasions                  GiftOccasion[]                 @relation("GiftOccasionsOwner")
   giftOccasionIdeas              GiftOccasionIdea[]             @relation("GiftOccasionIdeasOwner")
   giftOccasionReminders          GiftOccasionReminder[]         @relation("GiftOccasionRemindersOwner")
@@ -2206,4 +2208,134 @@ model IdempotencyKey {
   @@unique([key, actorKey, method, path])
   @@index([expiresAt])
   @@index([actorHash, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Research surveys — localized PMF-style questionnaires
+//
+// Survey definitions live in code (`SURVEY_PMF_V1` const). The DB stores
+// metadata (status, version), invites (one per user per survey),
+// completions (one response per invite), and individual answers
+// (one row per selected optionId — multi-choice safe).
+//
+// PII discipline: no telegramId, username, firstName, lastName, or raw
+// item titles. answerText permitted only for `optionId IN ('__text__','other')`.
+// ─────────────────────────────────────────────────────────────
+
+enum ResearchSurveyStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+}
+
+enum ResearchSurveyInviteStatus {
+  PENDING
+  SENT
+  OPENED
+  STARTED
+  COMPLETED
+  DISMISSED
+  FAILED
+}
+
+model ResearchSurvey {
+  id        String               @id @default(cuid())
+  slug      String
+  version   Int                  @default(1)
+  status    ResearchSurveyStatus @default(DRAFT)
+  openedAt  DateTime?
+  closedAt  DateTime?
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  invites   ResearchSurveyInvite[]
+  responses ResearchSurveyResponse[]
+
+  @@unique([slug, version])
+  @@index([status])
+}
+
+// One row per (survey, user). Unique constraint blocks duplicate invites.
+// segmentSubtype is set only for S8 (behavioral dropout stage) and stays
+// null for S1/S2/S3/S5/S7. Both segmentId and segmentSubtype are captured
+// at recipient-selection time and never recomputed afterwards.
+model ResearchSurveyInvite {
+  id             String                     @id @default(cuid())
+  surveyId       String
+  survey         ResearchSurvey             @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  segmentId      String
+  segmentSubtype String?
+  locale         String
+  status         ResearchSurveyInviteStatus @default(PENDING)
+  sentAt         DateTime?
+  openedAt       DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  dismissedAt    DateTime?
+  failedAt       DateTime?
+  failureReason  String?
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+
+  response ResearchSurveyResponse?
+
+  @@unique([surveyId, userId])
+  @@index([surveyId, status])
+  @@index([status, sentAt])
+  @@index([surveyId, segmentId, segmentSubtype])
+}
+
+// One row per completed (or in-progress) flow. rewardKind/rewardGrantedAt
+// are written only at /complete, never at /start or /answer.
+//   'pro_30d'                — +30 days extension or new monthly Subscription
+//   'pro_30d_lifetime_noop'  — lifetime user; no Subscription mutation, but
+//                              response is marked as rewarded for idempotency
+model ResearchSurveyResponse {
+  id              String               @id @default(cuid())
+  surveyId        String
+  survey          ResearchSurvey       @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  inviteId        String               @unique
+  invite          ResearchSurveyInvite @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  segmentId       String
+  segmentSubtype  String?
+  locale          String
+  startedAt       DateTime             @default(now())
+  completedAt     DateTime?
+  rewardKind      String?
+  rewardGrantedAt DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  answers ResearchSurveyAnswer[]
+
+  @@unique([surveyId, userId])
+  @@index([surveyId, completedAt])
+  @@index([segmentId, segmentSubtype, completedAt])
+}
+
+// One row per selected optionId. multi-choice questions (Q3/Q6/Q7) create
+// up to 2 rows per (response, question). Single-choice creates exactly 1.
+// NPS (Q9) uses optionId='score_0'..'score_10'. Open text (Q10) uses
+// optionId='__text__' with answerText populated. Any other question's
+// 'other' option may also carry answerText.
+//
+// On edit, the server deletes all rows for (responseId, questionId) and
+// recreates new ones inside one transaction — see services/research-survey.
+model ResearchSurveyAnswer {
+  id         String                 @id @default(cuid())
+  responseId String
+  response   ResearchSurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  questionId String
+  optionId   String
+  answerText String?
+  createdAt  DateTime               @default(now())
+  updatedAt  DateTime               @updatedAt
+
+  @@unique([responseId, questionId, optionId])
+  @@index([questionId, optionId])
+  @@index([responseId, questionId])
 }
