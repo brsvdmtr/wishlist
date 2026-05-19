@@ -97,6 +97,11 @@ export async function selectSurveyRecipients(input: SelectionInput): Promise<Sel
   let nonRuEn = 0;
   const localeByUser = new Map<string, SurveyLocale>();
   const eligibleIds: string[] = [];
+  // activeIds is a subset of eligibleIds — users with updatedAt within the
+  // 30-day inactivity cutoff. S1/S2/S3 recruit from here only; S5/S7 ignore
+  // activity (rare signal); S8 substrata-classify the complement.
+  const inactiveCutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const activeIds: string[] = [];
   for (const u of eligiblePool) {
     const locale = resolveSurveyLocale({
       profile: u.profile,
@@ -109,7 +114,9 @@ export async function selectSurveyRecipients(input: SelectionInput): Promise<Sel
     }
     localeByUser.set(u.id, locale);
     eligibleIds.push(u.id);
+    if (u.updatedAt >= inactiveCutoff) activeIds.push(u.id);
   }
+  const activeSet = new Set(activeIds);
 
   // ── S7 (paid PRO) ──
   const s7 = await querySegmentS7(eligibleIds, now);
@@ -134,11 +141,12 @@ export async function selectSurveyRecipients(input: SelectionInput): Promise<Sel
     countsBySegment.S5 += 1;
   }
 
-  // ── S3 (shared, variant B: shareOpenCount > 0) ──
-  const remaining2 = eligibleIds.filter((u) => !assigned.has(u));
-  const s3 = await querySegmentS3(remaining2);
+  // ── S3 (shared, variant B: shareOpenCount > 0) — active users only ──
+  const activeRemaining3 = activeIds.filter((u) => !assigned.has(u));
+  const s3 = await querySegmentS3(activeRemaining3);
   for (const u of s3) {
     if (assigned.has(u)) continue;
+    if (!activeSet.has(u)) continue;
     const locale = localeByUser.get(u);
     if (!locale) continue;
     recipients.push({ userId: u, segmentId: 'S3', segmentSubtype: null, locale });
@@ -146,11 +154,12 @@ export async function selectSurveyRecipients(input: SelectionInput): Promise<Sel
     countsBySegment.S3 += 1;
   }
 
-  // ── S1 (activated owners) ──
-  const remaining3 = eligibleIds.filter((u) => !assigned.has(u));
-  const s1 = await querySegmentS1(remaining3);
+  // ── S1 (activated owners) — active users only ──
+  const activeRemaining1 = activeIds.filter((u) => !assigned.has(u));
+  const s1 = await querySegmentS1(activeRemaining1);
   for (const u of s1) {
     if (assigned.has(u)) continue;
+    if (!activeSet.has(u)) continue;
     const locale = localeByUser.get(u);
     if (!locale) continue;
     recipients.push({ userId: u, segmentId: 'S1', segmentSubtype: null, locale });
@@ -158,11 +167,12 @@ export async function selectSurveyRecipients(input: SelectionInput): Promise<Sel
     countsBySegment.S1 += 1;
   }
 
-  // ── S2 (created wishlist, did not share) ──
-  const remaining4 = eligibleIds.filter((u) => !assigned.has(u));
-  const s2 = await querySegmentS2(remaining4);
+  // ── S2 (created wishlist, did not share) — active users only ──
+  const activeRemaining2 = activeIds.filter((u) => !assigned.has(u));
+  const s2 = await querySegmentS2(activeRemaining2);
   for (const u of s2) {
     if (assigned.has(u)) continue;
+    if (!activeSet.has(u)) continue;
     const locale = localeByUser.get(u);
     if (!locale) continue;
     recipients.push({ userId: u, segmentId: 'S2', segmentSubtype: null, locale });
@@ -196,6 +206,11 @@ export async function selectSurveyRecipients(input: SelectionInput): Promise<Sel
 
 // ─────────────────────────────────────────────────────────────────────
 // Base filter — eligible pool before segment matching.
+// updatedAt is included so the caller can split active vs inactive: S1/S2/S3
+// only recruit active users (we want signal from people still using the
+// product), S8 only recruits inactive ones (substrata are a churn-funnel
+// breakdown). S5/S7 ignore activity because those signals are rare and
+// worth surveying even if the user went quiet.
 // ─────────────────────────────────────────────────────────────────────
 async function loadEligiblePool(surveyId: string, surveySlug: string, now: Date) {
   const newUserCutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -212,6 +227,7 @@ async function loadEligiblePool(surveyId: string, surveySlug: string, now: Date)
     },
     select: {
       id: true,
+      updatedAt: true,
       profile: {
         select: {
           languageMode: true,
