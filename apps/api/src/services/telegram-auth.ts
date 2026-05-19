@@ -189,3 +189,23 @@ export async function getOrCreateTgUser(tgUser: TelegramUser) {
   }
   return user;
 }
+
+/**
+ * Resolve internal `User.id` (cuid) from a Telegram numeric ID. Read-only
+ * lookup — does NOT upsert. Returns `null` if the User row doesn't exist
+ * yet (which is fine for analytics: the first authenticated route handler
+ * will create it via getOrCreateTgUser).
+ *
+ * Use this when you need to write `AnalyticsEvent.userId` and you only
+ * have `req.tgUser.id` in scope. The canonical contract for
+ * `AnalyticsEvent.userId` is internal `User.id`; passing the raw Telegram
+ * ID is a bug (see docs/analytics-events.md).
+ */
+export async function resolveTgUserId(telegramId: number | string | undefined | null): Promise<string | null> {
+  if (telegramId == null) return null;
+  const row = await prisma.user.findUnique({
+    where: { telegramId: String(telegramId) },
+    select: { id: true },
+  });
+  return row?.id ?? null;
+}

@@ -22,18 +22,24 @@
 Эти три правила применены ко **всем** запросам ниже. Дублировать в каждом
 сегменте не буду — храните их в голове.
 
-1. **`AnalyticsEvent.userId` — гетерогенное поле.** На текущей базе из 10 517
-   событий: 1 111 — формат `User.id` (cuid, серверные `trackEvent`), 9 249 —
-   формат `User.telegramId` (стрингифицированный numeric ID из фронтовой
-   `/tg/telemetry`), 157 — NULL. Это значит, что **наивный** `JOIN "User" u ON
-   u.id = ae."userId"` режет 88% событий. Правильный join:
+1. **`AnalyticsEvent.userId` — гетерогенное поле (исторически).** На момент
+   снятия снимка (2026-05-19) база из 10 517 событий распадалась на
+   1 111 cuid-формат + 9 249 numeric (telegramId-as-string) + 157 NULL —
+   следствие двух разных эмиттер-путей (server passes `user.id`, frontend
+   `/tg/telemetry` + два bot-эмиттера передавали `String(tgUser.id)`).
+   Запросы ниже сделаны через OR-join:
 
    ```sql
    JOIN "User" u ON (u.id = ae."userId" OR u."telegramId" = ae."userId")
    ```
 
-   Альтернатива — нормализационный CTE. На объёме <11k событий OR-join
-   терпимо; при росте → материализованная нормализованная вьюха.
+   **Контракт нормализован в коммите того же дня** (см. [docs/analytics-events.md
+   § «AnalyticsEvent.userId contract»](../analytics-events.md#analyticseventuserid-contract--internal-userid-only)
+   и миграцию
+   [`20260519180000_normalize_analyticsevent_userid`](../../packages/db/prisma/migrations/20260519180000_normalize_analyticsevent_userid/migration.sql)).
+   После применения миграции на проде OR-join становится историческим артефактом —
+   все новые запросы могут писать просто `JOIN "User" u ON u.id = ae."userId"`.
+   До апплая миграции запросы из этого файла продолжают работать как есть.
 
 2. **`godMode` исключён везде.** В `WHERE` каждой ветки стоит
    `u."godMode" = false`. На сегодняшний день godMode-юзеров **1** — то есть

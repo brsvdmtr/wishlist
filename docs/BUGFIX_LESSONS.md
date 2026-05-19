@@ -5,6 +5,109 @@ New entries go at the top.
 
 ---
 
+## 2026-05-19 — `AnalyticsEvent.userId` гетерогенное поле (cuid + telegramId)
+
+### Симптом
+При расчёте размеров пользовательских сегментов (см.
+[docs/research/segment-sizes-2026-05.md](research/segment-sizes-2026-05.md))
+наивный `JOIN "User" u ON u.id = ae."userId"` отдавал 0 для events,
+которые на самом деле есть в базе. Конкретный кейс: `share.token_generated`
+имеет 20+ строк в `AnalyticsEvent`, но `INNER JOIN` через `User.id` возвращал
+ноль уникальных пользователей. Cohort/retention запросы, построенные по
+этому полю, занижают N в 9 раз.
+
+### Root cause
+`AnalyticsEvent.userId` — обычный `String?` без FK. На него пишут два
+независимых эмиттер-пути с **разными форматами** идентификатора:
+
+1. **Server-side** (`services/analytics.ts`: `trackEvent` /
+   `trackAnalyticsEvent` / `trackProductEvent`) — callsite'ы передают
+   `user.id` (внутренний cuid после `getOrCreateTgUser`).
+2. **Frontend** (`POST /tg/telemetry` →
+   `apps/api/src/routes/telemetry.routes.ts:119`) и два эмиттера в боте
+   (`apps/bot/src/index.ts:653, 780`) — писали
+   `String(req.tgUser.id)` / `String(ctx.from.id)`, т.е. **Telegram numeric
+   id**, не cuid.
+
+На проде snapshot 2026-05-19: total 10 517 строк, из них 1 111 в формате
+cuid, 9 249 — numeric, 157 NULL. ~88% событий не матчилось на `User.id`.
+
+Дополнительные viral pattern'ы: 9 route-handler callsite'ов в API
+(`reservation.succeeded`, `wish.edited`, `wishlist.deleted` и др.) копировали
+тот же неправильный шаблон через `userId: String(req.tgUser!.id)`, даже когда
+`user.id` уже был в scope тремя строками выше.
+
+### Lesson
+Когда у поля **нет foreign key** и нет статической типизации, контракт
+держится только на дисциплине эмиттеров. **TypeScript-сигнатура** `userId?:
+string` не отличает «строку User.id» от «строки telegramId» — оба
+проходят typecheck. В отсутствие FK единственная защита — runtime test
+или static grep guard.
+
+### Rule
+
+1. **`AnalyticsEvent.userId` всегда хранит `User.id` (cuid) или NULL.**
+   Telegram numeric id никогда не попадает в эту колонку. Контракт описан
+   в [docs/analytics-events.md § «AnalyticsEvent.userId contract»](analytics-events.md#analyticseventuserid-contract--internal-userid-only).
+2. **В роуте, который уже вызывает `getOrCreateTgUser(req.tgUser!)`,
+   используем `user.id`.** Никогда `String(req.tgUser!.id)` рядом с
+   `userId:`.
+3. **Если userId нужен без upsert** (telemetry, error tracker) — есть
+   `resolveTgUserId(req.tgUser?.id)` в `services/telegram-auth.ts`:
+   read-only `findUnique` по telegramId, на miss возвращает `null`, а
+   не raw telegram id.
+4. **В bot-handler'е, который уже `prisma.user.upsert(...)`-нул**, —
+   `user?.id ?? null`. Никогда `String(ctx.from.id)` или `telegramId`
+   (имя локальной переменной в боте).
+5. **Static regression guard** —
+   [`apps/api/src/analytics-event-userid-contract.test.ts`](../apps/api/src/analytics-event-userid-contract.test.ts) —
+   грепает обе ловушки (`String(req.tgUser…)` и `userId: telegramId`)
+   при каждом запуске CI. Падает раньше, чем регрессия доедет до прода.
+
+### Better code
+
+**Было** (`apps/api/src/routes/telemetry.routes.ts:119`):
+```ts
+const userId = req.tgUser?.id ? String(req.tgUser.id) : null; // ❌ telegramId
+```
+
+**Стало:**
+```ts
+// Canonical contract: AnalyticsEvent.userId is always internal User.id
+// (cuid). Server resolves it from the authenticated initData; client-
+// supplied userId is ignored.
+const userId = await resolveTgUserId(req.tgUser?.id); // ✅ cuid or null
+```
+
+И helper в `services/telegram-auth.ts`:
+```ts
+export async function resolveTgUserId(
+  telegramId: number | string | undefined | null,
+): Promise<string | null> {
+  if (telegramId == null) return null;
+  const row = await prisma.user.findUnique({
+    where: { telegramId: String(telegramId) },
+    select: { id: true },
+  });
+  return row?.id ?? null;
+}
+```
+
+Backfill исторических строк — миграция
+[`20260519180000_normalize_analyticsevent_userid`](../packages/db/prisma/migrations/20260519180000_normalize_analyticsevent_userid/migration.sql).
+Dry-run на проде:
+
+```
+BEFORE: total=10527 null=158 cuid=1111 numeric=9258
+AFTER : total=10527 null=216 cuid=10311 numeric=0
+```
+
+9 200 строк нормализовалось через `User.telegramId` lookup; 58
+осиротевших (удалённые юзеры) → NULL, чтобы не оставлять numeric-string
+артефакты которые сломают будущие cohort-запросы повторно.
+
+---
+
 ## 2026-05-18 — «Ошибка загрузки» тосты на экране Настроек (304 + `!res.ok`)
 
 ### Симптом

@@ -1283,7 +1283,7 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
           .catch(() => { /* non-critical */ });
       }
 
-      trackAnalyticsEvent({ event: 'reservation.succeeded', userId: req.tgUser?.id != null ? String(req.tgUser.id) : undefined, props: { itemId: req.params.id } });
+      trackAnalyticsEvent({ event: 'reservation.succeeded', userId: user.id, props: { itemId: req.params.id } });
 
       // Cancel active hints when item is reserved
       void cancelItemHints(id);
@@ -1335,10 +1335,10 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
       if (result.kind === 'conflict') return res.status(409).json({ error: 'Cannot unreserve' });
       if (result.kind === 'forbidden') return res.status(403).json({ error: 'Forbidden' });
 
-      trackAnalyticsEvent({ event: 'reservation.cancelled', userId: req.tgUser?.id != null ? String(req.tgUser.id) : undefined, props: { itemId: req.params.id } });
+      const unreserveUser = await getOrCreateTgUser(req.tgUser!);
+      trackAnalyticsEvent({ event: 'reservation.cancelled', userId: unreserveUser.id, props: { itemId: req.params.id } });
 
       // Mark ReservationMeta as inactive (history)
-      const unreserveUser = await getOrCreateTgUser(req.tgUser!);
       void prisma.reservationMeta.updateMany({
         where: { itemId: id, reserverUserId: unreserveUser.id, active: true },
         data: { active: false, endedAt: new Date(), endReason: 'unreserved' },

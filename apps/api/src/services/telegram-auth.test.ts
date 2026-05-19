@@ -10,12 +10,13 @@ import * as crypto from 'node:crypto';
 
 const shared = vi.hoisted(() => ({
   upsert: vi.fn(),
+  findUnique: vi.fn(),
   recordIpEvent: vi.fn(),
   trackProductEvent: vi.fn(),
 }));
 
 vi.mock('@wishlist/db', () => ({
-  prisma: { user: { upsert: shared.upsert } },
+  prisma: { user: { upsert: shared.upsert, findUnique: shared.findUnique } },
 }));
 
 vi.mock('../security/ipThrottle', () => ({
@@ -31,6 +32,7 @@ import {
   tgActorHash,
   SYSTEM_ACTOR_HASH,
   getOrCreateTgUser,
+  resolveTgUserId,
   INIT_DATA_MAX_AGE_SECONDS,
   INIT_DATA_CLOCK_SKEW_SECONDS,
   clampMaxAgeSeconds,
@@ -38,6 +40,7 @@ import {
 
 beforeEach(() => {
   shared.upsert.mockReset();
+  shared.findUnique.mockReset();
   shared.recordIpEvent.mockReset();
   shared.trackProductEvent.mockReset();
 });
@@ -271,5 +274,46 @@ describe('clampMaxAgeSeconds', () => {
   it('module-level INIT_DATA_MAX_AGE_SECONDS came from this clamp', () => {
     // Sanity check that the exported constant is at least the floor.
     expect(INIT_DATA_MAX_AGE_SECONDS).toBeGreaterThanOrEqual(60);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// resolveTgUserId — internal User.id lookup for the AnalyticsEvent.userId
+// contract (see docs/analytics-events.md). Read-only by design: never upserts,
+// never falls back to the Telegram id on miss.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('resolveTgUserId', () => {
+  it('returns internal User.id (cuid) for a known Telegram numeric id', async () => {
+    shared.findUnique.mockResolvedValue({ id: 'cuid_user_xyz' });
+    const result = await resolveTgUserId(8246090589);
+    expect(result).toBe('cuid_user_xyz');
+    expect(shared.findUnique).toHaveBeenCalledWith({
+      where: { telegramId: '8246090589' },
+      select: { id: true },
+    });
+  });
+
+  it('returns null when no User row exists for the Telegram id', async () => {
+    // Critical: must NOT fall back to the Telegram id — that would re-introduce
+    // the heterogeneous-userId bug that motivated this contract.
+    shared.findUnique.mockResolvedValue(null);
+    const result = await resolveTgUserId(999999999);
+    expect(result).toBeNull();
+  });
+
+  it('accepts a string telegramId (stringified numeric)', async () => {
+    shared.findUnique.mockResolvedValue({ id: 'cuid_str_input' });
+    const result = await resolveTgUserId('464400946');
+    expect(result).toBe('cuid_str_input');
+    expect(shared.findUnique).toHaveBeenCalledWith({
+      where: { telegramId: '464400946' },
+      select: { id: true },
+    });
+  });
+
+  it('returns null for undefined or null input without touching the DB', async () => {
+    expect(await resolveTgUserId(undefined)).toBeNull();
+    expect(await resolveTgUserId(null)).toBeNull();
+    expect(shared.findUnique).not.toHaveBeenCalled();
   });
 });

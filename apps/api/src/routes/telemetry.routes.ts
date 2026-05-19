@@ -23,6 +23,7 @@ import {
 
 import logger from '../logger';
 import { asyncHandler } from '../lib/asyncHandler';
+import { resolveTgUserId } from '../services/telegram-auth';
 
 // ── Telemetry ingestion ─────────────────────────────────
 // Accept events matching known product-area prefixes + a small exact-match list.
@@ -116,7 +117,13 @@ export function registerTelemetryRouter(): Router {
       return res.status(400).json({ error: 'Invalid telemetry payload', issues: parsed.error.issues });
     }
   
-    const userId = req.tgUser?.id ? String(req.tgUser.id) : null;
+    // Canonical contract: AnalyticsEvent.userId is always internal User.id
+    // (cuid), never the Telegram numeric ID. Server resolves it from the
+    // authenticated initData; client-supplied userId is ignored (and not
+    // even accepted by telemetryBodySchema). If the user row doesn't exist
+    // yet (extremely rare — would mean telemetry fired before any other
+    // authenticated route), persist with NULL rather than fabricate an id.
+    const userId = await resolveTgUserId(req.tgUser?.id);
     const now = Date.now();
     const oneHourAgo = now - 3_600_000;
   

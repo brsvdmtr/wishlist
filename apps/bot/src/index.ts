@@ -649,11 +649,13 @@ if (!token) {
       }
     }
 
-    // Fire-and-forget analytics
+    // Fire-and-forget analytics. userId is internal User.id (cuid). If the
+    // upsert above failed (user === null), persist with NULL rather than
+    // fall back to the Telegram id — see docs/analytics-events.md.
     prisma.analyticsEvent.create({
       data: {
         event: 'bot.start_received',
-        userId: String(ctx.from.id),
+        userId: user?.id ?? null,
         props: {
           telegramId: ctx.from.id,
           hasStartParam: !!ctx.startPayload,
@@ -776,11 +778,12 @@ if (!token) {
       try {
         const inviter = await resolveReferralCode(prisma, refCode);
 
-        // Always log the event — even if code is invalid.
+        // Always log the event — even if code is invalid. userId is internal
+        // User.id (cuid); see docs/analytics-events.md for the contract.
         prisma.analyticsEvent.create({
           data: {
             event: inviter ? 'referral.start_command_received' : 'referral.code_invalid',
-            userId: telegramId,
+            userId: user?.id ?? null,
             props: { refCode, hasInviter: !!inviter },
           },
         }).catch(() => {});

@@ -780,7 +780,7 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
         select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, position: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
       });
 
-      trackAnalyticsEvent({ event: 'wish.edited', userId: String(req.tgUser!.id), props: { itemId: req.params.id } });
+      trackAnalyticsEvent({ event: 'wish.edited', userId: user.id, props: { itemId: req.params.id } });
 
       // Onboarding: detect meaningful edit on a demo item → trigger completion
       if (item.isDemo && item.originVariantKey && item.originType === 'DEMO') {
@@ -885,7 +885,7 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
         },
       });
 
-      trackAnalyticsEvent({ event: 'wish.deleted', userId: String(req.tgUser!.id), props: { itemId: req.params.id } });
+      trackAnalyticsEvent({ event: 'wish.deleted', userId: user.id, props: { itemId: req.params.id } });
 
       // Cancel active hints when item is deleted
       void cancelItemHints(id);
@@ -957,7 +957,7 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
         select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
       });
 
-      trackAnalyticsEvent({ event: 'wish.completed', userId: String(req.tgUser!.id), props: { itemId: req.params.id } });
+      trackAnalyticsEvent({ event: 'wish.completed', userId: user.id, props: { itemId: req.params.id } });
 
       // Cancel active hints when item is completed
       void cancelItemHints(id);

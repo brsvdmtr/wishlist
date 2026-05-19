@@ -177,6 +177,67 @@ Before merging a PR that adds an event:
 
 ---
 
+## `AnalyticsEvent.userId` contract — internal `User.id` only
+
+**Rule.** Every value persisted in `AnalyticsEvent.userId` is either
+the internal `User.id` (Prisma `cuid`) or `NULL`. The Telegram numeric
+ID never enters this column. Static regression guard:
+[`apps/api/src/analytics-event-userid-contract.test.ts`](../apps/api/src/analytics-event-userid-contract.test.ts).
+
+### Why
+
+`AnalyticsEvent.userId` is a plain `String?` column with no FK — the
+type system does not stop someone from passing a Telegram id. Before
+2026-05-19, frontend telemetry (`POST /tg/telemetry`) and two bot
+emitters did exactly that: `String(req.tgUser.id)` / `String(ctx.from.id)`,
+writing the raw Telegram numeric id. ~88% of historical rows landed in
+that format. Every cohort / retention / paywall-funnel query then had
+to do `JOIN "User" u ON u.id = ae."userId" OR u."telegramId" = ae."userId"`
+or silently drop most events.
+
+The cuid-only contract removes that OR-join from every downstream
+query and unblocks dashboards.
+
+### How to comply
+
+| Context | Helper | Notes |
+|---|---|---|
+| Mini App route handler that already calls `getOrCreateTgUser(req.tgUser!)` | use `user.id` from the resolved row | The canonical pattern. `user` is already in scope in every state-changing handler. |
+| Endpoint that does NOT need to upsert (e.g. `/tg/telemetry`, error middleware) | `await resolveTgUserId(req.tgUser?.id)` from `services/telegram-auth.ts` | Read-only `findUnique` by `telegramId`. Returns `null` on miss — never falls back to the Telegram id. |
+| Bot handler that has already done `prisma.user.upsert(...)` | `user?.id ?? null` | Use the upserted row. `null` if the upsert failed; do NOT substitute the Telegram id. |
+| Bot handler with only `ctx.from.id` | `await resolveTgUserId(ctx.from.id)` (after importing it into the bot — or do the equivalent `prisma.user.findUnique({ where: { telegramId } })` inline) | Same rule: cuid or `null`. |
+
+### Anti-patterns the static guard catches
+
+- `userId: String(req.tgUser!.id)` next to a `userId:` key
+- `userId: String(ctx.from.id)`
+- `userId: telegramId` (the conventional `String(ctx.from.id)` variable name in the bot)
+
+The guard scans every non-test `.ts` under `apps/api/src/` and
+`apps/bot/src/`. Add a new emitter callsite that matches these
+patterns and CI fails before the regression reaches prod.
+
+### Historical backfill
+
+Migration
+[`20260519180000_normalize_analyticsevent_userid`](../packages/db/prisma/migrations/20260519180000_normalize_analyticsevent_userid/migration.sql)
+rewrites every legacy numeric-format row to the corresponding `User.id`
+via a `User.telegramId` lookup. Rows whose Telegram id no longer maps
+to a live `User` (deleted accounts) are NULL'd — we prefer `NULL`
+over leaving orphan numeric strings that would re-pollute every cohort
+query.
+
+Dry-run on prod snapshot (2026-05-19, before migration applies):
+
+```
+BEFORE: total=10527 null=158 cuid=1111 numeric=9258
+AFTER : total=10527 null=216 cuid=10311 numeric=0
+```
+
+9 200 rows resolved cleanly; 58 became `NULL` (deleted users).
+
+---
+
 ## Legacy mismatches — known and intentional
 
 Some events in `ANALYTICS_EVENTS` cannot be received over

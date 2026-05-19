@@ -99,6 +99,7 @@ import {
   SYSTEM_ACTOR_HASH,
   requireTelegramAuth,
   getOrCreateTgUser,
+  resolveTgUserId,
 } from './services/telegram-auth';
 import {
   PLANS,
@@ -419,10 +420,16 @@ tgRouter.use((req, res, next) => {
       if (status === 403 && route === '/tg/items/:id/comments') return;
 
       const method = req.method;
-      const userId = req.tgUser?.id != null ? String(req.tgUser.id) : null;
-      prisma.analyticsEvent.create({
-        data: { event: `error:${method}:${status}:${route}`, userId },
-      }).catch(() => {});
+      // Canonical contract: AnalyticsEvent.userId is internal User.id (cuid).
+      // We have the Telegram id here from req.tgUser; resolve to the internal
+      // id with a fast read-only lookup. If the User row doesn't exist
+      // (auth failed pre-upsert) — write NULL, never the Telegram id.
+      const tgId = req.tgUser?.id;
+      void resolveTgUserId(tgId).then((userId) => {
+        prisma.analyticsEvent.create({
+          data: { event: `error:${method}:${status}:${route}`, userId },
+        }).catch(() => {});
+      });
     }
   });
   next();

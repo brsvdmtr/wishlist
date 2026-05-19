@@ -358,7 +358,7 @@ export function registerBillingRouter(deps: BillingRouterDeps): Router {
         where: { id: sub.id },
         data: { cancelAtPeriodEnd: true, cancelledAt: new Date() },
       });
-      trackAnalyticsEvent({ event: 'subscription.cancelled', userId: String(req.tgUser!.id) });
+      trackAnalyticsEvent({ event: 'subscription.cancelled', userId: user.id });
 
       return res.json({
         subscription: {

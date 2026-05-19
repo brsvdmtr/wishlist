@@ -485,7 +485,7 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
         data: { shareToken: token },
         select: { shareToken: true },
       });
-      trackAnalyticsEvent({ event: 'share.token_generated', userId: String(req.tgUser!.id), props: { wishlistId: req.params.id } });
+      trackAnalyticsEvent({ event: 'share.token_generated', userId: user.id, props: { wishlistId: req.params.id } });
 
       return res.json({ shareToken: updated.shareToken });
     }),
@@ -947,7 +947,7 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
       await reassignPrimaryBeforeWishlistDelete(id);
 
       await prisma.wishlist.delete({ where: { id } });
-      trackAnalyticsEvent({ event: 'wishlist.deleted', userId: String(req.tgUser!.id), props: { wishlistId: req.params.id } });
+      trackAnalyticsEvent({ event: 'wishlist.deleted', userId: user.id, props: { wishlistId: req.params.id } });
 
       // Repack positions for remaining REGULAR non-archived wishlists to keep them contiguous
       const remaining = await prisma.wishlist.findMany({
@@ -1884,7 +1884,7 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
 
       trackAnalyticsEvent({
         event: 'wish.created',
-        userId: String(req.tgUser!.id),
+        userId: user.id,
         props: { wishlistId, hasUrl: !!parsed.data.url, hasPrice: !!parsed.data.price },
       });
 
