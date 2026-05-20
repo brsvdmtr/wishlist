@@ -48,7 +48,35 @@ jobs:
             cd /opt/wishlist
             echo "=== Pull latest ==="
             git fetch origin main
-            PREV_SHA=$(git rev-parse HEAD)
+
+            # PREV_SHA is the changed-service-detection baseline: it must be the
+            # last *successfully deployed* commit. Do NOT read it from
+            # `git rev-parse HEAD` — the `git reset --hard origin/main` below
+            # advances HEAD *before* the build runs, so a deploy that fails
+            # mid-build (e.g. a transient `next build` font-fetch timeout)
+            # leaves HEAD already at the new SHA. On the retry, `git diff
+            # HEAD..origin/main` is empty, the detection finds no changed
+            # services, and the rebuild is silently skipped while CI reports
+            # success (the stale image keeps running). Source it instead from
+            # the .deploy/last-successful-release marker — the same file
+            # ops/deploy.sh writes and ops/rollback.sh reads — which is updated
+            # only after a deploy fully succeeds.
+            DEPLOY_DIR=/opt/wishlist/.deploy
+            RELEASE_MARKER="$DEPLOY_DIR/last-successful-release"
+            mkdir -p "$DEPLOY_DIR"
+            PREV_SHA=""
+            if [ -f "$RELEASE_MARKER" ]; then
+              PREV_SHA=$(tr -d '[:space:]' < "$RELEASE_MARKER")
+            fi
+            if [ -n "$PREV_SHA" ] && git rev-parse --verify --quiet "${PREV_SHA}^{commit}" >/dev/null; then
+              echo "PREV_SHA from release marker: $PREV_SHA"
+            else
+              # First run after this change, or marker missing/corrupt — fall
+              # back to current HEAD as the best available estimate.
+              PREV_SHA=$(git rev-parse HEAD)
+              echo "release marker missing/invalid — PREV_SHA falls back to HEAD: $PREV_SHA"
+            fi
+
             git reset --hard origin/main
             NEW_SHA=$(git rev-parse HEAD)
             git log --oneline -3
@@ -117,6 +145,9 @@ jobs:
               docker compose -f docker-compose.prod.yml up -d --no-build api bot
               echo "=== Container status ==="
               docker ps --filter name=wishlist-prod --format '{{.Names}}\t{{.Status}}'
+              # Record success: this run deployed NEW_SHA (nothing to rebuild).
+              # Written last so a failure above never updates the baseline.
+              echo "$NEW_SHA" > "$RELEASE_MARKER"
               echo "=== Deploy OK (label refresh, no rebuild) ==="
               exit 0
             fi
@@ -139,4 +170,8 @@ jobs:
             echo "=== Failed migrations (expect 0) ==="
             docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist -At -c \
               "SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL;"
+            # Record success: build + restart + health check all passed.
+            # Written last so a failure above never updates the baseline —
+            # this is what makes a retry-after-failure rebuild correctly.
+            echo "$NEW_SHA" > "$RELEASE_MARKER"
             echo "=== Deploy OK (rebuilt: $SERVICES) ==="

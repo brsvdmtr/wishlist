@@ -5,6 +5,112 @@ New entries go at the top.
 
 ---
 
+## 2026-05-20 — CI-деплой пропускает пересборку при ретрае после падения (`PREV_SHA` из `git HEAD`)
+
+### Симптом
+
+Деплой коммита `03adbb7`: первая попытка GitHub Actions упала на
+`docker compose build web` (временный таймаут `next build` при скачивании
+Google Fonts). Перезапуск упавшего job'а через `gh run rerun --failed`
+показал **зелёный** статус — но web-контейнер так и не пересобрался
+(`docker ps` показывал web `Up 8 hours` вместо свежего). Прод остался на
+старом фронте, хотя CI рапортовал успешный деплой. Поймано вручную по
+post-deploy health-check'у.
+
+### Root cause
+
+`.github/workflows/deploy.yml` пересобирает только изменившиеся сервисы:
+`CHANGED=$(git diff --name-only "$PREV_SHA" "$NEW_SHA")`. Базлайн брался
+так:
+
+```bash
+PREV_SHA=$(git rev-parse HEAD)   # ← «что сейчас задеплоено»
+git reset --hard origin/main
+NEW_SHA=$(git rev-parse HEAD)
+```
+
+Замысел: `PREV_SHA` = задеплоенный коммит. Но `git reset --hard` двигает
+HEAD **до** сборки. Если сборка падает — HEAD уже на новом SHA, а скрипт
+завершается с ошибкой. При ретрае:
+
+- `PREV_SHA = git rev-parse HEAD` = **уже новый SHA** (сдвинут упавшей
+  попыткой);
+- `git reset --hard origin/main` — no-op;
+- `NEW_SHA == PREV_SHA` → `git diff` **пустой**;
+- detection не находит ни одного сервиса → ветка «no service-level
+  changes» → `docker compose up -d --no-build api bot` + `exit 0`.
+
+Пересборка молча пропущена, exit code 0, CI зелёный.
+
+Отдельно: в репозитории **уже был** правильный артефакт —
+`.deploy/last-successful-release`, который пишет `ops/deploy.sh` (ручной
+деплой) и читает `ops/rollback.sh`. CI-деплой его игнорировал и вёл
+собственный — ошибочный — учёт «прошлого релиза». Два пути деплоя с
+расходящимся представлением о том, что задеплоено.
+
+### Урок
+
+**`git HEAD` ≠ «последний успешно задеплоенный коммит».** HEAD двигается
+даже при упавшем деплое. Любой шаг вида «сделай А или Б в зависимости от
+того, что изменилось с прошлого раза» обязан сравнивать с **персистентным
+маркером последнего УСПЕХА**, а не с мутабельным runtime-состоянием
+(git HEAD, тег текущего образа), которое меняется в середине процесса.
+
+Второй урок: **ретрай упавшего деплоя обязан быть идемпотентным** — давать
+тот же результат, что чистый прогон. Здесь ретрай молча делал меньше, чем
+первый прогон, потому что первый прогон оставил после себя побочный
+эффект (сдвинутый HEAD).
+
+### Правило
+
+1. **Базлайн change-detection — персистентный маркер, не git-состояние.**
+   `deploy.yml` теперь читает `PREV_SHA` из
+   `.deploy/last-successful-release`.
+2. **Маркер пишется последним действием успешного пути** — после
+   build + `up -d` + health-check. Упавший процесс не обновляет базлайн,
+   поэтому ретрай видит ту же дельту, что и первая попытка.
+3. **Есть артефакт «last good» — переиспользуй, не плоди параллельный.**
+   CI-деплой и `ops/deploy.sh`/`ops/rollback.sh` теперь используют один и
+   тот же `.deploy/last-successful-release`.
+4. **`exit 0` обязан означать «сделано то, что должно».** Ветка «нечего
+   пересобирать» легитимна только когда дельта реально пуста — а не когда
+   дельту посчитали от испорченного базлайна.
+
+### Лучший код
+
+```bash
+# ❌ До: базлайн из git HEAD — на ретрае после падения diff пустой,
+#        пересборка пропущена, CI зелёный.
+PREV_SHA=$(git rev-parse HEAD)
+git reset --hard origin/main
+NEW_SHA=$(git rev-parse HEAD)
+CHANGED=$(git diff --name-only "$PREV_SHA" "$NEW_SHA")
+
+# ✅ После: базлайн из персистентного маркера последнего успеха.
+RELEASE_MARKER=/opt/wishlist/.deploy/last-successful-release
+PREV_SHA=""
+[ -f "$RELEASE_MARKER" ] && PREV_SHA=$(tr -d '[:space:]' < "$RELEASE_MARKER")
+if [ -n "$PREV_SHA" ] && git rev-parse --verify --quiet "${PREV_SHA}^{commit}" >/dev/null; then
+  : # маркер валиден
+else
+  PREV_SHA=$(git rev-parse HEAD)   # первый прогон / маркер потерян — фоллбэк
+fi
+git reset --hard origin/main
+NEW_SHA=$(git rev-parse HEAD)
+CHANGED=$(git diff --name-only "$PREV_SHA" "$NEW_SHA")
+# ... и в КОНЦЕ каждой успешной ветки (после health-check):
+echo "$NEW_SHA" > "$RELEASE_MARKER"
+```
+
+Регрессионный тест: `ops/deploy-workflow.test.mjs` (`node:test`, гоняется
+через `pnpm test:ops`) — grep-guard на `deploy.yml`: `PREV_SHA` читается из
+маркера, маркер пишется в обеих success-ветках, `git HEAD` остаётся только
+фоллбэком. Падает на pre-fix коммите (3 из 33 ops-тестов).
+
+**Commit:** см. `git log --grep="fix(deploy): source PREV_SHA from release marker"`
+
+---
+
 ## 2026-05-20 — PRODUCT_EVENT `user.session_started` объявлен и потребляется rollup'ом, но ни один клиент его не эмитит
 
 ### Симптом
