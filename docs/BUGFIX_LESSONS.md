@@ -103,7 +103,8 @@ if [ -z "$PREV_SHA" ]; then
 else
   CHANGED=$(git diff --name-only "$PREV_SHA" "$NEW_SHA")   # CHANGED → SERVICES
 fi
-# ... и в КОНЦЕ каждой успешной ветки (после health-check):
+# ... и в КОНЦЕ каждой успешной ветки (после health-check + проверки
+# незавершённых миграций — застрявшая миграция = exit 1, маркер не пишется):
 echo "$NEW_SHA" > "$RELEASE_MARKER"
 ```
 

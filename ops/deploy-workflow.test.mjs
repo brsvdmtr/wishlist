@@ -74,6 +74,15 @@ test('deploy.yml writes the release marker only after deploy success, in both br
     writes[writes.length - 1].index > healthCheckIdx,
     'rebuild branch must write the marker after the health check',
   );
+
+  // The rebuild branch must also abort on a stuck migration before writing
+  // the marker — the marker means "fully successful deploy", and unfinished
+  // migrations are a failed deploy.
+  assert.match(
+    DEPLOY_YML,
+    /FAILED_MIGRATIONS[\s\S]{0,240}exit 1/,
+    'an unfinished migration count must exit 1 before the marker is written',
+  );
 });
 
 test('deploy.yml forces a full rebuild when the marker is missing — no git-HEAD fallback', () => {

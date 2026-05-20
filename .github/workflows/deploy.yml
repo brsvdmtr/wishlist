@@ -187,9 +187,17 @@ jobs:
             echo "=== Container status ==="
             docker ps --filter name=wishlist-prod --format '{{.Names}}\t{{.Status}}'
             echo "=== Failed migrations (expect 0) ==="
-            docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist -At -c \
-              "SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL;"
-            # Record success: build + restart + health check all passed.
+            FAILED_MIGRATIONS=$(docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist -At -c \
+              "SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL;")
+            echo "$FAILED_MIGRATIONS unfinished migration(s)"
+            if [ "$FAILED_MIGRATIONS" != "0" ]; then
+              # A stuck migration means the deploy is NOT fully healthy — fail
+              # the job and do not advance the marker, so this release is not
+              # recorded as the last-known-good baseline.
+              echo "ERROR: $FAILED_MIGRATIONS unfinished migration(s) — see CLAUDE.md for 'prisma migrate resolve'"
+              exit 1
+            fi
+            # Record success: build + restart + health check + migrations all OK.
             # Written last so a failure above never updates the baseline —
             # this is what makes a retry-after-failure rebuild correctly.
             echo "$NEW_SHA" > "$RELEASE_MARKER"

@@ -91,8 +91,9 @@ describe('MiniApp.tsx — user.session_started emitter guard (2026-05-20 regress
     // The mirror must sit inside the `if (event === 'miniapp.bootstrap_succeeded')`
     // block — a bare emission elsewhere would not match the per-app-open
     // semantics the session-start event represents. Anchored on the `if (`
-    // form, so comment edits before the block don't affect the match.
-    const mirror = /if \(event === 'miniapp\.bootstrap_succeeded'[\s\S]{0,300}event: 'user\.session_started'/;
+    // form, so comment edits before the block don't affect the match; the
+    // 600-char window leaves room for statements added inside the block.
+    const mirror = /if \(event === 'miniapp\.bootstrap_succeeded'[\s\S]{0,600}event: 'user\.session_started'/;
     expect(mirror.test(MINI_APP_SRC)).toBe(true);
   });
 });
