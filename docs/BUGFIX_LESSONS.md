@@ -5,6 +5,61 @@ New entries go at the top.
 
 ---
 
+## 2026-05-20 — Flaky CI: `produces NO write side-effects` падал на глобальном `count()` (гонка параллельных vitest-воркеров)
+
+### Симптом
+
+Деплой коммита `5e487a3` (фикс фильтра достижимости survey) упал на
+`tests`-джобе: `1 failed | 78 passed`. Падал **не новый** тест, а
+существующий `research-survey-recipients.test.ts > produces NO write
+side-effects`: `expected { responses: 0 } to equal { responses: 1 }`
+(в другом прогоне — `answers: 6` vs `9`). Локально тест проходил.
+
+### Root cause
+
+Тест снимал «до/после» снапшоты глобальными `db.researchSurveyResponse
+.count()` / `.researchSurveyAnswer.count()` — **без `where`**. Vitest
+гоняет integration-файлы в параллельных воркерах против одной тестовой
+БД; соседний `research-survey.test.ts` создаёт `ResearchSurveyResponse`/
+`Answer` через `submitAnswer`/`completeSurvey`. Его записи попадали между
+`pre` и `post` снапшотами → глобальный счётчик прыгал.
+
+Падение замаскировалось под «side-effect от `selectSurveyRecipients`»,
+хотя `selectSurveyRecipients` строго read-only. Латентная флака — прошлым
+деплоям везло с таймингом; новый код в файле сдвинул окно.
+
+### Урок
+
+**Integration-тест, снимающий снапшот `count()`, обязан скоупить счёт к
+собственным данным теста.** Глобальный `count()` детерминирован только
+при последовательном прогоне; под параллельными воркерами на общей БД он
+— гонка. Скоуп по `surveyId` (или PREFIX-владельцу) делает тест
+невосприимчивым к любым соседним файлам.
+
+### Правило
+
+Любой `.count()` агрегат в integration-тесте — со `where`, привязанным к
+фикстуре теста (свой `surveyId`, PREFIX-telegramId и т.п.). Безусловные
+агрегаты по таблице в общей тестовой БД запрещены.
+
+### Лучший код
+
+```ts
+// ❌ До: глобальный счётчик — гонка с параллельными воркерами
+const pre = { responses: await db.researchSurveyResponse.count() };
+
+// ✅ После: счёт скоуплен к survey этого теста
+const countOwn = async () => ({
+  responses: await db.researchSurveyResponse.count({ where: { surveyId: survey.id } }),
+  answers: await db.researchSurveyAnswer.count({ where: { response: { surveyId: survey.id } } }),
+});
+const pre = await countOwn();
+```
+
+**Commit:** `test(survey): deflake produces-no-write-side-effects (scope counts)`
+
+---
+
 ## 2026-05-20 — Survey-приглашения: 45% волны падают с `chat_not_found` (фильтр получателей не проверял достижимость бота)
 
 ### Симптом

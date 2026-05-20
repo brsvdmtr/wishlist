@@ -351,20 +351,23 @@ suite('selectSurveyRecipients — segment SQL on real schema', () => {
     const db = getTestPrisma();
     const survey = await makeSurvey();
     await makeUser({ telegramId: `${PREFIX}-readonly1` });
-    const pre = {
-      invites: await db.researchSurveyInvite.count(),
-      responses: await db.researchSurveyResponse.count(),
-      answers: await db.researchSurveyAnswer.count(),
-    };
+    // Counts MUST be scoped to this test's survey. An unscoped global count()
+    // flakes: vitest runs integration files in parallel workers against the
+    // same DB, and a sibling (research-survey.test.ts) writes invites/
+    // responses/answers that can land between the pre and post snapshots.
+    const countOwn = async () => ({
+      invites: await db.researchSurveyInvite.count({ where: { surveyId: survey.id } }),
+      responses: await db.researchSurveyResponse.count({ where: { surveyId: survey.id } }),
+      answers: await db.researchSurveyAnswer.count({
+        where: { response: { surveyId: survey.id } },
+      }),
+    });
+    const pre = await countOwn();
     const { selectSurveyRecipients } = await import('../../src/services/research-survey/recipients');
     await selectSurveyRecipients({
       surveyId: survey.id, surveySlug: SURVEY_SLUG, s8Cap: 150, shuffleSeed: 1, now: new Date(),
     });
-    const post = {
-      invites: await db.researchSurveyInvite.count(),
-      responses: await db.researchSurveyResponse.count(),
-      answers: await db.researchSurveyAnswer.count(),
-    };
+    const post = await countOwn();
     expect(post).toEqual(pre);
   });
 });
