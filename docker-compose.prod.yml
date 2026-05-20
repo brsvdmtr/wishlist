@@ -79,6 +79,14 @@ services:
       PRO_YEARLY_PRICE_XTR: ${PRO_YEARLY_PRICE_XTR:-800}
       PRO_YEARLY_EXTEND_SECONDS: ${PRO_YEARLY_EXTEND_SECONDS:-31536000}
       PRO_SUBSCRIPTION_PERIOD: ${PRO_SUBSCRIPTION_PERIOD:-2592000}
+      # Research survey send scheduler (apps/api/src/schedulers/research-survey-send.ts).
+      # Both default to "off" — ops/research-survey/send-pilot-wave.sh flips them
+      # in /opt/wishlist/.env then `up -d --force-recreate api`. WITHOUT these two
+      # lines in the environment block the .env flip never reaches the container
+      # and the send scheduler stays disabled (root cause of the 2026-05-20 09:00
+      # MSK pilot-send failure — env didn't propagate, script aborted exit 3).
+      RESEARCH_SURVEY_SEND_ENABLED: ${RESEARCH_SURVEY_SEND_ENABLED:-false}
+      RESEARCH_SURVEY_ACTIVE_SLUG: ${RESEARCH_SURVEY_ACTIVE_SLUG:-}
     volumes:
       - wishlist_uploads:/data/uploads
       - ./logs/api:/app/logs
