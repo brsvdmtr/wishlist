@@ -43,13 +43,20 @@ export function trackProductEvent<E extends ProductEventName>(
 type ProductEmit = <E extends ProductEventName>(input: ProductEventInput<E>) => void;
 type RawEmit = (input: { event: string; userId: string; props: Record<string, unknown> }) => void;
 
-let _productEmit: ProductEmit = trackProductEvent;
-let _rawEmit: RawEmit = (input) => {
+// Production raw-emit path: a direct prisma write for the legacy
+// `referral.invitee_converted_to_paid` event (not in PRODUCT_EVENTS, so the
+// typed helper rejects it at compile time). Hoisted to a single const so the
+// default binding and the `__resetEmitters` reset can never diverge.
+// Exported for the unit test that pins its PII sanitization.
+export const productionRawEmit: RawEmit = (input) => {
   prisma.analyticsEvent
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .create({ data: { event: input.event, userId: input.userId, props: sanitizeAnalyticsProps(input.props) as any } })
     .catch((e) => logger.debug({ err: e, event: input.event }, 'analytics write failed'));
 };
+
+let _productEmit: ProductEmit = trackProductEvent;
+let _rawEmit: RawEmit = productionRawEmit;
 
 /** Test-only override hook. Production never calls this. */
 export function __setEmitters(opts: { product?: ProductEmit; raw?: RawEmit } = {}): void {
@@ -60,12 +67,7 @@ export function __setEmitters(opts: { product?: ProductEmit; raw?: RawEmit } = {
 /** Test-only reset hook. Restores both emitters to their production defaults. */
 export function __resetEmitters(): void {
   _productEmit = trackProductEvent;
-  _rawEmit = (input) => {
-    prisma.analyticsEvent
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .create({ data: { event: input.event, userId: input.userId, props: sanitizeAnalyticsProps(input.props) as any } })
-      .catch((e) => logger.debug({ err: e, event: input.event }, 'analytics write failed'));
-  };
+  _rawEmit = productionRawEmit;
 }
 
 export type PaymentAnalyticsInput = {
