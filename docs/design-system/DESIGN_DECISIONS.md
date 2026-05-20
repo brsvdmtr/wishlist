@@ -32,6 +32,40 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-05-20 — URL-import entry card always visible (Drafts reachable at 0 drafts)
+
+**Type:** approval
+
+**Decision.** `mockups/proposed/url-import-entry-card.html` is approved and
+promoted to `mockups/approved/`. The home wishlists-tab card loses its
+`draftsCount > 0` gate — it is now **always present** and reframed as the
+URL-import entry: title "Импорт по ссылке", subtitle = the live quota line
+(reused `importQuotaLabel`), a draft-count badge when drafts exist, v2.1
+accent styling. Tapping it opens the Drafts screen.
+
+**Context / why.** The URL-import input + the "X из 5" counter live on the
+Drafts screen, reachable only via this home card — which was gated on
+`draftsCount > 0`. A fresh FREE user (0 drafts) could not reach the import
+surface at all (chicken-and-egg). The 2026-05-19 monetization audit framed
+URL-import as activation-critical; an unreachable Mini-App import surface
+undercuts that. Always-showing the card also surfaces the "5 из 5" quota on
+the home screen.
+
+**Supersedes.** The amber `draftsCount > 0`-gated "Черновики" card on the
+home wishlists tab.
+
+**Impact.**
+- Mockup moved `proposed/` → `approved/url-import-entry-card.html`.
+- Mini App: home card ungated + restyled to v2.1 accent;
+  `components/ImportQuotaCounter.tsx` gains an exported `importQuotaLabel`
+  helper, reused by the card so the quota wording lives in one place.
+- New i18n key `drafts_entry_title` across all 6 locales.
+- The Drafts screen itself is unchanged — its empty-state already exists.
+
+**Approved by.** Dmitry (solo-owner decision, 2026-05-20).
+
+---
+
 ## 2026-05-20 — URL-import credit counter + quota upsell approved
 
 **Type:** approval

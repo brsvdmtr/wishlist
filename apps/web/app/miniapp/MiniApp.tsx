@@ -23,7 +23,7 @@ import { SurveyScreen } from './screens/survey/SurveyScreen';
 import type { SearchResult, AccessViewResponse } from './lib/searchApi';
 import { recordWishlistOpen, fetchAccessView } from './lib/searchApi';
 import { ProBadge } from './components/ProBadge';
-import { ImportQuotaCounter } from './components/ImportQuotaCounter';
+import { ImportQuotaCounter, importQuotaLabel } from './components/ImportQuotaCounter';
 import { SantaHatOverlay } from './components/SantaHatOverlay';
 import { SnowflakeOverlay } from './components/SnowflakeOverlay';
 import { SantaAvatar, santaAliasHue } from './components/SantaAvatar';
@@ -13287,26 +13287,47 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <div style={isDesktop ? {
             display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16,
           } : { display: 'flex', flexDirection: 'column' as const, gap: 12 }}>
-            {draftsCount > 0 && (
-              <div onClick={() => { void loadDrafts(); setScreen('drafts'); }} style={{
-                background: `linear-gradient(135deg, rgba(251, 191, 36, 0.125), rgba(251, 191, 36, 0.031))`,
-                borderRadius: 16, padding: '16px 20px', cursor: 'pointer',
-                border: `1px solid rgba(251, 191, 36, 0.145)`,
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                animation: 'fadeIn 0.3s ease',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ fontSize: 24 }}>📥</span>
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 700, fontFamily: font, color: C.text }}>{t('drafts_title', locale)}</div>
-                    <div style={{ fontSize: 12, color: C.textMuted }}>
-                      {draftsCount} {pluralize(draftsCount, t('cards_one', locale), t('cards_few', locale), t('cards_many', locale), locale)}
+            {/* URL-import entry — always present (no draftsCount gate) so a
+                fresh FREE user can reach the import surface. See
+                DESIGN_DECISIONS.md 2026-05-20 (url-import-entry-card). */}
+            {(() => {
+              const isProUser = planInfo.code !== 'FREE';
+              const freeImportLimit = credits.freeImportsLimit ?? 5;
+              const freeImportLeft = Math.max(0, freeImportLimit - (credits.freeImportsUsed ?? 0));
+              return (
+                <div onClick={() => { void loadDrafts(); setScreen('drafts'); }} style={{
+                  background: 'var(--wb-accent-soft)',
+                  border: '1px solid var(--wb-accent-soft-strong)',
+                  borderRadius: 22, padding: 15, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 13,
+                  animation: 'fadeIn 0.3s ease',
+                }}>
+                  <div style={{
+                    width: 46, height: 46, borderRadius: 14, flexShrink: 0,
+                    background: 'var(--wb-grad-accent)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', fontSize: 23,
+                  }}>📥</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 16, fontWeight: 650, fontFamily: font, color: C.text, letterSpacing: '-0.015em' }}>
+                      {t('drafts_entry_title', locale)}
+                    </div>
+                    <div style={{ fontSize: 12.5, fontWeight: 550, color: 'var(--wb-text-secondary)', marginTop: 3 }}>
+                      {importQuotaLabel({ isPro: isProUser, freeLeft: freeImportLeft, freeLimit: freeImportLimit, paidLeft: credits.importCredits, locale })}
                     </div>
                   </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                    {draftsCount > 0 && (
+                      <span style={{
+                        minWidth: 22, height: 22, padding: '0 6px', borderRadius: 11,
+                        background: 'var(--wb-accent)', color: C.text, fontSize: 12, fontWeight: 800,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>{draftsCount}</span>
+                    )}
+                    <span style={{ fontSize: 19, color: C.textMuted }}>›</span>
+                  </div>
                 </div>
-                <span style={{ fontSize: 20, color: C.orange }}>›</span>
-              </div>
-            )}
+              );
+            })()}
 
             {/* ── Referral home banner ──────────────────────────────────────
                 Shown to active users (≥1 wishlist) when program is live AND

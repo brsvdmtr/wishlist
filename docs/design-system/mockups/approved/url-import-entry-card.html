@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>URL-import — точка входа на главной (proposed)</title>
+<!--
+  PROPOSED mockup — 2026-05-20
+  Follow-up to url-import-credit-counter.html (approved).
+
+  Problem: the URL-import input + the "X из 5" counter live on the Drafts
+  screen, but that screen is reachable ONLY via the home "Черновики" card,
+  which is gated `draftsCount > 0`. A fresh FREE user (0 drafts) can't reach
+  the import surface at all — chicken-and-egg.
+
+  Fix shown here: drop the gate — the home card is ALWAYS present and doubles
+  as the import entry. Reuses the existing card slot + setScreen('drafts')
+  navigation; existing users with drafts see no change.
+
+  Frames:
+    1. Home, FREE, 0 drafts — the NEW always-on entry card
+    2. Home, FREE, 3 drafts — card with a draft-count badge (≈ today)
+    3. Empty Drafts screen — where the card leads
+    4. Home, PRO — card without the counter
+
+  Tokens: v2.1 (colors_and_type.css). Inline CSS — no external <link>.
+  APPROVED 2026-05-20 — see docs/design-system/DESIGN_DECISIONS.md.
+-->
+<style>
+  :root {
+    --wb-bg: #0F0F12;
+    --wb-bg-elev: #17171C;
+    --wb-card: rgba(255,255,255,0.045);
+    --wb-card-strong: rgba(255,255,255,0.07);
+    --wb-surface: rgba(255,255,255,0.05);
+    --wb-accent: #8B7BFF;
+    --wb-accent-strong: #B4A6FF;
+    --wb-accent-soft: rgba(139,123,255,0.14);
+    --wb-accent-soft-strong: rgba(139,123,255,0.30);
+    --wb-warning: #FBBF24;
+    --wb-warning-soft: rgba(251,191,36,0.14);
+    --wb-danger: #FB7185;
+    --wb-danger-soft: rgba(251,113,133,0.14);
+    --wb-text: #FFFFFF;
+    --wb-text-secondary: #C7CAD1;
+    --wb-text-muted: #8F94A3;
+    --wb-border: rgba(255,255,255,0.06);
+    --wb-border-light: rgba(255,255,255,0.10);
+    --wb-grad-accent: linear-gradient(135deg, #8B7BFF 0%, #B4A6FF 100%);
+    --wb-grad-mesh:
+      radial-gradient(ellipse 80% 60% at 12% 0%, rgba(139,123,255,0.22), transparent 55%),
+      radial-gradient(ellipse 60% 50% at 100% 20%, rgba(255,120,180,0.10), transparent 55%),
+      radial-gradient(ellipse 100% 70% at 50% 110%, rgba(139,123,255,0.10), transparent 65%);
+    --wb-font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--wb-bg); color: var(--wb-text); font-family: var(--wb-font);
+    -webkit-font-smoothing: antialiased; padding: 40px 24px 64px;
+    position: relative; min-height: 100vh;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background: var(--wb-grad-mesh); pointer-events: none; z-index: 0;
+  }
+  body > * { position: relative; z-index: 1; }
+
+  header { max-width: 980px; margin: 0 auto 36px; }
+  header h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.025em; margin-bottom: 8px; }
+  header p {
+    font-size: 14px; font-weight: 500; line-height: 1.5; color: var(--wb-text-secondary);
+    max-width: 760px;
+  }
+  header .legend { margin-top: 12px; font-size: 12px; color: var(--wb-text-muted); line-height: 1.6; }
+  header code {
+    background: var(--wb-surface); border: 1px solid var(--wb-border);
+    padding: 1px 6px; border-radius: 6px; font-size: 11px;
+  }
+
+  .frames {
+    display: flex; gap: 28px; flex-wrap: wrap; justify-content: center;
+    max-width: 1720px; margin: 0 auto;
+  }
+  figure { margin: 0; width: 375px; }
+  figcaption {
+    margin-top: 14px; font-size: 12.5px; line-height: 1.55; color: var(--wb-text-secondary);
+  }
+  figcaption b { color: var(--wb-text); font-weight: 650; }
+  figcaption .tag {
+    display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+    text-transform: uppercase; padding: 3px 8px; border-radius: 7px; margin-bottom: 6px;
+  }
+  .tag.new   { background: var(--wb-accent-soft); color: var(--wb-accent-strong); }
+  .tag.today { background: var(--wb-surface); color: var(--wb-text-muted); }
+  .tag.dest  { background: var(--wb-warning-soft); color: var(--wb-warning); }
+  .tag.pro   { background: var(--wb-accent-soft); color: var(--wb-accent-strong); }
+
+  /* ───── Phone frame ───── */
+  .phone {
+    width: 375px; height: 812px; background: var(--wb-bg);
+    border-radius: 44px; overflow: hidden; position: relative;
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: 0 30px 80px rgba(0,0,0,0.55);
+  }
+  .phone::before {
+    content: ''; position: absolute; inset: 0;
+    background: var(--wb-grad-mesh); pointer-events: none;
+  }
+  .phone > * { position: relative; }
+
+  .statusbar {
+    height: 44px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 26px; font-size: 14px; font-weight: 650;
+  }
+  .statusbar .dots { letter-spacing: 2px; font-size: 11px; color: var(--wb-text-secondary); }
+
+  .topbar { height: 52px; display: flex; align-items: center; gap: 12px; padding: 0 16px; }
+  .topbar .back {
+    width: 32px; height: 32px; border-radius: 10px; background: var(--wb-surface);
+    border: 1px solid var(--wb-border); display: flex; align-items: center;
+    justify-content: center; font-size: 17px; color: var(--wb-text-secondary);
+  }
+  .topbar .title { font-size: 17px; font-weight: 650; letter-spacing: -0.02em; }
+
+  .screen { padding: 6px 16px 16px; }
+
+  /* ───── Home header ───── */
+  .home-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 16px 14px;
+  }
+  .home-head .h-title { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; }
+  .home-head .h-search {
+    width: 38px; height: 38px; border-radius: 12px; background: var(--wb-surface);
+    border: 1px solid var(--wb-border); display: flex; align-items: center;
+    justify-content: center; font-size: 17px;
+  }
+
+  /* ───── Import-by-link entry card (the proposal) ───── */
+  .entry {
+    margin: 0 16px 18px; display: flex; align-items: center; gap: 13px;
+    padding: 15px 15px; border-radius: 22px;
+    background: linear-gradient(135deg, rgba(139,123,255,0.13), rgba(139,123,255,0.05));
+    border: 1px solid var(--wb-accent-soft-strong);
+    backdrop-filter: blur(14px);
+  }
+  .entry .e-ic {
+    width: 46px; height: 46px; border-radius: 14px; flex-shrink: 0;
+    background: var(--wb-grad-accent); display: flex; align-items: center;
+    justify-content: center; font-size: 23px;
+    box-shadow: 0 6px 18px rgba(139,123,255,0.4), inset 0 1px 0 rgba(255,255,255,0.22);
+  }
+  .entry .e-body { flex: 1; min-width: 0; }
+  .entry .e-title { font-size: 16px; font-weight: 650; letter-spacing: -0.015em; }
+  .entry .e-sub { font-size: 12.5px; font-weight: 550; margin-top: 3px; line-height: 1.3; }
+  .entry .e-sub.ok    { color: var(--wb-text-secondary); }
+  .entry .e-sub.ok b  { color: var(--wb-accent-strong); font-weight: 700; }
+  .entry .e-sub.pro   { color: var(--wb-text-muted); }
+  .entry .e-sub.pro b { color: var(--wb-accent-strong); font-weight: 700; }
+  .entry .e-trail { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .entry .e-badge {
+    min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px;
+    background: var(--wb-accent); color: #fff; font-size: 12px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .entry .e-chev { color: var(--wb-text-muted); font-size: 19px; }
+
+  /* ───── Section label + wishlist tiles (context) ───── */
+  .sec-label {
+    margin: 4px 16px 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--wb-text-muted);
+  }
+  .wl-tile {
+    margin: 0 16px 10px; display: flex; gap: 12px; align-items: center; padding: 14px;
+    background: var(--wb-card); border: 1px solid var(--wb-border);
+    border-radius: 22px; backdrop-filter: blur(14px);
+  }
+  .wl-tile .wl-thumb {
+    width: 48px; height: 48px; border-radius: 14px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 24px;
+  }
+  .wl-tile .wl-body { flex: 1; min-width: 0; }
+  .wl-tile .wl-title { font-size: 15.5px; font-weight: 650; letter-spacing: -0.01em; }
+  .wl-tile .wl-meta { font-size: 12px; color: var(--wb-text-muted); margin-top: 3px; }
+  .wl-tile .wl-chev { color: var(--wb-text-muted); font-size: 18px; }
+
+  /* ───── Drafts screen: import row + counter + empty-state ───── */
+  .import-row { display: flex; gap: 8px; }
+  .import-input {
+    flex: 1; height: 48px; border-radius: 16px;
+    background: var(--wb-surface); border: 1px solid var(--wb-border-light);
+    display: flex; align-items: center; padding: 0 14px;
+    font-size: 14px; color: var(--wb-text-muted); font-weight: 500;
+  }
+  .import-btn {
+    width: 48px; height: 48px; border-radius: 18px; flex-shrink: 0;
+    background: var(--wb-grad-accent); display: flex; align-items: center;
+    justify-content: center; font-size: 19px; opacity: 0.45;
+  }
+  .counter {
+    margin-top: 10px; display: flex; align-items: center; gap: 8px;
+    padding: 9px 12px; border-radius: 14px; font-size: 12.5px;
+    font-weight: 550; line-height: 1.3;
+    background: var(--wb-accent-soft); color: var(--wb-text-secondary);
+  }
+  .counter b { color: var(--wb-accent-strong); font-weight: 700; }
+
+  .empty {
+    margin-top: 64px; display: flex; flex-direction: column; align-items: center;
+    text-align: center; padding: 0 28px;
+  }
+  .empty .em-ic {
+    width: 84px; height: 84px; border-radius: 50%; margin-bottom: 18px;
+    background: var(--wb-accent-soft); display: flex; align-items: center;
+    justify-content: center; font-size: 38px;
+  }
+  .empty .em-title { font-size: 18px; font-weight: 650; letter-spacing: -0.02em; margin-bottom: 7px; }
+  .empty .em-text {
+    font-size: 13.5px; font-weight: 500; line-height: 1.5; color: var(--wb-text-secondary);
+  }
+
+  .home-ind {
+    position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+    width: 134px; height: 5px; border-radius: 9999px; background: rgba(255,255,255,0.30);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>URL-import — точка входа на главной</h1>
+  <p>
+    Фолоу-ап к approved-мокапу <code>url-import-credit-counter.html</code>. Поле
+    импорта и счётчик «X из 5» живут на экране «Черновики», но попасть на него
+    можно только через карточку на главной, которая показывается лишь при
+    <code>draftsCount&nbsp;&gt;&nbsp;0</code>. Новый FREE-юзер (0 черновиков)
+    не доходит до импорта вообще.
+  </p>
+  <p class="legend">
+    Решение: снять гейт — карточка на главной <b>всегда на месте</b> и сама
+    является входом в импорт. Переиспользуется существующий слот карточки и
+    навигация <code>setScreen('drafts')</code>; у юзеров с черновиками —
+    ничего не меняется. Бонус: счётчик «5 из 5» виден прямо на главной.
+  </p>
+</header>
+
+<div class="frames">
+
+  <!-- ══════════ FRAME 1 — Home, FREE, 0 drafts (NEW) ══════════ -->
+  <figure>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="home-head">
+        <div class="h-title">Вишлисты</div>
+        <div class="h-search">🔍</div>
+      </div>
+      <div class="entry">
+        <div class="e-ic">📥</div>
+        <div class="e-body">
+          <div class="e-title">Импорт по ссылке</div>
+          <div class="e-sub ok">Осталось <b>5&nbsp;из&nbsp;5</b> импортов в этом месяце</div>
+        </div>
+        <div class="e-trail"><span class="e-chev">›</span></div>
+      </div>
+      <div class="sec-label">Мои вишлисты</div>
+      <div class="wl-tile">
+        <div class="wl-thumb" style="background:rgba(139,123,255,0.14)">🎁</div>
+        <div class="wl-body">
+          <div class="wl-title">День рождения</div>
+          <div class="wl-meta">4 желания · 2 участника</div>
+        </div>
+        <div class="wl-chev">›</div>
+      </div>
+      <div class="wl-tile">
+        <div class="wl-thumb" style="background:rgba(74,222,128,0.14)">🏡</div>
+        <div class="wl-body">
+          <div class="wl-title">Для дома</div>
+          <div class="wl-meta">7 желаний</div>
+        </div>
+        <div class="wl-chev">›</div>
+      </div>
+      <div class="home-ind"></div>
+    </div>
+    <figcaption>
+      <span class="tag new">FREE · 0 черновиков · NEW</span><br>
+      <b>Главное изменение.</b> Раньше при 0 черновиков карточки не было вообще —
+      и экран импорта был недостижим. Теперь карточка «Импорт по ссылке» всегда
+      на месте, подзаголовок несёт счётчик квоты. Тап → экран «Черновики».
+    </figcaption>
+  </figure>
+
+  <!-- ══════════ FRAME 2 — Home, FREE, 3 drafts ══════════ -->
+  <figure>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="home-head">
+        <div class="h-title">Вишлисты</div>
+        <div class="h-search">🔍</div>
+      </div>
+      <div class="entry">
+        <div class="e-ic">📥</div>
+        <div class="e-body">
+          <div class="e-title">Импорт по ссылке</div>
+          <div class="e-sub ok">Осталось <b>4&nbsp;из&nbsp;5</b> импортов в этом месяце</div>
+        </div>
+        <div class="e-trail">
+          <span class="e-badge">3</span>
+          <span class="e-chev">›</span>
+        </div>
+      </div>
+      <div class="sec-label">Мои вишлисты</div>
+      <div class="wl-tile">
+        <div class="wl-thumb" style="background:rgba(139,123,255,0.14)">🎁</div>
+        <div class="wl-body">
+          <div class="wl-title">День рождения</div>
+          <div class="wl-meta">4 желания · 2 участника</div>
+        </div>
+        <div class="wl-chev">›</div>
+      </div>
+      <div class="wl-tile">
+        <div class="wl-thumb" style="background:rgba(251,191,36,0.16)">✈️</div>
+        <div class="wl-body">
+          <div class="wl-title">Путешествия</div>
+          <div class="wl-meta">5 желаний</div>
+        </div>
+        <div class="wl-chev">›</div>
+      </div>
+      <div class="home-ind"></div>
+    </div>
+    <figcaption>
+      <span class="tag today">FREE · 3 черновика</span><br>
+      <b>≈ сегодняшнее поведение.</b> Карточка была видна и раньше — просто
+      переименована из «Черновики» в «Импорт по ссылке» (консистентно). Бейдж
+      <b>3</b> справа — черновики, ожидающие разбора.
+    </figcaption>
+  </figure>
+
+  <!-- ══════════ FRAME 3 — Empty Drafts screen ══════════ -->
+  <figure>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="topbar">
+        <div class="back">‹</div>
+        <div class="title">Черновики</div>
+      </div>
+      <div class="screen">
+        <div class="import-row">
+          <div class="import-input">Вставь ссылку на товар</div>
+          <div class="import-btn">📥</div>
+        </div>
+        <div class="counter">
+          <span>↻</span>
+          <span>Осталось <b>5&nbsp;из&nbsp;5</b> импортов в этом месяце</span>
+        </div>
+        <div class="empty">
+          <div class="em-ic">🔗</div>
+          <div class="em-title">Пока пусто</div>
+          <div class="em-text">
+            Вставь ссылку на товар выше — добавим в черновики за пару секунд.
+            Ozon, Wildberries, Я.Маркет, Lamoda и другие.
+          </div>
+        </div>
+      </div>
+      <div class="home-ind"></div>
+    </div>
+    <figcaption>
+      <span class="tag dest">Пустой экран «Черновики»</span><br>
+      <b>Куда ведёт карточка.</b> Экран уже готов — поле ввода и счётчик
+      рендерятся вверху всегда; пустой список просто показывает дружелюбный
+      empty-state. Чинить нужно <b>только достижимость</b>, сам экран не трогаем.
+    </figcaption>
+  </figure>
+
+  <!-- ══════════ FRAME 4 — Home, PRO ══════════ -->
+  <figure>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="home-head">
+        <div class="h-title">Вишлисты</div>
+        <div class="h-search">🔍</div>
+      </div>
+      <div class="entry">
+        <div class="e-ic">📥</div>
+        <div class="e-body">
+          <div class="e-title">Импорт по ссылке</div>
+          <div class="e-sub pro">💜 Импорт <b>без лимита</b> · PRO</div>
+        </div>
+        <div class="e-trail"><span class="e-chev">›</span></div>
+      </div>
+      <div class="sec-label">Мои вишлисты</div>
+      <div class="wl-tile">
+        <div class="wl-thumb" style="background:rgba(139,123,255,0.14)">🎄</div>
+        <div class="wl-body">
+          <div class="wl-title">Новый год</div>
+          <div class="wl-meta">9 желаний · 4 участника</div>
+        </div>
+        <div class="wl-chev">›</div>
+      </div>
+      <div class="wl-tile">
+        <div class="wl-thumb" style="background:rgba(134,171,245,0.16)">📚</div>
+        <div class="wl-body">
+          <div class="wl-title">Книги</div>
+          <div class="wl-meta">12 желаний</div>
+        </div>
+        <div class="wl-chev">›</div>
+      </div>
+      <div class="home-ind"></div>
+    </div>
+    <figcaption>
+      <span class="tag pro">PRO</span><br>
+      <b>PRO — без счётчика.</b> Та же карточка, подзаголовок — «Импорт без
+      лимита». Никакой квоты, поведение симметрично счётчику внутри экрана.
+    </figcaption>
+  </figure>
+
+</div>
+
+</body>
+</html>
