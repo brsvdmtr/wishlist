@@ -49,30 +49,39 @@ test('deploy.yml sources PREV_SHA from the last-successful-release marker', () =
 test('deploy.yml writes the release marker only after deploy success, in both branches', () => {
   // NEW_SHA must be persisted to the marker after a deploy succeeds, so the
   // next run (including a retry) has a correct changed-detection baseline.
-  // One write in the "no service-level changes" branch, one in the
-  // "rebuilt services" branch — both are successful-deploy exits.
+  // There are exactly two success exits: the "no service-level changes"
+  // branch and the "rebuilt services" branch. Pinning the count at 2 means a
+  // future third success path forces this guard to be revisited rather than
+  // silently leaving a write unchecked.
   const writes = [...DEPLOY_YML.matchAll(/echo "\$NEW_SHA" > "\$RELEASE_MARKER"/g)];
-  assert.ok(
-    writes.length >= 2,
-    `marker must be written in both success branches; found ${writes.length}`,
+  assert.strictEqual(
+    writes.length, 2,
+    `marker must be written exactly once per success branch; found ${writes.length}`,
   );
 
   // Ordering guard — this is what actually catches a re-introduction of the
-  // bug. A marker write moved ABOVE `docker compose build` / the health
-  // check would advance the baseline even when the deploy never succeeded.
+  // bug: a marker write that runs before the deploy truly succeeded would
+  // advance the baseline on a failed deploy. Each write is pinned to its own
+  // branch by the surrounding anchors, not by trusting array position alone.
   const noBuildIdx = DEPLOY_YML.indexOf('up -d --no-build api bot');
+  const buildIdx = DEPLOY_YML.indexOf('docker compose -f docker-compose.prod.yml build');
   const healthCheckIdx = DEPLOY_YML.indexOf('curl -sf http://localhost:3001/health');
   assert.notStrictEqual(noBuildIdx, -1, 'no-build recreate line must exist');
+  assert.notStrictEqual(buildIdx, -1, 'rebuild `docker compose build` line must exist');
   assert.notStrictEqual(healthCheckIdx, -1, 'health-check line must exist');
-  // Branch 1 (no service-level changes): marker write after the recreate.
+  // The no-build branch precedes the rebuild branch in the script.
+  const [noBuildWrite, rebuildWrite] = writes;
+  // No-build branch: marker write after the recreate AND before the rebuild
+  // branch even begins — i.e. genuinely inside the no-build branch.
   assert.ok(
-    writes[0].index > noBuildIdx,
-    'no-build branch must write the marker after recreating containers',
+    noBuildWrite.index > noBuildIdx && noBuildWrite.index < buildIdx,
+    'no-build branch must write the marker after the recreate, inside its own branch',
   );
-  // Branch 2 (rebuilt): marker write after the health check passes.
+  // Rebuild branch: marker write after the image build AND after the health
+  // check — i.e. only once the deploy is proven good.
   assert.ok(
-    writes[writes.length - 1].index > healthCheckIdx,
-    'rebuild branch must write the marker after the health check',
+    rebuildWrite.index > buildIdx && rebuildWrite.index > healthCheckIdx,
+    'rebuild branch must write the marker after the build and the health check',
   );
 
   // The rebuild branch must also abort on a stuck migration before writing
@@ -95,10 +104,12 @@ test('deploy.yml forces a full rebuild when the marker is missing — no git-HEA
     'deploy.yml must not fall back to git HEAD for the changed-detection baseline',
   );
   // An empty PREV_SHA (no baseline) must short-circuit the detection to a
-  // full rebuild of every service.
+  // full rebuild of every service. Match the empty-baseline → full-rebuild
+  // linkage loosely — don't pin the exact shell form (`||`-compound vs.
+  // `if; then`), per this file's match-loosely convention above.
   assert.match(
     DEPLOY_YML,
-    /if \[ -z "\$PREV_SHA" \] \|\|[^\n]*\n\s*SERVICES="api bot web"/,
+    /\[ -z "\$PREV_SHA" \][\s\S]{0,150}SERVICES="api bot web"/,
     'a missing baseline (empty PREV_SHA) must force SERVICES="api bot web"',
   );
   // A marker SHA that isn't an ancestor of NEW_SHA is equally untrustworthy

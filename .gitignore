@@ -12,3 +12,8 @@ coverage
 *.log
 .DS_Store
 
+# Per-host deploy state — the .deploy/last-successful-release marker is
+# created at runtime in /opt/wishlist/.deploy by deploy.yml / ops/deploy.sh.
+# Never committed.
+.deploy/
+

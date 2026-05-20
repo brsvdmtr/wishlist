@@ -60,7 +60,11 @@ jobs:
             # success (the stale image keeps running). Source it instead from
             # the .deploy/last-successful-release marker — the same file
             # ops/deploy.sh writes and ops/rollback.sh reads — which is updated
-            # only after a deploy fully succeeds. Worst case the marker is
+            # only after a deploy fully succeeds. The marker is untracked
+            # per-host runtime state (not version-controlled): `git reset
+            # --hard` leaves it alone, and if it is ever wiped — e.g. by
+            # ops/rollback.sh's `git clean` — the missing-marker path below
+            # just forces a harmless full rebuild. Worst case the marker is
             # stale (points further back than reality): the diff range is then
             # too wide and over-rebuilds — slower, but never under-rebuilds.
             # That asymmetry is deliberate — an over-rebuild is safe, a skipped
