@@ -76,15 +76,20 @@ test('deploy.yml writes the release marker only after deploy success, in both br
   );
 });
 
-test('deploy.yml keeps git HEAD only as the fallback for PREV_SHA', () => {
-  // `git rev-parse HEAD` may remain — but only as the fallback when the
-  // marker is missing/invalid (first run after this change). Require the
-  // marker-based read to appear before the HEAD fallback in the script.
-  const markerReadIdx = DEPLOY_YML.search(/PREV_SHA=[^\n]*RELEASE_MARKER/);
-  const fallbackIdx = DEPLOY_YML.indexOf('PREV_SHA=$(git rev-parse HEAD)');
-  assert.notStrictEqual(markerReadIdx, -1, 'marker-based PREV_SHA assignment must exist');
+test('deploy.yml forces a full rebuild when the marker is missing — no git-HEAD fallback', () => {
+  // The marker-missing path must NOT fall back to `git rev-parse HEAD`: on a
+  // retry-after-failure HEAD is already advanced, so a HEAD baseline would
+  // diff an empty range and skip the rebuild. A missing baseline must instead
+  // force a full rebuild — over-rebuilding is always safe.
   assert.ok(
-    fallbackIdx === -1 || markerReadIdx < fallbackIdx,
-    'the marker read must precede the git-HEAD fallback',
+    !DEPLOY_YML.includes('PREV_SHA=$(git rev-parse HEAD)'),
+    'deploy.yml must not fall back to git HEAD for the changed-detection baseline',
+  );
+  // An empty PREV_SHA (no baseline) must short-circuit the detection to a
+  // full rebuild of every service.
+  assert.match(
+    DEPLOY_YML,
+    /if \[ -z "\$PREV_SHA" \] \|\|[^\n]*\n\s*SERVICES="api bot web"/,
+    'a missing baseline (empty PREV_SHA) must force SERVICES="api bot web"',
   );
 });

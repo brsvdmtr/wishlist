@@ -88,10 +88,11 @@ describe('MiniApp.tsx — user.session_started emitter guard (2026-05-20 regress
   });
 
   it('gates the user.session_started emission on miniapp.bootstrap_succeeded', () => {
-    // The mirror must be tied to the successful-bootstrap path — a bare
-    // emission elsewhere would not match the per-app-open semantics the
-    // session-start event represents.
-    const mirror = /event === 'miniapp\.bootstrap_succeeded'[\s\S]{0,400}'user\.session_started'/;
+    // The mirror must sit inside the `if (event === 'miniapp.bootstrap_succeeded')`
+    // block — a bare emission elsewhere would not match the per-app-open
+    // semantics the session-start event represents. Anchored on the `if (`
+    // form, so comment edits before the block don't affect the match.
+    const mirror = /if \(event === 'miniapp\.bootstrap_succeeded'[\s\S]{0,300}event: 'user\.session_started'/;
     expect(mirror.test(MINI_APP_SRC)).toBe(true);
   });
 });

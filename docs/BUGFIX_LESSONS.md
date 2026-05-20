@@ -90,22 +90,28 @@ CHANGED=$(git diff --name-only "$PREV_SHA" "$NEW_SHA")
 RELEASE_MARKER=/opt/wishlist/.deploy/last-successful-release
 PREV_SHA=""
 [ -f "$RELEASE_MARKER" ] && PREV_SHA=$(tr -d '[:space:]' < "$RELEASE_MARKER")
-if [ -n "$PREV_SHA" ] && git rev-parse --verify --quiet "${PREV_SHA}^{commit}" >/dev/null; then
-  : # маркер валиден
-else
-  PREV_SHA=$(git rev-parse HEAD)   # первый прогон / маркер потерян — фоллбэк
+if ! { [ -n "$PREV_SHA" ] && git rev-parse --verify --quiet "${PREV_SHA}^{commit}" >/dev/null; }; then
+  # Маркер потерян/битый. НЕ фоллбэчимся на git HEAD — на ретрае после
+  # падения он уже сдвинут `git reset --hard`, и баг воспроизведётся.
+  # Пустой PREV_SHA = «нет базлайна» → пересобрать всё (over-rebuild безопасен).
+  PREV_SHA=""
 fi
 git reset --hard origin/main
 NEW_SHA=$(git rev-parse HEAD)
-CHANGED=$(git diff --name-only "$PREV_SHA" "$NEW_SHA")
+if [ -z "$PREV_SHA" ]; then
+  SERVICES="api bot web"                                  # нет базлайна → полная пересборка
+else
+  CHANGED=$(git diff --name-only "$PREV_SHA" "$NEW_SHA")   # CHANGED → SERVICES
+fi
 # ... и в КОНЦЕ каждой успешной ветки (после health-check):
 echo "$NEW_SHA" > "$RELEASE_MARKER"
 ```
 
 Регрессионный тест: `ops/deploy-workflow.test.mjs` (`node:test`, гоняется
 через `pnpm test:ops`) — grep-guard на `deploy.yml`: `PREV_SHA` читается из
-маркера, маркер пишется в обеих success-ветках, `git HEAD` остаётся только
-фоллбэком. Падает на pre-fix коммите (3 из 33 ops-тестов).
+маркера, маркер пишется в обеих success-ветках (с проверкой порядка — после
+health-check), а отсутствие маркера форсит полную пересборку (без фоллбэка
+на `git HEAD`). Падает на pre-fix коммите (3 из 33 ops-тестов).
 
 **Commit:** см. `git log --grep="fix(deploy): source PREV_SHA from release marker"`
 
@@ -189,14 +195,17 @@ callsite'ов. Каждый слой тестирует контракт «на 
 //        'user.session_started' → rollup-колонка sessionStarted мёртвая.
 
 // ✅ После: единое зеркало в trackEvent — покрывает все 21 ветку
-//          deep-link'ов разом; bootstrap_succeeded ↔ session_started
-//          1:1 by construction (каждый app-open = одно событие; rollup
-//          суммирует их в sessionStarted как и все прочие COUNTER_FIELDS).
-if (event === 'miniapp.bootstrap_succeeded') {
+//          deep-link'ов разом; bootstrap_succeeded → session_started
+//          ≤1 на mount (ref-guard), каждый app-open = одно событие;
+//          rollup суммирует в sessionStarted как и все COUNTER_FIELDS.
+// reuse `entry` → идентичный prop shape (bootSessionId, durationMs, …),
+// одна точка построения props.
+if (event === 'miniapp.bootstrap_succeeded' && !sessionStartedRef.current) {
+  sessionStartedRef.current = true;
   telemetryBufferRef.current.push({
+    ...entry,
     event: 'user.session_started',
-    ts: Date.now(),
-    props: { bootSessionId: bootSessionIdRef.current, clientEventId: crypto.randomUUID() },
+    props: { ...entry.props, clientEventId: crypto.randomUUID() },
   });
 }
 ```

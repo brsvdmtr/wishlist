@@ -5646,6 +5646,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
   // Telemetry event buffer — flushed to server after auth confirmed
   const telemetryBufferRef = useRef<Array<{event: string; ts: number; props?: Record<string, unknown>}>>([]);
+  // Fires-once guard for the user.session_started mirror below. Each app-open
+  // is a fresh mount, so once-per-mount == once-per-app-open. Makes the
+  // bootstrap_succeeded → session_started 1:1 invariant structural, not just
+  // a convention across the ~21 hand-written bootstrap_succeeded callsites.
+  const sessionStartedRef = useRef(false);
 
   const trackEvent = useCallback((event: string, props?: Record<string, unknown>) => {
     const entry = {
@@ -5660,16 +5665,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     telemetryBufferRef.current.push(entry);
     // eslint-disable-next-line no-console
     if (process.env.NODE_ENV === 'development') console.log(`[telemetry] ${event}`, entry.props);
-    // Mirror every successful bootstrap (one app-open) to the canonical
+    // Mirror the first successful bootstrap (one app-open) to the canonical
     // session-start PRODUCT_EVENT, so the daily-activity rollup
     // (services/daily-activity.service.ts → UserDailyActivity.sessionStarted)
-    // gets a feed. One mirror here covers every bootstrap_succeeded callsite.
-    // Reuse `entry` so the mirror carries the identical prop shape
-    // (bootSessionId, durationMs, anything trackEvent injects later) — only
-    // the event name and a fresh clientEventId differ, keeping a single
-    // prop-construction path. Server resolves userId from req.tgUser.id
-    // (telemetry.routes.ts); the client never sends one.
-    if (event === 'miniapp.bootstrap_succeeded') {
+    // gets a feed. One mirror here covers every bootstrap_succeeded callsite;
+    // the sessionStartedRef guard makes it fire at most once per app-open even
+    // if bootstrap_succeeded is ever double-emitted. Reuse `entry` so the
+    // mirror carries the identical prop shape (bootSessionId, durationMs,
+    // anything trackEvent injects later) — only the event name and a fresh
+    // clientEventId differ, keeping a single prop-construction path. Server
+    // resolves userId from req.tgUser.id (telemetry.routes.ts); client never
+    // sends one.
+    if (event === 'miniapp.bootstrap_succeeded' && !sessionStartedRef.current) {
+      sessionStartedRef.current = true;
       telemetryBufferRef.current.push({
         ...entry,
         event: 'user.session_started',
