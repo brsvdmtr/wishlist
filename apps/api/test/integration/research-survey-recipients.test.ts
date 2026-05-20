@@ -70,7 +70,9 @@ suite('selectSurveyRecipients — segment SQL on real schema', () => {
     });
   }
 
-  async function makeUser(opts: { telegramId?: string; createdAt?: Date; locale?: string } = {}) {
+  async function makeUser(
+    opts: { telegramId?: string; createdAt?: Date; locale?: string; reachable?: boolean } = {},
+  ) {
     const db = getTestPrisma();
     const u = await db.user.create({
       data: {
@@ -80,7 +82,31 @@ suite('selectSurveyRecipients — segment SQL on real schema', () => {
       },
     });
     await makeProfile(u.id, opts.locale ?? 'ru');
+    // loadEligiblePool requires ≥1 delivered LifecycleTouch (bot-reachability),
+    // so the default fixture user gets one. Pass reachable:false to model a
+    // Mini-App-only user the bot has no DM chat with.
+    if (opts.reachable !== false) await makeDeliveredTouch(u.id);
     return u;
+  }
+
+  // Inserts a delivered LifecycleTouch. sentAt is 10 days ago — old enough to
+  // clear the base filter's "no touch in the last 24h" window, delivered=true
+  // so the user passes the reachability filter.
+  async function makeDeliveredTouch(userId: string) {
+    const db = getTestPrisma();
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+    await db.lifecycleTouch.create({
+      data: {
+        userId,
+        segment: 'S1',
+        episodeKey: `ep_${Math.random().toString(36).slice(2, 8)}`,
+        touchNumber: 1,
+        scheduledFor: tenDaysAgo,
+        sentAt: tenDaysAgo,
+        delivered: true,
+        messageKind: 'activation',
+      },
+    });
   }
 
   async function makeWishlistWithItem(ownerId: string, opts: { shareToken?: string | null; shareOpenCount?: number } = {}) {
@@ -268,6 +294,56 @@ suite('selectSurveyRecipients — segment SQL on real schema', () => {
     const report = await selectSurveyRecipients({
       surveyId: survey.id, surveySlug: SURVEY_SLUG, s8Cap: 150, shuffleSeed: 1, now: new Date(),
     });
+    expect(report.recipients.find((r) => r.userId === u.id)).toBeUndefined();
+  });
+
+  // ─── Bot-reachability filter ─────────────────────────────────────────
+  it('keeps a bot-reachable user and drops one with no delivered LifecycleTouch', async () => {
+    const survey = await makeSurvey();
+    // Reachable — has a delivered LifecycleTouch (makeUser default).
+    const reachable = await makeUser({ telegramId: `${PREFIX}-reach1` });
+    await makeWishlistWithItem(reachable.id);
+    // Unreachable — Mini-App-only user, the bot never delivered a DM.
+    const unreachable = await makeUser({ telegramId: `${PREFIX}-unreach1`, reachable: false });
+    await makeWishlistWithItem(unreachable.id);
+
+    const { selectSurveyRecipients } = await import('../../src/services/research-survey/recipients');
+    const report = await selectSurveyRecipients({
+      surveyId: survey.id, surveySlug: SURVEY_SLUG, s8Cap: 150, shuffleSeed: 1, now: new Date(),
+    });
+
+    // Reachable user is selected — has a real item → S1.
+    expect(report.recipients.find((r) => r.userId === reachable.id)?.segmentId).toBe('S1');
+    // Unreachable user is dropped by the base filter, before segment matching.
+    expect(report.recipients.find((r) => r.userId === unreachable.id)).toBeUndefined();
+    // ...and the report attributes the drop.
+    expect(report.skipped.notReachable).toBeGreaterThanOrEqual(1);
+  });
+
+  it('excludes a user whose only LifecycleTouch has delivered=false', async () => {
+    const db = getTestPrisma();
+    const survey = await makeSurvey();
+    // reachable:false → no default touch; we add one that was never delivered.
+    const u = await makeUser({ telegramId: `${PREFIX}-undeliv1`, reachable: false });
+    await db.lifecycleTouch.create({
+      data: {
+        userId: u.id,
+        segment: 'S1',
+        episodeKey: `ep_undeliv_${Math.random().toString(36).slice(2, 8)}`,
+        touchNumber: 1,
+        scheduledFor: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+        sentAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+        delivered: false,
+        messageKind: 'activation',
+      },
+    });
+    await makeWishlistWithItem(u.id);
+
+    const { selectSurveyRecipients } = await import('../../src/services/research-survey/recipients');
+    const report = await selectSurveyRecipients({
+      surveyId: survey.id, surveySlug: SURVEY_SLUG, s8Cap: 150, shuffleSeed: 1, now: new Date(),
+    });
+    // A touch row exists but was never delivered → still unreachable.
     expect(report.recipients.find((r) => r.userId === u.id)).toBeUndefined();
   });
 

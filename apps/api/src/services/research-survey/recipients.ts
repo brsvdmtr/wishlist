@@ -9,6 +9,7 @@
 //        - no prior ResearchSurveyInvite for this surveyId    (rule 1)
 //        - no prior completed ResearchSurveyResponse for the same slug (rule 2)
 //        - no LifecycleTouch sent in the last 24h             (rule G)
+//        - ≥1 LifecycleTouch with delivered=true              (bot-reachability)
 //        - resolveSurveyLocale(...) ∈ {ru, en}                (Wave 1 locale gate)
 //
 //   2. segment assignment (mutually exclusive, in priority order):
@@ -27,8 +28,20 @@
 //
 // Output: `RecipientSelection[]` ready for direct insert into
 // ResearchSurveyInvite (one row per user).
+//
+// Research-ops constraint — the bot-reachability filter shrinks every
+// segment's eligible pool, and unevenly. Lifecycle DMs target early-funnel
+// churn, so bot-reachable users cluster in the early-funnel S8 substrata;
+// segments that recruit later-funnel users — notably S5 (guest reservers)
+// — can have a near-zero reachable pool. This is an inherent limit of a
+// bot-DM-delivered survey, not a bug: wave planning must expect smaller,
+// skewed cohorts, and `SelectionReport.skipped.notReachable` reports the
+// drop. Validated on the pmf-discovery pilot (2026-05-20): pre-filter,
+// 27/60 invites failed Telegram `chat_not_found`; a reachability-filtered
+// re-wave hit 0/27. Reaching the excluded users needs an in-app survey
+// surface — a separate, larger piece of work.
 
-import { prisma } from '@wishlist/db';
+import { prisma, Prisma } from '@wishlist/db';
 import { resolveSurveyLocale, type SurveyLocale } from './locale';
 
 export type SegmentId = 'S1' | 'S2' | 'S3' | 'S5' | 'S7' | 'S8';
@@ -62,10 +75,17 @@ export interface SelectionReport {
   countsBySegment: Record<SegmentId, number>;
   s8CountsBySubtype: Record<S8Subtype, number>;
   skipped: {
-    /** Base-filter pool size before segment matching. */
+    /** Base-filter pool size (bot-reachable users) before segment matching. */
     eligible: number;
     /** Eligible but locale didn't resolve to ru/en. */
     nonRuEn: number;
+    /**
+     * Users that passed every other base-filter rule but were dropped
+     * because the bot has never delivered them a DM (no LifecycleTouch
+     * with delivered=true). Not included in `eligible` — surfaced so wave
+     * planning sees the true pool shrinkage.
+     */
+    notReachable: number;
   };
 }
 
@@ -92,7 +112,11 @@ export async function selectSurveyRecipients(input: SelectionInput): Promise<Sel
     activated_then_churned: 0,
   };
 
-  const eligiblePool = await loadEligiblePool(input.surveyId, input.surveySlug, now);
+  const { pool: eligiblePool, notReachable } = await loadEligiblePool(
+    input.surveyId,
+    input.surveySlug,
+    now,
+  );
   const eligible = eligiblePool.length;
   let nonRuEn = 0;
   const localeByUser = new Map<string, SurveyLocale>();
@@ -201,7 +225,12 @@ export async function selectSurveyRecipients(input: SelectionInput): Promise<Sel
     s8CountsBySubtype[pick.subtype] += 1;
   }
 
-  return { recipients, countsBySegment, s8CountsBySubtype, skipped: { eligible, nonRuEn } };
+  return {
+    recipients,
+    countsBySegment,
+    s8CountsBySubtype,
+    skipped: { eligible, nonRuEn, notReachable },
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -211,34 +240,57 @@ export async function selectSurveyRecipients(input: SelectionInput): Promise<Sel
 // product), S8 only recruits inactive ones (substrata are a churn-funnel
 // breakdown). S5/S7 ignore activity because those signals are rare and
 // worth surveying even if the user went quiet.
+//
+// Bot-reachability: a user is eligible only if the bot has provably
+// delivered them a DM before — ≥1 LifecycleTouch with delivered=true.
+// Mini-App-only users (launched via the menu button, never a tracked bot
+// chat) have no such row, and a survey-invite DM to them fails Telegram
+// `chat_not_found`. Returns `notReachable`: the count of users that passed
+// every other base-filter rule but were dropped here, so the caller can
+// report honest pool shrinkage.
 // ─────────────────────────────────────────────────────────────────────
 async function loadEligiblePool(surveyId: string, surveySlug: string, now: Date) {
   const newUserCutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const lifecycleCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  return await prisma.user.findMany({
-    where: {
-      godMode: false,
-      telegramId: { not: null },
-      createdAt: { lt: newUserCutoff },
-      profile: { is: { notifyMarketing: true } },
-      researchSurveyInvites: { none: { surveyId } },
-      researchSurveyResponses: { none: { survey: { slug: surveySlug } } },
-      lifecycleTouches: { none: { sentAt: { gt: lifecycleCutoff } } },
-    },
-    select: {
-      id: true,
-      updatedAt: true,
-      profile: {
-        select: {
-          languageMode: true,
-          manualLanguage: true,
-          normalizedLocale: true,
-          language: true,
-          marketBucket: true,
+  // Base filter excluding the reachability clause. Counted on its own so the
+  // difference vs the reachable pool is attributable to unreachability.
+  const baseWhere: Prisma.UserWhereInput = {
+    godMode: false,
+    telegramId: { not: null },
+    createdAt: { lt: newUserCutoff },
+    profile: { is: { notifyMarketing: true } },
+    researchSurveyInvites: { none: { surveyId } },
+    researchSurveyResponses: { none: { survey: { slug: surveySlug } } },
+    lifecycleTouches: { none: { sentAt: { gt: lifecycleCutoff } } },
+  };
+  // `none recent touch` (above) and `some delivered touch` are two distinct
+  // LifecycleTouch predicates; a single relation key can't hold both, so the
+  // reachability clause goes in its own AND term.
+  const reachableWhere: Prisma.UserWhereInput = {
+    AND: [baseWhere, { lifecycleTouches: { some: { delivered: true } } }],
+  };
+
+  const [eligibleBeforeReachability, pool] = await Promise.all([
+    prisma.user.count({ where: baseWhere }),
+    prisma.user.findMany({
+      where: reachableWhere,
+      select: {
+        id: true,
+        updatedAt: true,
+        profile: {
+          select: {
+            languageMode: true,
+            manualLanguage: true,
+            normalizedLocale: true,
+            language: true,
+            marketBucket: true,
+          },
         },
       },
-    },
-  });
+    }),
+  ]);
+
+  return { pool, notReachable: eligibleBeforeReachability - pool.length };
 }
 
 // ─────────────────────────────────────────────────────────────────────
