@@ -16,3 +16,15 @@ coverage
 # created at runtime in /opt/wishlist/.deploy by deploy.yml / ops/deploy.sh.
 # Never committed.
 .deploy/
+
+# Local agent / Claude Code runtime — machine-local, never committed.
+.agents/
+.claude/worktrees/
+.claude/scheduled_tasks.lock
+
+# TypeScript incremental build cache — regenerated on every build.
+*.tsbuildinfo
+
+# Local design-system scratch — a working copy of the wishboard-design
+# skill that already lives (tracked) at .claude/skills/wishboard-design/.
+redisign/
