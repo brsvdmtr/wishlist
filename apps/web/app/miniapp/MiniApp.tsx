@@ -24,6 +24,7 @@ import type { SearchResult, AccessViewResponse } from './lib/searchApi';
 import { recordWishlistOpen, fetchAccessView } from './lib/searchApi';
 import { ProBadge } from './components/ProBadge';
 import { ImportQuotaCounter, importQuotaLabel } from './components/ImportQuotaCounter';
+import { importResultToast, type ImportParseStatus } from './components/importResultToast';
 import { SantaHatOverlay } from './components/SantaHatOverlay';
 import { SnowflakeOverlay } from './components/SnowflakeOverlay';
 import { SantaAvatar, santaAliasHue } from './components/SantaAvatar';
@@ -7183,7 +7184,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       }
       // Reflect the consumed credit in the live counter (server-authoritative).
       const okBody = await res.json().catch(() => null) as
-        | { importQuota?: { importCredits: number; freeImportsUsed: number; freeImportsLimit: number } }
+        | {
+            parseStatus?: ImportParseStatus;
+            importQuota?: { importCredits: number; freeImportsUsed: number; freeImportsLimit: number };
+          }
         | null;
       if (okBody?.importQuota) {
         const q = okBody.importQuota;
@@ -7193,13 +7197,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       // Reload drafts + wishlists (to update drafts count)
       await loadDrafts();
       await loadWishlists();
-      pushToast(t('drafts_card_created', locale), 'success');
+      // Toast copy varies by parse outcome — a failed parse creates a stub
+      // card and spends NO credit, so it must not read as a plain success.
+      const toast = importResultToast(okBody?.parseStatus ?? 'ok', locale);
+      pushToast(toast.message, toast.tone);
     } catch {
       pushToast(t('toast_url_import_error', locale), 'error');
     } finally {
       setImportLoading(false);
     }
-  }, [importUrl, tgFetch, pushToast, loadDrafts, loadWishlists]);
+  }, [importUrl, tgFetch, pushToast, loadDrafts, loadWishlists, locale]);
 
   const handleMoveItem = useCallback(async (itemId: string, targetWishlistId: string, fromItemDetail = false) => {
     try {
