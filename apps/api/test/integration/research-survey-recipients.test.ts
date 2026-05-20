@@ -338,6 +338,9 @@ suite('selectSurveyRecipients — segment SQL on real schema', () => {
     });
     // A touch row exists but was never delivered → still unreachable.
     expect(report.recipients.find((r) => r.userId === u.id)).toBeUndefined();
+    // ...and counted in the drop — proves the delivered=false user is treated
+    // as unreachable, not silently kept eligible.
+    expect(report.skipped.notReachable).toBeGreaterThanOrEqual(1);
   });
 
   it('produces NO write side-effects (read-only)', async () => {
