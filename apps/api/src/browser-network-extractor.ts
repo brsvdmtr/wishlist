@@ -297,7 +297,14 @@ function scanOzonComposerResponse(json: unknown): ProductCandidate | null {
 
 // ─── HTML Hydration Extraction ────────────────────────────────────────────────
 
-function extractFromHydration(html: string, hostname: string): ExtractedProduct | null {
+/**
+ * Scan a page's embedded hydration state for product data.
+ *
+ * Exported so the cheap HTTP path (url-parser.ts) can reuse it without a
+ * browser: most modern marketplaces (Next.js, Nuxt, Redux SPAs) ship the
+ * product JSON inside the server-rendered HTML.
+ */
+export function extractFromHydration(html: string, hostname: string): ExtractedProduct | null {
   const $ = cheerio.load(html);
 
   // 1. __NEXT_DATA__ (highest: Next.js stores like Lamoda, Goldapple)
@@ -324,6 +331,9 @@ function extractFromHydration(html: string, hostname: string): ExtractedProduct 
     'window.REDUX_STATE',
     'window.__PRELOADED_STATE__',
     'window.__NUXT__',
+    'window.__APOLLO_STATE__',
+    'window.runParams',       // AliExpress
+    'window._init_data_',     // AliExpress (newer)
     '__INITIAL_STATE__',     // sometimes without window.
   ];
 

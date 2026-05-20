@@ -174,16 +174,33 @@ function confidenceBucket(score: number): ParsedProduct['confidenceLevel'] {
 
 // ─── Price Formatting ────────────────────────────────────────────────────────
 
+/** Per-currency display: locale for digit grouping + symbol placement. */
+interface CurrencyDisplay { locale: string; symbol: string; prefix: boolean; }
+
+const CURRENCY_DISPLAY: Record<string, CurrencyDisplay> = {
+  RUB: { locale: 'ru-RU', symbol: '\u20BD', prefix: false },
+  USD: { locale: 'en-US', symbol: '$',      prefix: true  },
+  EUR: { locale: 'de-DE', symbol: '\u20AC', prefix: true  },
+  GBP: { locale: 'en-GB', symbol: '\u00A3', prefix: true  },
+  INR: { locale: 'en-IN', symbol: '\u20B9', prefix: true  },
+  CNY: { locale: 'zh-CN', symbol: '\u00A5', prefix: true  },
+};
+
+/**
+ * Format a numeric amount for display. Known currencies get their symbol and
+ * locale-appropriate digit grouping; unknown currencies fall back to a plain
+ * "<amount> <CODE>" form.
+ */
 export function formatPrice(amount: number, currency: string): string {
-  const formatted = amount.toLocaleString('ru-RU', {
+  const raw  = (currency || 'RUB').toUpperCase();
+  const code = raw === 'RUR' ? 'RUB' : raw === 'RMB' ? 'CNY' : raw;
+  const cfg  = CURRENCY_DISPLAY[code];
+  const formatted = amount.toLocaleString(cfg?.locale ?? 'en-US', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   });
-  const cur = currency.toUpperCase();
-  if (!cur || cur === 'RUB' || cur === 'RUR') return `${formatted} \u20BD`;
-  if (cur === 'USD') return `$${formatted}`;
-  if (cur === 'EUR') return `\u20AC${formatted}`;
-  return `${formatted} ${cur}`;
+  if (!cfg) return `${formatted} ${code}`;
+  return cfg.prefix ? `${cfg.symbol}${formatted}` : `${formatted} ${cfg.symbol}`;
 }
 
 // ─── Utilities ───────────────────────────────────────────────────────────────

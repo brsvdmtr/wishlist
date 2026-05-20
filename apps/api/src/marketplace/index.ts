@@ -61,6 +61,21 @@ export {
   isValidImageUrl,
 } from './guards.js';
 
+// Universal structured-data extraction
+export {
+  extractJsonLd,
+  extractMicrodata,
+  extractOpenGraph,
+  extractTwitterCard,
+  parseAmount,
+  detectCurrency,
+} from './structured-data.js';
+export type { ExtractedFields } from './structured-data.js';
+
+// Marketplace site registry
+export { lookupSite, fallbackCurrency } from './site-registry.js';
+export type { SiteInfo } from './site-registry.js';
+
 // Logger
 export { parseLog } from './logger.js';
 

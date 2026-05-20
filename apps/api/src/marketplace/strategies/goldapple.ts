@@ -21,6 +21,7 @@ import {
   descriptionField,
 } from '../scoring.js';
 import { isGarbageTitle } from '../guards.js';
+import { extractJsonLd } from '../structured-data.js';
 import { fetchHtml } from '../browser-provider.js';
 
 // ─── Strategy 1: HTTP Fetch + JSON-LD ────────────────────────────────────────
@@ -80,10 +81,10 @@ function extractGoldAppleFromDom(
   let description: FieldValue<string> | null = null;
 
   // ── JSON-LD extraction (best source for GA) ──────────────────────────
-  const jsonLd = extractJsonLdProduct($);
+  const jsonLd = extractJsonLd($);
   if (jsonLd) {
-    if (jsonLd.name && !isGarbageTitle(jsonLd.name)) {
-      title = titleField(jsonLd.name, 'jsonld', 5);
+    if (jsonLd.title && !isGarbageTitle(jsonLd.title)) {
+      title = titleField(jsonLd.title, 'jsonld', 5);
     }
     if (jsonLd.price && jsonLd.price > 0) {
       price = priceField(jsonLd.price, jsonLd.currency ?? 'RUB', 'jsonld', 5);
@@ -171,79 +172,6 @@ function extractGoldAppleFromDom(
     title, description, price, image,
     strategyName,
     durationMs: Date.now() - startTime,
-  };
-}
-
-// ─── JSON-LD Helper ──────────────────────────────────────────────────────────
-
-interface JsonLdResult {
-  name: string | null;
-  description: string | null;
-  price: number | null;
-  currency: string | null;
-  image: string | null;
-}
-
-function extractJsonLdProduct($: ReturnType<typeof import('cheerio').load>): JsonLdResult | null {
-  const scripts = $('script[type="application/ld+json"]');
-  for (let i = 0; i < scripts.length; i++) {
-    try {
-      const raw = $(scripts[i]).html()?.trim();
-      if (!raw) continue;
-      const data = JSON.parse(raw) as Record<string, unknown>;
-      const product = findProduct(data);
-      if (product) return product;
-    } catch { /* skip */ }
-  }
-  return null;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function findProduct(data: any): JsonLdResult | null {
-  if (!data) return null;
-  if (data['@graph'] && Array.isArray(data['@graph'])) {
-    for (const item of data['@graph']) {
-      const r = findProduct(item);
-      if (r) return r;
-    }
-    return null;
-  }
-  if (Array.isArray(data)) {
-    for (const item of data) {
-      const r = findProduct(item);
-      if (r) return r;
-    }
-    return null;
-  }
-
-  const type = data['@type'];
-  if (!(type === 'Product' || (Array.isArray(type) && type.includes('Product')))) return null;
-
-  let price: number | null = null;
-  let currency: string | null = null;
-  const offers = data.offers;
-  if (offers) {
-    const offer = Array.isArray(offers) ? offers[0] : offers;
-    const rawPrice = offer?.price ?? offer?.lowPrice;
-    if (rawPrice != null) {
-      price = typeof rawPrice === 'number' ? rawPrice : parseFloat(String(rawPrice));
-      if (isNaN(price) || price <= 0) price = null;
-    }
-    currency = offer?.priceCurrency ?? null;
-  }
-
-  let image: string | null = null;
-  if (typeof data.image === 'string') image = data.image;
-  else if (Array.isArray(data.image) && data.image.length > 0) {
-    image = typeof data.image[0] === 'string' ? data.image[0] : data.image[0]?.url ?? null;
-  } else if (data.image?.url) image = data.image.url;
-
-  return {
-    name: data.name ? String(data.name).trim() : null,
-    description: data.description ? String(data.description).trim().slice(0, 500) : null,
-    price,
-    currency,
-    image,
   };
 }
 

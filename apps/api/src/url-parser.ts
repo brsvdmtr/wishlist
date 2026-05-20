@@ -25,6 +25,8 @@ import * as net from 'node:net';
 import puppeteer, { type Browser } from 'puppeteer-core';
 import {
   browserExtract,
+  extractFromHydration,
+  extractEmbeddedJson,
   type ExtractedProduct,
   wbCdnImageUrl,
   wbBasket,
@@ -42,6 +44,16 @@ import {
   getMarketplaceId,
   shouldFallbackToLegacy,
   isOrchestratorEnabled,
+  // Universal structured-data extraction (shared with marketplace strategies)
+  extractJsonLd,
+  extractMicrodata,
+  extractOpenGraph,
+  extractTwitterCard,
+  parseAmount,
+  detectCurrency,
+  formatPrice,
+  fallbackCurrency,
+  type ExtractedFields,
 } from './marketplace/index.js';
 // Auto-register all marketplace strategies on import
 import './marketplace/strategies/index.js';
@@ -580,7 +592,7 @@ async function runBrowserExtract(url: string, hostname: string): Promise<ParseRe
   // Cheerio extraction from rendered HTML (levels 3–5 in priority)
   const htmlResult = extractFromHtml(html, url, hostname, 'browser_fallback');
 
-  return mergeNetworkWithHtml(networkProduct, htmlResult);
+  return mergeNetworkWithHtml(networkProduct, htmlResult, hostname);
 }
 
 /**
@@ -590,18 +602,18 @@ async function runBrowserExtract(url: string, hostname: string): Promise<ParseRe
 function mergeNetworkWithHtml(
   net: ExtractedProduct | null,
   html: ParseResult,
+  hostname: string,
 ): ParseResult {
   if (!net || net.score < 20) return html;
 
   const title      = net.title      ?? html.title;
   const description = net.description ?? html.description;
   const imageUrl   = net.imageUrl   ?? html.imageUrl;
-  const priceText  = net.rawPrice
-    ? formatPrice(net.rawPrice, net.currency)
+  const netAmount  = parseAmount(net.rawPrice);
+  const priceText  = netAmount !== null
+    ? formatPrice(netAmount, net.currency ?? fallbackCurrency(hostname))
     : html.priceText;
 
-  // Clean up title (remove "- купить на..." suffixes from network data too)
-  const hostname = ''; // titles from network don't need domain-specific cleaning usually
   const cleanedTitle = cleanTitle(title, hostname);
 
   const confidence = calcConfidence({ title: cleanedTitle, imageUrl, priceText });
@@ -684,9 +696,50 @@ async function fetchHtml(url: string): Promise<string> {
 // Register fetchHtml provider for marketplace strategies
 registerFetchHtmlProvider(fetchHtml);
 
-// ─── HTML Extraction (Cheerio + JSON-LD + domain adapters) ───────────────────
+// ─── HTML Extraction (universal structured-data + domain adapters) ───────────
 
-function extractFromHtml(
+/**
+ * Universal extraction kill switch. Set PARSER_UNIVERSAL_EXTRACT_DISABLED=1 to
+ * roll back to the pre-existing JSON-LD + Open Graph + domain-adapter behaviour
+ * without a redeploy (microdata, Twitter cards and embedded hydration JSON are
+ * skipped). JSON-LD and Open Graph always stay on — they are not new.
+ */
+function isUniversalExtractEnabled(): boolean {
+  return process.env.PARSER_UNIVERSAL_EXTRACT_DISABLED !== '1';
+}
+
+/** Run the shared hydration-JSON scanner and normalise to ExtractedFields. */
+function hydrationFields(html: string, hostname: string): ExtractedFields | null {
+  const ep = extractFromHydration(html, hostname);
+  if (!ep) return null;
+  return {
+    title:       ep.title,
+    description: ep.description,
+    price:       parseAmount(ep.rawPrice),
+    currency:    ep.currency,
+    image:       ep.imageUrl,
+  };
+}
+
+/** First price candidate (in precedence order) that carries a numeric amount. */
+function pickPrice(
+  candidates: Array<{ amount: number | null; currency: string | null } | null>,
+): { amount: number; currency: string | null } | null {
+  for (const c of candidates) {
+    if (c && c.amount !== null) return { amount: c.amount, currency: c.currency };
+  }
+  return null;
+}
+
+/**
+ * Extract product fields from a rendered/fetched HTML document.
+ *
+ * Universal layer — domain-agnostic, works for marketplaces worldwide.
+ * Per-field precedence (highest first):
+ *   domain adapter > embedded hydration JSON > JSON-LD > microdata >
+ *   Open Graph > Twitter Card > <title>/<meta>.
+ */
+export function extractFromHtml(
   html: string,
   baseUrl: string,
   hostname: string,
@@ -695,55 +748,67 @@ function extractFromHtml(
   const $ = cheerio.load(html);
   const h = normalizeHost(hostname);
 
-  // ── Open Graph / meta (level 5a) ──────────────────────────────────────
-  const ogTitle  = $('meta[property="og:title"]').attr('content')?.trim() ?? null;
-  const ogImage  = $('meta[property="og:image"]').attr('content')?.trim() ?? null;
-  const ogDesc   = $('meta[property="og:description"]').attr('content')?.trim() ?? null;
-  const ogPrice  = ($('meta[property="product:price:amount"]').attr('content')
-                 ?? $('meta[property="og:price:amount"]').attr('content'))?.trim() ?? null;
-  const ogCur    = ($('meta[property="product:price:currency"]').attr('content')
-                 ?? $('meta[property="og:price:currency"]').attr('content'))?.trim() ?? null;
+  // Plain <title> / <meta description> — weakest universal fallback
   const titleTag = $('title').first().text().trim() || null;
   const metaDesc = $('meta[name="description"]').attr('content')?.trim() ?? null;
 
-  let resolvedOgImage = ogImage;
-  if (resolvedOgImage && !resolvedOgImage.startsWith('http')) {
-    try { resolvedOgImage = new URL(resolvedOgImage, baseUrl).href; } catch { /* keep */ }
-  }
-
-  const universal = {
-    title: ogTitle ?? titleTag ?? null,
-    desc:  ogDesc  ?? metaDesc ?? null,
-    image: resolvedOgImage,
-    price: ogPrice,
-    cur:   ogCur,
-  };
+  const universalOn = isUniversalExtractEnabled();
+  const og = extractOpenGraph($);
 
   // ── Anti-bot guard ─────────────────────────────────────────────────────
-  if (isAntiBotPage(html, universal.title)) {
+  if (isAntiBotPage(html, og?.title ?? titleTag)) {
     console.warn(`[parser] anti-bot detected for ${hostname}`);
     return emptyParseResult(defaultMethod);
   }
 
-  // ── JSON-LD (level 4) ──────────────────────────────────────────────────
-  const jsonLd = extractJsonLd($);
+  // ── Structured-data extractors ─────────────────────────────────────────
+  const jsonLd  = extractJsonLd($);
+  const micro   = universalOn ? extractMicrodata($)   : null;
+  const twitter = universalOn ? extractTwitterCard($) : null;
+  // Embedded hydration JSON — skipped in the browser path, where
+  // browserExtract() already scanned hydration state alongside network data.
+  const embedded = (universalOn && defaultMethod !== 'browser_fallback')
+    ? hydrationFields(html, h)
+    : null;
 
-  // ── Domain adapters (level 5b — DOM selectors) ─────────────────────────
+  // ── Domain adapter (bespoke per-site DOM selectors) ────────────────────
   const domainData = applyDomainAdapter($, h, html);
 
-  // ── Merge: domain DOM > JSON-LD > OG ──────────────────────────────────
-  const title       = cleanTitle(domainData?.title ?? jsonLd?.name    ?? universal.title ?? null, h);
-  const description = (domainData?.description ?? jsonLd?.description ?? universal.desc  ?? null)?.slice(0, 500) ?? null;
-  const imageUrl    = resolveUrl(domainData?.image ?? jsonLd?.image    ?? universal.image ?? null, baseUrl);
-  const rawPrice    = domainData?.price ?? jsonLd?.price    ?? universal.price ?? null;
-  const priceCur    = jsonLd?.currency ?? universal.cur ?? null;
-  const priceText   = rawPrice ? formatPrice(rawPrice, priceCur) : null;
+  // ── Field-level merge by source precedence ─────────────────────────────
+  const title = cleanTitle(
+    domainData?.title ?? embedded?.title ?? jsonLd?.title ?? micro?.title
+    ?? og?.title ?? twitter?.title ?? titleTag,
+    h,
+  );
 
+  const description = (
+    domainData?.description ?? embedded?.description ?? jsonLd?.description
+    ?? micro?.description ?? og?.description ?? twitter?.description ?? metaDesc
+  )?.slice(0, 500) ?? null;
+
+  const imageUrl = resolveUrl(
+    domainData?.image ?? embedded?.image ?? jsonLd?.image ?? micro?.image
+    ?? og?.image ?? twitter?.image ?? null,
+    baseUrl,
+  );
+
+  const price = pickPrice([
+    { amount: parseAmount(domainData?.price), currency: domainData?.currency ?? null },
+    embedded ? { amount: embedded.price, currency: embedded.currency } : null,
+    jsonLd   ? { amount: jsonLd.price,   currency: jsonLd.currency }   : null,
+    micro    ? { amount: micro.price,    currency: micro.currency }    : null,
+    og       ? { amount: og.price,       currency: og.currency }       : null,
+    twitter  ? { amount: twitter.price,  currency: twitter.currency }  : null,
+  ]);
+  const priceText = price
+    ? formatPrice(price.amount, price.currency ?? fallbackCurrency(h))
+    : null;
+
+  // ── parseMethod: where the strongest signal came from ──────────────────
   let parseMethod: ParseResult['parseMethod'] = defaultMethod;
-  if (domainData) {
-    parseMethod = defaultMethod === 'browser_fallback' ? 'browser_fallback' : 'domain_adapter';
-  } else if (jsonLd?.name || jsonLd?.price) {
-    parseMethod = defaultMethod === 'browser_fallback' ? 'browser_fallback' : 'generic_jsonld';
+  if (defaultMethod !== 'browser_fallback') {
+    if (domainData)                       parseMethod = 'domain_adapter';
+    else if (embedded || jsonLd || micro) parseMethod = 'generic_jsonld';
   }
 
   const confidence = calcConfidence({ title, imageUrl: imageUrl ?? null, priceText });
@@ -769,61 +834,7 @@ function isAntiBotPage(html: string, title: string | null): boolean {
   return false;
 }
 
-// ─── JSON-LD Extractor ────────────────────────────────────────────────────────
-
-interface JsonLdProduct {
-  name: string | null; description: string | null;
-  image: string | null; price: string | null; currency: string | null;
-}
-
-function extractJsonLd($: cheerio.CheerioAPI): JsonLdProduct | null {
-  const scripts = $('script[type="application/ld+json"]');
-  for (let i = 0; i < scripts.length; i++) {
-    try {
-      const raw = $(scripts[i]).html()?.trim();
-      if (!raw) continue;
-      const data = JSON.parse(raw);
-      const product = findJsonLdProduct(data);
-      if (product) return product;
-    } catch { /* skip */ }
-  }
-  return null;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function findJsonLdProduct(data: any): JsonLdProduct | null {
-  if (!data) return null;
-  if (data['@graph'] && Array.isArray(data['@graph'])) {
-    for (const item of data['@graph']) { const r = findJsonLdProduct(item); if (r) return r; }
-    return null;
-  }
-  if (Array.isArray(data)) {
-    for (const item of data) { const r = findJsonLdProduct(item); if (r) return r; }
-    return null;
-  }
-  const type = data['@type'];
-  if (!(type === 'Product' || (Array.isArray(type) && type.includes('Product')))) return null;
-
-  let price: string | null = null;
-  let currency: string | null = null;
-  const offers = data.offers;
-  if (offers) {
-    const offer = Array.isArray(offers) ? offers[0] : offers;
-    price    = offer?.price != null ? String(offer.price) : (offer?.lowPrice != null ? String(offer.lowPrice) : null);
-    currency = offer?.priceCurrency ?? null;
-  }
-
-  let image: string | null = null;
-  if (typeof data.image === 'string')          image = data.image;
-  else if (Array.isArray(data.image))          image = typeof data.image[0] === 'string' ? data.image[0] : (data.image[0]?.url ?? null);
-  else if (data.image?.url)                    image = data.image.url;
-
-  return {
-    name:        data.name        ? String(data.name).trim()        : null,
-    description: data.description ? String(data.description).trim() : null,
-    image, price, currency,
-  };
-}
+// JSON-LD / microdata / Open Graph / Twitter extraction → marketplace/structured-data.ts
 
 // ─── Domain Adapters (DOM-level, level 5b) ────────────────────────────────────
 
@@ -832,9 +843,13 @@ interface DomainData {
   description?: string | null;
   image?: string | null;
   price?: string | null;
+  /** ISO 4217 currency when the adapter can determine it from the page */
+  currency?: string | null;
 }
 
 function applyDomainAdapter($: cheerio.CheerioAPI, hostname: string, html: string): DomainData | null {
+  if (isAmazonHost(hostname))                                                     return amazonAdapter($);
+  if (isAliexpressHost(hostname))                                                 return aliexpressAdapter(html);
   if (hostname === 'ozon.ru'          || hostname.endsWith('.ozon.ru'))           return ozonAdapter($, html);
   if (hostname === 'wildberries.ru'   || hostname.endsWith('.wildberries.ru'))    return wbHtmlAdapter($, html);
   if (hostname === 'market.yandex.ru' || hostname.endsWith('.market.yandex.ru')) return ymAdapter($);
@@ -978,6 +993,110 @@ function borkAdapter($: cheerio.CheerioAPI): DomainData | null {
   return Object.keys(result).length ? result : null;
 }
 
+// ─── Amazon / AliExpress (bespoke — see API_ARCHITECTURE notes) ──────────────
+
+function isAmazonHost(h: string): boolean {
+  return /(^|\.)amazon\.(com|com\.mx|com\.br|com\.au|co\.uk|co\.jp|de|es|fr|it|nl|ca|se|pl|sa|ae|eg|sg|in)$/.test(h);
+}
+
+function isAliexpressHost(h: string): boolean {
+  return /(^|\.)aliexpress\.(com|ru|us)$/.test(h);
+}
+
+/**
+ * Amazon ships no JSON-LD Product and no og:price — title and image come
+ * from the universal layer, but the price needs DOM selectors.
+ */
+function amazonAdapter($: cheerio.CheerioAPI): DomainData | null {
+  const result: DomainData = {};
+
+  const title = $('#productTitle').first().text().trim()
+             || $('#title').first().text().trim();
+  if (title) result.title = title;
+
+  for (const sel of [
+    '#corePriceDisplay_desktop_feature_div .a-price .a-offscreen',
+    '#corePrice_feature_div .a-price .a-offscreen',
+    '#corePrice_desktop .a-offscreen',
+    'span.priceToPay .a-offscreen',
+    '#priceblock_ourprice',
+    '#priceblock_dealprice',
+    '#priceblock_saleprice',
+    '.a-price .a-offscreen',
+  ]) {
+    const text = $(sel).first().text().trim();
+    if (!text) continue;
+    const amount = parseAmount(text);
+    if (amount !== null) {
+      result.price = String(amount);
+      const cur = detectCurrency(text);
+      if (cur) result.currency = cur;
+      break;
+    }
+  }
+
+  const img = $('#landingImage').attr('data-old-hires')
+           || $('#landingImage').attr('src')
+           || $('#imgTagWrapperId img').attr('src');
+  if (img && !img.startsWith('data:')) result.image = img;
+
+  return Object.keys(result).length ? result : null;
+}
+
+/**
+ * AliExpress server-renders product data into `window.runParams`. Title and
+ * image are usually also in Open Graph, but the price lives only here.
+ */
+function aliexpressAdapter(html: string): DomainData | null {
+  const result: DomainData = {};
+  const data = extractAliexpressData(html);
+  if (!data) return null;
+
+  const titleModule = data.titleModule ?? data.productInfoComponent;
+  const subject = titleModule?.subject ?? data.subject;
+  if (typeof subject === 'string' && subject.trim()) result.title = subject.trim();
+
+  const pm = data.priceModule ?? data.priceComponent;
+  if (pm) {
+    const amt = pm.minActivityAmount?.value ?? pm.minAmount?.value
+             ?? pm.maxActivityAmount?.value ?? pm.maxAmount?.value
+             ?? pm.formatedActivityPrice ?? pm.formatedPrice;
+    const num = parseAmount(amt);
+    if (num !== null) {
+      result.price = String(num);
+      const cur = pm.minActivityAmount?.currency ?? pm.minAmount?.currency
+               ?? detectCurrency(String(pm.formatedActivityPrice ?? pm.formatedPrice ?? ''));
+      if (cur) result.currency = String(cur).toUpperCase();
+    }
+  }
+
+  const imgList = (data.imageModule ?? data.imageComponent)?.imagePathList;
+  if (Array.isArray(imgList) && typeof imgList[0] === 'string') result.image = imgList[0];
+
+  return Object.keys(result).length ? result : null;
+}
+
+/** Locate and parse the `window.runParams` SSR blob from AliExpress HTML. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractAliexpressData(html: string): any | null {
+  let idx = html.indexOf('runParams');
+  while (idx !== -1) {
+    const eq = html.indexOf('=', idx + 'runParams'.length);
+    if (eq !== -1 && eq - idx < 40) {
+      const json = extractEmbeddedJson(html, eq + 1);
+      if (json) {
+        try {
+          const parsed = JSON.parse(json);
+          const data = parsed?.data ?? parsed;
+          if (data && typeof data === 'object') return data;
+        } catch { /* truncated/invalid — try the next occurrence */ }
+      }
+    }
+    idx = html.indexOf('runParams', idx + 'runParams'.length);
+  }
+  return null;
+}
+
 // ─── Title Cleanup ────────────────────────────────────────────────────────────
 
 const TITLE_SUFFIXES: Array<[RegExp, RegExp[]]> = [
@@ -988,6 +1107,8 @@ const TITLE_SUFFIXES: Array<[RegExp, RegExp[]]> = [
   [/goldapple\.ru/i,        [/\s*[-–—]\s*(?:купить|заказать).*/i, /\s*\|\s*Золотое яблоко\s*$/i]],
   [/tehnopark\.ru/i,        [/\s*[-–—]\s*(?:купить|заказать).*/i, /\s*[-–—]\s*Технопарк\s*$/i]],
   [/bork\.ru/i,             [/\s*[-–—]\s*(?:купить|заказать).*/i, /\s*\|\s*BORK\s*$/i]],
+  [/amazon\./i,             [/^\s*Amazon\.[a-z.]+\s*:\s*/i]],
+  [/aliexpress\./i,         [/\s*[-–—|]\s*AliExpress.*$/i]],
 ];
 
 function cleanTitle(title: string | null, hostname: string): string | null {
@@ -1012,18 +1133,6 @@ function resolveUrl(url: string | null | undefined, base: string): string | null
 
 function formatNumber(n: number): string {
   return n.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-}
-
-function formatPrice(raw: string, currency?: string | null): string {
-  const cleaned = raw.replace(/\s/g, '').replace(',', '.');
-  const num = parseFloat(cleaned);
-  if (isNaN(num) || num <= 0) return raw;
-  const formatted = num.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-  const cur = (currency ?? '').toUpperCase();
-  if (!cur || cur === 'RUB' || cur === 'RUR') return `${formatted} ₽`;
-  if (cur === 'USD') return `$${formatted}`;
-  if (cur === 'EUR') return `€${formatted}`;
-  return `${formatted} ${cur}`;
 }
 
 function calcConfidence(r: { title: string | null; imageUrl: string | null; priceText: string | null }): ParseResult['confidence'] {

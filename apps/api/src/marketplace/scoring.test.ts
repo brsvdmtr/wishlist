@@ -205,4 +205,26 @@ describe('formatPrice', () => {
   it('formats EUR price', () => {
     expect(formatPrice(49, 'EUR')).toBe('€49');
   });
+
+  it('formats INR price with the rupee symbol', () => {
+    expect(formatPrice(1299, 'INR')).toMatch(/^₹/);
+    expect(formatPrice(1299, 'INR')).toContain('1,299');
+  });
+
+  it('formats CNY price with the yuan symbol', () => {
+    expect(formatPrice(199, 'CNY')).toBe('¥199');
+  });
+
+  it('formats GBP price with the pound symbol', () => {
+    expect(formatPrice(49, 'GBP')).toBe('£49');
+  });
+
+  it('normalises currency aliases (RUR → RUB, RMB → CNY)', () => {
+    expect(formatPrice(100, 'RUR')).toContain('₽');
+    expect(formatPrice(100, 'RMB')).toBe('¥100');
+  });
+
+  it('falls back to the plain code for an unknown currency', () => {
+    expect(formatPrice(100, 'JPY')).toBe('100 JPY');
+  });
 });
