@@ -228,3 +228,42 @@ describe('trackProductEvent — typed taxonomy helper', () => {
     expect(shared.loggerDebug).toHaveBeenCalled();
   });
 });
+
+describe('PII sanitization — user content never reaches the AnalyticsEvent table', () => {
+  const knownEvent = ANALYTICS_EVENTS[0]!;
+
+  it('trackEvent strips title/description from persisted props', () => {
+    trackEvent('feature_gate_hit_pro', 'u1', {
+      itemId: 'i1',
+      source: 'manual',
+      title: 'My private wish title',
+      description: 'A long personal description',
+    });
+    expect(shared.create).toHaveBeenCalledOnce();
+    expect(shared.create.mock.calls[0]![0].data.props).toEqual({ itemId: 'i1', source: 'manual' });
+  });
+
+  it('trackEvent logs sanitized props — no raw user content in pino logs', () => {
+    // item_created flows through trackEvent (log-only here — `item_` is not a
+    // persistence prefix); the log line must not carry content either.
+    trackEvent('item_created', 'u1', { wishlistId: 'w1', title: 'secret', description: 'secret' });
+    expect(shared.loggerInfo).toHaveBeenCalledWith(
+      { event: 'item_created', userId: 'u1', props: { wishlistId: 'w1' } },
+      'analytics event',
+    );
+  });
+
+  it('trackAnalyticsEvent strips comment / hint / search content keys', () => {
+    trackAnalyticsEvent({
+      event: knownEvent,
+      userId: 'u1',
+      props: { itemId: 'i1', commentText: 'private', hintText: 'private', query: 'private search' },
+    });
+    expect(shared.create.mock.calls[0]![0].data.props).toEqual({ itemId: 'i1' });
+  });
+
+  it('trackProductEvent strips freeform-content keys', () => {
+    trackProductEvent({ event: 'paywall.viewed', userId: 'u1', props: { plan: 'monthly', note: 'freeform note' } });
+    expect(shared.create.mock.calls[0]![0].data.props).toEqual({ plan: 'monthly' });
+  });
+});

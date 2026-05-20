@@ -19,6 +19,7 @@ import { prisma } from '@wishlist/db';
 import {
   isClientTelemetryAllowedEvent,
   isServerOnlyProductEvent,
+  sanitizeAnalyticsProps,
 } from '@wishlist/shared';
 
 import logger from '../logger';
@@ -141,19 +142,13 @@ export function registerTelemetryRouter(): Router {
     }
   
     const records = accepted.map(ev => {
-      // Clamp timestamp to last hour
+      // Clamp timestamp to last hour.
       const ts = Math.max(oneHourAgo, Math.min(now, ev.ts));
-      // Truncate props
-      let props: Record<string, unknown> = ev.props || {};
-      for (const [key, val] of Object.entries(props)) {
-        if (typeof val === 'string' && val.length > 300) {
-          props[key] = val.slice(0, 300) + '...';
-        }
-      }
-      const serialized = JSON.stringify(props);
-      if (serialized.length > 1024) {
-        props = { _truncated: true, event: ev.event };
-      }
+      // Strip user-content keys + truncate. `/tg/telemetry` accepts arbitrary
+      // client-supplied props, so this is the enforcement boundary for PII —
+      // a modified client cannot land item titles / comment text / search
+      // queries here. See docs/research/analytics-pii-audit.md.
+      const props = sanitizeAnalyticsProps(ev.props) ?? {};
       return {
         event: ev.event,
         userId,

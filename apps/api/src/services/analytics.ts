@@ -1,19 +1,21 @@
 // Analytics layer (P5s-5 — extracted from apps/api/src/index.ts).
 //
-// Three pure stateless helpers that wrap `prisma.analyticsEvent.create(...)`:
+// Three pure stateless helpers that wrap `prisma.analyticsEvent.create(...)`.
+// Every one runs props through `sanitizeAnalyticsProps` (from `@wishlist/shared`)
+// before persisting — that helper drops user-content keys (item titles,
+// descriptions, comment / hint bodies, search text, freeform notes) and
+// truncates oversized values. See docs/research/analytics-pii-audit.md.
 //
 //   - `trackEvent(event, userId?, props?)` — LEGACY. Logs every call
-//     (`logger.info`) and conditionally persists to `AnalyticsEvent` for events
-//     whose name matches the in-body prefix allowlist (feature_gate_hit_,
-//     onboarding_, demo_item_, gift_, first_share_prompt_,
-//     ready_share_prompt_, group_gift_, secret_res., showcase.,
-//     public_profile., error:). Persistence requires `userId`.
+//     (`logger.info`, with already-sanitized props) and conditionally
+//     persists to `AnalyticsEvent` for events whose name matches the in-body
+//     prefix allowlist (feature_gate_hit_, onboarding_, demo_item_, gift_,
+//     first_share_prompt_, ready_share_prompt_, group_gift_, secret_res.,
+//     showcase., public_profile., error:). Persistence requires `userId`.
 //
 //   - `trackAnalyticsEvent({ event, userId?, props? })` — LEGACY. Checks the
-//     `ANALYTICS_EVENTS` allowlist from `@wishlist/shared`, applies
-//     per-string truncation to props (300 chars) plus a 1024-byte total
-//     cap (replaces with `{ _truncated: true }` if exceeded), then
-//     persists. Silently drops events not in the allowlist.
+//     `ANALYTICS_EVENTS` allowlist from `@wishlist/shared`, sanitizes props,
+//     then persists. Silently drops events not in the allowlist.
 //
 //   - `trackProductEvent({ event, userId?, props? })` — NEW typed entry point
 //     for the unified `domain.action` taxonomy in `PRODUCT_EVENTS`. The
@@ -37,6 +39,7 @@ import { prisma } from '@wishlist/db';
 import {
   ANALYTICS_EVENTS,
   isProductEvent,
+  sanitizeAnalyticsProps,
   type ProductEventInput,
   type ProductEventName,
 } from '@wishlist/shared';
@@ -49,7 +52,9 @@ import logger from '../logger';
 const ANALYTICS_EVENTS_SET = new Set<string>(ANALYTICS_EVENTS);
 
 export function trackEvent(event: string, userId?: string, props?: Record<string, unknown>) {
-  logger.info({ event, userId, props }, 'analytics event');
+  // Sanitize once — the log line and the DB write must never carry user content.
+  const sanitized = sanitizeAnalyticsProps(props);
+  logger.info({ event, userId, props: sanitized }, 'analytics event');
   // Persist to DB for god-mode analytics: feature gate hits, onboarding, demo item, and error events.
   // Fire-and-forget — never blocks the request path.
   const shouldPersist =
@@ -67,7 +72,7 @@ export function trackEvent(event: string, userId?: string, props?: Record<string
   if (shouldPersist && userId) {
     prisma.analyticsEvent
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .create({ data: { event, userId, props: props ? (props as any) : undefined } })
+      .create({ data: { event, userId, props: sanitized ? (sanitized as any) : undefined } })
       .catch((e) => logger.debug({ err: e, event }, 'analytics write failed'));
   }
 }
@@ -78,15 +83,7 @@ export function trackAnalyticsEvent(params: {
   props?: Record<string, unknown>;
 }): void {
   if (!ANALYTICS_EVENTS_SET.has(params.event)) return;
-  let props = params.props;
-  if (props) {
-    const cleaned: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(props)) {
-      cleaned[k] = typeof v === 'string' && v.length > 300 ? v.slice(0, 300) + '...' : v;
-    }
-    const ser = JSON.stringify(cleaned);
-    props = ser.length > 1024 ? { _truncated: true } : cleaned;
-  }
+  const props = sanitizeAnalyticsProps(params.props);
   prisma.analyticsEvent.create({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data: { event: params.event, userId: params.userId ?? null, props: props ? (props as any) : undefined },
@@ -108,15 +105,7 @@ export function trackProductEvent<E extends ProductEventName>(
   input: ProductEventInput<E>,
 ): void {
   if (!isProductEvent(input.event)) return;
-  let props = input.props;
-  if (props) {
-    const cleaned: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(props)) {
-      cleaned[k] = typeof v === 'string' && v.length > 300 ? v.slice(0, 300) + '...' : v;
-    }
-    const ser = JSON.stringify(cleaned);
-    props = ser.length > 1024 ? { _truncated: true } : cleaned;
-  }
+  const props = sanitizeAnalyticsProps(input.props);
   prisma.analyticsEvent
     .create({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

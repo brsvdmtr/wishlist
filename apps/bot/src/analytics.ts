@@ -5,14 +5,16 @@
 // holds a typed copy plus the payment-event helper consumed by the
 // successful_payment handler in index.ts.
 //
-// Fire-and-forget semantics, runtime allowlist gate, prop sanitization
-// (300-char per-value clamp + 1024-byte total cap) all match the API helper
-// byte-for-byte so server- and bot-emitted events sort identically in
-// downstream dashboards.
+// Fire-and-forget semantics + runtime allowlist gate mirror the API helper.
+// Prop sanitization (PII-key stripping + truncation) is the shared
+// `sanitizeAnalyticsProps` from `@wishlist/shared` — the same code the API
+// runs, so server- and bot-emitted events sort identically downstream. See
+// docs/research/analytics-pii-audit.md.
 
 import { prisma } from '@wishlist/db';
 import {
   isProductEvent,
+  sanitizeAnalyticsProps,
   type ProductEventInput,
   type ProductEventName,
 } from '@wishlist/shared';
@@ -22,15 +24,7 @@ export function trackProductEvent<E extends ProductEventName>(
   input: ProductEventInput<E>,
 ): void {
   if (!isProductEvent(input.event)) return;
-  let props = input.props;
-  if (props) {
-    const cleaned: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(props)) {
-      cleaned[k] = typeof v === 'string' && v.length > 300 ? v.slice(0, 300) + '...' : v;
-    }
-    const ser = JSON.stringify(cleaned);
-    props = ser.length > 1024 ? { _truncated: true } : cleaned;
-  }
+  const props = sanitizeAnalyticsProps(input.props);
   prisma.analyticsEvent
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .create({ data: { event: input.event, userId: input.userId ?? null, props: props ? (props as any) : undefined } })
@@ -53,7 +47,7 @@ let _productEmit: ProductEmit = trackProductEvent;
 let _rawEmit: RawEmit = (input) => {
   prisma.analyticsEvent
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .create({ data: { event: input.event, userId: input.userId, props: input.props as any } })
+    .create({ data: { event: input.event, userId: input.userId, props: sanitizeAnalyticsProps(input.props) as any } })
     .catch((e) => logger.debug({ err: e, event: input.event }, 'analytics write failed'));
 };
 
@@ -69,7 +63,7 @@ export function __resetEmitters(): void {
   _rawEmit = (input) => {
     prisma.analyticsEvent
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .create({ data: { event: input.event, userId: input.userId, props: input.props as any } })
+      .create({ data: { event: input.event, userId: input.userId, props: sanitizeAnalyticsProps(input.props) as any } })
       .catch((e) => logger.debug({ err: e, event: input.event }, 'analytics write failed'));
   };
 }

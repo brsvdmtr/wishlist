@@ -261,3 +261,37 @@ describe('POST /telemetry — AnalyticsEvent.userId contract', () => {
     expect(rows[0].userId).toBeNull();
   });
 });
+
+describe('POST /telemetry — PII sanitization', () => {
+  it('strips item title/description from item_created before persisting', async () => {
+    // item_created lands in AnalyticsEvent via this client path (not the
+    // backend trackEvent, whose prefix allowlist excludes item_). A modified
+    // client could send content props — the /tg/telemetry boundary must strip
+    // them. See docs/research/analytics-pii-audit.md.
+    const res = await request(makeApp()).post('/telemetry').send({
+      events: [{
+        event: 'item_created',
+        ts: Date.now(),
+        props: { wishlistId: 'w1', placements: 1, title: 'My private wish', description: 'personal note' },
+      }],
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, accepted: 1 });
+    const rows = shared.analyticsEvent.createMany.mock.calls[0]![0].data;
+    expect(rows[0].event).toBe('item_created');
+    expect(rows[0].props).toEqual({ wishlistId: 'w1', placements: 1 });
+  });
+
+  it('strips freeform content keys (commentText) from client telemetry', async () => {
+    const res = await request(makeApp()).post('/telemetry').send({
+      events: [{
+        event: 'comment_reply_sent',
+        ts: Date.now(),
+        props: { itemId: 'i1', commentId: 'c1', commentText: 'a private reply' },
+      }],
+    });
+    expect(res.status).toBe(200);
+    const rows = shared.analyticsEvent.createMany.mock.calls[0]![0].data;
+    expect(rows[0].props).toEqual({ itemId: 'i1', commentId: 'c1' });
+  });
+});

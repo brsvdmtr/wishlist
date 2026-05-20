@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export * from './analyticsEvents';
+export * from './sanitizeAnalyticsProps';
 export * from './i18n';
 
 export const WishlistItemSchema = z.object({
