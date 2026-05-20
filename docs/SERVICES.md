@@ -4,9 +4,11 @@
 
 The `services/` layer holds cross-cutting helpers that don't belong to a
 single route module. As of **2026-05-07** the P5s extraction wave is
-**complete**: all 13 service modules are live and `apps/api/src/index.ts`
-is **1 789 LOC** (down from a peak of ~21 580 — −91.7% off the original
-monolith, −51.6% off the post-P5r baseline of 3 700).
+**complete**: 13 service modules were extracted from the monolith and
+`apps/api/src/index.ts` is **1 789 LOC** (down from a peak of ~21 580 —
+−91.7% off the original monolith, −51.6% off the post-P5r baseline of
+3 700). Services added since then under the on-touch rule bring the live
+total to **14** (see § 1).
 
 `services/` is the canonical home for:
 
@@ -30,7 +32,7 @@ It is **not** the right home for:
 
 ---
 
-## 1. Live services (13 modules)
+## 1. Live services (14 modules)
 
 | # | Module | Phase | Δ LOC out of index.ts | Strategy | Consumers |
 |---|---|---|---|---|---|
@@ -47,8 +49,14 @@ It is **not** the right home for:
 | 11 | `services/analytics.ts` | P5s-5 | ~75 | A — deps preserved | 21+ files (every router + most schedulers) |
 | 12 | `services/referral-hooks.ts` | P5s-5 | ~180 | A — deps preserved | `routes/wishlists.routes.ts`, `routes/onboarding.routes.ts`, `routes/admin.routes.ts` |
 | 13 | `services/santa-season.ts` | P5s-4 | ~382 | A — deps preserved | `routes/santa.routes.ts`, `schedulers/santa.ts`, `runSantaStartupJobs` |
+| 14 | `services/import-credits.ts` | post-P5s (2026-05-20) | 0 (born new) | B — direct import | `routes/import.routes.ts`, `routes/internal.routes.ts`, `services/entitlement.ts` |
 
 **Total moved out of index.ts:** ~2 121 LOC (P5s alone) + 199 (P5r-5/-6) ≈ **2 320 LOC** across the entire services layer.
+
+**Post-P5s additions:** `services/import-credits.ts` (#14) is the first
+service added after the extraction wave closed. It is **born new** — not
+carved out of index.ts — under the on-touch rule (§ 5). index.ts is
+untouched; consumers import it directly.
 
 ---
 
@@ -240,6 +248,33 @@ firstName field is empty, then caching the result on the User row.
 
 **Sole consumer:** `routes/reservations.routes.ts`.
 
+### `services/import-credits.ts` (post-P5s, 2026-05-20, ~150 LOC)
+
+**Purpose:** the credit model behind URL import. FREE users get a monthly
+free-import quota (`FREE_IMPORT_QUOTA_PER_MONTH`, default 5, env-tunable);
+PRO is unlimited; paid `import_pack_*` credits (`UserCredits.importCredits`)
+top up beyond the free allowance. Replaces the old hard PRO gate on
+`POST /tg/import-url` — the activation-critical paywall flagged by the
+2026-05-19 monetization audit.
+
+**Exports:** `FREE_IMPORT_QUOTA_PER_MONTH`, `currentImportPeriod`,
+`resolveFreeImports` (pure), `getImportAllowance`, `consumeImportCredit`,
+plus the `FreeImportState` / `ImportAllowance` / `ConsumeImportResult` types.
+
+**Monthly reset is lazy** — no scheduler. `UserCredits.freeImportsPeriod`
+stores a `"YYYY-MM"` UTC bucket; a stale bucket counts as zero used on both
+the read path (`resolveFreeImports`) and on consume.
+
+**Concurrency:** `consumeImportCredit` spends free quota before paid credits
+via single-statement conditional `INSERT ... ON CONFLICT DO UPDATE` and
+`UPDATE` — parallel imports can never exceed the quota or drive
+`importCredits` negative (pinned by `test/integration/import-credits.test.ts`).
+
+**Born new, not extracted:** index.ts is untouched; `import.routes.ts` and
+`internal.routes.ts` import `getImportAllowance` / `consumeImportCredit`
+directly, and `entitlement.ts` imports the pure `resolveFreeImports` for the
+`/tg/me` + `/tg/wishlists` counter payload.
+
 ---
 
 ## 3. Pattern: import directly vs receive via deps
@@ -259,6 +294,7 @@ firstName field is empty, then caching the result on the User row.
 | `locale` | direct import | Single function, single consumer. |
 | `lifecycle` | deps factory | Factory closing over botToken+logger. |
 | `birthday-reminders` | direct import | Pure utilities. |
+| `import-credits` | direct import | Pure + DB helpers; routes import the two functions directly — no index.ts wiring (born post-P5s). |
 
 The blanket pattern: **Strategy A (deps preserved)** when fan-out is
 high or when the helper closes over a runtime dep that lives in

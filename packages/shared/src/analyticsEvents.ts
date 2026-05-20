@@ -21,6 +21,10 @@ export const ANALYTICS_EVENTS = [
   'import.bot_started',
   'import.bot_succeeded',
   'import.bot_failed',
+  // Credit-based URL import — FREE monthly quota, paid-pack fallback, upsell.
+  'import.free_quota_used',
+  'import.free_quota_exhausted',
+  'import.credit_pack_suggested',
   'guest.view_opened',
   'reservation.succeeded',
   'reservation.cancelled',

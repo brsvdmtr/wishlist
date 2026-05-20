@@ -744,14 +744,23 @@ model UserAddOn {
   @@index([userId, addonType])
 }
 
-// Consumable balances: hint credits and import credits.
-// PRO users bypass the credit check entirely (server-side).
+// Consumable balances + monthly free-tier quota.
+//   • hintCredits / importCredits — paid one-time packs (hints_pack_*,
+//     import_pack_*). Never expire.
+//   • freeImportsUsed / freeImportsPeriod — FREE-tier URL-import allowance:
+//     N imports per UTC calendar month. freeImportsPeriod is the "YYYY-MM"
+//     bucket; consume lazily zeroes the counter when the month rolls over
+//     (no scheduler). Consumption order is free-first, then paid.
+//     See apps/api/src/services/import-credits.ts.
+// PRO users bypass every credit/quota check entirely (server-side).
 model UserCredits {
-  id            String   @id @default(cuid())
-  userId        String   @unique
-  hintCredits   Int      @default(0)
-  importCredits Int      @default(0)
-  updatedAt     DateTime @updatedAt
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  hintCredits       Int      @default(0)
+  importCredits     Int      @default(0)
+  freeImportsUsed   Int      @default(0)
+  freeImportsPeriod String?
+  updatedAt         DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

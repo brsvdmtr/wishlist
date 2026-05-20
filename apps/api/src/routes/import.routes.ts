@@ -1,8 +1,10 @@
 // Telegram-auth router for POST /tg/import-url (1 handler).
 // Mounted via `tgRouter.use(importRouter)` in apps/api/src/index.ts.
 //
-// PRO-only feature: imports an item draft from a third-party URL via
-// importUrlForUser (shared with internal.routes /internal/import-url).
+// Credit-gated feature: imports an item draft from a third-party URL via
+// importUrlForUser (shared with internal.routes /internal/import-url). FREE
+// users get FREE_IMPORT_QUOTA_PER_MONTH imports/month + paid import_pack_*
+// credits; PRO is unlimited — see services/import-credits.ts.
 // The runtime function lives in index.ts so internal.routes and this
 // router share the same closure; the dep type here is structurally
 // wider than internal's because the Mini App passes a 5th arg
@@ -20,6 +22,7 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { zodError } from '../lib/http';
 import { getRequestLocale } from '../lib/locale';
 import { validateUrl } from '../url-parser.js';
+import { getImportAllowance, consumeImportCredit } from '../services/import-credits';
 
 type TelegramUserShape = {
   id: number;
@@ -32,18 +35,18 @@ type TelegramUserShape = {
 export type ImportRouterDeps = {
   getOrCreateTgUser: (tgUser: TelegramUserShape) => Promise<{ id: string }>;
   // Narrow structural shape — only `.plan.code` and `.plan.features` are read.
-  getUserEntitlement: (userId: string, godMode?: boolean) => Promise<{ plan: { code: string; features: readonly string[] } }>;
+  getUserEntitlement: (userId: string, godMode?: boolean) => Promise<{ plan: { code: string; features: readonly string[] }; isPro: boolean }>;
   trackEvent: (event: string, userId?: string, props?: Record<string, unknown>) => void;
   trackAnalyticsEvent: (params: { event: string; userId?: string; props?: Record<string, unknown> }) => void;
   // 5-arg signature — Mini App passes opts; internal.routes only uses 4 args.
-  // Wide return — handler reads `.item.title`, `.item.price`.
+  // Wide return — handler reads `.item.title`, `.item.price`, `.parseStatus`.
   importUrlForUser: (
     userId: string,
     url: string,
     note?: string,
     source?: string,
     opts?: { noCache?: boolean },
-  ) => Promise<{ item: { price?: unknown; title?: string }; [key: string]: unknown }>;
+  ) => Promise<{ item: { price?: unknown; title?: string }; parseStatus: 'ok' | 'partial' | 'failed'; [key: string]: unknown }>;
   DRAFTS_ITEM_LIMIT: number;
 };
 
@@ -92,11 +95,24 @@ export function registerImportRouter(deps: ImportRouterDeps): Router {
   
       const user = await getOrCreateTgUser(req.tgUser!);
   
-      // Feature gate: import by URL requires PRO
+      // Credit gate: PRO is unlimited; FREE gets a monthly quota + paid credits.
       const ent = await getUserEntitlement(user.id);
-      if (!ent.plan.features.includes('url_import')) {
+      const allowance = await getImportAllowance(user.id, ent.isPro);
+      if (!allowance.allowed) {
         trackEvent('feature_gate_hit_url_import', user.id);
-        return res.status(402).json({ error: 'Pro feature', feature: 'url_import', planCode: ent.plan.code });
+        trackAnalyticsEvent({
+          event: 'import.credit_pack_suggested',
+          userId: user.id,
+          props: { freeLimit: allowance.freeLimit, paidCredits: allowance.paidCredits },
+        });
+        return res.status(402).json({
+          error: 'import_quota_exhausted',
+          feature: 'url_import',
+          planCode: ent.plan.code,
+          freeLimit: allowance.freeLimit,
+          freeUsed: allowance.freeUsed,
+          paidCredits: allowance.paidCredits,
+        });
       }
   
       let importDomain = '';
@@ -111,6 +127,19 @@ export function registerImportRouter(deps: ImportRouterDeps): Router {
       try {
         const noCache = req.headers['x-parse-no-cache'] === '1';
         const result = await importUrlForUser(user.id, parsed.data.url, parsed.data.note, parsed.data.source || 'miniapp', noCache ? { noCache: true } : undefined);
+
+        // Decrement only on a real import — an item created with usable data
+        // (parseStatus ok/partial). A failed parse still creates a domain-stub
+        // item but must not cost a credit; PRO never decrements.
+        let importQuota: { importCredits: number; freeImportsUsed: number; freeImportsLimit: number } | undefined;
+        if (!ent.isPro && (result.parseStatus === 'ok' || result.parseStatus === 'partial')) {
+          const consumed = await consumeImportCredit(user.id, { source: 'miniapp' });
+          importQuota = {
+            importCredits: consumed.paidCredits,
+            freeImportsUsed: consumed.freeUsed,
+            freeImportsLimit: consumed.freeLimit,
+          };
+        }
   
         trackAnalyticsEvent({
           event: 'import.succeeded',
@@ -118,7 +147,7 @@ export function registerImportRouter(deps: ImportRouterDeps): Router {
           props: { domain: importDomain, hasPrice: !!result.item.price, hasTitle: !!result.item.title },
         });
   
-        return res.status(201).json(result);
+        return res.status(201).json(importQuota ? { ...result, importQuota } : result);
       } catch (err: any) {
         trackAnalyticsEvent({
           event: 'import.failed',

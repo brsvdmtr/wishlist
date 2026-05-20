@@ -34,6 +34,8 @@ import {
   isLifetimeSubscription,
 } from '@wishlist/shared';
 
+import { resolveFreeImports } from './import-credits';
+
 // ─── Plan & Entitlement System ──────────────────────────────────────────────
 export const PLANS = {
   FREE: {
@@ -251,6 +253,9 @@ export async function getEffectiveEntitlements(userId: string, godMode?: boolean
     addOns.filter(a => a.addonType === 'seasonal_decoration' && a.targetId).map(a => a.targetId!)
   );
 
+  // FREE-tier monthly URL-import allowance (period-aware; lazy reset).
+  const freeImports = resolveFreeImports(credits);
+
   return {
     ...base,
     effectiveWishlistLimit: base.plan.wishlists + extraWishlistSlots,
@@ -259,6 +264,8 @@ export async function getEffectiveEntitlements(userId: string, godMode?: boolean
     seasonalWishlists,
     hintCredits: credits?.hintCredits ?? 0,
     importCredits: credits?.importCredits ?? 0,
+    freeImportsUsed: freeImports.freeUsed,
+    freeImportsLimit: freeImports.freeLimit,
     addOns,
     // Gift Notes access: PRO users get it, or one-time unlock via UserAddOn
     hasGiftNotes: base.isPro || godMode || addOns.some(a => a.addonType === GIFT_NOTES_SKU),

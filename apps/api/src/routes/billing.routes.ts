@@ -115,6 +115,8 @@ type BillingEffectiveEntitlements = {
   extraItemsPerWishlist: Record<string, number>;
   hintCredits: number;
   importCredits: number;
+  freeImportsUsed: number;
+  freeImportsLimit: number;
   hasGiftNotes: boolean;
   hasSecretReservations: boolean;
   giftNotes: unknown;
@@ -559,6 +561,8 @@ export function registerBillingRouter(deps: BillingRouterDeps): Router {
         credits: {
           hintCredits: ent.hintCredits,
           importCredits: ent.importCredits,
+          freeImportsUsed: ent.freeImportsUsed,
+          freeImportsLimit: ent.freeImportsLimit,
         },
         reservationPro: hasReservationPro(user, ent.isPro, ent.addOns),
       });

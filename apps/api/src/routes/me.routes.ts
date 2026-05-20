@@ -73,6 +73,8 @@ type MeEntitlements = {
   seasonalWishlists: ReadonlySet<string>;
   hintCredits: number;
   importCredits: number;
+  freeImportsUsed: number;
+  freeImportsLimit: number;
 };
 
 export type MeRouterDeps = {
@@ -336,6 +338,8 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
         credits: {
           hintCredits: ent.hintCredits,
           importCredits: ent.importCredits,
+          freeImportsUsed: ent.freeImportsUsed,
+          freeImportsLimit: ent.freeImportsLimit,
         },
         skus: Object.values(ONE_TIME_SKUS).map(s => ({
           code: s.code,

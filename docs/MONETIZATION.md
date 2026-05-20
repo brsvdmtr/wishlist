@@ -59,7 +59,7 @@ Text is sourced from `packages/shared/src/i18n.ts` keys `plan_pro_f1`–`plan_pr
 | 2 | `plan_pro_f2` | До 70 желаний в каждом | Больше места для хотелок без лишних ограничений. | server (count >= plan.items → 402) |
 | 3 | `plan_pro_f3` | До 20 участников | Собирай друзей и близких в одном вишлисте. | server (distinct reservers → 402) |
 | 4 | `plan_pro_f4` | Комментарии к желаниям | Обсуждайте подарок прямо в карточке. | server (`features.includes('comments')` → 402) |
-| 5 | `plan_pro_f5` | Добавление по ссылке | Ozon, Wildberries, Яндекс Маркет, Lamoda, Goldapple и другие. | server (`features.includes('url_import')` → 402) |
+| 5 | `plan_pro_f5` | Добавление по ссылке | Ozon, Wildberries, Яндекс Маркет, Lamoda, Goldapple и другие. | server — FREE 5 импортов/мес, далее 402 upsell; PRO без лимита (`import-credits.ts`) |
 | 6 | `plan_pro_f6` | Намекнуть на подарок | Подскажи друзьям конкретную идею деликатно и быстро. | server (`features.includes('hints')` → 402) |
 | 7 | `plan_pro_f7` | До 5 подписок на вишлисты друзей | Следи за изменениями у друзей и получай обновления. | server (count >= plan.subscriptions → 402) |
 | 8 | `plan_pro_f8` | Расширенная приватность | Управляй видимостью, подписками и комментариями в своих вишлистах. | server (isPro check → 403) |
@@ -89,7 +89,7 @@ All limits and feature gates are **enforced server-side**. The client performs p
 | Feature | Endpoint | Check |
 |---------|----------|-------|
 | Comments | `POST /tg/items/:id/comments` | `features.includes('comments')` — both sides, either-or |
-| URL Import | `POST /tg/import-url` | `features.includes('url_import')` |
+| URL Import | `POST /tg/import-url` | credit-gated — `getImportAllowance()`: PRO unlimited; FREE 5/mo + paid `importCredits`; else 402 `import_quota_exhausted` |
 | Hints | `POST /tg/items/:id/hint` | `features.includes('hints')` |
 | Visibility `PUBLIC_PROFILE` / `PRIVATE` | `PATCH /tg/wishlists/:id` | `isPro` → 403 |
 | `allowSubscriptions=NOBODY` | `PATCH /tg/wishlists/:id` | `isPro` → 403 |
@@ -262,7 +262,7 @@ When user taps "Отменить продление", a bottom sheet appears lis
 | **Wishlist creation** | `MiniApp.tsx` | Shows counter "X из Y"; upsell on 402 |
 | **Item add** | `MiniApp.tsx` | Shows counter; upsell on 402 |
 | **Comments** | `MiniApp.tsx` | Locked behind PRO badge + upsell |
-| **URL Import** | `MiniApp.tsx` | Locked behind PRO; upsell on 402 |
+| **URL Import** | `MiniApp.tsx` | FREE: 5/mo with "X из 5" counter; quota-exhausted upsell (buy pack / PRO / add manually) |
 | **Hints** | `MiniApp.tsx` | Locked behind PRO; upsell on 402 |
 | **Guest sort (recommended)** | `MiniApp.tsx` | Client-only; upsell on click if FREE |
 | **Subscribe to wishlist** | `MiniApp.tsx` | Shows count "X из Y"; upsell on 402 |
@@ -397,21 +397,44 @@ Prevent add-ons from substituting PRO:
 
 ## 12. Credits System
 
-Credits enable FREE users to access PRO-gated features (hints, URL import) on a per-use basis without subscribing.
+Credits let FREE users use credit-gated features without subscribing. URL
+import additionally grants a **monthly free quota** before any paid credit is
+needed (see § 12.1).
 
 ### Credit Types
 
 | Credit | Model field | Consumed by | PRO behavior |
 |--------|------------|-------------|-------------|
 | Hint credits | `UserCredits.hintCredits` | `POST /tg/items/:id/hint` | PRO bypasses — unlimited |
-| Import credits | `UserCredits.importCredits` | `POST /tg/import-url` | PRO bypasses — unlimited |
+| Import credits | `UserCredits.importCredits` | `POST /tg/import-url`, `POST /internal/import-url` | PRO bypasses — unlimited |
 
 ### How Credits Work
 
-1. User purchases a consumable SKU (e.g., `hints_pack_5`)
+1. User purchases a consumable SKU (e.g., `hints_pack_5`, `import_pack_10`)
 2. `UserCredits` record is upserted with incremented balance
 3. On feature use, if user is FREE, one credit is deducted
 4. If balance = 0 and user is FREE, the feature gate returns 402
+
+### 12.1. URL-import monthly free quota
+
+URL import is **not** a hard PRO gate. The credit model
+(`services/import-credits.ts`, live 2026-05-20):
+
+- **FREE** users get `FREE_IMPORT_QUOTA_PER_MONTH` imports per UTC calendar
+  month (default **5**, env-tunable). Tracked on `UserCredits.freeImportsUsed`
+  / `freeImportsPeriod` (a `"YYYY-MM"` bucket); the counter resets lazily on
+  the first import of a new month — no scheduler.
+- **PRO** is unlimited and never decrements.
+- Consumption order on a successful import: free monthly quota first, then
+  paid `importCredits` (`import_pack_10` / `import_pack_25`).
+- A credit is spent only when an item is actually created (`parseStatus`
+  `ok` or `partial`); a failed parse never decrements.
+- When the FREE quota **and** paid credits are both exhausted, the route
+  returns `402 { error: 'import_quota_exhausted', feature: 'url_import',
+  freeLimit, freeUsed, paidCredits }` — the Mini App shows a buy-pack / PRO /
+  "add manually" upsell instead of a hard wall.
+- Analytics: `import.free_quota_used`, `import.free_quota_exhausted`,
+  `import.credit_pack_suggested`.
 
 ---
 

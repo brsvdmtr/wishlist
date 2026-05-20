@@ -27,14 +27,16 @@ import { secureCompare } from '../lib/crypto';
 import { validateUrl } from '../url-parser.js';
 import { sendTgBotMessage } from '../telegram/botApi';
 import { sendAdminAlert } from '../notifications/adminAlerts';
+import { trackAnalyticsEvent } from '../services/analytics';
+import { getImportAllowance, consumeImportCredit } from '../services/import-credits';
 
 export type InternalRouterDeps = {
   // The runtime shape of getUserEntitlement is wider than the surface we
-  // touch here (PlanInfo + isPro + proSource + subscription + promoPro). The
-  // structural `{ plan: { features: readonly string[] } }` is the minimum we
-  // need — using readonly so the upstream `as const` features tuple matches.
-  getUserEntitlement: (userId: string, godMode?: boolean) => Promise<{ plan: { features: readonly string[] } }>;
-  importUrlForUser: (userId: string, url: string, note?: string, source?: string) => Promise<unknown>;
+  // touch here (PlanInfo + proSource + subscription + promoPro). The
+  // structural narrow keeps `plan.features` (readonly so the upstream
+  // `as const` tuple matches) plus `isPro` for the import credit gate.
+  getUserEntitlement: (userId: string, godMode?: boolean) => Promise<{ plan: { features: readonly string[] }; isPro: boolean }>;
+  importUrlForUser: (userId: string, url: string, note?: string, source?: string) => Promise<{ parseStatus: 'ok' | 'partial' | 'failed'; [key: string]: unknown }>;
   DRAFTS_ITEM_LIMIT: number;
   recordMaintenanceExposure: (userId: string, surface: string, locale: string, telegramChatId: string | null) => Promise<string>;
   trackEvent: (event: string, userId?: string, props?: Record<string, unknown>) => void;
@@ -89,15 +91,33 @@ export function registerInternalRouter(deps: InternalRouterDeps): Router {
         return res.status(400).json({ error: err.message || 'Invalid URL' });
       }
 
-      // Feature gate: url_import requires PRO (respect godMode for admin users)
+      // Credit gate: PRO unlimited; FREE gets a monthly quota + paid credits
+      // (respect godMode for admin users). Same model as POST /tg/import-url.
       const user = await prisma.user.findUnique({ where: { id: parsed.data.userId }, select: { godMode: true } });
       const ent = await getUserEntitlement(parsed.data.userId, user?.godMode ?? false);
-      if (!ent.plan.features.includes('url_import')) {
-        return res.status(402).json({ error: 'Pro feature', feature: 'url_import' });
+      const allowance = await getImportAllowance(parsed.data.userId, ent.isPro);
+      if (!allowance.allowed) {
+        trackEvent('feature_gate_hit_url_import', parsed.data.userId);
+        trackAnalyticsEvent({
+          event: 'import.credit_pack_suggested',
+          userId: parsed.data.userId,
+          props: { source: 'bot', freeLimit: allowance.freeLimit, paidCredits: allowance.paidCredits },
+        });
+        return res.status(402).json({
+          error: 'import_quota_exhausted',
+          feature: 'url_import',
+          freeLimit: allowance.freeLimit,
+          freeUsed: allowance.freeUsed,
+          paidCredits: allowance.paidCredits,
+        });
       }
 
       try {
         const result = await importUrlForUser(parsed.data.userId, parsed.data.url, parsed.data.note, parsed.data.source || 'bot');
+        // Decrement on a real import (ok/partial); failed parse and PRO skip.
+        if (!ent.isPro && (result.parseStatus === 'ok' || result.parseStatus === 'partial')) {
+          await consumeImportCredit(parsed.data.userId, { source: 'bot' });
+        }
         return res.status(201).json(result);
       } catch (err: any) {
         if (err.statusCode === 402) {

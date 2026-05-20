@@ -142,6 +142,8 @@ type WishlistsEntitlements = {
   addOns: { addonType: string; quantity: number; targetId?: string | null }[];
   hintCredits: number;
   importCredits: number;
+  freeImportsUsed: number;
+  freeImportsLimit: number;
   hasGiftNotes: boolean;
   giftNotes: unknown;
   hasGroupGift: boolean;
@@ -448,6 +450,8 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
         credits: {
           hintCredits: ent.hintCredits,
           importCredits: ent.importCredits,
+          freeImportsUsed: ent.freeImportsUsed,
+          freeImportsLimit: ent.freeImportsLimit,
         },
         skus: Object.values(ONE_TIME_SKUS).map(s => ({
           code: s.code,

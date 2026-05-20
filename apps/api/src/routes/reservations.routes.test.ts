@@ -38,12 +38,13 @@ import { registerReservationsRouter } from './reservations.routes';
 
 function buildDeps(over: Partial<Parameters<typeof registerReservationsRouter>[0]> = {}) {
   return {
-    getOrCreateTgUser: vi.fn(async () => ({ id: 'u-test', telegramChatId: '123', godMode: false })),
+    getOrCreateTgUser: vi.fn(async () => ({ id: 'u-test', telegramId: '123', godMode: false })),
     getEffectiveEntitlements: vi.fn(async () => ({
       isPro: false,
       addOns: [],
       hasSecretReservations: false,
-      plan: { code: 'FREE' },
+      plan: { participants: 1 },
+      secretReservations: { unlocked: false, unlockType: null, priceXtr: 24 },
     })),
     mapTgItem: vi.fn((it: { status?: string }) => ({ ...it, status: String(it.status ?? '').toLowerCase() })),
     trackEvent: vi.fn(),
