@@ -5,6 +5,104 @@ New entries go at the top.
 
 ---
 
+## 2026-05-20 — PRODUCT_EVENT `user.session_started` объявлен и потребляется rollup'ом, но ни один клиент его не эмитит
+
+### Симптом
+
+После деплоя `0cf385a` (UserDailyActivity rollup) колонка
+`sessionStarted` оказалась нулевой **на каждой строке** 90-дневного
+backfill'а. Прямая проверка AnalyticsEvent:
+
+```
+SELECT COUNT(*) FROM "AnalyticsEvent"
+WHERE event = 'user.session_started'
+  AND "createdAt" >= NOW() - INTERVAL '3 hours';
+-- 0
+```
+
+Ноль строк за все 3 часа, по всем пользователям. Не «мало активности» —
+ровно ноль.
+
+### Root cause
+
+`user.session_started` прошёл весь pipeline, кроме самого первого шага:
+
+1. **Объявлен** — `packages/shared/src/analyticsEvents.ts` как
+   PRODUCT_EVENT с `sources: ['client']`.
+2. **Пропущен ingest'ом** — `routes/telemetry.routes.ts` пускает его
+   через `isClientTelemetryAllowedEvent` (clientAllowed).
+3. **Потребляется** — `services/daily-activity.service.ts` `EVENT_TO_FIELD`
+   маппит `'user.session_started' → 'sessionStarted'`.
+4. **Эмиттера НЕТ.** Ни один callsite в `apps/web` не вызывал
+   `trackEvent('user.session_started')`. Таксономия, allowlist и
+   потребитель есть — событие просто никем не порождается.
+
+Коварство в том, что **тесты каждого слоя были зелёные**:
+`analyticsEvents.test.ts` проверял таксономию, `telemetry.routes.test.ts`
+— что ingest принимает событие, `daily-activity.service.test.ts` — что
+rollup его маппит. Каждый тест формы «**если** событие придёт — оно
+корректно обработается». Никто не проверял «событие **приходит**».
+
+### Урок
+
+**Declared + consumed ≠ emitted.** Событие может пройти всю цепочку
+(taxonomy → ingest allowlist → rollup mapping) с зелёным CI и иметь ноль
+callsite'ов. Каждый слой тестирует контракт «на входе», но сам вход
+может никогда не наступить — а отсутствие данных выглядит неотличимо от
+«нет активности».
+
+Сигнал, который надо ловить: **новая колонка durable-таблицы, дающая
+ноль/дефолт на КАЖДОЙ строке backfill'а** — это почти всегда «нет
+эмиттера», а не «нет активности». Реальная активность шумит; идеальный
+ноль — это ненайденный provider.
+
+### Правило
+
+1. **Добавляя событие в `EVENT_TO_FIELD` (или иной durable rollup),
+   убедись, что эмиттер уже существует**, прежде чем считать фичу
+   готовой. Для client-sourced событий — grep по `apps/web` на
+   `trackEvent('<name>')`. Нет callsite'а — фича не готова.
+2. **Каждый новый client-sourced PRODUCT_EVENT, потребляемый rollup'ом,
+    ships с регрессионным guard'ом, что callsite существует.** Для
+   событий, эмитящихся из монолита `MiniApp.tsx`, guard живёт в
+   `apps/web/app/miniapp/monolith-guards.test.ts` (grep-style проверка
+   исходника — extraction монолита ещё не сделана).
+3. **Нулевой результат backfill'а по новой колонке = блокер, а не
+   «деплоим, потом посмотрим».** Дефолт на всех строках проверяется до
+   закрытия задачи.
+
+### Лучший код
+
+`apps/web/app/miniapp/MiniApp.tsx` — `trackEvent` зеркалит каждый
+успешный bootstrap в канонический PRODUCT_EVENT. Сервер резолвит
+`userId` из `req.tgUser.id` → `User.id` (cuid) в `telemetry.routes.ts`;
+клиент `userId` не отправляет.
+
+```ts
+// ❌ До: 21 callsite 'miniapp.bootstrap_succeeded', ни одного эмиттера
+//        'user.session_started' → rollup-колонка sessionStarted мёртвая.
+
+// ✅ После: единое зеркало в trackEvent — покрывает все 21 ветку
+//          deep-link'ов разом, инвариант 1:1 by construction.
+if (event === 'miniapp.bootstrap_succeeded') {
+  telemetryBufferRef.current.push({
+    event: 'user.session_started',
+    ts: Date.now(),
+    props: { bootSessionId: bootSessionIdRef.current, clientEventId: crypto.randomUUID() },
+  });
+}
+```
+
+`apps/web/app/miniapp/monolith-guards.test.ts` — новый guard
+«MiniApp.tsx — user.session_started emitter guard»: проверяет, что
+исходник содержит эмиттер `'user.session_started'` и что он завязан на
+`event === 'miniapp.bootstrap_succeeded'`. Падает на pre-fix коммите,
+проходит на fix-коммите.
+
+**Commit:** см. `git log --grep="fix(analytics): emit user.session_started"`
+
+---
+
 ## 2026-05-19 — `daily-activity` rollup падал на FK violation у удалённых users
 
 ### Симптом

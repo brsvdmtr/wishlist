@@ -74,6 +74,28 @@ describe('MiniApp.tsx — hardcoded-locale regression guard (L1 anti-pattern)', 
   });
 });
 
+describe('MiniApp.tsx — user.session_started emitter guard (2026-05-20 regression)', () => {
+  // 2026-05-20: `user.session_started` was a declared PRODUCT_EVENT
+  // (analyticsEvents.ts, sources: ['client']) consumed by the daily-activity
+  // rollup (services/daily-activity.service.ts → EVENT_TO_FIELD →
+  // UserDailyActivity.sessionStarted) and allowed through telemetry ingest —
+  // but NO client callsite emitted it. Taxonomy + consumer + ingest all
+  // green; the emitter never existed, so every rollup row had
+  // sessionStarted=0. The Mini App must mirror each successful bootstrap to
+  // `user.session_started`.
+  it('emits user.session_started somewhere in the monolith', () => {
+    expect(MINI_APP_SRC).toContain("'user.session_started'");
+  });
+
+  it('gates the user.session_started emission on miniapp.bootstrap_succeeded', () => {
+    // The mirror must be tied to the successful-bootstrap path — a bare
+    // emission elsewhere would not match the "user opened the app today"
+    // semantics the rollup assumes.
+    const mirror = /event === 'miniapp\.bootstrap_succeeded'[\s\S]{0,400}'user\.session_started'/;
+    expect(mirror.test(MINI_APP_SRC)).toBe(true);
+  });
+});
+
 describe('MiniApp.tsx — file shape sanity', () => {
   it('is the expected monolith size (~33k LOC, well above the extraction threshold)', () => {
     // When this drops below 5 000 LOC an extraction wave landed and the
