@@ -126,6 +126,16 @@ jobs:
             #      trigger a web rebuild even though they're separate packages.)
             #   docker-compose.prod.yml → all three (compose spec itself changed)
             #   .github/**              → none (CI-only change)
+            # A marker SHA that isn't an ancestor of NEW_SHA is also untrust-
+            # worthy: `ops/deploy.sh` writes the marker from its own checkout
+            # without fetch/reset, so an operator running it from a side
+            # branch could leave a SHA off the origin/main line. `git diff`
+            # between unrelated commits still yields a (misleading) delta —
+            # discard such a baseline and fall through to a full rebuild.
+            if [ -n "$PREV_SHA" ] && ! git merge-base --is-ancestor "$PREV_SHA" "$NEW_SHA" 2>/dev/null; then
+              echo "marker SHA $PREV_SHA is not an ancestor of $NEW_SHA — forcing a full rebuild"
+              PREV_SHA=""
+            fi
             if [ -z "$PREV_SHA" ]; then
               # No trustworthy baseline (see marker logic above) — a diff would
               # be meaningless. Fall through to a full rebuild.

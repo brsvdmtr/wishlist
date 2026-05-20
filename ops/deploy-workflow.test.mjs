@@ -101,4 +101,12 @@ test('deploy.yml forces a full rebuild when the marker is missing — no git-HEA
     /if \[ -z "\$PREV_SHA" \] \|\|[^\n]*\n\s*SERVICES="api bot web"/,
     'a missing baseline (empty PREV_SHA) must force SERVICES="api bot web"',
   );
+  // A marker SHA that isn't an ancestor of NEW_SHA is equally untrustworthy
+  // (e.g. ops/deploy.sh wrote it from a side branch) — it must be discarded
+  // so the detection falls through to the full rebuild above.
+  assert.match(
+    DEPLOY_YML,
+    /git merge-base --is-ancestor "\$PREV_SHA" "\$NEW_SHA"/,
+    'a non-ancestor marker SHA must be discarded',
+  );
 });

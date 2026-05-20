@@ -101,12 +101,13 @@ jobs:
       - name: Run tests
         run: pnpm test
 
-      - name: Run ops tests (node:test for ops/watchdog/state.mjs)
+      - name: Run ops tests (node:test for ops/*.test.mjs)
         # `pnpm test` is workspace-recursive (`pnpm -r ... run test`) and does
         # NOT see the root-level node:test invocation. Without this step the
-        # 30 state-machine tests for the watchdog state file would pass on
-        # `pnpm test:ops` locally but never block CI, defeating the test
-        # gate. Added 2026-05-17 as part of watchdog-hardening PR.
+        # ops node:test suites (watchdog state machine + deploy-workflow
+        # guards) would pass on `pnpm test:ops` locally but never block CI,
+        # defeating the test gate. Added 2026-05-17 (watchdog-hardening PR);
+        # deploy-workflow guards added 2026-05-20.
         run: pnpm test:ops
 
       - name: Coverage report (non-blocking)
