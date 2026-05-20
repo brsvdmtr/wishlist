@@ -85,14 +85,16 @@ suite('selectSurveyRecipients — segment SQL on real schema', () => {
     // loadEligiblePool requires ≥1 delivered LifecycleTouch (bot-reachability),
     // so the default fixture user gets one. Pass reachable:false to model a
     // Mini-App-only user the bot has no DM chat with.
-    if (opts.reachable !== false) await makeDeliveredTouch(u.id);
+    if (opts.reachable !== false) await makeLifecycleTouch(u.id);
     return u;
   }
 
-  // Inserts a delivered LifecycleTouch. sentAt is 10 days ago — old enough to
-  // clear the base filter's "no touch in the last 24h" window, delivered=true
-  // so the user passes the reachability filter.
-  async function makeDeliveredTouch(userId: string) {
+  // Inserts a LifecycleTouch. sentAt is 10 days ago — old enough to clear the
+  // base filter's "no touch in the last 24h" window. delivered defaults to
+  // true (the bot-reachability signal); pass false to model an undelivered
+  // touch. segment/messageKind are arbitrary — loadEligiblePool reads only
+  // sentAt and delivered.
+  async function makeLifecycleTouch(userId: string, delivered = true) {
     const db = getTestPrisma();
     const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
     await db.lifecycleTouch.create({
@@ -103,7 +105,7 @@ suite('selectSurveyRecipients — segment SQL on real schema', () => {
         touchNumber: 1,
         scheduledFor: tenDaysAgo,
         sentAt: tenDaysAgo,
-        delivered: true,
+        delivered,
         messageKind: 'activation',
       },
     });
@@ -316,27 +318,18 @@ suite('selectSurveyRecipients — segment SQL on real schema', () => {
     expect(report.recipients.find((r) => r.userId === reachable.id)?.segmentId).toBe('S1');
     // Unreachable user is dropped by the base filter, before segment matching.
     expect(report.recipients.find((r) => r.userId === unreachable.id)).toBeUndefined();
-    // ...and the report attributes the drop.
+    // ...and the report attributes the drop. >= 1 (not exactly 1):
+    // loadEligiblePool's candidate count spans the whole base pool and the
+    // integration DB is shared with parallel workers — only our own drop
+    // is guaranteed to be counted.
     expect(report.skipped.notReachable).toBeGreaterThanOrEqual(1);
   });
 
   it('excludes a user whose only LifecycleTouch has delivered=false', async () => {
-    const db = getTestPrisma();
     const survey = await makeSurvey();
-    // reachable:false → no default touch; we add one that was never delivered.
+    // reachable:false → no default touch; add one that was never delivered.
     const u = await makeUser({ telegramId: `${PREFIX}-undeliv1`, reachable: false });
-    await db.lifecycleTouch.create({
-      data: {
-        userId: u.id,
-        segment: 'S1',
-        episodeKey: `ep_undeliv_${Math.random().toString(36).slice(2, 8)}`,
-        touchNumber: 1,
-        scheduledFor: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
-        sentAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
-        delivered: false,
-        messageKind: 'activation',
-      },
-    });
+    await makeLifecycleTouch(u.id, false);
     await makeWishlistWithItem(u.id);
 
     const { selectSurveyRecipients } = await import('../../src/services/research-survey/recipients');

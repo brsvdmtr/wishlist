@@ -36,12 +36,13 @@
 // — can have a near-zero reachable pool. This is an inherent limit of a
 // bot-DM-delivered survey, not a bug: wave planning must expect smaller,
 // skewed cohorts, and `SelectionReport.skipped.notReachable` reports the
-// drop. Validated on the pmf-discovery pilot (2026-05-20): pre-filter,
-// 27/60 invites failed Telegram `chat_not_found`; a reachability-filtered
-// re-wave hit 0/27. Reaching the excluded users needs an in-app survey
-// surface — a separate, larger piece of work.
+// drop. Validated on the pmf-discovery pilot (2026-05-20): of 60 invites,
+// 27 failed Telegram `chat_not_found`; retrospectively, all 30 delivered
+// invites had a delivered LifecycleTouch and none of the 27 failures did.
+// Reaching the excluded users needs an in-app survey surface — a separate,
+// larger piece of work.
 
-import { prisma, Prisma } from '@wishlist/db';
+import { prisma } from '@wishlist/db';
 import { resolveSurveyLocale, type SurveyLocale } from './locale';
 
 export type SegmentId = 'S1' | 'S2' | 'S3' | 'S5' | 'S7' | 'S8';
@@ -75,7 +76,11 @@ export interface SelectionReport {
   countsBySegment: Record<SegmentId, number>;
   s8CountsBySubtype: Record<S8Subtype, number>;
   skipped: {
-    /** Base-filter pool size (bot-reachable users) before segment matching. */
+    /**
+     * Base-filter pool size — bot-reachable users that cleared the base
+     * filter. `nonRuEn` of these are dropped on locale before segment
+     * matching; the remainder are segment-matched.
+     */
     eligible: number;
     /** Eligible but locale didn't resolve to ru/en. */
     nonRuEn: number;
@@ -252,45 +257,52 @@ export async function selectSurveyRecipients(input: SelectionInput): Promise<Sel
 async function loadEligiblePool(surveyId: string, surveySlug: string, now: Date) {
   const newUserCutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const lifecycleCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  // Base filter excluding the reachability clause. Counted on its own so the
-  // difference vs the reachable pool is attributable to unreachability.
-  const baseWhere: Prisma.UserWhereInput = {
-    godMode: false,
-    telegramId: { not: null },
-    createdAt: { lt: newUserCutoff },
-    profile: { is: { notifyMarketing: true } },
-    researchSurveyInvites: { none: { surveyId } },
-    researchSurveyResponses: { none: { survey: { slug: surveySlug } } },
-    lifecycleTouches: { none: { sentAt: { gt: lifecycleCutoff } } },
-  };
-  // `none recent touch` (above) and `some delivered touch` are two distinct
-  // LifecycleTouch predicates; a single relation key can't hold both, so the
-  // reachability clause goes in its own AND term.
-  const reachableWhere: Prisma.UserWhereInput = {
-    AND: [baseWhere, { lifecycleTouches: { some: { delivered: true } } }],
-  };
-
-  const [eligibleBeforeReachability, pool] = await Promise.all([
-    prisma.user.count({ where: baseWhere }),
-    prisma.user.findMany({
-      where: reachableWhere,
-      select: {
-        id: true,
-        updatedAt: true,
-        profile: {
-          select: {
-            languageMode: true,
-            manualLanguage: true,
-            normalizedLocale: true,
-            language: true,
-            marketBucket: true,
-          },
+  // One query, one snapshot: fetch the whole base-eligible pool and probe
+  // each candidate's bot-reachability inline. Partitioning a single result
+  // set in memory keeps `notReachable` an exact complement of `pool` — a
+  // separate count() query could race a concurrent LifecycleTouch insert
+  // and return a total inconsistent with the pool it is paired with.
+  const candidates = await prisma.user.findMany({
+    where: {
+      godMode: false,
+      telegramId: { not: null },
+      createdAt: { lt: newUserCutoff },
+      profile: { is: { notifyMarketing: true } },
+      researchSurveyInvites: { none: { surveyId } },
+      researchSurveyResponses: { none: { survey: { slug: surveySlug } } },
+      // rule G — no LifecycleTouch in the last 24h. Distinct from the
+      // bot-reachability probe in `select` below (delivered=true, any time).
+      lifecycleTouches: { none: { sentAt: { gt: lifecycleCutoff } } },
+    },
+    select: {
+      id: true,
+      updatedAt: true,
+      profile: {
+        select: {
+          languageMode: true,
+          manualLanguage: true,
+          normalizedLocale: true,
+          language: true,
+          marketBucket: true,
         },
       },
-    }),
-  ]);
+      // Reachability probe: one delivered LifecycleTouch is enough — take: 1
+      // keeps it a cheap existence check, not a full relation fetch. No index
+      // covers (userId, delivered): Postgres locates a user's touches via the
+      // userId-prefixed index, then scans those rows for delivered=true.
+      // Acceptable here — recipient selection is a rare ops job, not a hot path.
+      lifecycleTouches: {
+        where: { delivered: true },
+        select: { id: true },
+        take: 1,
+      },
+    },
+  });
 
-  return { pool, notReachable: eligibleBeforeReachability - pool.length };
+  const pool = candidates
+    .filter((u) => u.lifecycleTouches.length > 0)
+    .map((u) => ({ id: u.id, updatedAt: u.updatedAt, profile: u.profile }));
+  return { pool, notReachable: candidates.length - pool.length };
 }
 
 // ─────────────────────────────────────────────────────────────────────

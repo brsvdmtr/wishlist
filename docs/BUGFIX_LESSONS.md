@@ -122,11 +122,15 @@ where: {
   // ...нет проверки, что бот может доставить DM
 }
 
-// ✅ После: достижимость бота — часть базового фильтра
-const reachableWhere: Prisma.UserWhereInput = {
-  AND: [baseWhere, { lifecycleTouches: { some: { delivered: true } } }],
-};
-// + notReachable в SelectionReport.skipped — усадка пула больше не молчит
+// ✅ После: достижимость — часть выборки. Один запрос тянет весь базовый
+// пул и помечает каждого кандидата флагом доставимости:
+select: {
+  // ...
+  lifecycleTouches: { where: { delivered: true }, select: { id: true }, take: 1 },
+}
+const pool = candidates.filter((u) => u.lifecycleTouches.length > 0);
+// notReachable = candidates.length - pool.length — точный комплемент;
+// он в SelectionReport.skipped: усадка пула больше не молчит
 ```
 
 **Commit:** `fix(survey): require bot-reachability for survey recipient selection`
