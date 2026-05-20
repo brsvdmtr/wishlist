@@ -84,13 +84,19 @@ test('deploy.yml writes the release marker only after deploy success, in both br
     'rebuild branch must write the marker after the build and the health check',
   );
 
-  // The rebuild branch must also abort on a stuck migration before writing
-  // the marker — the marker means "fully successful deploy", and unfinished
-  // migrations are a failed deploy.
+  // The rebuild branch must also abort on a stuck migration — and that gate
+  // must run BEFORE the rebuild-branch marker write (the marker means "fully
+  // successful deploy", and unfinished migrations are a failed deploy).
   assert.match(
     DEPLOY_YML,
     /FAILED_MIGRATIONS[\s\S]{0,240}exit 1/,
-    'an unfinished migration count must exit 1 before the marker is written',
+    'an unfinished migration count must trigger exit 1',
+  );
+  const migrationGateIdx = DEPLOY_YML.indexOf('[ "$FAILED_MIGRATIONS" != "0" ]');
+  assert.notStrictEqual(migrationGateIdx, -1, 'migration gate must exist');
+  assert.ok(
+    rebuildWrite.index > migrationGateIdx,
+    'the migration gate must run before the rebuild-branch marker write',
   );
 });
 

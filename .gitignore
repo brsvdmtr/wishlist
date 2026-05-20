@@ -16,4 +16,3 @@ coverage
 # created at runtime in /opt/wishlist/.deploy by deploy.yml / ops/deploy.sh.
 # Never committed.
 .deploy/
-

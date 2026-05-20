@@ -181,7 +181,10 @@ jobs:
               echo "=== Container status ==="
               docker ps --filter name=wishlist-prod --format '{{.Names}}\t{{.Status}}'
               # Record success: this run deployed NEW_SHA (nothing to rebuild).
-              # Written last so a failure above never updates the baseline.
+              # No health gate here — unlike the rebuild branch — by design:
+              # this branch ships no new image, api/bot keep their already-
+              # proven images and only the APP_RELEASE label changes. `set -e`
+              # still aborts before this line if the `up -d` recreate fails.
               echo "$NEW_SHA" > "$RELEASE_MARKER"
               echo "=== Deploy OK (label refresh, no rebuild) ==="
               exit 0

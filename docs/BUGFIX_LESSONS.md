@@ -192,10 +192,10 @@ callsite'ов. Каждый слой тестирует контракт «на 
 клиент `userId` не отправляет.
 
 ```ts
-// ❌ До: 21 callsite 'miniapp.bootstrap_succeeded', ни одного эмиттера
+// ❌ До: ~22 callsite'а 'miniapp.bootstrap_succeeded', ни одного эмиттера
 //        'user.session_started' → rollup-колонка sessionStarted мёртвая.
 
-// ✅ После: единое зеркало в trackEvent — покрывает все 21 ветку
+// ✅ После: единое зеркало в trackEvent — покрывает все ветки
 //          deep-link'ов разом; bootstrap_succeeded → session_started
 //          ≤1 на mount (ref-guard), каждый app-open = одно событие;
 //          rollup суммирует в sessionStarted как и все COUNTER_FIELDS.

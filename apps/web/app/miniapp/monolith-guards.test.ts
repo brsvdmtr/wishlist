@@ -84,8 +84,9 @@ describe('MiniApp.tsx — user.session_started emitter guard (2026-05-20 regress
   // sessionStarted=0. The Mini App must mirror each successful bootstrap to
   // `user.session_started`.
   it('emits user.session_started somewhere in the monolith', () => {
-    // Assert it appears as an `event:` property value — a bare quoted
-    // mention in a comment must not satisfy this guard.
+    // Assert it appears as an `event:` property assignment, not merely the
+    // bare string. Paired with the gating guard below (which a stray comment
+    // alone cannot satisfy), this pins the real emitter.
     expect(MINI_APP_SRC).toMatch(/event:\s*'user\.session_started'/);
   });
 
