@@ -14,27 +14,16 @@ import { startBirthdayRemindersScheduler } from './birthday-reminders';
 const HOURLY_MS = 60 * 60 * 1000;
 const fakeLogger = (): Logger => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), fatal: vi.fn(), trace: vi.fn(), child: vi.fn() } as unknown as Logger);
 
-let prisma: Record<string, Record<string, ReturnType<typeof vi.fn>>>;
-let getEffectiveEntitlements: ReturnType<typeof vi.fn>;
-let tgActorHash: ReturnType<typeof vi.fn>;
-let trackEvent: ReturnType<typeof vi.fn>;
-
-beforeEach(() => {
-  vi.useFakeTimers();
-  // Pin fake clock to a deterministic time inside the scheduler's MSK
-  // send-hour window (9–22). `useFakeTimers()` defaults to wall-clock time
-  // at setup, which makes these tests flake based on when CI / local runs
-  // happen: any run started between 23:00 and 08:59 MSK exits early at
-  // `birthday-reminders.ts:527` and never reaches findMany / heartbeat.
-  // 2026-05-16T09:00:00Z = 12:00 MSK — safely mid-window.
-  vi.setSystemTime(new Date('2026-05-16T09:00:00Z'));
-  // Minimal-noise Prisma mock — every model returns the empty result that
-  // forces the cron into "no candidates" early-exit. Real branches are
-  // covered by integration tests.
+// Minimal-noise Prisma mock — every model returns the empty result that
+// forces the cron into "no candidates" early-exit. Real branches are covered
+// by integration tests. Extracted to a factory so `prisma` gets a precise
+// inferred type (named model props, not an index signature) — that keeps
+// `prisma.userProfile.findMany` non-undefined under noUncheckedIndexedAccess.
+function makePrismaMock() {
   const empty = () => vi.fn().mockResolvedValue([]);
   const emptyOne = () => vi.fn().mockResolvedValue(null);
   const zeroCount = () => vi.fn().mockResolvedValue({ count: 0 });
-  prisma = {
+  return {
     userProfile: { findMany: empty() },
     user: { findUnique: emptyOne(), findMany: empty(), count: vi.fn().mockResolvedValue(0) },
     wishlistSubscription: { findMany: empty() },
@@ -56,6 +45,23 @@ beforeEach(() => {
     hint: { findMany: empty() },
     serviceHeartbeat: { upsert: vi.fn().mockResolvedValue({}) },
   };
+}
+
+let prisma: ReturnType<typeof makePrismaMock>;
+let getEffectiveEntitlements: ReturnType<typeof vi.fn>;
+let tgActorHash: ReturnType<typeof vi.fn>;
+let trackEvent: ReturnType<typeof vi.fn>;
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  // Pin fake clock to a deterministic time inside the scheduler's MSK
+  // send-hour window (9–22). `useFakeTimers()` defaults to wall-clock time
+  // at setup, which makes these tests flake based on when CI / local runs
+  // happen: any run started between 23:00 and 08:59 MSK exits early at
+  // `birthday-reminders.ts:527` and never reaches findMany / heartbeat.
+  // 2026-05-16T09:00:00Z = 12:00 MSK — safely mid-window.
+  vi.setSystemTime(new Date('2026-05-16T09:00:00Z'));
+  prisma = makePrismaMock();
   getEffectiveEntitlements = vi.fn().mockResolvedValue({ isPro: false });
   tgActorHash = vi.fn((id: number) => `actor-${id}`);
   trackEvent = vi.fn();

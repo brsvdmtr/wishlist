@@ -23,7 +23,7 @@ import { registerPromoRouter } from './promo.routes';
 function buildDeps() {
   return {
     getOrCreateTgUser: vi.fn(async () => ({ id: 'u-test', godMode: false })),
-    getUserEntitlement: vi.fn(async () => ({ isPro: false, plan: { code: 'FREE' } })),
+    getUserEntitlement: vi.fn(async () => ({ isPro: false, proSource: null, subscription: null })),
     trackEvent: vi.fn(),
     LIFECYCLE_PROMO_CODE: 'WISHPRO',
   } as Parameters<typeof registerPromoRouter>[0];

@@ -83,7 +83,7 @@ describe('Demo templates', () => {
 
   it('every GLOBAL demo has currency=USD', () => {
     for (const v of GLOBAL_VARIANTS) {
-      expect(GLOBAL_DEMO_ITEMS[v].currency).toBe('USD');
+      expect(GLOBAL_DEMO_ITEMS[v]!.currency).toBe('USD');
     }
   });
 

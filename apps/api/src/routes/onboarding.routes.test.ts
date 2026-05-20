@@ -29,7 +29,7 @@ function buildDeps() {
     trackEvent: vi.fn(),
     completeOnboarding: vi.fn(async () => {}),
     runReferralProgressHook: vi.fn(async () => {}),
-    importUrlForUser: vi.fn(async () => ({ item: { id: 'new' }, wishlistId: 'drafts', parseStatus: 'ok' as const })),
+    importUrlForUser: vi.fn(async () => ({ item: { id: 'new', sourceDomain: null }, wishlistId: 'drafts', parseStatus: 'ok' as const })),
     getOrCreateDraftsWishlist: vi.fn(async () => ({ id: 'drafts' })),
     mapTgItem: vi.fn((it) => it),
   } as Parameters<typeof registerOnboardingRouter>[0];

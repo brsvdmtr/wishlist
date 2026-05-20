@@ -20,7 +20,7 @@ import { registerSupportRouter } from './support.routes';
 
 function buildDeps(over: Partial<Parameters<typeof registerSupportRouter>[0]> = {}) {
   return {
-    getOrCreateTgUser: vi.fn(async () => ({ id: 'u', telegramId: '42', godMode: false })),
+    getOrCreateTgUser: vi.fn(async () => ({ id: 'u', telegramId: '42', godMode: false, telegramChatId: null })),
     ...over,
   } as Parameters<typeof registerSupportRouter>[0];
 }
@@ -58,7 +58,7 @@ describe('GET /support/lookup/:ticketCode — god-mode gate', () => {
   it('403 when user is in allowlist but godMode flag is false', async () => {
     process.env.GOD_MODE_TELEGRAM_IDS = '42';
     const deps = buildDeps({
-      getOrCreateTgUser: vi.fn(async () => ({ id: 'u', telegramId: '42', godMode: false })),
+      getOrCreateTgUser: vi.fn(async () => ({ id: 'u', telegramId: '42', godMode: false, telegramChatId: null })),
     });
     const res = await request(makeApp(deps)).get('/support/lookup/ABC123');
     expect(res.status).toBe(403);
@@ -67,7 +67,7 @@ describe('GET /support/lookup/:ticketCode — god-mode gate', () => {
   it('queries supportTicket with uppercased ticketCode when authorised', async () => {
     process.env.GOD_MODE_TELEGRAM_IDS = '42';
     const deps = buildDeps({
-      getOrCreateTgUser: vi.fn(async () => ({ id: 'u', telegramId: '42', godMode: true })),
+      getOrCreateTgUser: vi.fn(async () => ({ id: 'u', telegramId: '42', godMode: true, telegramChatId: null })),
     });
     shared.supportTicket.findUnique.mockResolvedValueOnce(null);
 
@@ -80,7 +80,7 @@ describe('GET /support/lookup/:ticketCode — god-mode gate', () => {
   it('404 when authorised but ticket not found', async () => {
     process.env.GOD_MODE_TELEGRAM_IDS = '42';
     const deps = buildDeps({
-      getOrCreateTgUser: vi.fn(async () => ({ id: 'u', telegramId: '42', godMode: true })),
+      getOrCreateTgUser: vi.fn(async () => ({ id: 'u', telegramId: '42', godMode: true, telegramChatId: null })),
     });
     shared.supportTicket.findUnique.mockResolvedValueOnce(null);
 

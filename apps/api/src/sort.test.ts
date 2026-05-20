@@ -29,7 +29,7 @@ describe('sortItemsJs', () => {
       item({ id: 'arch', status: 'COMPLETED', priority: 'HIGH' }),
       item({ id: 'active', status: 'AVAILABLE', priority: 'LOW' }),
     ];
-    expect(sortItemsJs(items)[0].id).toBe('active');
+    expect(sortItemsJs(items)[0]!.id).toBe('active');
   });
 
   it('tiebreaks by position ASC within same priority (manual order)', () => {
@@ -46,7 +46,7 @@ describe('sortItemsJs', () => {
       item({ id: 'old', position: 0, createdAt: d('2025-01-01T00:00:00Z') }),
       item({ id: 'new', position: 0, createdAt: d('2026-01-01T00:00:00Z') }),
     ];
-    expect(sortItemsJs(items)[0].id).toBe('new');
+    expect(sortItemsJs(items)[0]!.id).toBe('new');
   });
 
   it('tiebreaks by id DESC when position and createdAt equal', () => {
@@ -55,7 +55,7 @@ describe('sortItemsJs', () => {
       item({ id: 'aaa', position: 0, createdAt: ts }),
       item({ id: 'zzz', position: 0, createdAt: ts }),
     ];
-    expect(sortItemsJs(items)[0].id).toBe('zzz');
+    expect(sortItemsJs(items)[0]!.id).toBe('zzz');
   });
 
   it('position beats createdAt — manual reorder wins over time', () => {
@@ -63,7 +63,7 @@ describe('sortItemsJs', () => {
       item({ id: 'newer-but-bumped-down', position: 100, createdAt: d('2026-06-01T00:00:00Z') }),
       item({ id: 'older-but-on-top', position: 0, createdAt: d('2025-01-01T00:00:00Z') }),
     ];
-    expect(sortItemsJs(items)[0].id).toBe('older-but-on-top');
+    expect(sortItemsJs(items)[0]!.id).toBe('older-but-on-top');
   });
 
   it('unknown/missing priority falls back to rank 1 (treated as LOW)', () => {
@@ -71,7 +71,7 @@ describe('sortItemsJs', () => {
       item({ id: 'unknown', priority: 'UNKNOWN' as unknown as SortableItem['priority'] }),
       item({ id: 'medium', priority: 'MEDIUM' }),
     ];
-    expect(sortItemsJs(items)[0].id).toBe('medium');
+    expect(sortItemsJs(items)[0]!.id).toBe('medium');
   });
 
   it('does not mutate original array', () => {
@@ -97,6 +97,6 @@ describe('sortItemsJs', () => {
       item({ id: 'low-front', priority: 'LOW', position: 0 }),
       item({ id: 'high-back', priority: 'HIGH', position: 999 }),
     ];
-    expect(sortItemsJs(items)[0].id).toBe('high-back');
+    expect(sortItemsJs(items)[0]!.id).toBe('high-back');
   });
 });

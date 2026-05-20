@@ -101,7 +101,13 @@ describe('GET /reservations — reserved-items list', () => {
 
 describe('reservations — entitlement flow integration', () => {
   it('GET /reservations calls getEffectiveEntitlements with godMode flag', async () => {
-    const ent = vi.fn(async () => ({ isPro: false, addOns: [], hasSecretReservations: false, plan: { code: 'FREE' } }));
+    const ent = vi.fn(async () => ({
+      isPro: false,
+      plan: { participants: 1 },
+      addOns: [],
+      hasSecretReservations: false,
+      secretReservations: { unlocked: false, unlockType: null, priceXtr: 24 },
+    }));
     const { app } = makeApp(buildDeps({ getEffectiveEntitlements: ent }));
     await request(app).get('/reservations');
     expect(ent).toHaveBeenCalledWith('u-test', false);
