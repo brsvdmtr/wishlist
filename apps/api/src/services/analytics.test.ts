@@ -1,8 +1,10 @@
 // Unit tests for services/analytics.ts.
 //
-// Both functions are fire-and-forget: writes are awaited via `.catch()` and
-// debug-logged on failure. Tests assert dispatch behaviour (does it call
-// prisma.analyticsEvent.create?) plus the truncation and allowlist contracts.
+// The three helpers (trackEvent, trackAnalyticsEvent, trackProductEvent) are
+// fire-and-forget: writes are awaited via `.catch()` and debug-logged on
+// failure. Tests assert dispatch behaviour (does it call
+// prisma.analyticsEvent.create?), the allowlist + truncation contracts, and
+// PII-key sanitization via the shared sanitizeAnalyticsProps helper.
 //
 // The Prisma client and logger are mocked at module-load time so the tests
 // run in zero-IO mode.

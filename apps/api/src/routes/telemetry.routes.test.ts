@@ -294,4 +294,22 @@ describe('POST /telemetry — PII sanitization', () => {
     const rows = shared.analyticsEvent.createMany.mock.calls[0]![0].data;
     expect(rows[0].props).toEqual({ itemId: 'i1', commentId: 'c1' });
   });
+
+  it('sanitizes every row of a multi-event batch, not just the first', async () => {
+    // The ingest path maps each event through sanitizeAnalyticsProps
+    // independently — a regression that sanitized only events[0] would leak
+    // PII from every later row of the batch. Pin per-row coverage.
+    const res = await request(makeApp()).post('/telemetry').send({
+      events: [
+        { event: 'item_created', ts: Date.now(), props: { wishlistId: 'w1', title: 'first wish' } },
+        { event: 'comment_reply_sent', ts: Date.now(), props: { itemId: 'i2', commentText: 'second secret' } },
+      ],
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, accepted: 2 });
+    const rows = shared.analyticsEvent.createMany.mock.calls[0]![0].data;
+    expect(rows).toHaveLength(2);
+    expect(rows[0].props).toEqual({ wishlistId: 'w1' });
+    expect(rows[1].props).toEqual({ itemId: 'i2' });
+  });
 });

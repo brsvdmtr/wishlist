@@ -25,8 +25,9 @@
      — эндпоинт принимает `props: z.record(z.unknown())`, т.е. **любые** ключи;
   3. legacy-функции `trackEvent` писать строку любой длины — она **не
      truncate'ила** props вообще.
-- **Дублирование:** логика truncate (300 символов/строка + 1024 байта суммарно)
-  была **скопирована в 4 местах** и могла разойтись.
+- **Дублирование:** логика truncate (300 символов/строка + 1024 символа
+  суммарно — это `String.length`, UTF-16 code units, не байты) была
+  **скопирована в 4 местах** и могла разойтись.
 - **Фикс:** единый помощник `sanitizeAnalyticsProps()` в `@wishlist/shared`
   — он (а) **выкидывает ключи с пользовательским контентом** по denylist'у имён,
   (б) truncate'ит. Вызывается на **каждом** write-пути в `AnalyticsEvent`.
@@ -67,7 +68,8 @@ ad-hoc в god-mode. Контент пользователя там не нуже
 | 3 | `trackProductEvent` (`PRODUCT_EVENTS` typed) | services/analytics.ts | ✅ inline | ❌ нет |
 | 4 | `POST /tg/telemetry` (клиентский батч) | [routes/telemetry.routes.ts](../../apps/api/src/routes/telemetry.routes.ts) | ✅ inline | ❌ нет |
 | 5 | `trackProductEvent` / `_rawEmit` (бот) | [apps/bot/src/analytics.ts](../../apps/bot/src/analytics.ts) | ✅ inline / ❌ | ❌ нет |
-| 6 | прямые `prisma.analyticsEvent.create` (бот `/start`) | [apps/bot/src/index.ts](../../apps/bot/src/index.ts) | ❌ нет | ❌ нет |
+| 6 | прямые `prisma.analyticsEvent.create` ×4 (бот: `bot.start_received` + 3 × `referral.*`) | [apps/bot/src/index.ts](../../apps/bot/src/index.ts) | ❌ нет | ❌ нет |
+| 7 | прямой `prisma.analyticsEvent.create` (error-rate middleware) | [apps/api/src/index.ts](../../apps/api/src/index.ts) | — (без props) | — (без props) |
 
 Фронтенд (`MiniApp.tsx:5650` `trackEvent` → `telemetryBufferRef` → flush) сам
 **ничего не персистит** — он лишь буферизует и шлёт на путь #4. Поэтому
@@ -89,12 +91,17 @@ ad-hoc в god-mode. Контент пользователя там не нуже
 | `gift_occasion_created` | gift-notes.routes.ts:223 | `type, source` | ✅ чисто |
 | `birthday.custom_message_saved` | me.routes.ts:674 | `{}` | ✅ пустые props |
 | `onboarding_manual_submitted` | MiniApp.tsx:6394 | `title_length`, `has_price` | ✅ длина, не title |
-| `dont_gift_saved` | MiniApp.tsx:10215 | `presets, custom, hasComment` | ✅ `hasComment` — boolean |
+| `dont_gift_saved` | me.routes.ts:1234 | `presetCount, customItemCount, hasComment, visible` | ✅ только счётчики/boolean |
 | `bot.start_received` | apps/bot/src/index.ts:655 | `telegramId, hasStartParam, startParam` | ✅ deeplink-параметр, не контент |
+| `referral.fraud_resolved` | admin.routes.ts:609/632 | `attributionId, decision, fraudScore, rewardResult, adminNote` | ⚠️ `adminNote` — **свободный текст админа**; добавлен в denylist |
 
-**Вывод:** кодовая база уже дисциплинирована — везде пишутся **производные
+**Вывод:** кодовая база почти дисциплинирована — везде пишутся **производные
 сигналы** (длина, boolean, хэш, id), а не сырой текст. `search.*` явно
 проектировался privacy-first (комментарий в `analyticsEvents.ts:202`).
+**Единственное исключение** — `adminNote` в `referral.fraud_resolved`
+(админское решение по реферал-фроду): свободный текст, набранный админом. Это
+не *пользовательский* контент, но всё же сырой текст — поэтому `adminnote`
+добавлен в `ANALYTICS_PII_PROP_KEYS` и в таблицу больше не попадает.
 
 Но эта дисциплина **нигде не проверяется**. Один невнимательный
 `trackEvent('item_created', uid, { title })` — и контент в таблице. Именно эту
@@ -116,11 +123,12 @@ sanitizeAnalyticsProps(props): Record<string, unknown> | undefined
 1. **Выкидывает PII-ключи.** `ANALYTICS_PII_PROP_KEYS` — denylist имён
    (case-insensitive, сравнение по `key.toLowerCase()`): `title`,
    `description`, `comment*`, `hint*`, `query`/`searchText`/…, `text`, `body`,
-   `message`, `note(s)`, `answerText`, `bio`, `caption`, `feedback`, `name` /
-   `firstName` / `lastName` / … Значение такого ключа **не пишется вообще**
-   (drop, не хэш — хэш названия желания аналитике бесполезен; если нужен
-   хэшированный сигнал — он считается явно на call-site, как
-   `normalizedQueryHash` в `search.routes.ts`).
+   `message`, `note(s)`, `adminNote`, `answerText`, `bio`, `caption`,
+   `feedback`, `content`, `input`, `subject`, `summary`, `name` /
+   `firstName` / `lastName` / `displayName`, `address`, `city`. Значение
+   такого ключа **не пишется вообще** (drop, не хэш — хэш названия желания
+   аналитике бесполезен; если нужен хэшированный сигнал — он считается явно
+   на call-site, как `normalizedQueryHash` в `search.routes.ts`).
 2. **Truncate.** Строки > 300 символов режутся до `300 + '...'`; если весь
    объект сериализуется > 1024 символов — заменяется на `{ _truncated: true }`.
    Эта логика раньше дублировалась в 4 местах — теперь одна.
@@ -150,11 +158,17 @@ Allowlist ключей был бы строже, но потребовал бы 
 | `apps/bot/src/analytics.ts` | `trackProductEvent` + `_rawEmit` переведены на общий помощник |
 | `*.test.ts` | юнит-тесты помощника + wiring-тесты в `analytics.test.ts` и `telemetry.routes.test.ts` |
 
-Прямые `prisma.analyticsEvent.create` в `apps/bot/src/index.ts` (#6) **не
-тронуты намеренно**: они пишут только `telegramId / hasStartParam / startParam /
-refCode / inviterUserId / kind` — короткие контролируемые поля без свободного
-текста; протаскивать туда помощник = непропорциональный диф в 20k-строчном
-файле. Зафиксировано здесь как осознанное исключение.
+Прямые `prisma.analyticsEvent.create` в `apps/bot/src/index.ts` (#6 — четыре
+вызова: `bot.start_received` + три `referral.*` события, включая
+`referral.bot_notification_sent`) и `apps/api/src/index.ts` (#7) **не тронуты
+намеренно**. #6 пишет только не-свободнотекстовые поля — `telegramId /
+hasStartParam / refCode / hasInviter / inviterUserId / kind / type` (id, boolean,
+enum) и `startParam`: это `?start=` deep-link токен, формат ограничен Telegram
+(`[A-Za-z0-9_-]`, ограниченная длина), не свободный текст. #7 (error-rate
+middleware) не пишет `props` вообще. Протаскивать помощник в 20k-строчные
+`index.ts` = непропорциональный диф ради no-op. Зафиксировано здесь как
+осознанное исключение; хедер `sanitizeAnalyticsProps.ts` перечисляет ровно этот
+covered/not-covered набор.
 
 ---
 

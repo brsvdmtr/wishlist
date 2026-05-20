@@ -12,17 +12,18 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 const dbMocks = vi.hoisted(() => ({
   userProfileFindUnique: vi.fn(),
   paymentEventCount: vi.fn(),
+  analyticsEventCreate: vi.fn(),
 }));
 
 vi.mock('@wishlist/db', () => ({
   prisma: {
-    analyticsEvent: { create: vi.fn().mockResolvedValue({}) },
+    analyticsEvent: { create: dbMocks.analyticsEventCreate },
     userProfile: { findUnique: dbMocks.userProfileFindUnique },
     paymentEvent: { count: dbMocks.paymentEventCount },
   },
 }));
 
-import { emitPaymentAnalytics, __setEmitters, __resetEmitters } from './analytics';
+import { emitPaymentAnalytics, trackProductEvent, productionRawEmit, __setEmitters, __resetEmitters } from './analytics';
 
 let productEmit: ReturnType<typeof vi.fn>;
 let rawEmit: ReturnType<typeof vi.fn>;
@@ -33,6 +34,8 @@ beforeEach(() => {
   __setEmitters({ product: productEmit, raw: rawEmit });
   dbMocks.userProfileFindUnique.mockReset();
   dbMocks.paymentEventCount.mockReset();
+  dbMocks.analyticsEventCreate.mockReset();
+  dbMocks.analyticsEventCreate.mockResolvedValue({});
   // Default: user has no referrer + no prior paid events. Individual tests
   // override.
   dbMocks.userProfileFindUnique.mockResolvedValue({ referredByUserId: null });
@@ -282,6 +285,66 @@ describe('emitPaymentAnalytics — privacy', () => {
       const serialised = JSON.stringify(props);
       expect(serialised).not.toContain('CONFIDENTIAL_TG_ID');
       expect(serialised).not.toContain('SESSION_UUID');
+    }
+  });
+});
+
+describe('trackProductEvent — PII sanitization on the real prisma path', () => {
+  // The emitPaymentAnalytics tests above run through swapped vi.fn() emit
+  // seams, so they never exercise the real sanitizeAnalyticsProps wiring.
+  // These call the REAL exported trackProductEvent straight through to the
+  // mocked prisma.analyticsEvent.create — pinning the bot-side wiring.
+  it('drops user-content keys before persisting', () => {
+    trackProductEvent({
+      event: 'paywall.viewed',
+      userId: 'u1',
+      props: { plan: 'monthly', title: 'My private wish', note: 'freeform text' },
+    });
+    expect(dbMocks.analyticsEventCreate).toHaveBeenCalledOnce();
+    expect(dbMocks.analyticsEventCreate.mock.calls[0]![0].data.props).toEqual({ plan: 'monthly' });
+  });
+
+  it('truncates an over-long string prop', () => {
+    trackProductEvent({ event: 'paywall.viewed', userId: 'u1', props: { reason: 'x'.repeat(500) } });
+    const props = dbMocks.analyticsEventCreate.mock.calls[0]![0].data.props as Record<string, unknown>;
+    expect((props.reason as string).length).toBe(303);
+  });
+
+  it('productionRawEmit (the _rawEmit default) strips PII keys before persisting', () => {
+    productionRawEmit({
+      event: 'referral.invitee_converted_to_paid',
+      userId: 'u1',
+      props: { inviterUserId: 'inviter_42', planCode: 'PRO', title: 'leak', note: 'leak' },
+    });
+    expect(dbMocks.analyticsEventCreate).toHaveBeenCalledOnce();
+    expect(dbMocks.analyticsEventCreate.mock.calls[0]![0].data.props).toEqual({
+      inviterUserId: 'inviter_42',
+      planCode: 'PRO',
+    });
+  });
+});
+
+describe('emitPaymentAnalytics — real emit seams reach prisma sanitized', () => {
+  it('writes payment.completed / pro.activated / referral.* via the real trackProductEvent + _rawEmit', async () => {
+    __resetEmitters(); // undo beforeEach's spy swap — exercise the real emitters
+    dbMocks.userProfileFindUnique.mockResolvedValue({ referredByUserId: 'inviter_42' });
+    dbMocks.paymentEventCount.mockResolvedValue(0);
+
+    await emitPaymentAnalytics({
+      userId: 'u1',
+      payload: basePayload,
+      planCode: 'PRO',
+      billingPeriod: 'monthly',
+      hadActivePriorSub: false,
+    });
+
+    const events = dbMocks.analyticsEventCreate.mock.calls.map((c) => c[0].data.event);
+    expect(events).toContain('payment.completed');
+    expect(events).toContain('pro.activated');
+    expect(events).toContain('referral.invitee_converted_to_paid');
+    // Every persisted row's props must be a plain serializable object.
+    for (const call of dbMocks.analyticsEventCreate.mock.calls) {
+      expect(() => JSON.stringify(call[0].data.props)).not.toThrow();
     }
   });
 });

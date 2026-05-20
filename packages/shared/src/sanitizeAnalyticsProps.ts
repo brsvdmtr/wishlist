@@ -1,11 +1,20 @@
 // Defense-in-depth sanitizer for `AnalyticsEvent.props`.
 //
-// Every write path into the AnalyticsEvent table runs props through this
-// helper before persistence:
+// Every analytics helper — and the POST /tg/telemetry client-ingest route —
+// runs props through this helper before persistence:
 //   - apps/api/src/services/analytics.ts      — trackEvent / trackAnalyticsEvent
 //                                                / trackProductEvent
 //   - apps/api/src/routes/telemetry.routes.ts  — POST /tg/telemetry ingest
 //   - apps/bot/src/analytics.ts                — trackProductEvent / _rawEmit
+//
+// NOT covered, by deliberate scoping (docs/research/analytics-pii-audit.md §5):
+// the direct `prisma.analyticsEvent.create` calls in apps/api/src/index.ts
+// (error-rate middleware — writes no `props` at all) and the four direct
+// calls in apps/bot/src/index.ts (`bot.start_received` + three `referral.*`
+// events). The bot calls write only non-free-text fields — ids, enums,
+// booleans, and `startParam` (the Telegram-format-constrained `?start=`
+// deep-link token: bounded length, [A-Za-z0-9_-], not free text). No user
+// free text reaches those paths.
 //
 // It does two things:
 //
@@ -34,7 +43,11 @@
 /** Per-string length cap. Longer string values are sliced + '...'-suffixed. */
 export const ANALYTICS_PROP_MAX_STRING_LEN = 300;
 
-/** Total serialized-length cap. Over this, props collapse to `{ _truncated: true }`. */
+/**
+ * Total serialized-length cap — `JSON.stringify(...).length`, i.e. UTF-16
+ * code units, NOT bytes. Over this, props collapse to `{ _truncated: true }`.
+ * Don't size a DB column off this constant.
+ */
 export const ANALYTICS_PROPS_MAX_SERIALIZED_LEN = 1024;
 
 /**
@@ -56,11 +69,13 @@ export const ANALYTICS_PII_PROP_KEYS: ReadonlySet<string> = new Set<string>([
   'hint', 'hinttext', 'hintmessage',
   // search
   'query', 'searchquery', 'searchtext', 'rawquery', 'searchterm',
-  // freeform notes / messages / captions / bios
-  'text', 'body', 'message', 'custommessage', 'note', 'notes',
+  // freeform notes / messages / captions / bios / generic free text
+  'text', 'body', 'message', 'custommessage', 'note', 'notes', 'adminnote',
   'giftnote', 'giftnotetext', 'answertext', 'bio', 'caption', 'feedback',
-  // person names (freeform PII)
+  'content', 'input', 'subject', 'summary',
+  // person names + contact / location PII
   'name', 'firstname', 'lastname', 'fullname', 'displayname',
+  'address', 'city',
 ]);
 
 /**
@@ -80,13 +95,26 @@ export function sanitizeAnalyticsProps(
   for (const [key, value] of Object.entries(props)) {
     // Drop PII keys outright — analytics never needs the raw content.
     if (ANALYTICS_PII_PROP_KEYS.has(key.toLowerCase())) continue;
+    // Per-value cap applies to strings only. Non-string values (arrays,
+    // nested objects) are not truncated individually — they rely on the
+    // total serialized-size cap below as the backstop.
     cleaned[key] =
       typeof value === 'string' && value.length > ANALYTICS_PROP_MAX_STRING_LEN
         ? value.slice(0, ANALYTICS_PROP_MAX_STRING_LEN) + '...'
         : value;
   }
 
-  if (JSON.stringify(cleaned).length > ANALYTICS_PROPS_MAX_SERIALIZED_LEN) {
+  // Total-size cap. JSON.stringify throws on circular references and BigInt
+  // values — analytics props should never contain those, but this helper is
+  // a defensive layer and must never throw into its (fire-and-forget) callers,
+  // so a non-serializable props object collapses to the truncation marker.
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(cleaned);
+  } catch {
+    return { _truncated: true };
+  }
+  if (serialized.length > ANALYTICS_PROPS_MAX_SERIALIZED_LEN) {
     return { _truncated: true };
   }
   return cleaned;
