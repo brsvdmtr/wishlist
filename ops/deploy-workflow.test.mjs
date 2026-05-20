@@ -36,24 +36,43 @@ test('deploy.yml sources PREV_SHA from the last-successful-release marker', () =
     /last-successful-release/,
     'deploy.yml must reference the .deploy/last-successful-release marker',
   );
-  // PREV_SHA must be read FROM the marker file — not solely from
-  // `git rev-parse HEAD`, which advances on a failed deploy.
+  // PREV_SHA must be assigned FROM the marker file. Match loosely — don't
+  // pin the exact command (tr/cat/sed), only that the marker feeds PREV_SHA,
+  // so a correct refactor doesn't trip a false failure.
   assert.match(
     DEPLOY_YML,
-    /PREV_SHA=\$\(tr [^\n]*RELEASE_MARKER/,
+    /PREV_SHA=[^\n]*RELEASE_MARKER/,
     'PREV_SHA must be sourced from the release-marker file',
   );
 });
 
-test('deploy.yml writes the release marker in both success branches', () => {
+test('deploy.yml writes the release marker only after deploy success, in both branches', () => {
   // NEW_SHA must be persisted to the marker after a deploy succeeds, so the
   // next run (including a retry) has a correct changed-detection baseline.
   // One write in the "no service-level changes" branch, one in the
   // "rebuilt services" branch — both are successful-deploy exits.
-  const writes = DEPLOY_YML.match(/echo "\$NEW_SHA" > "\$RELEASE_MARKER"/g) || [];
+  const writes = [...DEPLOY_YML.matchAll(/echo "\$NEW_SHA" > "\$RELEASE_MARKER"/g)];
   assert.ok(
     writes.length >= 2,
     `marker must be written in both success branches; found ${writes.length}`,
+  );
+
+  // Ordering guard — this is what actually catches a re-introduction of the
+  // bug. A marker write moved ABOVE `docker compose build` / the health
+  // check would advance the baseline even when the deploy never succeeded.
+  const noBuildIdx = DEPLOY_YML.indexOf('up -d --no-build api bot');
+  const healthCheckIdx = DEPLOY_YML.indexOf('curl -sf http://localhost:3001/health');
+  assert.notStrictEqual(noBuildIdx, -1, 'no-build recreate line must exist');
+  assert.notStrictEqual(healthCheckIdx, -1, 'health-check line must exist');
+  // Branch 1 (no service-level changes): marker write after the recreate.
+  assert.ok(
+    writes[0].index > noBuildIdx,
+    'no-build branch must write the marker after recreating containers',
+  );
+  // Branch 2 (rebuilt): marker write after the health check passes.
+  assert.ok(
+    writes[writes.length - 1].index > healthCheckIdx,
+    'rebuild branch must write the marker after the health check',
   );
 });
 
@@ -61,11 +80,11 @@ test('deploy.yml keeps git HEAD only as the fallback for PREV_SHA', () => {
   // `git rev-parse HEAD` may remain — but only as the fallback when the
   // marker is missing/invalid (first run after this change). Require the
   // marker-based read to appear before the HEAD fallback in the script.
-  const markerIdx = DEPLOY_YML.indexOf('PREV_SHA=$(tr');
+  const markerReadIdx = DEPLOY_YML.search(/PREV_SHA=[^\n]*RELEASE_MARKER/);
   const fallbackIdx = DEPLOY_YML.indexOf('PREV_SHA=$(git rev-parse HEAD)');
-  assert.notStrictEqual(markerIdx, -1, 'marker-based PREV_SHA assignment must exist');
+  assert.notStrictEqual(markerReadIdx, -1, 'marker-based PREV_SHA assignment must exist');
   assert.ok(
-    fallbackIdx === -1 || markerIdx < fallbackIdx,
+    fallbackIdx === -1 || markerReadIdx < fallbackIdx,
     'the marker read must precede the git-HEAD fallback',
   );
 });

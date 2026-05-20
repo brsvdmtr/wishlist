@@ -189,7 +189,9 @@ callsite'ов. Каждый слой тестирует контракт «на 
 //        'user.session_started' → rollup-колонка sessionStarted мёртвая.
 
 // ✅ После: единое зеркало в trackEvent — покрывает все 21 ветку
-//          deep-link'ов разом, инвариант 1:1 by construction.
+//          deep-link'ов разом; bootstrap_succeeded ↔ session_started
+//          1:1 by construction (каждый app-open = одно событие; rollup
+//          суммирует их в sessionStarted как и все прочие COUNTER_FIELDS).
 if (event === 'miniapp.bootstrap_succeeded') {
   telemetryBufferRef.current.push({
     event: 'user.session_started',

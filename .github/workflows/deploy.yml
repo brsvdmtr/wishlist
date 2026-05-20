@@ -60,12 +60,19 @@ jobs:
             # success (the stale image keeps running). Source it instead from
             # the .deploy/last-successful-release marker — the same file
             # ops/deploy.sh writes and ops/rollback.sh reads — which is updated
-            # only after a deploy fully succeeds.
+            # only after a deploy fully succeeds. Worst case the marker is
+            # stale (points further back than reality): the diff range is then
+            # too wide and over-rebuilds — slower, but never under-rebuilds.
+            # That asymmetry is deliberate — an over-rebuild is safe, a skipped
+            # rebuild is the bug this fix exists to prevent.
             DEPLOY_DIR=/opt/wishlist/.deploy
             RELEASE_MARKER="$DEPLOY_DIR/last-successful-release"
             mkdir -p "$DEPLOY_DIR"
             PREV_SHA=""
             if [ -f "$RELEASE_MARKER" ]; then
+              # `[:space:]` is a tr character class — this strips the trailing
+              # newline echo wrote plus any stray whitespace. Do not "simplify"
+              # to `tr -d '\n'`: a hand-edited marker may carry other blanks.
               PREV_SHA=$(tr -d '[:space:]' < "$RELEASE_MARKER")
             fi
             if [ -n "$PREV_SHA" ] && git rev-parse --verify --quiet "${PREV_SHA}^{commit}" >/dev/null; then

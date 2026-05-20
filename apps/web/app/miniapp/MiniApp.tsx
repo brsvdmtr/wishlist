@@ -5660,19 +5660,20 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     telemetryBufferRef.current.push(entry);
     // eslint-disable-next-line no-console
     if (process.env.NODE_ENV === 'development') console.log(`[telemetry] ${event}`, entry.props);
-    // Every successful bootstrap is one "user opened the app today" — mirror to
-    // the canonical PRODUCT_EVENT so the daily-activity rollup
+    // Mirror every successful bootstrap (one app-open) to the canonical
+    // session-start PRODUCT_EVENT, so the daily-activity rollup
     // (services/daily-activity.service.ts → UserDailyActivity.sessionStarted)
-    // has a feed. Server resolves userId from req.tgUser.id (telemetry.routes.ts);
-    // client never sends a userId.
+    // gets a feed. One mirror here covers every bootstrap_succeeded callsite.
+    // Reuse `entry` so the mirror carries the identical prop shape
+    // (bootSessionId, durationMs, anything trackEvent injects later) — only
+    // the event name and a fresh clientEventId differ, keeping a single
+    // prop-construction path. Server resolves userId from req.tgUser.id
+    // (telemetry.routes.ts); the client never sends one.
     if (event === 'miniapp.bootstrap_succeeded') {
       telemetryBufferRef.current.push({
+        ...entry,
         event: 'user.session_started',
-        ts: Date.now(),
-        props: {
-          bootSessionId: bootSessionIdRef.current,
-          clientEventId: crypto.randomUUID(),
-        },
+        props: { ...entry.props, clientEventId: crypto.randomUUID() },
       });
     }
   }, []);
