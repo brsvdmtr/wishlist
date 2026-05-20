@@ -32,6 +32,42 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-05-20 — URL-import credit counter + quota upsell approved
+
+**Type:** approval
+
+**Decision.** `mockups/proposed/url-import-credit-counter.html` is approved
+and promoted to `mockups/approved/`. It is the visual contract for the
+URL-import credit model: a per-month free-import counter under the URL field
+on the Drafts screen, and a quota-exhausted upsell sheet. The sheet
+emphasises the `import_pack_10` pack as the **hero** option (accent border +
+accent price chip, listed first); WishBoard PRO is the secondary card; "add
+manually — free" is a ghost button so a Free user never hits a hard wall.
+
+**Context / why.** URL import was a hard 402 PRO gate — the 2026-05-19
+monetization audit (`docs/research/03-monetization-paywall-audit.md`) named
+it the single most activation-damaging paywall and recommended 5 free imports
+per month. The counter escalates by tone with the remaining quota:
+accent-soft (≥2 left) → amber (1 left) → danger + tappable (0 left). PRO
+shows no counter — only a quiet "import without limit" line. Pack-as-hero
+follows the audit's low-friction-impulse-buy reasoning (solo-owner decision).
+
+**Supersedes.** The old hard-gated URL input in `MiniApp.tsx` (ProBadge
+overlay + PRO-only placeholder + `showUpsell` on tap for Free users).
+
+**Impact.**
+- Mockup moved `proposed/` → `approved/url-import-credit-counter.html`.
+- Mini App: the Drafts-screen URL input unlocks for Free users with quota;
+  new counter element; `import_quota_exhausted` 402 handling; the
+  `url_import` upsell gains a quota-exhausted variant + "add manually" exit.
+- Built from existing v2.1 tokens + primitive composition — no new
+  primitive, no new token.
+- Backend already shipped (`services/import-credits.ts`, 2026-05-20).
+
+**Approved by.** Dmitry (solo-owner decision, 2026-05-20).
+
+---
+
 ## 2026-05-16 — Global Search screen approved (mockup → ship)
 
 **Type:** approval

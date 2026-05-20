@@ -23,6 +23,7 @@ import { SurveyScreen } from './screens/survey/SurveyScreen';
 import type { SearchResult, AccessViewResponse } from './lib/searchApi';
 import { recordWishlistOpen, fetchAccessView } from './lib/searchApi';
 import { ProBadge } from './components/ProBadge';
+import { ImportQuotaCounter } from './components/ImportQuotaCounter';
 import { SantaHatOverlay } from './components/SantaHatOverlay';
 import { SnowflakeOverlay } from './components/SnowflakeOverlay';
 import { SantaAvatar, santaAliasHue } from './components/SantaAvatar';
@@ -292,7 +293,7 @@ type AddOnsInfo = {
   extraItemsPerWishlist?: Record<string, number>;
   smartReservationsWishlists?: string[];
 };
-type CreditsInfo = { hintCredits: number; importCredits: number };
+type CreditsInfo = { hintCredits: number; importCredits: number; freeImportsUsed?: number; freeImportsLimit?: number };
 
 // SKU descriptor from server
 type SkuInfo = { code: string; price: number; type: string; targetRequired: boolean };
@@ -3466,7 +3467,7 @@ function getAddonOffers(locale: Locale): Record<string, { title: string; tag: st
 // PRO UPSELL SHEET (context-aware)
 // ═══════════════════════════════════════════════════════
 
-function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon, addonCheckoutLoading, addonLoadingSku, availableSkus, cappedAddonCodes, locale, referralConfig, onOpenReferral, onReferralImpression }: {
+function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon, addonCheckoutLoading, addonLoadingSku, availableSkus, cappedAddonCodes, locale, referralConfig, onOpenReferral, onReferralImpression, onAddManually, freeImportsLimit }: {
   state: UpsellSheetState;
   onClose: () => void;
   onUpgrade: (plan: 'monthly' | 'yearly' | 'lifetime') => void;
@@ -3487,6 +3488,10 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
   } | null;
   onOpenReferral: () => void;
   onReferralImpression: (context: string) => void;
+  /** Closes the upsell and opens a blank manual item form — the no-cost exit. */
+  onAddManually: () => void;
+  /** FREE monthly URL-import allowance, for the quota-exhausted sheet copy. */
+  freeImportsLimit: number;
 }) {
   const content = state ? getUpsellContent(locale)[state.context] : null;
   // Lifetime tile renders in EVERY paywall sheet — context-driven feature-gates
@@ -3502,6 +3507,9 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
   // Default selection stays `yearly` so no accidental upsell; CTA copy adapts to
   // the chosen plan (gold gradient + "Купить навсегда" only when lifetime is picked).
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly' | 'lifetime'>('yearly');
+  // The url_import paywall has two views: 'options' = focused pack/PRO/manual
+  // sheet; 'pro' = the full PRO plan picker (reached by tapping the PRO option).
+  const [quotaView, setQuotaView] = useState<'options' | 'pro'>('options');
   const monthlyPrice = PRO_PRICE_MONTHLY_STARS;
   const yearlyPrice = PRO_PRICE_YEARLY_STARS;
   const lifetimePrice = PRO_PRICE_LIFETIME_STARS;
@@ -3523,6 +3531,10 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
     paywallImpressionFiredRef.current = key;
     onReferralImpression(key);
   }, [state, referralConfig, onReferralImpression]);
+
+  // Reset the url_import quota sheet to its focused options view whenever the
+  // sheet (re)opens or its context changes.
+  useEffect(() => { setQuotaView('options'); }, [state?.context]);
 
   // Group PRO benefits into 3 sections per approved v2-paywall mockup:
   //   - "Новое в PRO": isNew && !resSection (showcase, secret-res, curated, don't-gift)
@@ -3581,6 +3593,104 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
         ? t('paywall_cta_yearly', locale, { price: String(ctaPrice) })
         : t('paywall_cta_monthly', locale, { price: String(ctaPrice) });
   const isLifetimeCta = selectedPlan === 'lifetime';
+
+  // ── url_import — focused quota-exhausted sheet ──
+  // The url_import paywall only ever fires on import_quota_exhausted (Free
+  // users with quota import directly). Lead with the import pack; tapping PRO
+  // expands the full plan picker; "add manually" is the no-cost exit.
+  if (state && state.context === 'url_import' && quotaView === 'options') {
+    const packSku = availableSkus.find((s) => s.code === 'import_pack_10');
+    const packOffer = getAddonOffers(locale).import_pack_10!;
+    const packBusy = addonCheckoutLoading && addonLoadingSku === 'import_pack_10';
+    return (
+      <BottomSheet isOpen={state !== null} onClose={onClose}>
+        <div style={{ padding: '4px 4px 8px' }}>
+          <div style={{
+            width: 64, height: 64, borderRadius: '50%', margin: '2px auto 14px',
+            background: 'var(--wb-accent-soft)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', fontSize: 30,
+          }}>🔗</div>
+          <div style={{
+            fontSize: 19, fontWeight: 650, letterSpacing: '-0.025em',
+            textAlign: 'center', marginBottom: 6, color: 'var(--wb-text)',
+          }}>{t('import_quota_title', locale)}</div>
+          <div style={{
+            fontSize: 13, fontWeight: 500, lineHeight: 1.45, textAlign: 'center',
+            color: 'var(--wb-text-secondary)', margin: '0 auto 18px', maxWidth: 300,
+          }}>{t('import_quota_subtitle', locale, { limit: String(freeImportsLimit) })}</div>
+
+          {/* Hero — import pack (the low-friction option) */}
+          <button
+            type="button"
+            onClick={() => onBuyAddon('import_pack_10')}
+            disabled={addonCheckoutLoading}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 12,
+              padding: 14, borderRadius: 18, marginBottom: 10, textAlign: 'left',
+              background: 'var(--wb-accent-soft)',
+              border: '1px solid var(--wb-accent-soft-strong)',
+              cursor: 'pointer', fontFamily: font, color: 'var(--wb-text)',
+            }}
+          >
+            <span style={{
+              width: 42, height: 42, borderRadius: 12, flexShrink: 0,
+              background: 'var(--wb-accent-soft)', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', fontSize: 20,
+            }}>📦</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 15, fontWeight: 650, letterSpacing: '-0.01em' }}>{packOffer.title}</span>
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--wb-text-muted)', marginTop: 3 }}>{packOffer.tag}</span>
+            </span>
+            <span style={{
+              flexShrink: 0, fontSize: 14, fontWeight: 700,
+              padding: '7px 11px', borderRadius: 11,
+              background: 'var(--wb-accent)', color: 'var(--wb-text)',
+            }}>{packBusy ? '…' : `${packSku?.price ?? 39} ⭐`}</span>
+          </button>
+
+          {/* Secondary — PRO (taps through to the full plan picker) */}
+          <button
+            type="button"
+            onClick={() => setQuotaView('pro')}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 12,
+              padding: 14, borderRadius: 18, marginBottom: 10, textAlign: 'left',
+              background: 'var(--wb-card-strong)', border: '1px solid var(--wb-border)',
+              cursor: 'pointer', fontFamily: font, color: 'var(--wb-text)',
+            }}
+          >
+            <span style={{
+              width: 42, height: 42, borderRadius: 12, flexShrink: 0,
+              background: 'var(--wb-accent-soft)', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', fontSize: 20,
+            }}>💜</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 15, fontWeight: 650, letterSpacing: '-0.01em' }}>WishBoard PRO</span>
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--wb-text-muted)', marginTop: 3 }}>{t('import_quota_pro_sub', locale)}</span>
+            </span>
+            <span style={{
+              flexShrink: 0, fontSize: 14, fontWeight: 700,
+              padding: '7px 11px', borderRadius: 11,
+              background: 'var(--wb-surface)', border: '1px solid var(--wb-border-light)',
+            }}>{`${PRO_PRICE_MONTHLY_STARS} ⭐`}</span>
+          </button>
+
+          {/* No-cost exit — add the wish by hand */}
+          <button
+            type="button"
+            onClick={onAddManually}
+            style={{
+              width: '100%', height: 50, borderRadius: 18, marginTop: 6,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'var(--wb-surface)', border: '1px solid var(--wb-border-light)',
+              fontSize: 15, fontWeight: 650, color: 'var(--wb-text)',
+              cursor: 'pointer', fontFamily: font,
+            }}
+          >{t('import_quota_manual', locale)}</button>
+        </div>
+      </BottomSheet>
+    );
+  }
 
   return (
     <BottomSheet isOpen={state !== null} onClose={onClose}>
@@ -7057,20 +7167,27 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         idempotency: { action: `import.url:${url}` },
       });
       if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string; feature?: string };
         if (res.status === 402) {
-          const body = await res.json().catch(() => ({})) as { feature?: string };
-          if (body.feature === 'url_import') {
+          // Monthly free quota + paid credits both exhausted → quota upsell.
+          if (body.error === 'import_quota_exhausted' || body.feature === 'url_import') {
             showUpsell('url_import', { auto: true });
-          } else if (planInfo.code === 'FREE') {
-            showUpsell('item_limit', { auto: true });
           } else {
-            pushToast(t('toast_plan_limit', locale), 'error');
+            // Drafts-capacity 402 or any other plan limit — surface the message.
+            pushToast(body.error || t('toast_plan_limit', locale), 'error');
           }
           return;
         }
-        const body = await res.json().catch(() => ({})) as { error?: string };
         pushToast(body.error || t('toast_url_error', locale), 'error');
         return;
+      }
+      // Reflect the consumed credit in the live counter (server-authoritative).
+      const okBody = await res.json().catch(() => null) as
+        | { importQuota?: { importCredits: number; freeImportsUsed: number; freeImportsLimit: number } }
+        | null;
+      if (okBody?.importQuota) {
+        const q = okBody.importQuota;
+        setCredits((c) => ({ ...c, importCredits: q.importCredits, freeImportsUsed: q.freeImportsUsed, freeImportsLimit: q.freeImportsLimit }));
       }
       setImportUrl('');
       // Reload drafts + wishlists (to update drafts count)
@@ -14348,42 +14465,50 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </div>
           )}
 
-          {/* URL input — hidden in select mode, with PRO badge for FREE users */}
-          {!draftsSelectMode && (
-            <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-              <div style={{ position: 'relative', flex: 1 }}>
-                <input
-                  style={{ ...inputStyle, flex: 1, paddingRight: planInfo.code === 'FREE' ? 52 : 16 }}
-                  placeholder={planInfo.code === 'FREE' ? t('drafts_url_pro_placeholder', locale) : t('drafts_url_placeholder', locale)}
-                  value={importUrl}
-                  onChange={(e) => setImportUrl(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      if (planInfo.code === 'FREE') { showUpsell('url_import'); return; }
-                      void handleImportUrl();
-                    }
-                  }}
+          {/* URL import row + monthly free-import quota counter.
+              FREE users import directly while quota or paid credits remain;
+              once exhausted, the input + counter route into the upsell. */}
+          {!draftsSelectMode && (() => {
+            const isProUser = planInfo.code !== 'FREE';
+            const freeImportLimit = credits.freeImportsLimit ?? 5;
+            const freeImportLeft = Math.max(0, freeImportLimit - (credits.freeImportsUsed ?? 0));
+            const paidImportLeft = credits.importCredits;
+            const canImportUrl = isProUser || freeImportLeft > 0 || paidImportLeft > 0;
+            const startImport = () => {
+              if (!canImportUrl) { showUpsell('url_import'); return; }
+              void handleImportUrl();
+            };
+            return (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    style={{ ...inputStyle, flex: 1 }}
+                    placeholder={t('drafts_url_placeholder', locale)}
+                    value={importUrl}
+                    onChange={(e) => setImportUrl(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') startImport(); }}
+                  />
+                  <Button
+                    variant="primary-gradient"
+                    fullWidth={false}
+                    style={{ width: 48, minWidth: 48, padding: 0 }}
+                    onClick={startImport}
+                    disabled={!importUrl.trim() || importLoading}
+                  >
+                    {importLoading ? '…' : '📥'}
+                  </Button>
+                </div>
+                <ImportQuotaCounter
+                  isPro={isProUser}
+                  freeLeft={freeImportLeft}
+                  freeLimit={freeImportLimit}
+                  paidLeft={paidImportLeft}
+                  locale={locale}
+                  onUpsell={() => showUpsell('url_import')}
                 />
-                {planInfo.code === 'FREE' && (
-                  <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)' }}>
-                    <ProBadge />
-                  </span>
-                )}
               </div>
-              <Button
-                variant="primary-gradient"
-                fullWidth={false}
-                style={{ width: 48, minWidth: 48, padding: 0 }}
-                onClick={() => {
-                  if (planInfo.code === 'FREE') { showUpsell('url_import'); return; }
-                  void handleImportUrl();
-                }}
-                disabled={!importUrl.trim() || importLoading}
-              >
-                {importLoading ? '…' : '📥'}
-              </Button>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Draft items list — <Card variant="interactive"> tiles with selection state. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -26191,6 +26316,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         addonLoadingSku={addonLoadingSku}
         availableSkus={availableSkus}
         cappedAddonCodes={cappedAddonCodes}
+        onAddManually={() => {
+          setUpsellSheet(null);
+          resetItemForm();
+          if (!currentWl && wishlists.length > 0) setCurrentWl(wishlists[0] ?? null);
+          setShowItemForm(true);
+        }}
+        freeImportsLimit={credits.freeImportsLimit ?? 5}
         locale={locale}
         referralConfig={referralRulesConfig}
         onOpenReferral={() => {
