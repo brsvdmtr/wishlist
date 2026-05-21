@@ -7221,6 +7221,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     } finally {
       setImportLoading(false);
     }
+    // openEditItem is declared later in this component, so it cannot be listed
+    // in this dependency array (temporal-dead-zone error). It is recreated each
+    // render and called synchronously here, so the stale-closure risk the deps
+    // array guards against does not apply.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importUrl, tgFetch, pushToast, loadDrafts, loadWishlists, locale]);
 
   const handleMoveItem = useCallback(async (itemId: string, targetWishlistId: string, fromItemDetail = false) => {
