@@ -68,6 +68,14 @@ services:
       UPLOAD_DIR: /data/uploads
       ONBOARDING_V2_ROLLOUT: ${ONBOARDING_V2_ROLLOUT:-ab50}
       MARKETPLACE_PARSER_DISABLED: ${MARKETPLACE_PARSER_DISABLED:-}
+      # URL-import parser config. Without these lines in the environment block
+      # the .env values never reach the container (same gotcha as the
+      # RESEARCH_SURVEY_* note below). SCRAPER_API_KEY activates the ScrapingAnt
+      # fallback for IP-blocked marketplaces; the others are kill switches.
+      PARSER_UNIVERSAL_EXTRACT_DISABLED: ${PARSER_UNIVERSAL_EXTRACT_DISABLED:-}
+      SCRAPER_API_KEY: ${SCRAPER_API_KEY:-}
+      SCRAPER_API_URL: ${SCRAPER_API_URL:-}
+      SCRAPER_API_DISABLED: ${SCRAPER_API_DISABLED:-}
       SUPPORT_CHAT_ID: ${SUPPORT_CHAT_ID:-}
       MAINTENANCE_MODE: ${MAINTENANCE_MODE:-false}
       GOD_MODE_TELEGRAM_IDS: ${GOD_MODE_TELEGRAM_IDS:-}
