@@ -54,6 +54,7 @@ import {
   detectCurrency,
   formatPrice,
   fallbackCurrency,
+  lookupSite,
   isScraperApiEnabled,
   fetchViaScraperApi,
   type ExtractedFields,
@@ -274,7 +275,10 @@ async function scraperApiFallback(
 ): Promise<ParsedUrlData> {
   if (isScraperApiEnabled()) {
     try {
-      const html = await fetchViaScraperApi(url.href);
+      // Route through the marketplace's own country when known — geo-fenced
+      // RU sites (Ozon / Yandex) only serve a Russian IP.
+      const country = lookupSite(hostname)?.country;
+      const html = await fetchViaScraperApi(url.href, { country });
       const r = extractFromHtml(html, url.href, hostname, 'generic_html');
       if (r.confidence !== 'none') {
         console.log(`[parser] scraper-api success: ${hostname} (${r.confidence})`);
