@@ -26,7 +26,3 @@ CREATE INDEX "LifecycleTouch_scheduledFor_sentAt_idx" ON "LifecycleTouch"("sched
 CREATE INDEX "LifecycleTouch_userId_offerCode_idx" ON "LifecycleTouch"("userId", "offerCode");
 
 ALTER TABLE "LifecycleTouch" ADD CONSTRAINT "LifecycleTouch_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- Add eligibility fields to PromoRedemption
-ALTER TABLE "PromoRedemption" ADD COLUMN "offeredAt" TIMESTAMP(3);
-ALTER TABLE "PromoRedemption" ADD COLUMN "offeredVia" TEXT;

@@ -10,7 +10,9 @@ name: Tests
 #     service is wired up now so Phase 2+ doesn't require touching CI.
 #   - DATABASE_URL is exported for all steps; apps/api integration tests
 #     read it from process.env.
-#   - prisma migrate deploy runs once before tests, establishing the schema.
+#   - prisma db push provisions the schema from schema.prisma before tests.
+#   - a separate `migration-replay` job validates that the migration history
+#     itself replays cleanly from an empty DB (the path prod and db push skip).
 
 on:
   pull_request:
@@ -86,16 +88,11 @@ jobs:
         run: pnpm -C packages/db build
 
       - name: Apply Prisma schema (db push, not migrate deploy)
-        # `migrate deploy` replays all 84 migrations in order from a fresh DB,
-        # which collides on enum-add operations whose values are already in
-        # the init migration's snapshot (e.g. ItemStatus.COMPLETED). Prod uses
-        # incremental migrate-deploy historically; that path doesn't collide
-        # because prod never re-applies the init from scratch.
-        #
-        # For the CI test gate we just want the current schema shape — not
-        # to validate the migration history. `db push` from schema.prisma is
-        # the canonical Prisma command for fresh-DB-from-schema and bypasses
-        # the historical replay problem entirely.
+        # The test gate provisions its DB straight from schema.prisma via
+        # `db push`: fast, and tests get the exact current schema shape without
+        # replaying the full migration history. Migration-history integrity —
+        # a from-scratch `migrate deploy` replaying cleanly — is covered by the
+        # separate `migration-replay` job below.
         run: pnpm -C packages/db exec prisma db push --schema=prisma/schema.prisma --skip-generate --accept-data-loss
 
       - name: Run tests
@@ -123,3 +120,57 @@ jobs:
             apps/*/coverage/
             packages/*/coverage/
           retention-days: 7
+
+  # Regression guard for migration-history integrity. A from-scratch
+  # `prisma migrate deploy` must replay every migration in order against an
+  # empty database. This is the ONLY path that catches ordering / duplication
+  # bugs in migrations/: prod applies migrations incrementally (so it never
+  # replays the whole history and never collides), and the `test` job above
+  # uses `db push` (built from schema.prisma, skips history entirely). Added
+  # after the 2026-05-21 from-scratch breakage — a duplicate `ItemStatus`
+  # enum-add plus a same-timestamp ordering collision. See docs/BUGFIX_LESSONS.md.
+  migration-replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: wishlist
+          POSTGRES_PASSWORD: wishlist
+          POSTGRES_DB: wishlist_migrate_replay
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wishlist -d wishlist_migrate_replay"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://wishlist:wishlist@localhost:5432/wishlist_migrate_replay
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Replay full migration history from an empty database
+        # Fails if any migration collides on a from-scratch apply. `migrate
+        # deploy` only needs the prisma CLI + DATABASE_URL — no client
+        # generate, no package builds.
+        run: pnpm -C packages/db db:migrate:deploy

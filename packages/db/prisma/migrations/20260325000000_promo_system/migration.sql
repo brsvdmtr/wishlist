@@ -83,3 +83,11 @@ ALTER TABLE "DegradationState" ADD CONSTRAINT "DegradationState_userId_fkey" FOR
 -- Seed WISHPRO campaign
 INSERT INTO "PromoCampaign" ("id", "code", "rewardType", "durationDays", "isActive", "createdAt", "updatedAt")
 VALUES ('promo_wishpro', 'WISHPRO', 'promo_pro', 30, true, NOW(), NOW());
+
+-- PromoRedemption eligibility fields — relocated here from
+-- 20260325000000_lifecycle_touches. Both migrations share the 20260325000000
+-- timestamp and lifecycle_touches sorts first, so a from-scratch `migrate
+-- deploy` ran these ALTERs before PromoRedemption existed. See BUGFIX_LESSONS
+-- 2026-05-21.
+ALTER TABLE "PromoRedemption" ADD COLUMN "offeredAt" TIMESTAMP(3);
+ALTER TABLE "PromoRedemption" ADD COLUMN "offeredVia" TEXT;
