@@ -54,6 +54,8 @@ import {
   detectCurrency,
   formatPrice,
   fallbackCurrency,
+  isScraperApiEnabled,
+  fetchViaScraperApi,
   type ExtractedFields,
 } from './marketplace/index.js';
 // Auto-register all marketplace strategies on import
@@ -260,6 +262,36 @@ async function parseViaOrchestrator(
 }
 
 /**
+ * Last-resort fallback when a direct fetch + headless browser both failed:
+ * retry the URL through the scraping API (rotating residential IP — beats
+ * datacenter-IP blocks). Inert when SCRAPER_API_KEY is unset. Always resolves:
+ * on failure it sets the negative cache and returns an empty result.
+ */
+async function scraperApiFallback(
+  url: URL,
+  hostname: string,
+  canonicalUrl: string,
+): Promise<ParsedUrlData> {
+  if (isScraperApiEnabled()) {
+    try {
+      const html = await fetchViaScraperApi(url.href);
+      const r = extractFromHtml(html, url.href, hostname, 'generic_html');
+      if (r.confidence !== 'none') {
+        console.log(`[parser] scraper-api success: ${hostname} (${r.confidence})`);
+        const final = toFinal(r, hostname, canonicalUrl);
+        cacheSet(canonicalUrl, final);
+        return final;
+      }
+      console.warn(`[parser] scraper-api: no useful data for ${hostname}`);
+    } catch (e) {
+      console.warn(`[parser] scraper-api failed for ${hostname}: ${(e as Error).message}`);
+    }
+  }
+  setNegative(canonicalUrl);
+  return emptyResult(hostname, canonicalUrl);
+}
+
+/**
  * Legacy parser flow — used for:
  *   1. Unknown domains (not a recognized marketplace)
  *   2. Fallback when orchestrator returns 'none' for a known marketplace
@@ -325,9 +357,8 @@ async function parseLegacy(url: URL, hostname: string, canonicalUrl: string): Pr
     }
 
     if (result.confidence === 'none') {
-      console.warn(`[parser] no useful data for ${hostname}`);
-      setNegative(canonicalUrl);
-      return emptyResult(hostname, canonicalUrl);
+      console.warn(`[parser] no useful data for ${hostname} — trying scraper-api`);
+      return scraperApiFallback(url, hostname, canonicalUrl);
     }
 
     console.log(
@@ -341,8 +372,7 @@ async function parseLegacy(url: URL, hostname: string, canonicalUrl: string): Pr
 
   } catch (err) {
     console.error(`[parser] unhandled error for ${hostname}:`, (err as Error).message);
-    setNegative(canonicalUrl);
-    return emptyResult(hostname, canonicalUrl);
+    return scraperApiFallback(url, hostname, canonicalUrl);
   }
 }
 

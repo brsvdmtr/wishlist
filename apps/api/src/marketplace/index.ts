@@ -76,6 +76,9 @@ export type { ExtractedFields } from './structured-data.js';
 export { lookupSite, fallbackCurrency } from './site-registry.js';
 export type { SiteInfo } from './site-registry.js';
 
+// Scraping-API fetch fallback (beats datacenter-IP blocks)
+export { isScraperApiEnabled, fetchViaScraperApi, buildScraperApiUrl } from './scraper-api.js';
+
 // Logger
 export { parseLog } from './logger.js';
 
