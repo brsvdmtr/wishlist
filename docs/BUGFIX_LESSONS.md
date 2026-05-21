@@ -5,6 +5,96 @@ New entries go at the top.
 
 ---
 
+## 2026-05-21 — Mini App не открывается: «Application error» из-за hydration mismatch
+
+### Симптом
+
+Telegram Mini App падал у всех на загрузке белым экраном — «Application
+error: a client-side exception has occurred». В консоли — React-ошибки
+гидратации #418 / #423 / #425. Аналитика: после 12:44 UTC — ноль сессий
+(`user.session_started`), приложение лежало ~6 часов. Краш срабатывал
+ДО первого события `miniapp.open_attempt` — то есть на самом рендере
+бандла, не доходя до bootstrap.
+
+### Root cause
+
+Две независимые проблемы, обе — нарушение SSR-инварианта «первый рендер
+клиента обязан совпасть с серверным HTML»:
+
+1. **`ThemeProvider` читал `localStorage` в инициализаторе `useState`.**
+   `useState(() => readStoredPref())` → на сервере `window` нет, тема
+   `dark/violet`; на клиенте у PRO-пользователя с кастомной темой —
+   `black/blue`. Атрибуты `data-theme`/`data-accent` на корневом
+   `.wb-phone` расходились → React не мог сгидрировать → #418.
+
+2. **`MiniAppInner` (~30k строк) целиком уходил в SSR.** Любое
+   server/client-расхождение в его дереве (тема, локаль, Telegram-контекст,
+   `Date.now()`/`Math.random()` в рендере) — потенциальный mismatch. SSR
+   для Telegram Mini App бесполезен в принципе: нет SEO, первый кадр всё
+   равно сплэш, без `window.Telegram` приложение не работает.
+
+Чистая пересборка `--no-cache` дала **байт-в-байт тот же бандл** (те же
+хеши чанков) — это исключило порчу артефакта сборки и доказало, что баг
+детерминированный, в исходнике.
+
+### Урок
+
+В Next.js (как и в любом SSR-фреймворке) **первый рендер компонента —
+чистая функция пропсов**. Любое чтение браузерного состояния
+(`localStorage`, `window`, `navigator`, `matchMedia`, `Date.now()`) в теле
+рендера или в инициализаторе `useState`/`useMemo` ломает гидратацию.
+Браузерное состояние читается ТОЛЬКО в `useEffect` — после коммита первого
+(SSR-идентичного) рендера.
+
+Клиент-онли поверхность (Telegram Mini App) **не нужно** отдавать в SSR
+вообще — это не оптимизация, а только источник mismatch-ов.
+
+### Правило
+
+1. **Никакого `localStorage`/`window`/`navigator`/`Date`/`Math.random` в
+   инициализаторе `useState`/`useMemo` и в теле рендера.** Стартовое
+   состояние = дефолт или проп; браузерное состояние подтягивается в
+   `useEffect` после монтирования.
+2. **Клиент-онли поверхности гейтить mount-флагом** (`useState(false)` +
+   `useEffect(() => setMounted(true))`), отдавая в SSR детерминированный
+   плейсхолдер. Сервер и первый рендер клиента обязаны совпадать.
+3. **`--no-cache` пересборка с байт-идентичным бандлом** = баг
+   детерминированный → ищи в исходнике, не в инфраструктуре.
+
+### Лучший код
+
+```tsx
+// ❌ До: useState-инициализатор читает localStorage — на сервере его нет
+const [pref] = useState(() => {
+  const stored = readStoredPref();            // window.localStorage
+  return { theme: stored.theme ?? 'dark', accent: stored.accent ?? 'violet' };
+});
+
+// ✅ После: стартовое состояние = дефолт/проп; localStorage — в useEffect
+const [pref, setPref] = useState(() => ({
+  theme: initial?.theme ?? 'dark',
+  accent: initial?.accent ?? 'violet',
+}));
+useEffect(() => {
+  const stored = readStoredPref();
+  if (stored.theme || stored.accent) setPref((p) => ({ ...p, ...stored }));
+}, []);
+```
+
+```tsx
+// ❌ До: весь MiniAppInner (~30k строк) рендерится на сервере
+<ThemeProvider><MiniAppInner {...props} /></ThemeProvider>
+
+// ✅ После: клиент-онли часть за mount-гейтом, в SSR — детерминированный сплэш
+const [mounted, setMounted] = useState(false);
+useEffect(() => { setMounted(true); }, []);
+<ThemeProvider>{mounted ? <MiniAppInner {...props} /> : <BootSplash />}</ThemeProvider>
+```
+
+**Commit:** `fix(miniapp): client-only mount gate + SSR-safe ThemeProvider`
+
+---
+
 ## 2026-05-21 — From-scratch `prisma migrate deploy` падает: дубликат enum-значения + коллизия timestamp'ов
 
 ### Симптом

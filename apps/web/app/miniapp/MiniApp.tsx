@@ -4571,11 +4571,55 @@ function GiftNotesOnboardingContent({ locale, onFinishSkip, onFinishCreate }: { 
   );
 }
 
+/**
+ * Boot splash — the ONLY thing `MiniApp` server-renders. Shown for the single
+ * frame between the server render and the client mount, after which
+ * `MiniAppInner` takes over (and immediately shows its own richer loading
+ * splash). Because this is all the server emits, the server HTML and the
+ * client's first render are always identical → hydration is a guaranteed
+ * no-op. Keep it SSR-deterministic: no `window`, no `localStorage`, no
+ * locale/time-dependent output.
+ */
+function BootSplash() {
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexDirection: 'column',
+        background: 'var(--wb-bg, #0F0F12)',
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif",
+      }}
+    >
+      <div style={{ fontSize: 56, lineHeight: 1, marginBottom: 16 }}>🎁</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--wb-text, #FFFFFF)', letterSpacing: '-0.02em' }}>
+        WishBot
+      </div>
+    </div>
+  );
+}
+
 export default function MiniApp(props: { apiBase: string; botUsername: string; miniappShortName: string }) {
+  // The Mini App is a CLIENT-ONLY surface: `MiniAppInner` cannot render
+  // without `window.Telegram`, and SSR of it carries no value (no SEO; the
+  // first paint is a splash regardless). SSR-ing its ~30k-line tree only ever
+  // created a hydration-mismatch hazard — any server/client divergence inside
+  // it (theme read from localStorage, locale, Telegram context, time/random
+  // values) made React bail hydration with #418/#423/#425, which the Telegram
+  // WebView surfaces as a hard "Application error" white-screen.
+  //
+  // Gate `MiniAppInner` behind a mount flag: the server and the client's
+  // FIRST render both emit <BootSplash/>, so hydration always reconciles; the
+  // real app then mounts on the next client tick. `ThemeProvider` stays above
+  // the gate (it is SSR-safe — see ThemeProvider.tsx) so the themed
+  // background paints during that first frame.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
   return (
     <MiniAppErrorBoundary>
       <ThemeProvider>
-        <MiniAppInner {...props} />
+        {mounted ? <MiniAppInner {...props} /> : <BootSplash />}
       </ThemeProvider>
     </MiniAppErrorBoundary>
   );

@@ -125,13 +125,37 @@ export function ThemeProvider({
   rootClassName,
   rootStyle,
 }: ThemeProviderProps) {
-  const [pref, setPref] = useState<ThemePreference>(() => {
+  // SSR-safe initial state. The server has no `localStorage`, so reading the
+  // stored preference HERE (in the useState initializer) would make the
+  // client's first render diverge from the server-rendered HTML and break
+  // hydration — React #418/#423/#425, which in the Telegram Mini App surface
+  // as a hard "Application error" white-screen. The initial render must
+  // depend ONLY on props: `initial` is server-provided (so it serialises
+  // identically into the client) or the hard default. The persisted
+  // preference is applied just below, in a post-mount effect.
+  const [pref, setPref] = useState<ThemePreference>(() => ({
+    theme: (initial?.theme ?? 'dark') as Theme,
+    accent: (initial?.accent ?? 'violet') as Accent,
+  }));
+
+  // Apply the localStorage-persisted preference AFTER mount. Runs only on the
+  // client, only after the first (SSR-identical) render has committed, so it
+  // cannot cause a hydration mismatch. MUST stay declared before the persist
+  // effect below: that effect writes `pref` to localStorage, so on first
+  // mount it would overwrite the stored value with the default before this
+  // effect could read it.
+  useEffect(() => {
+    if (initial?.theme && initial?.accent) return;
     const stored = readStoredPref();
-    return {
-      theme: (initial?.theme ?? stored.theme ?? 'dark') as Theme,
-      accent: (initial?.accent ?? stored.accent ?? 'violet') as Accent,
-    };
-  });
+    if (stored.theme === undefined && stored.accent === undefined) return;
+    setPref((p) => ({
+      theme: (initial?.theme ?? stored.theme ?? p.theme) as Theme,
+      accent: (initial?.accent ?? stored.accent ?? p.accent) as Accent,
+    }));
+    // Mount-only: this is a one-time "load persisted state", not a reaction
+    // to `initial` identity churn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Track last broadcasted pref to avoid double-fire on re-mount.
   const lastSentRef = useRef<string | null>(null);
