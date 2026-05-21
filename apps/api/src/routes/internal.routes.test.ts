@@ -4,9 +4,16 @@ import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vites
 import express from 'express';
 import request from 'supertest';
 
+// hint.findUnique is explicit + controllable (the /hints/credit tests drive
+// it); every other prisma.* access falls through to a permissive null stub.
+const db = vi.hoisted(() => ({ hintFindUnique: vi.fn() }));
+
 vi.mock('@wishlist/db', () => ({
-  prisma: new Proxy({}, {
-    get() { return new Proxy({}, { get() { return vi.fn().mockResolvedValue(null); } }); },
+  prisma: new Proxy({ hint: { findUnique: db.hintFindUnique } } as Record<string, unknown>, {
+    get(target, key) {
+      if (key in target) return target[key as string];
+      return new Proxy({}, { get() { return vi.fn().mockResolvedValue(null); } });
+    },
   }),
 }));
 
@@ -15,11 +22,17 @@ vi.mock('../services/import-credits', () => ({
   consumeImportCredit: vi.fn(),
 }));
 
+vi.mock('../services/hint-credits', () => ({
+  consumeHintCharge: vi.fn(),
+}));
+
 import { getImportAllowance, consumeImportCredit } from '../services/import-credits';
+import { consumeHintCharge } from '../services/hint-credits';
 import { registerInternalRouter } from './internal.routes';
 
 const mockAllowance = vi.mocked(getImportAllowance);
 const mockConsume = vi.mocked(consumeImportCredit);
+const mockHintCharge = vi.mocked(consumeHintCharge);
 
 function smokeDeps() {
   return new Proxy({}, {
@@ -46,7 +59,7 @@ describe('internal — factory + boot', () => {
   });
 });
 
-describe('internal — POST /import-url credit gate', () => {
+describe('internal — credit endpoints', () => {
   const KEY = 'test-internal-key';
   type Deps = Parameters<typeof registerInternalRouter>[0];
 
@@ -72,7 +85,10 @@ describe('internal — POST /import-url credit gate', () => {
 
   beforeAll(() => { process.env.BOT_TOKEN = KEY; });
   afterAll(() => { delete process.env.BOT_TOKEN; });
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db.hintFindUnique.mockResolvedValue(null);
+  });
 
   it('FREE bot user with quota imports and a credit is consumed', async () => {
     mockAllowance.mockResolvedValue({ allowed: true, isPro: false, freeLimit: 5, freeUsed: 1, freeRemaining: 4, paidCredits: 0, source: 'free' });
@@ -93,5 +109,53 @@ describe('internal — POST /import-url credit gate', () => {
     expect(res.body.feature).toBe('url_import');
     expect(deps.importUrlForUser).not.toHaveBeenCalled();
     expect(mockConsume).not.toHaveBeenCalled();
+  });
+
+  it('POST /hints/credit → 404 when the hint does not exist', async () => {
+    // hint.findUnique resolves null (beforeEach default) → the endpoint 404s
+    // before it ever reaches consumeHintCharge.
+    const res = await request(makeApp(buildDeps()))
+      .post('/hints/credit')
+      .set('X-INTERNAL-KEY', KEY)
+      .send({ hintId: 'no-such-hint' });
+    expect(res.status).toBe(404);
+    expect(mockHintCharge).not.toHaveBeenCalled();
+  });
+
+  it('POST /hints/credit → charges a delivered hint and returns the result', async () => {
+    db.hintFindUnique.mockResolvedValue({
+      senderUserId: 'u-bot', status: 'DELIVERED', user: { godMode: false },
+    });
+    mockHintCharge.mockResolvedValue({
+      freeLimit: 3, freeUsed: 1, freeRemaining: 2,
+      outcome: 'free_monthly', charged: true,
+    });
+    const res = await request(makeApp(buildDeps()))
+      .post('/hints/credit')
+      .set('X-INTERNAL-KEY', KEY)
+      .send({ hintId: 'h1' });
+    expect(res.status).toBe(200);
+    expect(res.body.outcome).toBe('free_monthly');
+    expect(res.body.charged).toBe(true);
+    // The route loads the hint, resolves the sender's entitlement, and threads
+    // (senderUserId, hintId, status, isPro) into the service.
+    expect(mockHintCharge).toHaveBeenCalledWith('u-bot', 'h1', 'DELIVERED', false);
+  });
+
+  it('POST /hints/credit → forwards a non-DELIVERED status to the service untouched', async () => {
+    db.hintFindUnique.mockResolvedValue({
+      senderUserId: 'u-bot', status: 'SENT', user: { godMode: false },
+    });
+    mockHintCharge.mockResolvedValue({
+      freeLimit: 3, freeUsed: 0, freeRemaining: 3, outcome: 'not_delivered', charged: false,
+    });
+    const res = await request(makeApp(buildDeps()))
+      .post('/hints/credit')
+      .set('X-INTERNAL-KEY', KEY)
+      .send({ hintId: 'h-sent' });
+    expect(res.status).toBe(200);
+    expect(res.body.outcome).toBe('not_delivered');
+    // The route threads the REAL hint status — it never assumes DELIVERED.
+    expect(mockHintCharge).toHaveBeenCalledWith('u-bot', 'h-sent', 'SENT', false);
   });
 });

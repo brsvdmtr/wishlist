@@ -26,6 +26,7 @@ function buildDeps() {
       effectiveWishlistLimit: 2, effectiveSubscriptionLimit: 2,
       extraItemsPerWishlist: {}, hintCredits: 0, importCredits: 0,
       freeImportsUsed: 0, freeImportsLimit: 5,
+      freeHintsUsed: 0, freeHintsLimit: 3,
       hasGiftNotes: false, hasGroupGift: false, hasSecretReservations: false,
       seasonalWishlists: new Set<string>(), smartReservationsWishlists: new Set<string>(),
       proSource: null as null | string, subscription: null, promoPro: null,

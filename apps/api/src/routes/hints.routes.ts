@@ -1,5 +1,5 @@
 // Telegram-auth router for /tg/items/:id/hint (POST) and /tg/hints/:hintId
-// (GET) — 2 handlers covering the Pro-gated "hint friends" flow.
+// (GET) — 2 handlers covering the FREE-quota "hint friends" flow.
 //
 // Mounted via `tgRouter.use(hintsRouter)` in apps/api/src/index.ts alongside
 // the other early P5 sub-routers. Both endpoints lack a protectTgRoute(...)
@@ -36,6 +36,8 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { getRequestLocale } from '../lib/locale';
 import { sendTgBotMessage } from '../telegram/botApi';
 import logger from '../logger';
+import { getHintAllowance } from '../services/hint-credits';
+import { trackProductEvent } from '../services/analytics';
 
 // Shape of the Telegram initData user object — duplicated from index.ts to
 // avoid coupling routes/* to a non-exported local type. Structurally
@@ -56,9 +58,10 @@ type HintsUser = {
 };
 
 // Structural shape of getUserEntitlement return that POST /items/:id/hint
-// reads (`.plan.features`, `.plan.code`).
+// reads (`.isPro` for the quota gate, `.plan.code` for the upsell envelope).
 type HintsEntitlement = {
-  plan: { code: string; features: readonly string[] };
+  plan: { code: string };
+  isPro: boolean;
 };
 
 export type HintsRouterDeps = {
@@ -129,7 +132,7 @@ export function registerHintsRouter(deps: HintsRouterDeps): Router {
 
   const hintsRouter = Router();
 
-  // POST /tg/items/:id/hint — create a hint wave (Pro feature, owner-only)
+  // POST /tg/items/:id/hint — create a hint wave (FREE-quota gated, owner-only)
   //
   // Design (rewritten 2026-05-02 after user-reported "first click hangs 10 s,
   // second click works"):
@@ -170,14 +173,7 @@ export function registerHintsRouter(deps: HintsRouterDeps): Router {
       const user = await getOrCreateTgUser(req.tgUser!);
       const locale = getRequestLocale(req);
 
-      // 1. Feature gate: hints require PRO (godMode overrides to PRO)
-      const ent = await getUserEntitlement(user.id, user.godMode);
-      if (!ent.plan.features.includes('hints')) {
-        trackEvent('feature_gate_hit_hints', user.id);
-        return res.status(402).json({ error: 'Pro feature', feature: 'hints', planCode: ent.plan.code });
-      }
-
-      // 2. Load item + verify ownership
+      // 1. Load item + verify ownership
       const item = await prisma.item.findUnique({
         where: { id },
         select: { id: true, title: true, status: true, wishlist: { select: { ownerId: true, slug: true } } },
@@ -185,7 +181,7 @@ export function registerHintsRouter(deps: HintsRouterDeps): Router {
       if (!item) return res.status(404).json({ error: 'Item not found' });
       if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
 
-      // 2b. Check owner's hintsEnabled setting
+      // 1b. Check owner's hintsEnabled setting
       const ownerProfile = await prisma.userProfile.findUnique({
         where: { userId: user.id },
         select: { hintsEnabled: true },
@@ -194,9 +190,42 @@ export function registerHintsRouter(deps: HintsRouterDeps): Router {
         return res.status(403).json({ error: 'hints_disabled' });
       }
 
-      // 3. Item must be AVAILABLE (not reserved/completed/deleted)
+      // 2. Item must be AVAILABLE (not reserved/completed/deleted)
       if (item.status !== 'AVAILABLE') {
         return res.status(400).json({ error: 'item_not_available', message: t('api_hint_item_not_available', locale) });
+      }
+
+      // 3. Quota gate — runs LAST of the gates, so the monetization upsell only
+      //    fires for a user who would otherwise succeed (owns an available
+      //    item, hints enabled). PRO is unlimited; FREE gets
+      //    FREE_HINT_QUOTA_PER_MONTH delivered hints/month + paid hints_pack_*
+      //    credits. The allowance is only *checked* here — the actual charge
+      //    happens on delivery, when the bot reports the hint DELIVERED via
+      //    POST /internal/hints/credit (see services/hint-credits.ts). A hint
+      //    wave that is never delivered (keyboard lost, picker abandoned, hint
+      //    expired) costs nothing.
+      const ent = await getUserEntitlement(user.id, user.godMode);
+      const allowance = await getHintAllowance(user.id, ent.isPro);
+      if (!allowance.allowed) {
+        // Two events fire on the quota wall, by design: the legacy
+        // feature_gate_hit_hints feeds the existing god-mode dashboard (kept
+        // for parity with import.routes.ts's identical 402 path), and the
+        // typed hint.pack_suggested feeds the new PRODUCT_EVENTS taxonomy.
+        trackEvent('feature_gate_hit_hints', user.id);
+        trackProductEvent({
+          event: 'hint.pack_suggested',
+          userId: user.id,
+          props: { freeLimit: allowance.freeLimit, paidCredits: allowance.paidCredits },
+        });
+        return res.status(402).json({
+          error: 'hint_quota_exhausted',
+          feature: 'hints',
+          planCode: ent.plan.code,
+          freeLimit: allowance.freeLimit,
+          freeUsed: allowance.freeUsed,
+          paidCredits: allowance.paidCredits,
+          packs: ['hints_pack_5', 'hints_pack_10'],
+        });
       }
 
       const senderChatId = user.telegramChatId;

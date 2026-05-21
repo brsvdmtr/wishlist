@@ -29,6 +29,7 @@ import { sendTgBotMessage } from '../telegram/botApi';
 import { sendAdminAlert } from '../notifications/adminAlerts';
 import { trackAnalyticsEvent } from '../services/analytics';
 import { getImportAllowance, consumeImportCredit } from '../services/import-credits';
+import { consumeHintCharge } from '../services/hint-credits';
 
 export type InternalRouterDeps = {
   // The runtime shape of getUserEntitlement is wider than the surface we
@@ -66,6 +67,18 @@ export function registerInternalRouter(deps: InternalRouterDeps): Router {
   const internalImportLimiter = rateLimit({
     windowMs: 60 * 1000,
     limit: 30,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'Too many requests' },
+    validate: false,
+  });
+
+  // Generous cap for the bot's hint-charge calls — the bot retries up to 3×
+  // per delivery, so 60/min is comfortably above legitimate volume while
+  // bounding a runaway loop. Defence-in-depth on top of X-INTERNAL-KEY auth.
+  const internalHintCreditLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 60,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     message: { error: 'Too many requests' },
@@ -125,6 +138,46 @@ export function registerInternalRouter(deps: InternalRouterDeps): Router {
         }
         throw err;
       }
+    }),
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // ─── Hint quota: charge a delivered hint (internal, bot → API) ───────────────
+  //
+  // POST /internal/hints/credit — charge a delivered hint against the sender's
+  // FREE monthly hint quota (or a paid hints_pack credit). Called by the bot
+  // from its users_shared handler the moment a hint flips SENT → DELIVERED.
+  //
+  // Idempotent on hintId (HintQuotaCharge.hintId UNIQUE): a Telegram
+  // users_shared double-fire or an internal-call retry is a safe no-op. Only
+  // DELIVERED hints charge — an undelivered hint (SENT / CANCELLED / EXPIRED)
+  // never costs the user a credit. See services/hint-credits.ts.
+
+  internalRouter.post(
+    '/hints/credit',
+    internalHintCreditLimiter,
+    asyncHandler(async (req, res) => {
+      const parsed = z.object({ hintId: z.string().min(1) }).safeParse(req.body);
+      if (!parsed.success) return zodError(res, parsed.error);
+
+      const hint = await prisma.hint.findUnique({
+        where: { id: parsed.data.hintId },
+        select: { senderUserId: true, status: true, user: { select: { godMode: true } } },
+      });
+      if (!hint) return res.status(404).json({ error: 'Hint not found' });
+
+      // consumeHintCharge owns the "only DELIVERED charges" guard, so an
+      // undelivered hint resolves to outcome 'not_delivered' without a charge.
+      // The bot only calls after its atomic claim — passing the status keeps
+      // the rule enforced for any caller.
+      const ent = await getUserEntitlement(hint.senderUserId, hint.user.godMode);
+      const result = await consumeHintCharge(
+        hint.senderUserId,
+        parsed.data.hintId,
+        hint.status,
+        ent.isPro,
+      );
+      return res.json(result);
     }),
   );
 

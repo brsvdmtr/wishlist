@@ -35,6 +35,7 @@ import {
 } from '@wishlist/shared';
 
 import { resolveFreeImports } from './import-credits';
+import { getFreeHintsState } from './hint-credits';
 
 // ─── Plan & Entitlement System ──────────────────────────────────────────────
 export const PLANS = {
@@ -226,10 +227,11 @@ export async function getUserEntitlement(userId: string, godMode = false): Promi
  *  When godMode is omitted, auto-resolves from DB so callers can't forget it. */
 export async function getEffectiveEntitlements(userId: string, godMode?: boolean) {
   const resolvedGodMode = godMode ?? (await prisma.user.findUnique({ where: { id: userId }, select: { godMode: true } }))?.godMode ?? false;
-  const [base, addOns, credits] = await Promise.all([
+  const [base, addOns, credits, freeHints] = await Promise.all([
     getUserEntitlement(userId, resolvedGodMode),
     prisma.userAddOn.findMany({ where: { userId } }),
     prisma.userCredits.findUnique({ where: { userId } }),
+    getFreeHintsState(userId),
   ]);
 
   const extraWishlistSlots = addOns
@@ -266,6 +268,8 @@ export async function getEffectiveEntitlements(userId: string, godMode?: boolean
     importCredits: credits?.importCredits ?? 0,
     freeImportsUsed: freeImports.freeUsed,
     freeImportsLimit: freeImports.freeLimit,
+    freeHintsUsed: freeHints.freeUsed,
+    freeHintsLimit: freeHints.freeLimit,
     addOns,
     // Gift Notes access: PRO users get it, or one-time unlock via UserAddOn
     hasGiftNotes: base.isPro || godMode || addOns.some(a => a.addonType === GIFT_NOTES_SKU),

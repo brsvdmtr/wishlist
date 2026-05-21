@@ -206,7 +206,7 @@ Separate from public routes; these are TG-authenticated endpoints for the Mini A
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/tg/items/:id/hints` | Create a hint for an item (owner sends to friends). PRO feature (or hint credits). Stores `Hint` record; bot delivers via `users_shared` event. |
+| POST | `/tg/items/:id/hints` | Create a hint for an item (owner sends to friends). FREE 3/month quota, then paid hint credits or PRO unlimited; quota charged on delivery, not creation. Stores `Hint` record; bot delivers via `users_shared` event. |
 | GET | `/tg/items/:id/hints` | Poll hint delivery status. |
 
 **Subscriptions**
@@ -356,6 +356,7 @@ Mounted as `internalRouter`. All routes require `requireInternalAuth` middleware
 | Method | Path | Rate limit | Description |
 |---|---|---|---|
 | POST | `/internal/import-url` | 30/min | Import a product URL on behalf of a user (by `userId`). Same pipeline as `/tg/import-url`. Called by bot when a user sends a URL in chat. |
+| POST | `/internal/hints/credit` | — | Charge a delivered hint against the sender's FREE monthly hint quota (or a paid pack credit). Called by the bot the moment a hint flips SENT → DELIVERED. Idempotent on `hintId`. |
 | GET | `/internal/support/lookup` | — | Lookup support ticket by support ID. Used by bot for support flow resolution. |
 
 ### Admin routes (`/*` via `privateRouter`)
@@ -889,6 +890,26 @@ Response (201):
 ```
 
 This endpoint is called by the bot when a user sends a URL message in the Telegram chat. The bot first upserts the user in the database, then calls this endpoint with the internal key.
+
+### `POST /internal/hints/credit`
+
+Rate limit: —.
+
+Request body:
+```json
+{
+  "hintId": "<db hint id>"
+}
+```
+
+Charges a delivered hint against the sender's FREE monthly hint quota (3/month
+default), a paid `hints_pack_*` credit, or — if both are spent — records a
+`grace` delivery (delivered, uncharged). Writes an idempotent `HintQuotaCharge`
+audit row keyed by `hintId`, so a duplicate `users_shared` event never
+double-charges. Only a hint whose status is `DELIVERED` is charged; an
+undelivered hint resolves to `outcome: 'not_delivered'`. Called by the bot
+right after its atomic `SENT → DELIVERED` claim in the `users_shared` handler.
+See `services/hint-credits.ts`.
 
 ### `GET /internal/support/lookup`
 

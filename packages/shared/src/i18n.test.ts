@@ -14,6 +14,7 @@ import {
   deriveMarketBucketFromName,
   resolveMarketBucket,
   localeToBCP47,
+  t,
 } from './i18n';
 
 describe('deriveMarketBucket (single-signal language code)', () => {
@@ -297,5 +298,37 @@ describe('localeToBCP47', () => {
     expect(formatted).not.toMatch(/شوال|محرم|رمضان|صفر|ربيع|جمادى|رجب|شعبان|ذو/);
     // Sanity: should contain the Gregorian April name.
     expect(formatted).toContain('أبريل');
+  });
+});
+
+describe('hints_quota_* i18n keys', () => {
+  // Pins the hint-quota counter strings used by HintQuotaCounter and the
+  // FREE-hint monetization flow (services/hint-credits.ts). ru + en are the
+  // authored locales; both must resolve to a real, non-fallback string.
+  const KEYS = [
+    'hints_quota_left',
+    'hints_quota_empty',
+    'hints_quota_paid',
+    'hints_quota_unlimited',
+  ] as const;
+
+  it.each(KEYS)('en: %s is a non-empty authored string', (key) => {
+    const v = t(key, 'en');
+    expect(v).toBeTruthy();
+    expect(v).not.toBe(key); // not the bare-key fallback
+  });
+
+  it.each(KEYS)('ru: %s is authored (not the English fallback)', (key) => {
+    const ru = t(key, 'ru');
+    expect(ru).toBeTruthy();
+    expect(ru).not.toBe(key);
+    expect(ru).not.toBe(t(key, 'en'));
+  });
+
+  it('interpolates the count placeholders in hints_quota_left', () => {
+    const v = t('hints_quota_left', 'en', { n: 2, limit: 3 });
+    expect(v).toContain('2');
+    expect(v).toContain('3');
+    expect(v).not.toContain('{{');
   });
 });

@@ -200,6 +200,42 @@ describe('PRODUCT_EVENTS — fixture snapshot', () => {
           ],
         },
         {
+          "action": "free_quota_charge_skipped",
+          "domain": "hint",
+          "name": "hint.free_quota_charge_skipped",
+          "pii": "userId-only",
+          "sources": [
+            "server",
+          ],
+        },
+        {
+          "action": "free_quota_charged",
+          "domain": "hint",
+          "name": "hint.free_quota_charged",
+          "pii": "userId-only",
+          "sources": [
+            "server",
+          ],
+        },
+        {
+          "action": "free_quota_exhausted",
+          "domain": "hint",
+          "name": "hint.free_quota_exhausted",
+          "pii": "userId-only",
+          "sources": [
+            "server",
+          ],
+        },
+        {
+          "action": "pack_suggested",
+          "domain": "hint",
+          "name": "hint.pack_suggested",
+          "pii": "userId-only",
+          "sources": [
+            "server",
+          ],
+        },
+        {
           "action": "completed",
           "domain": "payment",
           "name": "payment.completed",

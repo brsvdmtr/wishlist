@@ -187,6 +187,7 @@ model User {
   paymentEvents                  PaymentEvent[]
   commentReadCursors             CommentReadCursor[]
   hints                          Hint[]
+  hintQuotaCharges               HintQuotaCharge[]
   profile                        UserProfile?
   wishlistSubscriptions          WishlistSubscription[]
   supportTickets                 SupportTicket[]
@@ -473,6 +474,41 @@ model Hint {
   @@index([itemId])
   @@index([senderUserId, createdAt])
   @@index([expiresAt])
+}
+
+// Audit ledger for hint-quota consumption — one immutable row per delivered
+// hint. Written by consumeHintCharge() (services/hint-credits.ts) when the bot
+// reports a hint DELIVERED via POST /internal/hints/credit.
+//
+//   • hintId is UNIQUE → the idempotency guard. Telegram can double-fire the
+//     users_shared event; the unique constraint makes a second charge a no-op.
+//   • hintId is a plain denormalized string, NOT a foreign key. A charge row
+//     must OUTLIVE its Hint: Hints are cascade-deleted when their Item is
+//     deleted, and if the ledger cascaded too a user could refund their
+//     monthly quota simply by deleting the wish. The ledger is the source of
+//     truth for "free hints used this month" (COUNT by userId + period).
+//   • source — free_monthly | paid_pack | grace | pro. charged is true only
+//     for free_monthly / paid_pack (a unit was actually spent).
+//   • grace — the FREE quota was available when the hint wave was created but
+//     exhausted by the time delivery completed; we deliver anyway (charged
+//     false) rather than punish a user mid-scenario. reason records why.
+//   • amount — units spent by this charge. Always 1 today (one delivered hint
+//     = one unit); recorded explicitly so the ledger is self-describing and
+//     leaves headroom for a future multi-unit charge.
+model HintQuotaCharge {
+  id        String   @id @default(cuid())
+  userId    String
+  hintId    String   @unique
+  period    String
+  source    String
+  charged   Boolean
+  amount    Int      @default(1)
+  reason    String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, period])
 }
 
 model UserProfile {

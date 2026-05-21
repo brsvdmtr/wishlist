@@ -75,6 +75,8 @@ type MeEntitlements = {
   importCredits: number;
   freeImportsUsed: number;
   freeImportsLimit: number;
+  freeHintsUsed: number;
+  freeHintsLimit: number;
 };
 
 export type MeRouterDeps = {
@@ -340,6 +342,8 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
           importCredits: ent.importCredits,
           freeImportsUsed: ent.freeImportsUsed,
           freeImportsLimit: ent.freeImportsLimit,
+          freeHintsUsed: ent.freeHintsUsed,
+          freeHintsLimit: ent.freeHintsLimit,
         },
         skus: Object.values(ONE_TIME_SKUS).map(s => ({
           code: s.code,

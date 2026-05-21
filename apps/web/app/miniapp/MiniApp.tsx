@@ -24,6 +24,7 @@ import type { SearchResult, AccessViewResponse } from './lib/searchApi';
 import { recordWishlistOpen, fetchAccessView } from './lib/searchApi';
 import { ProBadge } from './components/ProBadge';
 import { ImportQuotaCounter, importQuotaLabel } from './components/ImportQuotaCounter';
+import { HintQuotaCounter } from './components/HintQuotaCounter';
 import { importResultToast, type ImportParseStatus } from './components/importResultToast';
 import { SantaHatOverlay } from './components/SantaHatOverlay';
 import { SnowflakeOverlay } from './components/SnowflakeOverlay';
@@ -294,7 +295,12 @@ type AddOnsInfo = {
   extraItemsPerWishlist?: Record<string, number>;
   smartReservationsWishlists?: string[];
 };
-type CreditsInfo = { hintCredits: number; importCredits: number; freeImportsUsed?: number; freeImportsLimit?: number };
+type CreditsInfo = { hintCredits: number; importCredits: number; freeImportsUsed?: number; freeImportsLimit?: number; freeHintsUsed?: number; freeHintsLimit?: number };
+// Pre-bootstrap fallback for credits.freeHintsLimit. The server always sends
+// the real, env-tunable limit (FREE_HINT_QUOTA_PER_MONTH, default 3) in the
+// entitlements payload; this constant only applies in the sub-second window
+// before the first bootstrap resolves. Keep it in sync with that server default.
+const HINT_QUOTA_FALLBACK = 3;
 
 // SKU descriptor from server
 type SkuInfo = { code: string; price: number; type: string; targetRequired: boolean };
@@ -7648,8 +7654,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
   const handleHintTap = useCallback(async (item: Item) => {
     if (hintLoading || hintClosing) return;
-    // Free users → show upsell
-    if (planInfo.code === 'FREE') { showUpsell('hints'); return; }
+    // Hints are a FREE monthly quota, not a hard PRO gate. Only short-circuit
+    // to the upsell when a FREE user has spent BOTH the free quota and any
+    // paid pack credits — otherwise proceed and let the API decide (it
+    // returns a 402 hint_quota_exhausted envelope if the quota turns out
+    // spent, handled in the !res.ok branch below).
+    if (planInfo.code === 'FREE') {
+      const freeLeft = Math.max(0, (credits.freeHintsLimit ?? HINT_QUOTA_FALLBACK) - (credits.freeHintsUsed ?? 0));
+      if (freeLeft <= 0 && credits.hintCredits <= 0) { showUpsell('hints'); return; }
+    }
     setHintLoading(true);
     try {
       // 5 s ceiling: the API now fires the picker-keyboard delivery
@@ -7667,7 +7680,28 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       });
 
       if (!res.ok) {
-        if (res.status === 402) { showUpsell('hints'); return; }
+        if (res.status === 402) {
+          // The 402 envelope carries the live quota — fold it into `credits`
+          // so the HintQuotaCounter corrects immediately. The charge is async
+          // (the bot does it post-delivery), so without this the counter would
+          // stay stale until the next bootstrap.
+          const q = await res.json().catch(() => ({})) as {
+            freeUsed?: number; freeLimit?: number; paidCredits?: number;
+          };
+          const freeUsed = q.freeUsed;
+          const freeLimit = q.freeLimit;
+          const paidCredits = q.paidCredits;
+          if (typeof freeUsed === 'number' && typeof freeLimit === 'number') {
+            setCredits((c) => ({
+              ...c,
+              freeHintsUsed: freeUsed,
+              freeHintsLimit: freeLimit,
+              hintCredits: typeof paidCredits === 'number' ? paidCredits : c.hintCredits,
+            }));
+          }
+          showUpsell('hints');
+          return;
+        }
         if (res.status === 403) {
           const json = await res.json().catch(() => ({})) as { error?: string };
           if (json.error === 'hints_disabled') { pushToast(t('hints_disabled_toast', locale), 'error'); return; }
@@ -7688,6 +7722,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         }
         return;
       }
+      // The HintQuotaCounter is intentionally NOT decremented here: the quota
+      // is charged on DELIVERY (bot side, after the friend-pick), never on
+      // wave creation — an undelivered wave correctly costs the user nothing,
+      // so an optimistic decrement could under-count. The counter may briefly
+      // show a stale value until the next bootstrap refreshes it from the
+      // server ledger; acceptable, since the charge is delivery-time.
       // Show brief transition overlay, then navigate to bot chat
       try { tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred?.('success'); } catch { /* ok */ }
       setHintClosing(true);
@@ -7709,7 +7749,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     } finally {
       setHintLoading(false);
     }
-  }, [hintLoading, hintClosing, planInfo, tgFetch, pushToast, showUpsell, locale, botUsername]);
+  }, [hintLoading, hintClosing, planInfo, credits, tgFetch, pushToast, showUpsell, locale, botUsername]);
 
   const handleSaveDescription = useCallback(async () => {
     if (!viewingItem) return;
@@ -16416,24 +16456,37 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             )}
 
-            {/* Hint button */}
-            {viewingItem.status === 'available' && (
-              <div onClick={() => !hintLoading && handleHintTap(viewingItem as Item)} style={{
-                marginTop: 16, padding: '12px 14px', background: `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.031)`, border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.071)`,
-                borderRadius: 14, display: 'flex', alignItems: 'center', gap: 12, cursor: hintLoading ? 'wait' : 'pointer',
-                opacity: hintLoading ? 0.6 : 1,
-              }}>
-                <span style={{ fontSize: 18 }}>💡</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: C.textSec }}>{t('hint_friends_btn', locale)}</span>
-                    {planInfo.code === 'FREE' && <ProBadge />}
+            {/* Hint button — FREE-quota gated (no PRO badge); a HintQuotaCounter
+                strip below shows the monthly allowance and routes the upsell. */}
+            {viewingItem.status === 'available' && (() => {
+              const hintIsPro = planInfo.code !== 'FREE';
+              const hintFreeLimit = credits.freeHintsLimit ?? HINT_QUOTA_FALLBACK;
+              const hintFreeLeft = Math.max(0, hintFreeLimit - (credits.freeHintsUsed ?? 0));
+              return (
+                <>
+                  <div onClick={() => !hintLoading && handleHintTap(viewingItem as Item)} style={{
+                    marginTop: 16, padding: '12px 14px', background: `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.031)`, border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.071)`,
+                    borderRadius: 14, display: 'flex', alignItems: 'center', gap: 12, cursor: hintLoading ? 'wait' : 'pointer',
+                    opacity: hintLoading ? 0.6 : 1,
+                  }}>
+                    <span style={{ fontSize: 18 }}>💡</span>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: C.textSec }}>{t('hint_friends_btn', locale)}</span>
+                      <div style={{ fontSize: 11, color: C.textMuted, marginTop: 1 }}>{t('item_detail_hint_sub', locale)}</div>
+                    </div>
+                    <span style={{ color: C.textMuted }}>{hintLoading ? '⏳' : '›'}</span>
                   </div>
-                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 1 }}>{t('item_detail_hint_sub', locale)}</div>
-                </div>
-                <span style={{ color: C.textMuted }}>{hintLoading ? '⏳' : '›'}</span>
-              </div>
-            )}
+                  <HintQuotaCounter
+                    isPro={hintIsPro}
+                    freeLeft={hintFreeLeft}
+                    freeLimit={hintFreeLimit}
+                    paidLeft={credits.hintCredits}
+                    locale={locale}
+                    onUpsell={() => showUpsell('hints')}
+                  />
+                </>
+              );
+            })()}
           </div>
         </div>
         );
@@ -16645,28 +16698,41 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             )}
 
-            {/* Hint button — only show for available items */}
-            {viewingItem.status === 'available' && (
-              <div
-                onClick={() => !hintLoading && handleHintTap(viewingItem as Item)}
-                style={{
-                  marginTop: 16, padding: 16, background: C.surface, borderRadius: 16,
-                  display: 'flex', alignItems: 'center', gap: 12, cursor: hintLoading ? 'wait' : 'pointer',
-                  border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.063)`, opacity: hintLoading ? 0.6 : 1,
-                  transition: 'opacity 0.15s',
-                }}
-              >
-                <span style={{ fontSize: 22 }}>💡</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{t('hint_friends_btn', locale)}</span>
-                    {planInfo.code === 'FREE' && <ProBadge />}
+            {/* Hint button — FREE-quota gated (no PRO badge); a HintQuotaCounter
+                strip below shows the monthly allowance. Available items only. */}
+            {viewingItem.status === 'available' && (() => {
+              const hintIsPro = planInfo.code !== 'FREE';
+              const hintFreeLimit = credits.freeHintsLimit ?? HINT_QUOTA_FALLBACK;
+              const hintFreeLeft = Math.max(0, hintFreeLimit - (credits.freeHintsUsed ?? 0));
+              return (
+                <>
+                  <div
+                    onClick={() => !hintLoading && handleHintTap(viewingItem as Item)}
+                    style={{
+                      marginTop: 16, padding: 16, background: C.surface, borderRadius: 16,
+                      display: 'flex', alignItems: 'center', gap: 12, cursor: hintLoading ? 'wait' : 'pointer',
+                      border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.063)`, opacity: hintLoading ? 0.6 : 1,
+                      transition: 'opacity 0.15s',
+                    }}
+                  >
+                    <span style={{ fontSize: 22 }}>💡</span>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{t('hint_friends_btn', locale)}</span>
+                      <div style={{ fontSize: 12, color: C.textMuted }}>{t('hint_subtitle', locale)}</div>
+                    </div>
+                    <span style={{ fontSize: 16, color: C.textMuted }}>{hintLoading ? '⏳' : '›'}</span>
                   </div>
-                  <div style={{ fontSize: 12, color: C.textMuted }}>{t('hint_subtitle', locale)}</div>
-                </div>
-                <span style={{ fontSize: 16, color: C.textMuted }}>{hintLoading ? '⏳' : '›'}</span>
-              </div>
-            )}
+                  <HintQuotaCounter
+                    isPro={hintIsPro}
+                    freeLeft={hintFreeLeft}
+                    freeLimit={hintFreeLimit}
+                    paidLeft={credits.hintCredits}
+                    locale={locale}
+                    onUpsell={() => showUpsell('hints')}
+                  />
+                </>
+              );
+            })()}
             {viewingItem.status === 'reserved' && (
               <div
                 style={{

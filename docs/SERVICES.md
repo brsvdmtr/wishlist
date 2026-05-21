@@ -8,7 +8,7 @@ single route module. As of **2026-05-07** the P5s extraction wave is
 `apps/api/src/index.ts` is **1 789 LOC** (down from a peak of ~21 580 —
 −91.7% off the original monolith, −51.6% off the post-P5r baseline of
 3 700). Services added since then under the on-touch rule bring the live
-total to **14** (see § 1).
+total to **15** (see § 1).
 
 `services/` is the canonical home for:
 
@@ -32,7 +32,7 @@ It is **not** the right home for:
 
 ---
 
-## 1. Live services (14 modules)
+## 1. Live services (15 modules)
 
 | # | Module | Phase | Δ LOC out of index.ts | Strategy | Consumers |
 |---|---|---|---|---|---|
@@ -50,13 +50,15 @@ It is **not** the right home for:
 | 12 | `services/referral-hooks.ts` | P5s-5 | ~180 | A — deps preserved | `routes/wishlists.routes.ts`, `routes/onboarding.routes.ts`, `routes/admin.routes.ts` |
 | 13 | `services/santa-season.ts` | P5s-4 | ~382 | A — deps preserved | `routes/santa.routes.ts`, `schedulers/santa.ts`, `runSantaStartupJobs` |
 | 14 | `services/import-credits.ts` | post-P5s (2026-05-20) | 0 (born new) | B — direct import | `routes/import.routes.ts`, `routes/internal.routes.ts`, `services/entitlement.ts` |
+| 15 | `services/hint-credits.ts` | post-P5s (2026-05-21) | 0 (born new) | B — direct import | `routes/hints.routes.ts`, `routes/internal.routes.ts`, `services/entitlement.ts` |
 
 **Total moved out of index.ts:** ~2 121 LOC (P5s alone) + 199 (P5r-5/-6) ≈ **2 320 LOC** across the entire services layer.
 
 **Post-P5s additions:** `services/import-credits.ts` (#14) is the first
-service added after the extraction wave closed. It is **born new** — not
-carved out of index.ts — under the on-touch rule (§ 5). index.ts is
-untouched; consumers import it directly.
+service added after the extraction wave closed; `services/hint-credits.ts`
+(#15) is the second, same `import-credits` blueprint. Both are **born new** —
+not carved out of index.ts — under the on-touch rule (§ 5). index.ts is
+untouched; consumers import them directly.
 
 ---
 
@@ -275,6 +277,46 @@ via single-statement conditional `INSERT ... ON CONFLICT DO UPDATE` and
 directly, and `entitlement.ts` imports the pure `resolveFreeImports` for the
 `/tg/me` + `/tg/wishlists` counter payload.
 
+### `services/hint-credits.ts` (post-P5s, 2026-05-21, ~230 LOC)
+
+**Purpose:** the credit model behind "hint friends". FREE users get a monthly
+free-hint quota (`FREE_HINT_QUOTA_PER_MONTH`, default 3, env-tunable); PRO is
+unlimited; paid `hints_pack_*` credits (`UserCredits.hintCredits`) top up
+beyond the free allowance. Replaces the old hard PRO gate on
+`POST /tg/items/:id/hint` — the soft-virality feature the monetization audit
+flagged as better left FREE with a quota.
+
+**Charge on delivery, not creation:** unlike import credits, the hint quota is
+charged only when the bot reports a hint DELIVERED (`POST /internal/hints/credit`),
+never when the Mini App creates the hint wave. `getHintAllowance` only
+*checks* the allowance at creation; `consumeHintCharge` does the decrement on
+delivery. A hint that is never delivered (keyboard lost, picker abandoned,
+hint expired) costs the user nothing.
+
+**Exports:** `FREE_HINT_QUOTA_PER_MONTH`, `currentHintPeriod`,
+`resolveFreeHints` (pure), `getHintAllowance`, `getFreeHintsState`,
+`consumeHintCharge`, plus the `FreeHintState` / `HintAllowance` /
+`HintChargeOutcome` / `ConsumeHintResult` types.
+
+**Audit ledger:** every charge writes a `HintQuotaCharge` row (`hintId` UNIQUE
+→ idempotent; `source` ∈ `free_monthly` | `paid_pack` | `grace` | `pro`).
+"Free hints used this month" is a COUNT over the ledger — no counter column to
+drift. `hintId` is a denormalized string (no FK) so the ledger outlives its
+Hint: deleting a wish can never refund quota.
+
+**Grace:** if the FREE quota was available at wave creation but exhausted by
+delivery time, the hint is still delivered — recorded `source='grace',
+charged=false`. We never break a scenario the user already started.
+
+**Concurrency:** `consumeHintCharge` runs the whole decision inside one
+transaction holding a per-user `pg_advisory_xact_lock`, so parallel deliveries
+can never push the monthly counter past the cap (pinned by
+`test/integration/hint-credits.test.ts`).
+
+**Born new, not extracted:** index.ts is untouched; `hints.routes.ts` and
+`internal.routes.ts` import the functions directly, and `entitlement.ts`
+imports `getFreeHintsState` for the `/tg/me` + `/tg/wishlists` counter payload.
+
 ---
 
 ## 3. Pattern: import directly vs receive via deps
@@ -295,6 +337,7 @@ directly, and `entitlement.ts` imports the pure `resolveFreeImports` for the
 | `lifecycle` | deps factory | Factory closing over botToken+logger. |
 | `birthday-reminders` | direct import | Pure utilities. |
 | `import-credits` | direct import | Pure + DB helpers; routes import the two functions directly — no index.ts wiring (born post-P5s). |
+| `hint-credits` | direct import | Pure + DB helpers; `hints.routes.ts` checks, `internal.routes.ts` charges on bot delivery — no index.ts wiring (born post-P5s). |
 
 The blanket pattern: **Strategy A (deps preserved)** when fan-out is
 high or when the helper closes over a runtime dep that lives in

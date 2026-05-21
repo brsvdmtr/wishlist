@@ -421,6 +421,46 @@ export const PRODUCT_EVENTS = [
     sources: ['server'],
     pii: 'userId-only',
   },
+  // ── Hint free-quota (server-authoritative) ──
+  // "Hint friends" is a FREE monthly quota (default 3/mo), not a hard PRO
+  // gate. The quota is charged on DELIVERY, never on hint-wave creation —
+  // see services/hint-credits.ts.
+  {
+    name: 'hint.free_quota_charged',
+    domain: 'hint',
+    action: 'free_quota_charged',
+    description:
+      'A delivered hint consumed one unit of the FREE monthly hint quota. Emitted by consumeHintCharge() after the bot reports the hint DELIVERED — never on hint-wave creation.',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'hint.free_quota_charge_skipped',
+    domain: 'hint',
+    action: 'free_quota_charge_skipped',
+    description:
+      "A delivered hint did NOT consume a FREE quota unit. props.reason: 'pro' (unlimited plan), 'paid_pack' (a paid hints_pack credit was spent instead), or 'grace' (free quota ran out between wave creation and delivery — delivered anyway, uncharged).",
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'hint.free_quota_exhausted',
+    domain: 'hint',
+    action: 'free_quota_exhausted',
+    description:
+      'The hint charge that drained the last FREE monthly credit. Fires at most once per user per month, in the same consumeHintCharge() call as the final hint.free_quota_charged.',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'hint.pack_suggested',
+    domain: 'hint',
+    action: 'pack_suggested',
+    description:
+      'A FREE user with no remaining free quota and no paid hint credits hit the hint gate on POST /tg/items/:id/hint; the 402 upsell (buy a hints pack / upgrade to PRO) was returned.',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
 ] as const satisfies readonly ProductEventDescriptor[];
 
 export type ProductEventName = (typeof PRODUCT_EVENTS)[number]['name'];

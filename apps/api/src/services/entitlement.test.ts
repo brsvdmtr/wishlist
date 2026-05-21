@@ -14,6 +14,7 @@ const shared = vi.hoisted(() => ({
   addOnFindMany: vi.fn(),
   creditsFindUnique: vi.fn(),
   wishlistFindMany: vi.fn(),
+  hintChargeCount: vi.fn(),
   trackEvent: vi.fn(),
 }));
 
@@ -25,6 +26,7 @@ vi.mock('@wishlist/db', () => ({
     userAddOn: { findMany: shared.addOnFindMany },
     userCredits: { findUnique: shared.creditsFindUnique },
     wishlist: { findMany: shared.wishlistFindMany },
+    hintQuotaCharge: { count: shared.hintChargeCount },
   },
 }));
 
@@ -61,6 +63,7 @@ beforeEach(() => {
   shared.addOnFindMany.mockResolvedValue([]);
   shared.creditsFindUnique.mockResolvedValue(null);
   shared.wishlistFindMany.mockResolvedValue([]);
+  shared.hintChargeCount.mockResolvedValue(0);
 });
 
 describe('PLANS catalogue', () => {
@@ -397,6 +400,14 @@ describe('getEffectiveEntitlements — add-on aggregation', () => {
     const r = await getEffectiveEntitlements('u1');
     expect(r.hintCredits).toBe(0);
     expect(r.importCredits).toBe(0);
+  });
+
+  it('surfaces the FREE hint quota counted from the HintQuotaCharge ledger', async () => {
+    shared.userFindUnique.mockResolvedValueOnce({ godMode: false });
+    shared.hintChargeCount.mockResolvedValueOnce(2);
+    const r = await getEffectiveEntitlements('u1');
+    expect(r.freeHintsUsed).toBe(2);
+    expect(r.freeHintsLimit).toBe(3);
   });
 
   it('giftNotes.unlocked=true for PRO users (subscription)', async () => {

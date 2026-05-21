@@ -15,6 +15,7 @@ import { prisma, resolveReferralCode, tryCreateAttribution, markFirstBotStart, l
 import { t, pluralize, detectLocale, resolveEffectiveLocale, resolveLocaleWithSource, profileToLanguageSettings, resolveMarketBucket, localeToBCP47, LIFETIME_BILLING_PERIOD, PRO_LIFETIME_PERIOD_END_ISO, HINT_LOOKUP_WINDOW_MS, type Locale } from '@wishlist/shared';
 import logger from './logger';
 import { emitPaymentAnalytics } from './analytics';
+import { chargeDeliveredHint } from './hint-charge';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
 // but also support running from within apps/bot (pnpm -C apps/bot start).
@@ -1820,6 +1821,20 @@ if (!token) {
       );
       return;
     }
+
+    // The hint just transitioned SENT → DELIVERED — the friend-picker was
+    // completed and this event won the claim. Per the contract (spec point 1)
+    // the FREE quota is spent on that DELIVERED status transition: when the
+    // user completes the picker — NOT on wave creation, and NOT gated on how
+    // many recipient DMs the loop below lands. A picker can complete with zero
+    // direct sends (every recipient unreachable) and the sender still gets a
+    // forwardable link, so the scenario is "done" either way. A hint that
+    // never reaches DELIVERED (picker abandoned → stays SENT → CANCELLED /
+    // EXPIRED) is never charged. Fire-and-forget — never blocks the delivery
+    // loop below — with a bounded idempotent retry inside chargeDeliveredHint;
+    // a charge lost after all retries fails OPEN (the user keeps the hint).
+    // See apps/api POST /internal/hints/credit + services/hint-credits.ts.
+    void chargeDeliveredHint(hint.id, API_BASE_URL, token!);
 
     // Resolve owner name for the hint message
     const owner = await prisma.user.findUnique({

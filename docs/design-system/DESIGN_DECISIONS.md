@@ -32,6 +32,40 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-05-21 — HintQuotaCounter feature element (sibling of ImportQuotaCounter)
+
+**Type:** approval
+
+**Decision.** `apps/web/app/miniapp/components/HintQuotaCounter.tsx` is added
+as a feature element (NOT a `@wishlist/ui` primitive) for the FREE-hint-quota
+monetization change. It is a near-verbatim sibling of `ImportQuotaCounter`:
+the same 4-branch tone escalation (≥2 left = accent-soft, 1 left =
+warning-soft, 0 + paid credits = neutral, 0 + 0 = danger-soft + tappable), the
+same v2.1 tokens, the same slim-strip layout. Only the copy differs
+(`hints_quota_*` i18n keys instead of `drafts_import_*`). It renders under the
+"hint friends" card on the item-detail screen.
+
+**Context / why.** Hints moved from a hard PRO gate to a FREE monthly quota
+(3/month) — the soft-virality conversion from the 2026-05-19 monetization
+audit. That surface needs the same "X of Y left this month" counter the
+URL-import flow already has. The quota-counter pattern was approved 2026-05-20
+for `ImportQuotaCounter`; this entry records applying that approved pattern to
+a second feature rather than improvising a new one.
+
+**Supersedes.** The `<ProBadge />` previously shown on the hint card for FREE
+users (hints are no longer PRO-only).
+
+**Impact.**
+- New file `components/HintQuotaCounter.tsx` (feature element, not a primitive
+  — no `COMPONENT_REGISTRY.md` row, consistent with `ImportQuotaCounter`).
+- New i18n keys `hints_quota_left` / `_empty` / `_paid` / `_unlimited`
+  (6 locales).
+- No new tokens, no `@wishlist/ui` change.
+
+**Approved by.** Dmitry (solo-owner decision, 2026-05-21).
+
+---
+
 ## 2026-05-20 — URL-import entry card always visible (Drafts reachable at 0 drafts)
 
 **Type:** approval
