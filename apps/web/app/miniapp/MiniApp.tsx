@@ -7191,6 +7191,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       // Reflect the consumed credit in the live counter (server-authoritative).
       const okBody = await res.json().catch(() => null) as
         | {
+            item?: Item;
             parseStatus?: ImportParseStatus;
             importQuota?: { importCredits: number; freeImportsUsed: number; freeImportsLimit: number };
           }
@@ -7205,8 +7206,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       await loadWishlists();
       // Toast copy varies by parse outcome — a failed parse creates a stub
       // card and spends NO credit, so it must not read as a plain success.
-      const toast = importResultToast(okBody?.parseStatus ?? 'ok', locale);
+      const status = okBody?.parseStatus ?? 'ok';
+      const toast = importResultToast(status, locale);
       pushToast(toast.message, toast.tone);
+      // Graceful partial import: a failed parse leaves a domain-stub card and
+      // a partial parse leaves the price/image blank. Open the freshly-created
+      // draft straight in the edit form so the user fills the gaps right away
+      // instead of hunting for the stub in their inbox.
+      if ((status === 'failed' || status === 'partial') && okBody?.item) {
+        openEditItem(okBody.item);
+      }
     } catch {
       pushToast(t('toast_url_import_error', locale), 'error');
     } finally {
