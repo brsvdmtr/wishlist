@@ -57,6 +57,10 @@ import {
   lookupSite,
   isScraperApiEnabled,
   fetchViaScraperApi,
+  isScraperHopeless,
+  scraperMaxAttempts,
+  noteScraperCall,
+  scraperBudgetLeft,
   type ExtractedFields,
 } from './marketplace/index.js';
 // Auto-register all marketplace strategies on import
@@ -273,22 +277,28 @@ async function scraperApiFallback(
   hostname: string,
   canonicalUrl: string,
 ): Promise<ParsedUrlData> {
-  if (isScraperApiEnabled()) {
-    try {
-      // Route through the marketplace's own country when known — geo-fenced
-      // RU sites (Ozon / Yandex) only serve a Russian IP.
-      const country = lookupSite(hostname)?.country;
-      const html = await fetchViaScraperApi(url.href, { country });
-      const r = extractFromHtml(html, url.href, hostname, 'generic_html');
-      if (r.confidence !== 'none') {
-        console.log(`[parser] scraper-api success: ${hostname} (${r.confidence})`);
-        const final = toFinal(r, hostname, canonicalUrl);
-        cacheSet(canonicalUrl, final);
-        return final;
+  // Skip sites whose anti-bot the scraping API reliably fails (Ozon, Yandex,
+  // Taobao-class) — retrying only burns credits and stalls the import.
+  if (isScraperApiEnabled() && !isScraperHopeless(hostname)) {
+    // Geo-fenced sites need an IP in their own country (from the registry).
+    const country = lookupSite(hostname)?.country;
+    const maxAttempts = scraperMaxAttempts();
+    // Anti-bot bypass is probabilistic — retry a few times before giving up.
+    for (let attempt = 1; attempt <= maxAttempts && scraperBudgetLeft(); attempt++) {
+      noteScraperCall();
+      try {
+        const html = await fetchViaScraperApi(url.href, { country });
+        const r = extractFromHtml(html, url.href, hostname, 'generic_html');
+        if (r.confidence !== 'none') {
+          console.log(`[parser] scraper-api success: ${hostname} (attempt ${attempt}/${maxAttempts}, ${r.confidence})`);
+          const final = toFinal(r, hostname, canonicalUrl);
+          cacheSet(canonicalUrl, final);
+          return final;
+        }
+        console.warn(`[parser] scraper-api attempt ${attempt}/${maxAttempts}: no useful data for ${hostname}`);
+      } catch (e) {
+        console.warn(`[parser] scraper-api attempt ${attempt}/${maxAttempts} failed for ${hostname}: ${(e as Error).message}`);
       }
-      console.warn(`[parser] scraper-api: no useful data for ${hostname}`);
-    } catch (e) {
-      console.warn(`[parser] scraper-api failed for ${hostname}: ${(e as Error).message}`);
     }
   }
   setNegative(canonicalUrl);

@@ -2,9 +2,15 @@
  * Tests for the scraping-API fetch fallback config + URL builder.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { isScraperApiEnabled, buildScraperApiUrl } from './scraper-api.js';
+import {
+  isScraperApiEnabled, buildScraperApiUrl, isScraperHopeless,
+  scraperMaxAttempts, noteScraperCall, scraperBudgetLeft,
+} from './scraper-api.js';
 
-const ENV_KEYS = ['SCRAPER_API_KEY', 'SCRAPER_API_DISABLED', 'SCRAPER_API_URL'];
+const ENV_KEYS = [
+  'SCRAPER_API_KEY', 'SCRAPER_API_DISABLED', 'SCRAPER_API_URL',
+  'SCRAPER_API_MAX_ATTEMPTS', 'SCRAPER_API_MONTHLY_LIMIT',
+];
 afterEach(() => {
   for (const k of ENV_KEYS) delete process.env[k];
 });
@@ -40,5 +46,45 @@ describe('buildScraperApiUrl', () => {
     process.env.SCRAPER_API_URL = 'https://app.scrapingbee.com/api/v1/';
     expect(buildScraperApiUrl('https://x.com'))
       .toMatch(/^https:\/\/app\.scrapingbee\.com\/api\/v1\/\?/);
+  });
+});
+
+describe('isScraperHopeless', () => {
+  it('flags Ozon / Yandex / Taobao-class fortresses', () => {
+    expect(isScraperHopeless('ozon.ru')).toBe(true);
+    expect(isScraperHopeless('www.ozon.ru')).toBe(true);
+    expect(isScraperHopeless('market.yandex.ru')).toBe(true);
+    expect(isScraperHopeless('taobao.com')).toBe(true);
+  });
+  it('does not flag scrapable marketplaces', () => {
+    expect(isScraperHopeless('ebay.com')).toBe(false);
+    expect(isScraperHopeless('www.amazon.com')).toBe(false);
+    expect(isScraperHopeless('flipkart.com')).toBe(false);
+  });
+});
+
+describe('scraperMaxAttempts', () => {
+  it('defaults to 3', () => {
+    expect(scraperMaxAttempts()).toBe(3);
+  });
+  it('honours the env override and clamps to 1..5', () => {
+    process.env.SCRAPER_API_MAX_ATTEMPTS = '2';
+    expect(scraperMaxAttempts()).toBe(2);
+    process.env.SCRAPER_API_MAX_ATTEMPTS = '99';
+    expect(scraperMaxAttempts()).toBe(5);
+    process.env.SCRAPER_API_MAX_ATTEMPTS = 'junk';
+    expect(scraperMaxAttempts()).toBe(3);
+  });
+});
+
+describe('scraper monthly budget', () => {
+  it('runs out after SCRAPER_API_MONTHLY_LIMIT calls', () => {
+    process.env.SCRAPER_API_MONTHLY_LIMIT = '3';
+    expect(scraperBudgetLeft()).toBe(true);
+    noteScraperCall();
+    noteScraperCall();
+    expect(scraperBudgetLeft()).toBe(true);
+    noteScraperCall();
+    expect(scraperBudgetLeft()).toBe(false);
   });
 });
