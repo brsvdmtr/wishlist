@@ -4,27 +4,27 @@
  * Many marketplaces block our datacenter IP outright (Akamai / Cloudflare /
  * PerimeterX 403, geo-blocks). When a direct fetch + headless browser both
  * fail that way, the parser retries through a scraping API that fetches from a
- * rotating residential IP — and, for geo-fenced sites, from the marketplace's
- * own country (proxy_country, derived from the site registry).
+ * residential IP with a real rendering browser — and, for geo-fenced sites,
+ * from the marketplace's own country.
  *
  * Entirely gated on SCRAPER_API_KEY: with no key set this module is inert and
  * the parser behaves exactly as before. It is a *fallback* — invoked only
  * after a direct fetch fails — so marketplaces reachable directly (WB CDN,
  * Amazon, AliExpress, Target, JD) never consume scraping-API credits.
  *
- * Built for ScrapingAnt's v2 API — chosen for a recurring 10k-credit/month
- * free tier with residential proxies and RU geo-targeting. SCRAPER_API_URL
- * overrides the endpoint for a different provider.
+ * Built for ScrapingAnt's v2 API. Always uses a residential proxy + browser
+ * rendering: empirically, anything less (datacenter proxy or browser=false)
+ * is detected by eBay/Ozon-class anti-bot and returns HTTP 423. Cost on
+ * ScrapingAnt: 125 credits/request — the free tier's 10k/month covers ~80
+ * fallback fetches, fine while the feature is low-volume.
  *
  * Env:
  *   SCRAPER_API_KEY       — provider API key (absent ⇒ feature off)
  *   SCRAPER_API_URL       — base endpoint, default ScrapingAnt /v2/general
  *   SCRAPER_API_DISABLED  — kill switch (=1 ⇒ off even with a key)
- *   SCRAPER_API_BROWSER   — =1 ⇒ request JS rendering globally (costlier;
- *                           only needed for pure client-rendered SPAs)
  */
 
-const SCRAPER_TIMEOUT_MS = 60_000;   // residential + JS render can be slow
+const SCRAPER_TIMEOUT_MS = 90_000;   // residential + JS render is slow
 const MAX_HTML_BYTES     = 3 * 1024 * 1024;
 
 /** Whether the scraping-API fallback is configured and active. */
@@ -36,19 +36,15 @@ export function isScraperApiEnabled(): boolean {
  * Build the ScrapingAnt request URL. The API key travels in the `x-api-key`
  * header (see fetchViaScraperApi), NOT here — so this result is safe to log.
  *
- * Always uses a residential proxy: the whole point of the fallback is to beat
- * datacenter-IP blocks. `country` (ISO-3166 alpha-2) routes through that
- * country's IPs — critical for geo-fenced sites (Ozon / Yandex want RU).
+ * Always residential proxy + browser rendering: the only combination that
+ * gets past eBay/Ozon-class anti-bot. `country` (ISO-3166 alpha-2) routes
+ * through that country's IPs — critical for geo-fenced sites (RU).
  */
-export function buildScraperApiUrl(
-  targetUrl: string,
-  opts?: { country?: string; browser?: boolean },
-): string {
+export function buildScraperApiUrl(targetUrl: string, opts?: { country?: string }): string {
   const base = process.env.SCRAPER_API_URL || 'https://api.scrapingant.com/v2/general';
   const params = new URLSearchParams({ url: targetUrl });
   params.set('proxy_type', 'residential');
-  const browser = opts?.browser === true || process.env.SCRAPER_API_BROWSER === '1';
-  params.set('browser', browser ? 'true' : 'false');
+  params.set('browser', 'true');
   if (opts?.country) params.set('proxy_country', opts.country.toUpperCase());
   return `${base}?${params.toString()}`;
 }
@@ -59,7 +55,7 @@ export function buildScraperApiUrl(
  */
 export async function fetchViaScraperApi(
   targetUrl: string,
-  opts?: { country?: string; browser?: boolean },
+  opts?: { country?: string },
 ): Promise<string> {
   const apiKey = process.env.SCRAPER_API_KEY;
   if (!apiKey) throw new Error('scraper_api_no_key');

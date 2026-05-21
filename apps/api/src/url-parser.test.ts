@@ -199,3 +199,20 @@ describe('extractFromHtml — source precedence merge', () => {
     expect(r.priceText).toBe('$55');         // JSON-LD fills the missing price
   });
 });
+
+// ─── JD.com ──────────────────────────────────────────────────────────────────
+
+describe('extractFromHtml — JD.com', () => {
+  it('extracts title + image from the DOM; price absent (loaded async)', () => {
+    const html = page(
+      '',
+      `<div class="sku-name"> Deli Smart Vacuum X9 </div>
+       <img id="spec-img" width="450" height="450"
+            data-origin="//img12.360buyimg.com/n1/jfs/t1/x9.jpg" />`,
+    );
+    const r = extractFromHtml(html, 'https://item.jd.com/100079383742.html', 'item.jd.com', 'generic_html');
+    expect(r.title).toBe('Deli Smart Vacuum X9');
+    expect(r.imageUrl).toBe('https://img12.360buyimg.com/n1/jfs/t1/x9.jpg');
+    expect(r.priceText).toBeNull();
+  });
+});

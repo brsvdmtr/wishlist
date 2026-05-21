@@ -870,6 +870,7 @@ interface DomainData {
 function applyDomainAdapter($: cheerio.CheerioAPI, hostname: string, html: string): DomainData | null {
   if (isAmazonHost(hostname))                                                     return amazonAdapter($);
   if (isAliexpressHost(hostname))                                                 return aliexpressAdapter(html);
+  if (isJdHost(hostname))                                                         return jdAdapter($, html);
   if (hostname === 'ozon.ru'          || hostname.endsWith('.ozon.ru'))           return ozonAdapter($, html);
   if (hostname === 'wildberries.ru'   || hostname.endsWith('.wildberries.ru'))    return wbHtmlAdapter($, html);
   if (hostname === 'market.yandex.ru' || hostname.endsWith('.market.yandex.ru')) return ymAdapter($);
@@ -1023,6 +1024,10 @@ function isAliexpressHost(h: string): boolean {
   return /(^|\.)aliexpress\.(com|ru|us)$/.test(h);
 }
 
+function isJdHost(h: string): boolean {
+  return /(^|\.)jd\.com$/.test(h);
+}
+
 /**
  * Amazon ships no JSON-LD Product and no og:price — title and image come
  * from the universal layer, but the price needs DOM selectors.
@@ -1120,6 +1125,31 @@ function extractAliexpressData(html: string): any | null {
     idx = html.indexOf('runParams', idx + 'runParams'.length);
   }
   return null;
+}
+
+/**
+ * JD.com — no JSON-LD / Open Graph / hydration JSON. Title comes from the
+ * `.sku-name` element (fallback: a `name:'…'` pageConfig literal), the image
+ * from `#spec-img`. JD loads the price asynchronously by JS and it is not in
+ * the served HTML, so JD imports land as "partial" — title + image, no price.
+ */
+function jdAdapter($: cheerio.CheerioAPI, html: string): DomainData | null {
+  const result: DomainData = {};
+
+  const name = $('.sku-name').first().text().trim();
+  if (name) {
+    result.title = name;
+  } else {
+    const m = html.match(/name:\s*'([^']{2,200})'/);
+    if (m?.[1]) result.title = m[1].trim();
+  }
+
+  const img = $('#spec-img').attr('data-origin')
+           || $('#spec-img').attr('src')
+           || $('#preview img').first().attr('src');
+  if (img) result.image = img;
+
+  return Object.keys(result).length ? result : null;
 }
 
 // ─── Title Cleanup ────────────────────────────────────────────────────────────
