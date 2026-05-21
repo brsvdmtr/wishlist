@@ -302,10 +302,15 @@ function scanOzonComposerResponse(json: unknown): ProductCandidate | null {
  *
  * Exported so the cheap HTTP path (url-parser.ts) can reuse it without a
  * browser: most modern marketplaces (Next.js, Nuxt, Redux SPAs) ship the
- * product JSON inside the server-rendered HTML.
+ * product JSON inside the server-rendered HTML. The caller may pass an
+ * already-loaded Cheerio document (`pre$`) to avoid re-parsing the HTML.
  */
-export function extractFromHydration(html: string, hostname: string): ExtractedProduct | null {
-  const $ = cheerio.load(html);
+export function extractFromHydration(
+  html: string,
+  hostname: string,
+  pre$?: cheerio.CheerioAPI,
+): ExtractedProduct | null {
+  const $ = pre$ ?? cheerio.load(html);
 
   // 1. __NEXT_DATA__ (highest: Next.js stores like Lamoda, Goldapple)
   const nextDataEl = $('#__NEXT_DATA__');
@@ -471,7 +476,7 @@ function extractProductFields(obj: Record<string, unknown>, keys: string[]): Pro
   if (isValidName)               score += 30;
   if (priceResult !== null)       score += 35;
   if (image)                      score += 25;
-  if (description?.length ?? 0 > 10) score += 10;
+  if ((description?.length ?? 0) > 10) score += 10;
 
   return {
     name:        isValidName ? name : null,

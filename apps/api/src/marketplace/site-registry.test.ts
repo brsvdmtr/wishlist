@@ -53,6 +53,7 @@ describe('lookupSite — unknown domains', () => {
   });
   it('does not false-match a lookalike host', () => {
     expect(lookupSite('notamazon.com')).toBeNull();
+    expect(lookupSite('evil-amazon.co.uk')).toBeNull();
   });
 });
 

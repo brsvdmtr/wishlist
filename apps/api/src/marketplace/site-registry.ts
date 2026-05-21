@@ -58,6 +58,9 @@ const REGISTRY: Record<string, SiteInfo> = {
   'reliancedigital.in':{ name: 'Reliance Digital', country: 'IN', currency: 'INR' },
 
   // ─── China (CNY) ───────────────────────────────────────────────────────
+  // Taobao / Tmall / Pinduoduo are listed for recognition + currency fallback
+  // only — anti-bot + login walls make free server-side parsing infeasible;
+  // the parser degrades gracefully (item saved with link) for them by design.
   'taobao.com':        { name: 'Taobao',           country: 'CN', currency: 'CNY' },
   'tmall.com':         { name: 'Tmall',            country: 'CN', currency: 'CNY' },
   'jd.com':            { name: 'JD.com',           country: 'CN', currency: 'CNY' },
@@ -101,6 +104,17 @@ const REGISTRY: Record<string, SiteInfo> = {
   'amazon.fr':         { name: 'Amazon FR',        country: 'FR', currency: 'EUR' },
   'amazon.it':         { name: 'Amazon IT',        country: 'IT', currency: 'EUR' },
   'amazon.nl':         { name: 'Amazon NL',        country: 'NL', currency: 'EUR' },
+  'amazon.ca':         { name: 'Amazon CA',        country: 'CA', currency: 'CAD' },
+  'amazon.com.mx':     { name: 'Amazon MX',        country: 'MX', currency: 'MXN' },
+  'amazon.com.br':     { name: 'Amazon BR',        country: 'BR', currency: 'BRL' },
+  'amazon.com.au':     { name: 'Amazon AU',        country: 'AU', currency: 'AUD' },
+  'amazon.co.jp':      { name: 'Amazon JP',        country: 'JP', currency: 'JPY' },
+  'amazon.se':         { name: 'Amazon SE',        country: 'SE', currency: 'SEK' },
+  'amazon.pl':         { name: 'Amazon PL',        country: 'PL', currency: 'PLN' },
+  'amazon.sa':         { name: 'Amazon SA',        country: 'SA', currency: 'SAR' },
+  'amazon.ae':         { name: 'Amazon AE',        country: 'AE', currency: 'AED' },
+  'amazon.eg':         { name: 'Amazon EG',        country: 'EG', currency: 'EGP' },
+  'amazon.sg':         { name: 'Amazon SG',        country: 'SG', currency: 'SGD' },
 };
 
 /**
@@ -112,7 +126,7 @@ export function lookupSite(hostname: string): SiteInfo | null {
   const h = stripHostPrefix(hostname);
   const direct = REGISTRY[h];
   if (direct) return direct;
-  for (const host in REGISTRY) {
+  for (const host of Object.keys(REGISTRY)) {
     if (h.endsWith(`.${host}`)) return REGISTRY[host]!;
   }
   return null;

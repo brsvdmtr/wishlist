@@ -36,14 +36,22 @@ export interface ExtractedFields {
  * Parse a price into a plain number, tolerating grouping/decimal separators
  * from any locale ("1,299.00", "1.299,00", "1 299", "₹1,29,900").
  *
- * Heuristic: the decimal separator is whichever of `.`/`,` appears last AND
- * is followed by exactly 1–2 digits; every other separator is grouping.
+ * Only the first contiguous number-like run is read, so junk around the price
+ * ("from 10-20", "USD 1 299") does not glue extra digits on.
+ *
+ * Decimal heuristic: the decimal separator is whichever of `.`/`,` appears
+ * last AND is followed by exactly 1–2 digits; every other separator is
+ * grouping. A separator followed by 3+ digits is therefore always grouping —
+ * retail prices carry 0 or 2 decimals, so "1.500" is read as 1500, not 1.5.
  */
 export function parseAmount(raw: unknown): number | null {
   if (typeof raw === 'number') return isFinite(raw) && raw > 0 ? raw : null;
   if (typeof raw !== 'string') return null;
 
-  const s = raw.replace(/[^\d.,]/g, '');
+  // Optional leading separator handles sub-unit prices like "$.99".
+  const run = raw.match(/[.,]?\d[\d.,\s]*/);
+  if (!run) return null;
+  const s = run[0]!.replace(/\s/g, '');
   if (!s) return null;
 
   const lastDot   = s.lastIndexOf('.');
@@ -102,6 +110,11 @@ export function extractJsonLd($: cheerio.CheerioAPI): ExtractedFields | null {
   return null;
 }
 
+/**
+ * Depth-first search for the first schema.org Product node. JSON-LD convention
+ * places the page's main product first (top-level or first in @graph), so the
+ * first match is taken — related-item lists usually come after it.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function findJsonLdProduct(data: any, depth: number): ExtractedFields | null {
   if (!data || typeof data !== 'object' || depth > 8) return null;
@@ -212,20 +225,37 @@ export function extractMicrodata($: cheerio.CheerioAPI): ExtractedFields | null 
     .first();
   if (product.length === 0) return null;
 
-  const prop = (name: string): string | null => {
-    const el = product.find(`[itemprop="${name}"]`).first();
-    if (el.length === 0) return null;
-    const tag = String(el.prop('tagName') ?? '').toLowerCase();
-    let v: string | undefined;
-    if (tag === 'meta')                                                  v = el.attr('content');
-    else if (['img', 'source', 'video', 'audio', 'embed', 'iframe'].includes(tag)) v = el.attr('src');
-    else if (['a', 'area', 'link'].includes(tag))                        v = el.attr('href');
-    else if (tag === 'object')                                           v = el.attr('data');
-    else if (['data', 'meter'].includes(tag))                            v = el.attr('value');
-    else if (tag === 'time')                                             v = el.attr('datetime');
-    else                                                                 v = el.attr('content') ?? el.text();
-    const t = v?.trim();
-    return t && t.length > 0 ? t : null;
+  // Microdata model: a property's owner is its nearest ancestor itemscope.
+  //  - name / description / image must be DIRECT properties of `product`
+  //    (nearest itemscope === product) → rejects e.g. a nested Brand's name.
+  //  - price / priceCurrency legitimately sit inside a nested `offers` item,
+  //    so their nearest *Product-typed* scope must be product → still rejects
+  //    a related-Product's offer price.
+  // `image` is URL-valued (read href/src); the rest are text-valued — on an
+  // <a>/<link> their value is the text content, not the href.
+  const prop = (propName: string): string | null => {
+    const urlValued = propName === 'image';
+    const ownerSel = (propName === 'price' || propName === 'priceCurrency')
+      ? '[itemscope][itemtype*="roduct"]'
+      : '[itemscope]';
+    const candidates = product.find(`[itemprop="${propName}"]`);
+    for (let i = 0; i < candidates.length; i++) {
+      const el = candidates.eq(i);
+      const owner = el.closest(ownerSel);
+      if (owner.length > 0 && !owner.is(product)) continue;
+      const tag = String(el.prop('tagName') ?? '').toLowerCase();
+      let v: string | undefined;
+      if (tag === 'meta')                                                  v = el.attr('content');
+      else if (['img', 'source', 'video', 'audio', 'embed', 'iframe'].includes(tag)) v = el.attr('src');
+      else if (['a', 'area', 'link'].includes(tag))                        v = urlValued ? el.attr('href') : (el.text().trim() || el.attr('href'));
+      else if (tag === 'object')                                           v = el.attr('data');
+      else if (['data', 'meter'].includes(tag))                            v = el.attr('value');
+      else if (tag === 'time')                                             v = el.attr('datetime');
+      else                                                                 v = el.attr('content') ?? el.text();
+      const t = v?.trim();
+      if (t && t.length > 0) return t;
+    }
+    return null;
   };
 
   const title = prop('name');

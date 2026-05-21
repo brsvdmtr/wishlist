@@ -44,6 +44,7 @@ import {
   getMarketplaceId,
   shouldFallbackToLegacy,
   isOrchestratorEnabled,
+  isAntiBotPage,
   // Universal structured-data extraction (shared with marketplace strategies)
   extractJsonLd,
   extractMicrodata,
@@ -608,7 +609,9 @@ function mergeNetworkWithHtml(
 
   const title      = net.title      ?? html.title;
   const description = net.description ?? html.description;
-  const imageUrl   = net.imageUrl   ?? html.imageUrl;
+  // Sanitise the hydration/network image through resolveUrl: resolves
+  // protocol-relative URLs and rejects non-http(s) schemes.
+  const imageUrl   = resolveUrl(net.imageUrl, `https://${hostname}`) ?? html.imageUrl;
   const netAmount  = parseAmount(net.rawPrice);
   const priceText  = netAmount !== null
     ? formatPrice(netAmount, net.currency ?? fallbackCurrency(hostname))
@@ -709,8 +712,8 @@ function isUniversalExtractEnabled(): boolean {
 }
 
 /** Run the shared hydration-JSON scanner and normalise to ExtractedFields. */
-function hydrationFields(html: string, hostname: string): ExtractedFields | null {
-  const ep = extractFromHydration(html, hostname);
+function hydrationFields($: cheerio.CheerioAPI, html: string, hostname: string): ExtractedFields | null {
+  const ep = extractFromHydration(html, hostname, $);
   if (!ep) return null;
   return {
     title:       ep.title,
@@ -768,7 +771,7 @@ export function extractFromHtml(
   // Embedded hydration JSON — skipped in the browser path, where
   // browserExtract() already scanned hydration state alongside network data.
   const embedded = (universalOn && defaultMethod !== 'browser_fallback')
-    ? hydrationFields(html, h)
+    ? hydrationFields($, html, h)
     : null;
 
   // ── Domain adapter (bespoke per-site DOM selectors) ────────────────────
@@ -815,24 +818,7 @@ export function extractFromHtml(
   return { title, description, priceText, imageUrl: imageUrl ?? null, confidence, parseMethod };
 }
 
-// ─── Anti-Bot Detection ───────────────────────────────────────────────────────
-
-function isAntiBotPage(html: string, title: string | null): boolean {
-  if (html.length < 800) return true;
-
-  const lTitle = (title ?? '').toLowerCase();
-  if (['captcha', 'robot', 'challenge', 'antibot', 'access denied',
-       'attention required', 'just a moment', 'проверка', 'verify you are human']
-    .some(t => lTitle.includes(t))) return true;
-
-  const lHtml = html.toLowerCase();
-  if (['g-recaptcha', 'h-captcha', 'cf_challenge', 'cf-challenge-running',
-       'cf_chl_opt', 'cf-please-wait', 'ddos-guard', 'smartcaptcha',
-       'class="antibot"', '__cf_chl', 'yandex-smartcaptcha']
-    .some(s => lHtml.includes(s))) return true;
-
-  return false;
-}
+// Anti-bot detection → marketplace/guards.ts (isAntiBotPage)
 
 // JSON-LD / microdata / Open Graph / Twitter extraction → marketplace/structured-data.ts
 
@@ -1028,9 +1014,9 @@ function amazonAdapter($: cheerio.CheerioAPI): DomainData | null {
     if (!text) continue;
     const amount = parseAmount(text);
     if (amount !== null) {
+      // Currency comes from the site registry (amazon.ca = CAD, amazon.co.jp =
+      // JPY, …) — the on-page "$"/"¥" symbol is ambiguous across Amazon TLDs.
       result.price = String(amount);
-      const cur = detectCurrency(text);
-      if (cur) result.currency = cur;
       break;
     }
   }
@@ -1076,11 +1062,16 @@ function aliexpressAdapter(html: string): DomainData | null {
   return Object.keys(result).length ? result : null;
 }
 
-/** Locate and parse the `window.runParams` SSR blob from AliExpress HTML. */
+/**
+ * Locate and parse the `window.runParams` SSR blob from AliExpress HTML.
+ * Returned as `any`: runParams is deep, version-volatile vendor JSON — every
+ * read in aliexpressAdapter is coerced through parseAmount / String.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function extractAliexpressData(html: string): any | null {
   let idx = html.indexOf('runParams');
-  while (idx !== -1) {
+  // Cap the scan: a real page has runParams once; bound work on hostile input.
+  for (let scans = 0; idx !== -1 && scans < 5; scans++) {
     const eq = html.indexOf('=', idx + 'runParams'.length);
     if (eq !== -1 && eq - idx < 40) {
       const json = extractEmbeddedJson(html, eq + 1);
@@ -1126,9 +1117,15 @@ function cleanTitle(title: string | null, hostname: string): string | null {
 
 function resolveUrl(url: string | null | undefined, base: string): string | null {
   if (!url) return null;
-  if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  if (url.startsWith('//')) return 'https:' + url;
-  try { return new URL(url, base).href; } catch { return null; }
+  try {
+    const resolved = new URL(url, base);
+    // Reject non-web schemes (javascript:, data:, file:, …) — image/URL values
+    // come from scraped, attacker-controllable HTML.
+    if (resolved.protocol !== 'http:' && resolved.protocol !== 'https:') return null;
+    return resolved.href;
+  } catch {
+    return null;
+  }
 }
 
 function formatNumber(n: number): string {

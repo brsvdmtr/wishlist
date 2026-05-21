@@ -219,6 +219,11 @@ describe('formatPrice', () => {
     expect(formatPrice(49, 'GBP')).toBe('£49');
   });
 
+  it('applies locale-aware digit grouping (USD comma, EUR dot)', () => {
+    expect(formatPrice(1999, 'USD')).toBe('$1,999');
+    expect(formatPrice(1999, 'EUR')).toBe('€1.999');
+  });
+
   it('normalises currency aliases (RUR → RUB, RMB → CNY)', () => {
     expect(formatPrice(100, 'RUR')).toContain('₽');
     expect(formatPrice(100, 'RMB')).toBe('¥100');

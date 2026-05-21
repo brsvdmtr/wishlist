@@ -39,11 +39,25 @@ describe('parseAmount', () => {
   it('treats a bare comma with 3 trailing digits as grouping', () => {
     expect(parseAmount('1,299')).toBe(1299);
   });
-  it('returns null for non-numeric / empty input', () => {
+  it('treats a dot with 3 trailing digits as grouping (EU thousands)', () => {
+    expect(parseAmount('1.500')).toBe(1500);
+    expect(parseAmount('12.345')).toBe(12345);
+  });
+  it('reads only the first number from a range / junk string', () => {
+    expect(parseAmount('10-20')).toBe(10);
+    expect(parseAmount('from 1 299 ₽')).toBe(1299);
+  });
+  it('parses a leading-decimal sub-unit price', () => {
+    expect(parseAmount('$.99')).toBe(0.99);
+    expect(parseAmount('.50 €')).toBe(0.5);
+  });
+  it('returns null for non-numeric / empty / non-positive input', () => {
     expect(parseAmount('')).toBeNull();
     expect(parseAmount('Out of stock')).toBeNull();
     expect(parseAmount(null)).toBeNull();
     expect(parseAmount(0)).toBeNull();
+    expect(parseAmount(-5)).toBeNull();
+    expect(parseAmount(Infinity)).toBeNull();
   });
 });
 
@@ -66,6 +80,9 @@ describe('detectCurrency', () => {
   it('returns null when no signal', () => {
     expect(detectCurrency('1299')).toBeNull();
     expect(detectCurrency('')).toBeNull();
+  });
+  it('prefers RUB when both ₽/руб and $ appear', () => {
+    expect(detectCurrency('1000 руб ($12)')).toBe('RUB');
   });
 });
 
@@ -107,6 +124,50 @@ describe('extractJsonLd', () => {
     expect(r?.currency).toBe('INR');
   });
 
+  it('skips an offer with no price and uses the next in the array', () => {
+    const html = `<script type="application/ld+json">
+      {"@type":"Product","name":"Bundle","offers":[
+        {"@type":"Offer","availability":"OutOfStock"},
+        {"@type":"Offer","price":"59.00","priceCurrency":"USD"}]}
+    </script>`;
+    const r = extractJsonLd(cheerio.load(html));
+    expect(r?.price).toBe(59);
+    expect(r?.currency).toBe('USD');
+  });
+
+  it('takes the first Product when @graph lists several', () => {
+    const html = `<script type="application/ld+json">
+      {"@graph":[
+        {"@type":"Product","name":"Main Product",
+         "offers":{"@type":"Offer","price":"100","priceCurrency":"USD"}},
+        {"@type":"Product","name":"Related Product",
+         "offers":{"@type":"Offer","price":"5","priceCurrency":"USD"}}]}
+    </script>`;
+    const r = extractJsonLd(cheerio.load(html));
+    expect(r?.title).toBe('Main Product');
+    expect(r?.price).toBe(100);
+  });
+
+  it('reads price from offers.priceSpecification', () => {
+    const html = `<script type="application/ld+json">
+      {"@type":"Product","name":"Subscription Box","offers":{"@type":"Offer",
+       "priceSpecification":{"@type":"PriceSpecification","price":"29.90","priceCurrency":"EUR"}}}
+    </script>`;
+    const r = extractJsonLd(cheerio.load(html));
+    expect(r?.price).toBe(29.9);
+    expect(r?.currency).toBe('EUR');
+  });
+
+  it('finds a Product nested under WebPage.mainEntity', () => {
+    const html = `<script type="application/ld+json">
+      {"@type":"WebPage","mainEntity":{"@type":"Product","name":"Nested Item",
+       "offers":{"@type":"Offer","price":"12","priceCurrency":"USD"}}}
+    </script>`;
+    const r = extractJsonLd(cheerio.load(html));
+    expect(r?.title).toBe('Nested Item');
+    expect(r?.price).toBe(12);
+  });
+
   it('returns null when there is no Product JSON-LD', () => {
     const html = `<script type="application/ld+json">{"@type":"WebSite","name":"x"}</script>`;
     expect(extractJsonLd(cheerio.load(html))).toBeNull();
@@ -141,6 +202,56 @@ describe('extractMicrodata', () => {
     const html = `<div itemscope itemtype="https://schema.org/Organization">
       <span itemprop="name">Acme</span></div>`;
     expect(extractMicrodata(cheerio.load(html))).toBeNull();
+  });
+
+  it('ignores name/price from a nested related Product', () => {
+    // The nested cheap product appears FIRST in DOM order — a naive
+    // .find().first() would wrongly pick it.
+    const html = `<div itemscope itemtype="https://schema.org/Product">
+      <section class="related">
+        <div itemscope itemtype="https://schema.org/Product">
+          <span itemprop="name">Cheap Accessory</span>
+          <meta itemprop="price" content="9" />
+        </div>
+      </section>
+      <h1 itemprop="name">Main Camera</h1>
+      <div itemprop="offers" itemscope itemtype="https://schema.org/Offer">
+        <meta itemprop="price" content="49999" />
+        <meta itemprop="priceCurrency" content="USD" />
+      </div>
+    </div>`;
+    const r = extractMicrodata(cheerio.load(html));
+    expect(r?.title).toBe('Main Camera');
+    expect(r?.price).toBe(49999);
+    expect(r?.currency).toBe('USD');
+  });
+
+  it('reads name text (not href) from an <a itemprop="name">', () => {
+    const html = `<div itemscope itemtype="https://schema.org/Product">
+      <a itemprop="name" href="/p/12345">Ceramic Mug</a>
+      <link itemprop="image" href="https://cdn.shop/mug.jpg" />
+      <meta itemprop="price" content="14.99" />
+    </div>`;
+    const r = extractMicrodata(cheerio.load(html));
+    expect(r?.title).toBe('Ceramic Mug');
+    expect(r?.image).toBe('https://cdn.shop/mug.jpg');
+    expect(r?.price).toBe(14.99);
+  });
+
+  it('does not pick a nested Brand name as the product title', () => {
+    // The Brand's <span itemprop="name"> appears FIRST in DOM order.
+    const html = `<div itemscope itemtype="https://schema.org/Product">
+      <div itemprop="brand" itemscope itemtype="https://schema.org/Brand">
+        <span itemprop="name">SONY</span>
+      </div>
+      <h1 itemprop="name">Sony WH-1000XM5 Headphones</h1>
+      <div itemprop="offers" itemscope itemtype="https://schema.org/Offer">
+        <meta itemprop="price" content="299" />
+      </div>
+    </div>`;
+    const r = extractMicrodata(cheerio.load(html));
+    expect(r?.title).toBe('Sony WH-1000XM5 Headphones');
+    expect(r?.price).toBe(299);
   });
 });
 

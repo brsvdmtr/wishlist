@@ -164,3 +164,38 @@ describe('extractFromHtml — PARSER_UNIVERSAL_EXTRACT_DISABLED', () => {
     }
   });
 });
+
+// ─── Unsafe image URLs ───────────────────────────────────────────────────────
+
+describe('extractFromHtml — unsafe image URLs', () => {
+  it('drops a javascript: scheme image from scraped JSON-LD', () => {
+    const html = page(
+      `<script type="application/ld+json">
+        {"@type":"Product","name":"Sketchy Item","image":"javascript:alert(1)",
+         "offers":{"@type":"Offer","price":"10","priceCurrency":"USD"}}
+       </script>`,
+      '<h1>x</h1>',
+    );
+    const r = extractFromHtml(html, 'https://shop.example/p', 'shop.example', 'generic_html');
+    expect(r.title).toBe('Sketchy Item');
+    expect(r.imageUrl).toBeNull();
+  });
+});
+
+// ─── Field-level merge ───────────────────────────────────────────────────────
+
+describe('extractFromHtml — source precedence merge', () => {
+  it('fills price from JSON-LD when the domain adapter supplies only a title', () => {
+    // Amazon page: #productTitle present, but no .a-offscreen price element.
+    const html = page(
+      `<script type="application/ld+json">
+        {"@type":"Product","name":"JSON Name",
+         "offers":{"@type":"Offer","price":"55","priceCurrency":"USD"}}
+       </script>`,
+      `<span id="productTitle">Adapter Title</span>`,
+    );
+    const r = extractFromHtml(html, 'https://www.amazon.com/dp/Z', 'amazon.com', 'generic_html');
+    expect(r.title).toBe('Adapter Title');  // domain adapter wins the title
+    expect(r.priceText).toBe('$55');         // JSON-LD fills the missing price
+  });
+});
