@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import CuratedSelectionClient from './CuratedSelectionClient';
 
 type PageProps = {
-  params: { token: string };
+  params: Promise<{ token: string }>;
 };
 
 function apiBaseUrl() {
@@ -23,7 +23,8 @@ async function fetchSelection(token: string) {
   return { expired: false, data: await res.json() };
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata(props: PageProps): Promise<Metadata> {
+  const params = await props.params;
   try {
     const result = await fetchSelection(params.token);
     if (!result || result.expired) return { title: 'WishBoard' };
@@ -37,7 +38,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 }
 
-export default async function CuratedSelectionPage({ params }: PageProps) {
+export default async function CuratedSelectionPage(props: PageProps) {
+  const params = await props.params;
   const result = await fetchSelection(params.token);
   if (!result) notFound();
   return <CuratedSelectionClient expired={result.expired} data={result.data} token={params.token} />;

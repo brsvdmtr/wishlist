@@ -3,13 +3,14 @@ import { proxyToAPI } from '@/lib/api-proxy';
 
 export const dynamic = 'force-dynamic';
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 /**
  * GET /api/admin/wishlists/[id]/items
  * Proxy to: GET /public/wishlists/:slug/items
  */
-export async function GET(req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, props: Params) {
+  const params = await props.params;
   const { id } = params;
   const { searchParams } = new URL(req.url);
 
@@ -27,7 +28,8 @@ export async function GET(req: NextRequest, { params }: Params) {
  * POST /api/admin/wishlists/[id]/items
  * Proxy to: POST /wishlists/:id/items
  */
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params;
   const { id } = params;
   const body = await req.json();
 

@@ -3,7 +3,7 @@ import { proxyToAPI } from '@/lib/api-proxy';
 
 export const dynamic = 'force-dynamic';
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 /**
  * GET /api/admin/wishlists/[id]
@@ -12,7 +12,8 @@ type Params = { params: { id: string } };
  * NOTE: API doesn't have GET /wishlists/:id for admin.
  * We use public endpoint to fetch, but could add admin endpoint if needed.
  */
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const { id } = params;
 
   // For now, we'll need to add a new endpoint in API or use public endpoint
@@ -27,7 +28,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
  * PATCH /api/admin/wishlists/[id]
  * Proxy to: PATCH /wishlists/:id
  */
-export async function PATCH(req: NextRequest, { params }: Params) {
+export async function PATCH(req: NextRequest, props: Params) {
+  const params = await props.params;
   const { id } = params;
   const body = await req.json();
 
@@ -42,7 +44,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
  * DELETE /api/admin/wishlists/[id]
  * Proxy to: DELETE /wishlists/:id
  */
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(_req: NextRequest, props: Params) {
+  const params = await props.params;
   const { id } = params;
 
   return proxyToAPI({

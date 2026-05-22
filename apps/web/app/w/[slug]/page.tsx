@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import WishlistClient from './WishlistClient';
 
 type PageProps = {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 };
 
 function apiBaseUrl() {
@@ -22,7 +22,8 @@ async function fetchWishlist(slug: string) {
   return (await res.json()) as unknown;
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata(props: PageProps): Promise<Metadata> {
+  const params = await props.params;
   const slug = params.slug;
 
   try {
@@ -40,7 +41,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 }
 
-export default async function WishlistPage({ params }: PageProps) {
+export default async function WishlistPage(props: PageProps) {
+  const params = await props.params;
   const slug = params.slug;
   const data = await fetchWishlist(slug);
   if (!data) notFound();

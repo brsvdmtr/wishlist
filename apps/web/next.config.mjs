@@ -13,9 +13,7 @@ const nextConfig = {
     // Injected at build time — used as a cache-bust marker and debug indicator
     NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
   },
-  experimental: {
-    outputFileTracingRoot: path.join(__dirname, '../../'),
-  },
+  outputFileTracingRoot: path.join(__dirname, '../../'),
   eslint: {
     // We lint from the repo root (pnpm lint). Avoid failing builds due to
     // Next's eslint runner not being workspace-aware in a monorepo.

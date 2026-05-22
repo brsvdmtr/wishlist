@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -18,10 +18,11 @@ import {
 } from '@/lib/admin-api-client';
 
 type Props = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
-export default function EditWishlistPage({ params }: Props) {
+export default function EditWishlistPage(props: Props) {
+  const params = use(props.params);
   const router = useRouter();
   const wishlistId = params.id;
 
