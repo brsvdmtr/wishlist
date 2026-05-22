@@ -25,7 +25,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@/': fileURLToPath(new URL('./app/', import.meta.url)),
+      // Match tsconfig: `@/*` resolves from the apps/web root, not app/.
+      '@/': fileURLToPath(new URL('./', import.meta.url)),
     },
   },
 });
