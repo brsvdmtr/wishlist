@@ -775,7 +775,7 @@ HTTP status 503. Routes `/health`, `/health/deep`, `/uploads/*`, `/internal/*` r
   code: 'FREE' | 'PRO';
   wishlists: number;       // effective limit (base + add-ons)
   items: 20 | 70;
-  participants: 5 | 20;
+  participants: 10 | 20;
   subscriptions: number;   // effective limit (base + add-ons)
   features: [] | ['comments', 'url_import', 'hints'];
 }

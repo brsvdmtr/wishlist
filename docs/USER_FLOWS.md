@@ -255,7 +255,7 @@ The onboarding catalog is locale-aware. Two market segments determine which temp
    - The **owner** receives a Telegram notification from the bot: "{displayName} reserved wish '{title}'".
    - The guest sees confirmation and can see their own reservation on the item.
    - The guest can unreserve by tapping the item again and selecting "Cancel reservation" — this sends a `DELETE` or equivalent unreserve request.
-9. **On 402 (participants limit):** The wishlist has reached its participant limit (5 for FREE owner, 20 for PRO owner). A message is shown that the list is full and no new reservations can be made.
+9. **On 402 (participants limit):** The wishlist has reached its participant limit (10 for FREE owner, 20 for PRO owner). A message is shown that the list is full and no new reservations can be made.
 
 **Surprise mode guarantees:**
 - The owner sees the count of reservers ("Reserved by N people") but **not their identities**.

@@ -67,12 +67,12 @@ beforeEach(() => {
 });
 
 describe('PLANS catalogue', () => {
-  it('FREE plan: 2 wishlists, 20 items, 5 participants, 2 subs, no features', () => {
+  it('FREE plan: 2 wishlists, 20 items, 10 participants, 2 subs, no features', () => {
     expect(PLANS.FREE).toMatchObject({
       code: 'FREE',
       wishlists: 2,
       items: 20,
-      participants: 5,
+      participants: 10,
       subscriptions: 2,
       features: [],
     });
@@ -89,9 +89,10 @@ describe('PLANS catalogue', () => {
     expect(PLANS.PRO.features).toEqual(['comments', 'url_import', 'hints']);
   });
 
-  it('PRO uplift over FREE — wishlists 5×, items 3.5×, subs 2.5×', () => {
+  it('PRO uplift over FREE — wishlists 5×, items 3.5×, participants 2×, subs 2.5×', () => {
     expect(PLANS.PRO.wishlists / PLANS.FREE.wishlists).toBe(5);
     expect(PLANS.PRO.items / PLANS.FREE.items).toBeCloseTo(3.5, 1);
+    expect(PLANS.PRO.participants / PLANS.FREE.participants).toBe(2);
     expect(PLANS.PRO.subscriptions / PLANS.FREE.subscriptions).toBe(2.5);
   });
 });

@@ -192,7 +192,7 @@ All gates are **server-side enforced**. The client UI shows upsell prompts but c
 |----------|:----------:|:---------:|:-------------------:|
 | Wishlists (REGULAR, non-archived) | 2 | 10 | 402 |
 | Items per wishlist (active) | 20 | 70 | 402 |
-| Distinct reservers per wishlist | 5 | 20 | 402 |
+| Distinct reservers per wishlist | 10 | 20 | 402 |
 | Subscriptions (wishlists followed) | 2 | 5 | 402 |
 | Items in SYSTEM_DRAFTS | 50 | 50 | 402 (same for both) |
 

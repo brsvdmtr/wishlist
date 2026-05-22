@@ -2049,11 +2049,12 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
           totalHits: proLimitTotalRows,
           uniqueUsers: n(proLimitUsersRows[0]),
           byType: {
-            wishlistLimit: proByType['feature_gate_hit_wishlist_limit'] ?? 0,
-            itemLimit:     proByType['feature_gate_hit_item_limit'] ?? 0,
-            comments:      proByType['feature_gate_hit_comments'] ?? 0,
-            hints:         proByType['feature_gate_hit_hints'] ?? 0,
-            urlImport:     proByType['feature_gate_hit_url_import'] ?? 0,
+            wishlistLimit:    proByType['feature_gate_hit_wishlist_limit'] ?? 0,
+            itemLimit:        proByType['feature_gate_hit_item_limit'] ?? 0,
+            participantLimit: proByType['feature_gate_hit_participant_limit'] ?? 0,
+            comments:         proByType['feature_gate_hit_comments'] ?? 0,
+            hints:            proByType['feature_gate_hit_hints'] ?? 0,
+            urlImport:        proByType['feature_gate_hit_url_import'] ?? 0,
           },
         },
         errors24h: {

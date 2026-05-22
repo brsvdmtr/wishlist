@@ -22,7 +22,7 @@ function buildDeps() {
   return {
     getOrCreateTgUser: vi.fn(async () => ({ id: 'u-test', godMode: false, telegramId: '123', themePreference: null, accentPreference: null })),
     getEffectiveEntitlements: vi.fn(async () => ({
-      isPro: false, addOns: [], plan: { code: 'FREE', items: 20, participants: 5, features: [] },
+      isPro: false, addOns: [], plan: { code: 'FREE', items: 20, participants: 10, features: [] },
       effectiveWishlistLimit: 2, effectiveSubscriptionLimit: 2,
       extraItemsPerWishlist: {}, hintCredits: 0, importCredits: 0,
       freeImportsUsed: 0, freeImportsLimit: 5,

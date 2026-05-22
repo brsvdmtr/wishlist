@@ -1,7 +1,7 @@
 # MONETIZATION
 
 > Source of truth for plans, limits, entitlements, billing flow, and paywall content.
-> Last updated: 2026-05-08 · Branch: main
+> Last updated: 2026-05-22 · Branch: main
 
 ---
 
@@ -27,7 +27,7 @@ const PLANS = {
     code: 'FREE',
     wishlists: 2,
     items: 20,
-    participants: 5,
+    participants: 10,
     subscriptions: 2,
     features: [],
   },
@@ -281,7 +281,7 @@ type UpsellContext =
   | 'hints'             // triggered on hint attempt
   | 'wishlist_limit'    // triggered on wishlist creation 402
   | 'item_limit'        // triggered on item add 402
-  | 'participant_limit' // triggered on reserve 402
+  | 'participant_limit' // defined; not wired — reserve 402 shows toast_max_participants, not this upsell
   | 'subscription_limit'// triggered on follow 402 (показывает до 5 подписок)
   | 'sort_recommended'  // triggered on recommended sort click (client-only)
   | 'birthday_reminders_advanced'; // triggered on PATCH /tg/me/birthday-settings 402

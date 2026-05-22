@@ -592,7 +592,7 @@ type GodStats = {
   proLimits24h?: {
     totalHits: number; uniqueUsers: number;
     byType: {
-      wishlistLimit: number; itemLimit: number;
+      wishlistLimit: number; itemLimit: number; participantLimit: number;
       comments: number; hints: number; urlImport: number;
     };
   };
@@ -2246,6 +2246,10 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
     subtitle: t('upsell_item_subtitle', locale),
     showTable: true,
   },
+  // Defined for completeness, but intentionally NOT wired to a trigger: a guest
+  // who hits a wishlist's participant cap can't lift it by buying Pro — it's the
+  // owner's plan ceiling. Reserve 402 shows toast_max_participants instead. Do
+  // not call setUpsellSheet({ context: 'participant_limit' }). See MONETIZATION.md §7.
   participant_limit: {
     emoji: '👥',
     title: t('upsell_part_title', locale),
@@ -4760,7 +4764,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [wishlists, setWishlists] = useState<Wishlist[]>([]);
   const [planLimits, setPlanLimits] = useState({ wishlists: 2, items: 20 });
   const [planInfo, setPlanInfo] = useState<PlanInfo>({
-    code: 'FREE', wishlists: 2, items: 20, subscriptions: 2, participants: 5, features: [],
+    code: 'FREE', wishlists: 2, items: 20, subscriptions: 2, participants: 10, features: [],
   });
   const [cardDisplayMode, setCardDisplayMode] = useState<string>('auto');
   const [subscription, setSubscription] = useState<SubscriptionInfo>(null);

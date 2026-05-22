@@ -426,7 +426,7 @@ Returns an array of 13 PRO feature items (icon + title + subtitle from i18n):
 |---|------|---------|
 | 1 | -- | More wishlists (10 vs 2) |
 | 2 | -- | More items per wishlist (70 vs 20) |
-| 3 | -- | More participants (20 vs 5) |
+| 3 | -- | More participants (20 vs 10) |
 | 4 | -- | Comments between owner and reserver |
 | 5 | -- | URL import / auto-fill from product pages |
 | 6 | -- | Hint waves to friends |

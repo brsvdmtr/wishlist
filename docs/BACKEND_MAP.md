@@ -538,7 +538,7 @@ const PLANS = {
     code: 'FREE',
     wishlists: 2,
     items: 20,
-    participants: 5,
+    participants: 10,
     subscriptions: 2,
     features: [],
   },

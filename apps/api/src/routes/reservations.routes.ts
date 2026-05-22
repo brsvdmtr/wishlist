@@ -80,7 +80,7 @@ type ReservationsUser = {
 // handlers in THIS file consult them via ent.X.
 type ReservationsEntitlements = {
   isPro: boolean;
-  plan: { participants: number };
+  plan: { participants: number; code: string };
   addOns: Array<{ addonType: string; targetId?: string | null }>;
   hasSecretReservations: boolean;
   secretReservations: { unlocked: boolean; unlockType: 'PRO' | 'ONE_TIME' | 'GOD' | null; priceXtr: number };
@@ -1196,7 +1196,13 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
             activeReservations.map((r) => r.reserverUserId).filter(Boolean),
           );
           if (!existingReserverIds.has(user.id) && existingReserverIds.size >= ownerEnt.plan.participants) {
-            return { kind: 'participant_limit' as const, limit: ownerEnt.plan.participants };
+            return {
+              kind: 'participant_limit' as const,
+              limit: ownerEnt.plan.participants,
+              ownerId: wishlist.ownerId,
+              ownerPlan: ownerEnt.plan.code,
+              count: existingReserverIds.size,
+            };
           }
           // Smart Reservations: double-check both toggle AND owner entitlement
           if (wishlist.smartReservationsEnabled) {
@@ -1234,7 +1240,16 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
 
       if (result.kind === 'not_found') return res.status(404).json({ error: 'Item not found' });
       if (result.kind === 'conflict') return res.status(409).json({ error: 'Item is not available' });
-      if (result.kind === 'participant_limit') return res.status(402).json({ error: 'Participant limit reached', feature: 'participant_limit', limit: result.limit });
+      if (result.kind === 'participant_limit') {
+        // Owner-attributed: it's the owner's plan ceiling that blocked the
+        // reservation, and the owner is the upgrade candidate — not the guest.
+        trackEvent('feature_gate_hit_participant_limit', result.ownerId, {
+          plan: result.ownerPlan,
+          count: result.count,
+          limit: result.limit,
+        });
+        return res.status(402).json({ error: 'Participant limit reached', feature: 'participant_limit', limit: result.limit });
+      }
 
       if (result.kind === 'ok') {
         // Notify owner

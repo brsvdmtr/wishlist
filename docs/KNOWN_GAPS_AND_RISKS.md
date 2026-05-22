@@ -121,7 +121,7 @@
 ### 19. Plan Limits Hardcoded
 - **Risk**: `PLANS = { FREE: {...}, PRO: {...} }` hardcoded in index.ts
 - **Impact**: Cannot change per-user limits without code deploy
-- **Current values**: FREE: wishlists=2, items=20, participants=5, subscriptions=2; PRO: wishlists=10, items=70, participants=20, subscriptions=5
+- **Current values**: FREE: wishlists=2, items=20, participants=10, subscriptions=2; PRO: wishlists=10, items=70, participants=20, subscriptions=5
 - **Priority**: LOW (by design for current implementation)
 
 ---

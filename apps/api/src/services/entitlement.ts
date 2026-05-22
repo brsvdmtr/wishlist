@@ -43,7 +43,7 @@ export const PLANS = {
     code: 'FREE' as const,
     wishlists: 2,
     items: 20,       // reduced from 30; add-ons fill the gap; MAX tier will have 200+
-    participants: 5,
+    participants: 10, // raised from 5 — a birthday with 6+ guests is the core scenario
     subscriptions: 2,
     features: [] as string[],
   },
