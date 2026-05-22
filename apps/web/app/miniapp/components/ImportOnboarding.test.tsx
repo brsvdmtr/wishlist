@@ -39,7 +39,7 @@ describe('ImportOnboarding', () => {
     expect(screen.getByText('I will take it from there')).toBeInTheDocument();
   });
 
-  it('renders every onboarding string in all 6 locales (guards i18n key parity)', () => {
+  it('renders every onboarding string in all 6 locales', () => {
     const locales: Locale[] = ['ru', 'en', 'zh-CN', 'hi', 'es', 'ar'];
     const keys = [
       'drafts_ob_title', 'drafts_ob_sub',
@@ -51,8 +51,8 @@ describe('ImportOnboarding', () => {
       const { unmount } = render(<ImportOnboarding locale={locale} />);
       for (const key of keys) {
         const value = t(key, locale);
-        // a missing key would resolve to the key name itself
-        expect(value, `${key} missing for ${locale}`).not.toBe(key);
+        // real copy resolved, not a raw-key fallthrough; i18n.parity.test.ts owns key parity
+        expect(value, `${key} unresolved for ${locale}`).not.toBe(key);
         expect(screen.getByText(value)).toBeInTheDocument();
       }
       unmount();

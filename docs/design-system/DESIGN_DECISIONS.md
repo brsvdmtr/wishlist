@@ -65,8 +65,12 @@ with the onboarding, and populated with the onboarding gone).
   primitive — no `COMPONENT_REGISTRY.md` row, consistent with
   `ImportQuotaCounter` / `HintQuotaCounter`).
 - New i18n keys `drafts_ob_title` / `_sub` / `_s1..3_title` / `_s1..3_text`
-  (8 keys × 6 locales); removed `drafts_empty` / `drafts_empty_hint`.
-- No new tokens, no `@wishlist/ui` change.
+  (8 keys × 6 locales); removed `drafts_empty` / `drafts_empty_hint` and the
+  dead `drafts_url_pro_placeholder` key (× 6 locales, zero consumers).
+- Synced the already-canonical `borderLight` token
+  (`packages/ui-tokens/src/colors.ts`) into `apps/web/app/globals.css` as
+  `--wb-border-light` — it was missing there; the step connector needs it.
+  No new token values, no `@wishlist/ui` primitive change.
 
 **Approved by.** Dmitry (solo-owner decision, 2026-05-22).
 
