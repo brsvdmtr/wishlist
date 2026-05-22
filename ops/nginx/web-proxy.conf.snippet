@@ -17,8 +17,13 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 proxy_http_version 1.1;
-proxy_set_header Upgrade $http_upgrade;
-proxy_set_header Connection "upgrade";
+# WebSocket upgrades to the Next.js server are NOT forwarded — mitigation for
+# CVE-2026-44578 (Next.js WS-upgrade SSRF, CVSS 8.6; affects 13.4.13–15.5.15,
+# and our pinned 14.2.0 is in range). The web app uses no incoming WebSockets,
+# so dropping the upgrade is safe. Restore `Upgrade $http_upgrade` /
+# `Connection "upgrade"` only after Next.js is upgraded to >= 15.5.16.
+proxy_set_header Upgrade "";
+proxy_set_header Connection "";
 proxy_set_header Host $host;
 proxy_set_header X-Real-IP $remote_addr;
 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
