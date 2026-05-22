@@ -24,6 +24,7 @@ import type { SearchResult, AccessViewResponse } from './lib/searchApi';
 import { recordWishlistOpen, fetchAccessView } from './lib/searchApi';
 import { ProBadge } from './components/ProBadge';
 import { ImportQuotaCounter, importQuotaLabel } from './components/ImportQuotaCounter';
+import { ImportOnboarding } from './components/ImportOnboarding';
 import { HintQuotaCounter } from './components/HintQuotaCounter';
 import { importResultToast, type ImportParseStatus } from './components/importResultToast';
 import { SantaHatOverlay } from './components/SantaHatOverlay';
@@ -14822,13 +14823,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           </div>
 
           {draftsItems.length === 0 && !importLoading && (
-            <div style={{ textAlign: 'center', padding: '48px 24px' }}>
-              <div style={{ fontSize: 48, marginBottom: 16 }}>📥</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('drafts_empty', locale)}</div>
-              <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>
-                {t('drafts_empty_hint', locale)}
-              </div>
-            </div>
+            <ImportOnboarding locale={locale} />
           )}
 
         </div>

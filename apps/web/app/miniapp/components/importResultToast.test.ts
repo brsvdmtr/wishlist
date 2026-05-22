@@ -22,7 +22,7 @@ describe('importResultToast', () => {
   it('failed → info tone, signals no credit was counted', () => {
     const r = importResultToast('failed', 'en');
     expect(r.tone).toBe('info');
-    expect(r.message).toBe('Link not recognized — card added, import not counted');
+    expect(r.message).toBe('Link not recognized — card added, did not count toward your limit');
   });
 
   it('failed copy differs from the plain success copy (the whole point)', () => {
@@ -33,6 +33,6 @@ describe('importResultToast', () => {
   it('resolves localized copy — RU', () => {
     expect(importResultToast('ok', 'ru').message).toBe('Карточка создана!');
     expect(importResultToast('failed', 'ru').message)
-      .toBe('Ссылку не удалось разобрать — добавили карточку, импорт не засчитан');
+      .toBe('Ссылку не удалось разобрать — добавили карточку, добавление не засчитано');
   });
 });

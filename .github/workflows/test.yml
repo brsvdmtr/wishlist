@@ -121,14 +121,16 @@ jobs:
             packages/*/coverage/
           retention-days: 7
 
-  # Regression guard for migration-history integrity. A from-scratch
-  # `prisma migrate deploy` must replay every migration in order against an
-  # empty database. This is the ONLY path that catches ordering / duplication
-  # bugs in migrations/: prod applies migrations incrementally (so it never
-  # replays the whole history and never collides), and the `test` job above
-  # uses `db push` (built from schema.prisma, skips history entirely). Added
-  # after the 2026-05-21 from-scratch breakage — a duplicate `ItemStatus`
-  # enum-add plus a same-timestamp ordering collision. See docs/BUGFIX_LESSONS.md.
+  # Regression guard for migration-history integrity. Two checks against a
+  # from-scratch database: (1) `prisma migrate deploy` replays every migration
+  # in order — catches ordering / duplication bugs; (2) `prisma migrate diff
+  # --exit-code` asserts the replayed shape equals schema.prisma — catches
+  # drift a clean replay would otherwise hide. This is the ONLY path that
+  # catches either: prod applies migrations incrementally (so it never replays
+  # the whole history and never collides), and the `test` job above uses
+  # `db push` (built from schema.prisma, skips history entirely). Added after
+  # the 2026-05-21 from-scratch breakage — a duplicate `ItemStatus` enum-add
+  # plus a same-timestamp ordering collision. See docs/BUGFIX_LESSONS.md.
   migration-replay:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -174,3 +176,14 @@ jobs:
         # deploy` only needs the prisma CLI + DATABASE_URL — no client
         # generate, no package builds.
         run: pnpm -C packages/db db:migrate:deploy
+
+      - name: Assert the replayed schema matches schema.prisma
+        # The replay above only proves the history *applies*; it can still
+        # finish in a shape that differs from schema.prisma — the file that
+        # `prisma generate` (Client types) and the `test` job's `db push` both
+        # build from. `migrate diff --exit-code` exits 2 when the replayed DB
+        # and schema.prisma disagree, making that drift a hard CI failure.
+        # A failure here is fixed with a new forward migration:
+        # `prisma migrate dev --name reconcile_schema_drift`. Added 2026-05-21
+        # alongside migration 20260521084802_reconcile_schema_drift.
+        run: pnpm -C packages/db exec prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code

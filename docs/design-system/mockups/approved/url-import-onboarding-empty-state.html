@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>«Добавить товар по ссылке» — онбординг в пустом состоянии (approved)</title>
+<!--
+  APPROVED mockup — 2026-05-22
+  Follow-up to the import→add feature rename (drafts_entry_title и счётчик
+  переименованы «Импорт по ссылке» → «Добавить товар по ссылке»).
+
+  Problem: новый пользователь жмёт карточку «Добавить товар по ссылке» на
+  главной, попадает на экран «Неразобранное» и видит поле ввода + счётчик +
+  сухой empty-state («Пусто»). Что именно делать с полем — не объяснено.
+  Народ не понимает фичу.
+
+  Fix shown here: empty-state экрана «Неразобранное» превращается в короткий
+  онбординг из 3 шагов — скопируй ссылку → вставь выше → дальше соберу сам.
+  Показывается только при 0 черновиков; как только появится первый товар,
+  список вытесняет онбординг (Frame 2). Никакого localStorage — состояние
+  выводится из draftsItems.length.
+
+  Frames:
+    1. «Неразобранное», FREE, 0 черновиков — НОВЫЙ онбординг-empty-state
+    2. «Неразобранное» с 2 черновиками — онбординг ушёл, виден список
+
+  Tokens: v2.1 (colors_and_type.css). Inline CSS — no external <link>.
+  APPROVED 2026-05-22 — see docs/design-system/DESIGN_DECISIONS.md.
+-->
+<style>
+  :root {
+    --wb-bg: #0F0F12;
+    --wb-card: rgba(255,255,255,0.045);
+    --wb-surface: rgba(255,255,255,0.05);
+    --wb-accent: #8B7BFF;
+    --wb-accent-strong: #B4A6FF;
+    --wb-accent-soft: rgba(139,123,255,0.14);
+    --wb-accent-soft-strong: rgba(139,123,255,0.30);
+    --wb-text: #FFFFFF;
+    --wb-text-secondary: #C7CAD1;
+    --wb-text-muted: #8F94A3;
+    --wb-border: rgba(255,255,255,0.06);
+    --wb-border-light: rgba(255,255,255,0.10);
+    --wb-grad-accent: linear-gradient(135deg, #8B7BFF 0%, #B4A6FF 100%);
+    --wb-grad-mesh:
+      radial-gradient(ellipse 80% 60% at 12% 0%, rgba(139,123,255,0.22), transparent 55%),
+      radial-gradient(ellipse 60% 50% at 100% 20%, rgba(255,120,180,0.10), transparent 55%),
+      radial-gradient(ellipse 100% 70% at 50% 110%, rgba(139,123,255,0.10), transparent 65%);
+    --wb-font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--wb-bg); color: var(--wb-text); font-family: var(--wb-font);
+    -webkit-font-smoothing: antialiased; padding: 40px 24px 64px;
+    position: relative; min-height: 100vh;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background: var(--wb-grad-mesh); pointer-events: none; z-index: 0;
+  }
+  body > * { position: relative; z-index: 1; }
+
+  header { max-width: 980px; margin: 0 auto 36px; }
+  header h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.025em; margin-bottom: 8px; }
+  header p {
+    font-size: 14px; font-weight: 500; line-height: 1.55; color: var(--wb-text-secondary);
+    max-width: 780px;
+  }
+  header .legend { margin-top: 12px; font-size: 12px; color: var(--wb-text-muted); line-height: 1.6; }
+  header code {
+    background: var(--wb-surface); border: 1px solid var(--wb-border);
+    padding: 1px 6px; border-radius: 6px; font-size: 11px;
+  }
+
+  .frames {
+    display: flex; gap: 28px; flex-wrap: wrap; justify-content: center;
+    max-width: 1180px; margin: 0 auto;
+  }
+  figure { margin: 0; width: 375px; }
+  figcaption {
+    margin-top: 14px; font-size: 12.5px; line-height: 1.55; color: var(--wb-text-secondary);
+  }
+  figcaption b { color: var(--wb-text); font-weight: 650; }
+  figcaption .tag {
+    display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+    text-transform: uppercase; padding: 3px 8px; border-radius: 7px; margin-bottom: 6px;
+  }
+  .tag.new   { background: var(--wb-accent-soft); color: var(--wb-accent-strong); }
+  .tag.today { background: var(--wb-surface); color: var(--wb-text-muted); }
+
+  /* ───── Phone frame ───── */
+  .phone {
+    width: 375px; height: 812px; background: var(--wb-bg);
+    border-radius: 44px; overflow: hidden; position: relative;
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: 0 30px 80px rgba(0,0,0,0.55);
+  }
+  .phone::before {
+    content: ''; position: absolute; inset: 0;
+    background: var(--wb-grad-mesh); pointer-events: none;
+  }
+  .phone > * { position: relative; }
+
+  .statusbar {
+    height: 44px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 26px; font-size: 14px; font-weight: 650;
+  }
+  .statusbar .dots { letter-spacing: 2px; font-size: 11px; color: var(--wb-text-secondary); }
+
+  .screen { padding: 8px 16px 16px; }
+
+  /* ───── Screen header — PageTitle + subline ───── */
+  .scr-head { margin-bottom: 18px; }
+  .scr-title { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.05; }
+  .scr-sub { font-size: 13px; color: var(--wb-text-muted); margin-top: 5px; }
+
+  /* ───── URL-import row + quota counter (existing, approved) ───── */
+  .import-row { display: flex; gap: 8px; }
+  .import-input {
+    flex: 1; height: 48px; border-radius: 16px;
+    background: var(--wb-surface); border: 1px solid var(--wb-border-light);
+    display: flex; align-items: center; padding: 0 14px;
+    font-size: 14px; color: var(--wb-text-muted); font-weight: 500;
+  }
+  .import-btn {
+    width: 48px; height: 48px; border-radius: 18px; flex-shrink: 0;
+    background: var(--wb-grad-accent); display: flex; align-items: center;
+    justify-content: center; font-size: 19px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.22);
+  }
+  .import-btn.idle { opacity: 0.45; }
+  .counter {
+    margin-top: 10px; display: flex; align-items: center; gap: 8px;
+    padding: 9px 12px; border-radius: 14px; font-size: 12.5px;
+    font-weight: 550; line-height: 1.3;
+    background: var(--wb-accent-soft); color: var(--wb-text-secondary);
+  }
+
+  /* ───── NEW — onboarding empty state (the proposal) ───── */
+  .ob { margin-top: 30px; }
+  .ob-head { display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .ob-ic {
+    width: 60px; height: 60px; border-radius: 50%;
+    background: var(--wb-accent-soft); display: flex; align-items: center;
+    justify-content: center; font-size: 27px;
+  }
+  .ob-title {
+    font-size: 18px; font-weight: 650; letter-spacing: -0.02em;
+    margin-top: 14px; color: var(--wb-text);
+  }
+  .ob-sub {
+    font-size: 13.5px; font-weight: 500; line-height: 1.45;
+    color: var(--wb-text-secondary); margin-top: 6px; max-width: 280px;
+  }
+
+  /* steps card */
+  .ob-card {
+    margin-top: 18px; padding: 18px 16px 4px;
+    background: var(--wb-card); border: 1px solid var(--wb-border);
+    border-radius: 22px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  }
+  .ob-step { display: flex; gap: 13px; }
+  .ob-step:not(:last-child) { padding-bottom: 16px; }
+  /* number column — circle + connector line */
+  .ob-numcol { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+  .ob-num {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--wb-accent-soft); color: var(--wb-accent-strong);
+    font-size: 14px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ob-line {
+    width: 2px; flex: 1; margin-top: 6px; border-radius: 1px;
+    background: var(--wb-border-light);
+  }
+  .ob-body { padding-top: 3px; padding-bottom: 2px; }
+  .ob-step-title { font-size: 14.5px; font-weight: 650; color: var(--wb-text); }
+  .ob-step-text {
+    font-size: 12.5px; font-weight: 500; line-height: 1.45;
+    color: var(--wb-text-secondary); margin-top: 3px;
+  }
+
+  /* ───── Draft item card (Frame 2 — populated state) ───── */
+  .draft {
+    display: flex; gap: 12px; align-items: center; padding: 12px;
+    background: var(--wb-card); border: 1px solid var(--wb-border);
+    border-radius: 16px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    margin-bottom: 10px;
+  }
+  .draft .d-thumb {
+    width: 52px; height: 52px; border-radius: 14px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 25px;
+  }
+  .draft .d-body { flex: 1; min-width: 0; }
+  .draft .d-title {
+    font-size: 14.5px; font-weight: 650; color: var(--wb-text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .draft .d-meta { font-size: 12.5px; color: var(--wb-text-muted); margin-top: 3px; }
+  .draft .d-chev { color: var(--wb-text-muted); font-size: 18px; flex-shrink: 0; }
+  .drafts-label {
+    margin: 2px 2px 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--wb-text-muted);
+  }
+
+  .home-ind {
+    position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+    width: 134px; height: 5px; border-radius: 9999px; background: rgba(255,255,255,0.30);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>«Добавить товар по ссылке» — онбординг в пустом состоянии</h1>
+  <p>
+    После переименования фичи (<code>Импорт по ссылке</code> →
+    <code>Добавить товар по ссылке</code>) карточка стала понятнее, но экран,
+    куда она ведёт — <code>«Неразобранное»</code> — по-прежнему встречает
+    новичка сухим empty-state «Пусто». Что делать с полем ввода — не сказано.
+  </p>
+  <p class="legend">
+    Предложение: empty-state становится коротким онбордингом из 3 шагов —
+    <b>скопируй ссылку → вставь выше → дальше соберу сам</b>. Показывается
+    только при 0 черновиков; первый добавленный товар вытесняет онбординг
+    списком (Frame&nbsp;2). Состояние выводится из <code>draftsItems.length</code>
+    — без localStorage и без отдельного экрана. Токены v2.1, inline CSS.
+  </p>
+</header>
+
+<div class="frames">
+
+  <!-- ══════════ FRAME 1 — empty state with the 3-step onboarding ══════════ -->
+  <figure>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="screen">
+        <div class="scr-head">
+          <div class="scr-title">📥 Неразобранное</div>
+          <div class="scr-sub">Отправь ссылку на товар боту</div>
+        </div>
+
+        <div class="import-row">
+          <div class="import-input">Вставь ссылку на товар…</div>
+          <div class="import-btn idle">📥</div>
+        </div>
+        <div class="counter">
+          <span>↻</span>
+          <span>Осталось 5 из 5 в этом месяце</span>
+        </div>
+
+        <!-- NEW onboarding empty-state -->
+        <div class="ob">
+          <div class="ob-head">
+            <div class="ob-ic">🔗</div>
+            <div class="ob-title">Здесь пока пусто</div>
+            <div class="ob-sub">Добавь товар по ссылке — это пара секунд. Вот как:</div>
+          </div>
+
+          <div class="ob-card">
+            <div class="ob-step">
+              <div class="ob-numcol">
+                <div class="ob-num">1</div>
+                <div class="ob-line"></div>
+              </div>
+              <div class="ob-body">
+                <div class="ob-step-title">Скопируй ссылку на товар</div>
+                <div class="ob-step-text">В любом магазине: Ozon, Wildberries, Я.Маркет, AliExpress и десятки других</div>
+              </div>
+            </div>
+            <div class="ob-step">
+              <div class="ob-numcol">
+                <div class="ob-num">2</div>
+                <div class="ob-line"></div>
+              </div>
+              <div class="ob-body">
+                <div class="ob-step-title">Вставь её в поле выше</div>
+                <div class="ob-step-text">Поле для ссылки — в самом верху экрана</div>
+              </div>
+            </div>
+            <div class="ob-step">
+              <div class="ob-numcol">
+                <div class="ob-num">3</div>
+              </div>
+              <div class="ob-body">
+                <div class="ob-step-title">Дальше я сам</div>
+                <div class="ob-step-text">Соберу карточку: фото, название и цену. Что не распознаю — попрошу дописать</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="home-ind"></div>
+    </div>
+    <figcaption>
+      <span class="tag new">FREE · 0 черновиков · NEW</span><br>
+      <b>Главное изменение.</b> Сухой «Пусто» заменён онбордингом из 3 шагов.
+      Поле ввода и счётчик квоты («Осталось 5 из 5…») — без изменений, уже
+      одобрены. Иконка-кружок + 3 шага в glass-карточке (radius&nbsp;22).
+    </figcaption>
+  </figure>
+
+  <!-- ══════════ FRAME 2 — populated, onboarding gone ══════════ -->
+  <figure>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="screen">
+        <div class="scr-head">
+          <div class="scr-title">📥 Неразобранное</div>
+          <div class="scr-sub">2 карточки</div>
+        </div>
+
+        <div class="import-row">
+          <div class="import-input">Вставь ссылку на товар…</div>
+          <div class="import-btn idle">📥</div>
+        </div>
+        <div class="counter">
+          <span>↻</span>
+          <span>Осталось 3 из 5 в этом месяце</span>
+        </div>
+
+        <div style="margin-top:22px">
+          <div class="drafts-label">Ждут разбора</div>
+          <div class="draft">
+            <div class="d-thumb" style="background:rgba(139,123,255,0.14)">🎧</div>
+            <div class="d-body">
+              <div class="d-title">Наушники Sony WH-1000XM5</div>
+              <div class="d-meta">24 990 ₽ · Ozon</div>
+            </div>
+            <div class="d-chev">›</div>
+          </div>
+          <div class="draft">
+            <div class="d-thumb" style="background:rgba(251,191,36,0.16)">☕</div>
+            <div class="d-body">
+              <div class="d-title">Кофемолка ручная</div>
+              <div class="d-meta">3 490 ₽ · Wildberries</div>
+            </div>
+            <div class="d-chev">›</div>
+          </div>
+        </div>
+      </div>
+      <div class="home-ind"></div>
+    </div>
+    <figcaption>
+      <span class="tag today">FREE · 2 черновика</span><br>
+      <b>Онбординг сам уходит.</b> Как только появился первый товар, список
+      «Ждут разбора» занимает место онбординга. Никакого флага «показано» —
+      пусто/не пусто решает <code>draftsItems.length</code>.
+    </figcaption>
+  </figure>
+
+</div>
+
+</body>
+</html>

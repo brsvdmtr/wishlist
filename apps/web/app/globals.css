@@ -91,6 +91,7 @@ body {
   --wb-card-strong: rgba(255,255,255,0.07);
   --wb-nav-bg: rgba(15,15,18,0.72);
   --wb-border: rgba(255,255,255,0.06);
+  --wb-border-light: rgba(255,255,255,0.10);
   --wb-border-strong: rgba(255,255,255,0.12);
   --wb-hairline: rgba(255,255,255,0.04);
 

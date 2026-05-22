@@ -32,6 +32,46 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-05-22 — URL-import onboarding empty state (3-step explainer)
+
+**Type:** approval
+
+**Decision.** The drafts/import screen ("Неразобранное") empty state is
+replaced by a 3-step onboarding explainer — copy a product link → paste it
+into the field above → the app builds the card and asks you to fill in
+anything it could not recognize. Implemented as
+`apps/web/app/miniapp/components/ImportOnboarding.tsx`, a feature element
+(NOT a `@wishlist/ui` primitive) composed from v2.1 tokens: an accent-soft
+icon circle, title + sub, and a glass step card (radius 22) with numbered
+accent circles joined by a connector line. It needs no dismissal state —
+the first imported draft replaces it with the drafts list.
+
+**Context / why.** After the feature rename ("Импорт по ссылке" → "Добавить
+товар по ссылке"), the entry card is clearer, but the screen it leads to
+still met a first-time user with a bare "Пусто" label and a one-line hint —
+people did not understand what to do with the URL field. The empty state is
+the exact moment of need, so the onboarding lives there rather than as a
+separate one-time screen. Mockup
+`mockups/approved/url-import-onboarding-empty-state.html` (2 frames: empty
+with the onboarding, and populated with the onboarding gone).
+
+**Supersedes.** The previous drafts empty state in `MiniApp.tsx`
+(`drafts_empty` / `drafts_empty_hint` i18n keys — both removed).
+
+**Impact.**
+- Mockup moved `proposed/` → `approved/`:
+  `url-import-onboarding-empty-state.html`.
+- New file `components/ImportOnboarding.tsx` (feature element, not a
+  primitive — no `COMPONENT_REGISTRY.md` row, consistent with
+  `ImportQuotaCounter` / `HintQuotaCounter`).
+- New i18n keys `drafts_ob_title` / `_sub` / `_s1..3_title` / `_s1..3_text`
+  (8 keys × 6 locales); removed `drafts_empty` / `drafts_empty_hint`.
+- No new tokens, no `@wishlist/ui` change.
+
+**Approved by.** Dmitry (solo-owner decision, 2026-05-22).
+
+---
+
 ## 2026-05-21 — HintQuotaCounter feature element (sibling of ImportQuotaCounter)
 
 **Type:** approval

@@ -76,6 +76,13 @@ services:
       SCRAPER_API_KEY: ${SCRAPER_API_KEY:-}
       SCRAPER_API_URL: ${SCRAPER_API_URL:-}
       SCRAPER_API_DISABLED: ${SCRAPER_API_DISABLED:-}
+      # Jina Reader free fallback (on by default) + curl-impersonate TLS-
+      # fingerprint fetch. JINA_API_KEY is optional — it lifts the rate limit;
+      # the *_DISABLED vars are kill switches.
+      JINA_API_KEY: ${JINA_API_KEY:-}
+      JINA_READER_URL: ${JINA_READER_URL:-}
+      PARSER_JINA_DISABLED: ${PARSER_JINA_DISABLED:-}
+      PARSER_CURL_IMPERSONATE_DISABLED: ${PARSER_CURL_IMPERSONATE_DISABLED:-}
       SUPPORT_CHAT_ID: ${SUPPORT_CHAT_ID:-}
       MAINTENANCE_MODE: ${MAINTENANCE_MODE:-false}
       GOD_MODE_TELEGRAM_IDS: ${GOD_MODE_TELEGRAM_IDS:-}

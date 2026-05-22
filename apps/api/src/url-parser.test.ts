@@ -7,7 +7,7 @@
  * microdata, embedded __NEXT_DATA__, anti-bot rejection, and the kill switch.
  */
 import { describe, it, expect } from 'vitest';
-import { extractFromHtml } from './url-parser.js';
+import { extractFromHtml, mergeProductJsonResult } from './url-parser.js';
 
 /** Anti-bot guard rejects pages < 800 bytes; pad synthetic fixtures past it. */
 const FILLER = `<!-- ${'x'.repeat(1000)} -->`;
@@ -214,5 +214,49 @@ describe('extractFromHtml — JD.com', () => {
     expect(r.title).toBe('Deli Smart Vacuum X9');
     expect(r.imageUrl).toBe('https://img12.360buyimg.com/n1/jfs/t1/x9.jpg');
     expect(r.priceText).toBeNull();
+  });
+});
+
+// ─── product-JSON enrichment merge ───────────────────────────────────────────
+
+describe('mergeProductJsonResult', () => {
+  it('fills the gaps from product-JSON and raises confidence', () => {
+    const r = mergeProductJsonResult(
+      { title: 'Wireless Mouse', description: null, priceText: null, imageUrl: null,
+        confidence: 'low', parseMethod: 'generic_html' },
+      { title: 'ignored', price: 24.99, currency: 'USD',
+        image: 'https://cdn.example.com/m.jpg', sourceUrl: null },
+      'shop.example.com', 'https://shop.example.com/products/mouse',
+    );
+    expect(r?.title).toBe('Wireless Mouse');
+    expect(r?.imageUrl).toBe('https://cdn.example.com/m.jpg');
+    expect(r?.priceText).toBeTruthy();
+    expect(r?.confidence).toBe('high');
+    expect(r?.parseMethod).toBe('domain_api');
+  });
+
+  it('returns null when the merge would not raise the confidence bucket', () => {
+    const r = mergeProductJsonResult(
+      { title: 'Mouse', description: null, priceText: '$24.99',
+        imageUrl: 'https://cdn.example.com/a.jpg', confidence: 'high',
+        parseMethod: 'generic_jsonld' },
+      { title: 'X', price: 99, currency: 'USD',
+        image: 'https://cdn.example.com/b.jpg', sourceUrl: null },
+      'shop.example.com', 'https://shop.example.com/products/mouse',
+    );
+    expect(r).toBeNull();
+  });
+
+  it('never overwrites a field the universal extractor already found', () => {
+    const r = mergeProductJsonResult(
+      { title: 'Real Title', description: null, priceText: '$5.00', imageUrl: null,
+        confidence: 'medium', parseMethod: 'generic_html' },
+      { title: 'Wrong Title', price: 999, currency: 'USD',
+        image: 'https://cdn.example.com/good.jpg', sourceUrl: null },
+      'shop.example.com', 'https://shop.example.com/products/x',
+    );
+    expect(r?.title).toBe('Real Title');                          // base wins
+    expect(r?.priceText).toBe('$5.00');                           // base wins
+    expect(r?.imageUrl).toBe('https://cdn.example.com/good.jpg'); // gap filled
   });
 });

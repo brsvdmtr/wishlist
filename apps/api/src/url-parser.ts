@@ -23,6 +23,10 @@ import * as cheerio from 'cheerio';
 import * as dns from 'node:dns/promises';
 import * as net from 'node:net';
 import puppeteer, { type Browser } from 'puppeteer-core';
+// undici's own fetch + Agent — Node's global fetch is HTTP/1.1-only and cannot
+// take a custom dispatcher reliably across undici versions. Using undici's
+// fetch with undici's Agent guarantees the HTTP/2 dispatcher is honoured.
+import { fetch as h2Fetch, Agent } from 'undici';
 import {
   browserExtract,
   extractFromHydration,
@@ -61,6 +65,27 @@ import {
   scraperMaxAttempts,
   noteScraperCall,
   scraperBudgetLeft,
+  // Realistic browser request headers (anti-bot: thin Node headers get flagged)
+  browserHeaders,
+  // Shopify / WooCommerce product-JSON endpoints (anti-bot-free structured data)
+  detectStorePlatform,
+  isWooProductPage,
+  buildShopifyJsonUrl,
+  parseShopifyJson,
+  buildWooStoreApiUrls,
+  wooSlugFromUrl,
+  parseWooJson,
+  detectShopifyCurrency,
+  sameProductUrl,
+  type ProductJsonResult,
+  // Jina Reader free fallback tier
+  isJinaReaderEnabled,
+  fetchViaJinaReader,
+  // curl-impersonate — real-Chrome TLS fingerprint
+  isCurlImpersonateAvailable,
+  fetchViaCurlImpersonate,
+  // Shared response-body helpers
+  readCappedText,
   type ExtractedFields,
 } from './marketplace/index.js';
 // Auto-register all marketplace strategies on import
@@ -104,6 +129,20 @@ const CHROMIUM_PATH      = process.env.CHROMIUM_PATH || '/usr/bin/chromium';
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+/**
+ * HTTP/2-capable dispatcher for the parser's own page fetches. Modern Chrome
+ * speaks h2 over TLS, so an HTTP/1.1 request from a "Chrome" User-Agent is
+ * itself a bot signal. The Agent negotiates h2 via ALPN and transparently
+ * falls back to h1 for servers that don't offer it. Intentionally a
+ * process-lifetime singleton (like the browser singleton) — never closed.
+ */
+const h2Dispatcher = new Agent({
+  allowH2: true,
+  connect: { timeout: 8_000 },
+  headersTimeout: 15_000,
+  bodyTimeout: 30_000,
+});
 
 const TRACKING_PARAMS = new Set([
   'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
@@ -267,19 +306,47 @@ async function parseViaOrchestrator(
 }
 
 /**
- * Last-resort fallback when a direct fetch + headless browser both failed:
- * retry the URL through the scraping API (rotating residential IP — beats
- * datacenter-IP blocks). Inert when SCRAPER_API_KEY is unset. Always resolves:
- * on failure it sets the negative cache and returns an empty result.
+ * Last-resort remote fallback when a direct fetch + headless browser both
+ * failed. Two tiers, cheapest first:
+ *   1. Jina Reader — free; renders the page on Jina's own infrastructure.
+ *   2. ScrapingAnt — paid credits; residential IP + browser rendering.
+ * Geo-fenced fortresses (Ozon / Yandex / Taobao-class) reliably beat both and
+ * are skipped outright. Always resolves: on total failure it sets the negative
+ * cache and returns an empty result.
  */
-async function scraperApiFallback(
+async function remoteFetchFallback(
   url: URL,
   hostname: string,
   canonicalUrl: string,
 ): Promise<ParsedUrlData> {
-  // Skip sites whose anti-bot the scraping API reliably fails (Ozon, Yandex,
-  // Taobao-class) — retrying only burns credits and stalls the import.
-  if (isScraperApiEnabled() && !isScraperHopeless(hostname)) {
+  // Geo-fenced + login-walled fortresses beat every free/cheap remote tier —
+  // skip them outright (no wasted credits, no pointless 30–90 s waits).
+  if (isScraperHopeless(hostname)) {
+    setNegative(canonicalUrl);
+    return emptyResult(hostname, canonicalUrl);
+  }
+
+  // ── Tier 1: Jina Reader (free — renders from Jina's IPs) ───────────────
+  if (isJinaReaderEnabled()) {
+    try {
+      const html = await fetchViaJinaReader(url.href);
+      const r = extractFromHtml(html, url.href, hostname, 'generic_html');
+      if (r.confidence !== 'none') {
+        console.log(`[parser] jina-reader success: ${hostname} (${r.confidence})`);
+        const final = toFinal(r, hostname, canonicalUrl);
+        cacheSet(canonicalUrl, final);
+        return final;
+      }
+      const reason = isAntiBotPage(html, htmlTitle(html)) ? 'anti-bot page' : 'no useful data';
+      console.warn(`[parser] jina-reader: ${reason} for ${hostname}`);
+    } catch (e) {
+      console.warn(`[parser] jina-reader failed for ${hostname}: ${(e as Error).message}`);
+    }
+  }
+
+  // ── Tier 2: ScrapingAnt (paid residential proxy + browser) ─────────────
+  // Inert when SCRAPER_API_KEY is unset.
+  if (isScraperApiEnabled()) {
     // Geo-fenced sites need an IP in their own country (from the registry).
     const country = lookupSite(hostname)?.country;
     const maxAttempts = scraperMaxAttempts();
@@ -301,6 +368,7 @@ async function scraperApiFallback(
       }
     }
   }
+
   setNegative(canonicalUrl);
   return emptyResult(hostname, canonicalUrl);
 }
@@ -347,8 +415,9 @@ async function parseLegacy(url: URL, hostname: string, canonicalUrl: string): Pr
       result = await runBrowserExtract(url.href, hostname);
     } else {
       // ── HTTP-first ───────────────────────────────────────────────────
+      const country = lookupSite(hostname)?.country;
       let html: string | null = null;
-      try { html = await fetchHtml(url.href); } catch (e) {
+      try { html = await fetchHtmlResilient(url.href, { country }); } catch (e) {
         console.warn(`[parser] HTTP failed for ${hostname}: ${(e as Error).message}`);
       }
 
@@ -365,6 +434,16 @@ async function parseLegacy(url: URL, hostname: string, canonicalUrl: string): Pr
             result = fast;
           }
         }
+        // Shopify / WooCommerce storefronts carry the authoritative product
+        // data at a JSON endpoint even when the page HTML has no JSON-LD / OG.
+        if (result.confidence !== 'high') {
+          try {
+            const enriched = await enrichViaProductJson(result, url, hostname, html);
+            if (enriched) result = enriched;
+          } catch (e) {
+            console.warn(`[parser] product-json enrich failed for ${hostname}: ${(e as Error).message}`);
+          }
+        }
       } else {
         result = await runBrowserExtract(url.href, hostname);
       }
@@ -372,7 +451,7 @@ async function parseLegacy(url: URL, hostname: string, canonicalUrl: string): Pr
 
     if (result.confidence === 'none') {
       console.warn(`[parser] no useful data for ${hostname} — trying scraper-api`);
-      return scraperApiFallback(url, hostname, canonicalUrl);
+      return remoteFetchFallback(url, hostname, canonicalUrl);
     }
 
     console.log(
@@ -386,7 +465,7 @@ async function parseLegacy(url: URL, hostname: string, canonicalUrl: string): Pr
 
   } catch (err) {
     console.error(`[parser] unhandled error for ${hostname}:`, (err as Error).message);
-    return scraperApiFallback(url, hostname, canonicalUrl);
+    return remoteFetchFallback(url, hostname, canonicalUrl);
   }
 }
 
@@ -411,16 +490,17 @@ export function validateUrl(raw: string): URL {
 }
 
 /**
- * Resolve the hostname and reject if ANY A/AAAA record points to a forbidden IP.
- * Must be called before fetch/Puppeteer navigation.
+ * Resolve the hostname and reject if ANY A/AAAA record points to a forbidden
+ * IP. Must be called before fetch / Puppeteer navigation. Returns the resolved
+ * (validated-safe) addresses so a caller can pin a connection to one of them.
  */
-export async function assertDnsIsSafe(url: URL): Promise<void> {
+export async function assertDnsIsSafe(url: URL): Promise<string[]> {
   const hostname = url.hostname.replace(/^\[/, '').replace(/\]$/, '');
 
   // If the hostname is already an IP literal, check it directly
   if (net.isIP(hostname)) {
     if (isForbiddenIP(hostname)) throw new Error('Ссылка на внутренний адрес недоступна');
-    return;
+    return [hostname];
   }
 
   let addresses: string[];
@@ -430,7 +510,7 @@ export async function assertDnsIsSafe(url: URL): Promise<void> {
     addresses = [...results, ...results6];
   } catch {
     // DNS resolution failure — let the fetch itself fail with a descriptive error
-    return;
+    return [];
   }
 
   for (const ip of addresses) {
@@ -438,6 +518,8 @@ export async function assertDnsIsSafe(url: URL): Promise<void> {
       throw new Error('Ссылка на внутренний адрес недоступна (DNS)');
     }
   }
+  // Return the validated addresses so a caller can pin a connection to them.
+  return addresses;
 }
 
 /**
@@ -679,26 +761,20 @@ function mergeNetworkWithHtml(
 
 const MAX_REDIRECTS = 5;
 
-async function fetchHtml(url: string): Promise<string> {
+async function fetchHtml(url: string, opts?: { country?: string }): Promise<string> {
   let currentUrl = url;
 
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
     const ctrl  = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
     try {
-      const res = await fetch(currentUrl, {
+      const res = await h2Fetch(currentUrl, {
         signal: ctrl.signal,
-        headers: {
-          'User-Agent': USER_AGENT,
-          'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8',
-          'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'Sec-Fetch-Dest': 'document',
-          'Sec-Fetch-Mode': 'navigate',
-          'Sec-Fetch-Site': 'none',
-          'Upgrade-Insecure-Requests': '1',
-        },
+        // A full modern-Chrome header set, with Accept-Language tuned to the
+        // marketplace's country so the storefront serves its local locale.
+        headers: browserHeaders({ country: opts?.country }),
         redirect: 'manual',
+        dispatcher: h2Dispatcher,
       });
 
       // Handle redirects manually: validate each redirect target
@@ -742,6 +818,111 @@ async function fetchHtml(url: string): Promise<string> {
 
 // Register fetchHtml provider for marketplace strategies
 registerFetchHtmlProvider(fetchHtml);
+
+// The curl-impersonate binary install in Dockerfile.api is best-effort (a
+// download failure must not fail the build). Log its availability at startup
+// in production so a missing TLS-fingerprint tier is visible, not silent.
+if (process.env.NODE_ENV === 'production') {
+  console.log(
+    '[parser] curl-impersonate TLS-fingerprint tier: '
+    + (isCurlImpersonateAvailable() ? 'available' : 'NOT available'),
+  );
+}
+
+/**
+ * HTTP fetch with a TLS-fingerprint retry. A plain (undici) fetch presents a
+ * non-Chrome TLS handshake that some anti-bot layers 403 outright, or answer
+ * with a challenge page (HTTP 200 + bot wall). On either outcome, retry once
+ * via curl-impersonate, which performs a byte-identical Chrome TLS handshake.
+ * Throws when both miss — the caller then falls through to the headless browser.
+ */
+/** The <title> text from raw HTML — feeds isAntiBotPage's title heuristics. */
+function htmlTitle(html: string): string | null {
+  const m = html.match(/<title[^>]*>([\s\S]{0,300}?)<\/title>/i);
+  return m?.[1]?.trim() || null;
+}
+
+async function fetchHtmlResilient(
+  targetUrl: string,
+  opts?: { country?: string },
+): Promise<string> {
+  let lastError = 'plain fetch returned an anti-bot page';
+  let plainThrew = false;
+  try {
+    const html = await fetchHtml(targetUrl, opts);
+    if (!isAntiBotPage(html, htmlTitle(html))) return html;
+    console.warn(`[parser] plain fetch hit an anti-bot page: ${targetUrl}`);
+  } catch (e) {
+    lastError = (e as Error).message;
+    plainThrew = true;
+    console.warn(`[parser] plain fetch failed (${lastError}): ${targetUrl}`);
+  }
+  // A hard "gone" status (404/410) is not a bot block — a different TLS
+  // fingerprint cannot fix it (curl's --fail would just reject it too). Skip
+  // the curl retry and let the caller fall through to the browser.
+  const hardGone = plainThrew && /^HTTP 4(?:04|10)$/.test(lastError);
+  if (isCurlImpersonateAvailable() && !hardGone) {
+    // curl resolves DNS in its own process, outside assertDnsIsSafe — pin it
+    // to a freshly-validated IP so a DNS-rebinding flip between validation and
+    // connect cannot reach an internal host. assertDnsIsSafe throws if any
+    // resolved address is forbidden.
+    const u = new URL(targetUrl);
+    const safeIps = await assertDnsIsSafe(u);
+    const ip = safeIps[0];
+    const pin = ip
+      ? {
+          host: u.hostname.replace(/^\[/, '').replace(/\]$/, ''),
+          port: u.port || (u.protocol === 'https:' ? '443' : '80'),
+          ip,
+        }
+      : undefined;
+    console.warn(`[parser] retrying via curl-impersonate: ${targetUrl}`);
+    const html = await fetchViaCurlImpersonate(targetUrl, pin ? { pin } : undefined);
+    // curl-impersonate defeats TLS fingerprinting but NOT a JavaScript
+    // challenge — a Cloudflare / DataDome JS wall still returns HTTP 200.
+    // Reject it so the caller falls through to the headless browser.
+    if (isAntiBotPage(html, htmlTitle(html))) throw new Error('curl_impersonate_antibot');
+    console.log(`[parser] curl-impersonate fetch succeeded: ${targetUrl}`);
+    return html;
+  }
+  throw new Error(`http_fetch_failed:${lastError}`);
+}
+
+/**
+ * Fetch a small JSON / text resource (a product-JSON endpoint) with browser
+ * headers + a size cap. Redirects are NOT followed — these endpoints are
+ * same-origin as the already-DNS-validated page URL, and refusing redirects
+ * keeps the SSRF guard intact. Returns null on any non-2xx or failure.
+ */
+async function fetchTextSafe(
+  targetUrl: string,
+  opts?: { country?: string; timeoutMs?: number },
+): Promise<string | null> {
+  const ctrl  = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), opts?.timeoutMs ?? 6_000);
+  try {
+    // Re-validate DNS immediately before the fetch. The host was checked at
+    // parseUrl entry, but a product-JSON probe happens later — re-resolving
+    // here shrinks the DNS-rebinding window. Throws (→ caught below → null) if
+    // the host now resolves to an internal address.
+    await assertDnsIsSafe(new URL(targetUrl));
+    const headers = browserHeaders({ country: opts?.country });
+    headers['Accept']         = 'application/json,text/plain,*/*';
+    headers['Sec-Fetch-Dest'] = 'empty';
+    headers['Sec-Fetch-Mode'] = 'cors';
+    const res = await h2Fetch(targetUrl, {
+      signal: ctrl.signal, headers, redirect: 'manual', dispatcher: h2Dispatcher,
+    });
+    if (res.status < 200 || res.status >= 300) return null;
+    // Stream-read with a hard byte cap — never buffer an unbounded body.
+    // (undici types Response.body as ReadableStream<any>; it yields Uint8Array.)
+    return await readCappedText(res.body as ReadableStream<Uint8Array> | null, MAX_HTML_BYTES);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // ─── HTML Extraction (universal structured-data + domain adapters) ───────────
 
@@ -1160,6 +1341,100 @@ function jdAdapter($: cheerio.CheerioAPI, html: string): DomainData | null {
   if (img) result.image = img;
 
   return Object.keys(result).length ? result : null;
+}
+
+// ─── Shopify / WooCommerce product-JSON enrichment ────────────────────────────
+
+/**
+ * Merge product-JSON fields into a parse result: keep everything the universal
+ * extractor already found, fill ONLY the gaps. Returns the merged result when
+ * it raises the confidence bucket, else null (the caller keeps the original).
+ * Deterministic — exported for unit testing.
+ */
+export function mergeProductJsonResult(
+  base: ParseResult,
+  pj: ProductJsonResult,
+  hostname: string,
+  baseUrl: string,
+): ParseResult | null {
+  const title    = base.title ?? cleanTitle(pj.title, hostname);
+  const imageUrl = base.imageUrl ?? resolveUrl(pj.image, baseUrl);
+  let   priceText = base.priceText;
+  if (!priceText && pj.price !== null) {
+    priceText = formatPrice(pj.price, pj.currency ?? fallbackCurrency(hostname));
+  }
+
+  const confidence = calcConfidence({ title, imageUrl: imageUrl ?? null, priceText });
+  if (confidenceScore(confidence) <= confidenceScore(base.confidence)) return null;
+
+  return {
+    title,
+    description: base.description,
+    priceText,
+    imageUrl: imageUrl ?? null,
+    confidence,
+    parseMethod: 'domain_api',
+  };
+}
+
+/**
+ * Enrich a weak parse result with data from a Shopify / WooCommerce product
+ * JSON endpoint. The platform is detected from the page HTML; the platform's
+ * unauthenticated, anti-bot-free product endpoint is then fetched and used to
+ * fill ONLY the fields the universal extractor missed. Millions of independent
+ * storefronts (heavy in the US / ES long tail) ship themes with no JSON-LD /
+ * Open Graph — this is where they become parseable.
+ *
+ * Returns null when the platform isn't detected, the endpoint misses, or the
+ * merge wouldn't raise confidence — the caller then keeps the original result.
+ */
+async function enrichViaProductJson(
+  base: ParseResult, url: URL, hostname: string, html: string,
+): Promise<ParseResult | null> {
+  const platform = detectStorePlatform(html);
+  if (!platform) return null;
+  const h = normalizeHost(hostname);
+  const country = lookupSite(h)?.country;
+
+  let pj: ProductJsonResult | null = null;
+
+  if (platform === 'shopify') {
+    const jsonUrl = buildShopifyJsonUrl(url);
+    if (!jsonUrl) return null;
+    const raw = await fetchTextSafe(jsonUrl, { country, timeoutMs: 4_000 });
+    pj = raw ? parseShopifyJson(raw) : null;
+    // The Shopify .json endpoint omits currency — read it from the page HTML,
+    // else the site registry, else USD (the global Shopify-store default).
+    if (pj && !pj.currency) {
+      pj.currency = detectShopifyCurrency(html) ?? lookupSite(h)?.currency ?? 'USD';
+    }
+  } else {
+    // wooSlugFromUrl takes any URL's last path segment — skip the Store-API
+    // probe entirely on non-product WooCommerce pages (cart, account, blog,
+    // category) so they don't burn two same-origin round-trips.
+    if (!isWooProductPage(html)) return null;
+    const slug = wooSlugFromUrl(url);
+    if (!slug) return null;
+    for (const apiUrl of buildWooStoreApiUrls(url.origin, slug)) {
+      const raw = await fetchTextSafe(apiUrl, { country, timeoutMs: 4_000 });
+      const parsed = raw ? parseWooJson(raw) : null;
+      // The Store-API ?slug= is matched on the URL's last path segment, which
+      // is not always the real product slug — trust the result only when the
+      // returned product's permalink confirms it is this very page.
+      if (parsed && parsed.sourceUrl && sameProductUrl(parsed.sourceUrl, url.href)) {
+        pj = parsed;
+        break;
+      }
+    }
+  }
+  if (!pj) return null;
+
+  const merged = mergeProductJsonResult(base, pj, h, url.href);
+  if (merged) {
+    console.log(`[parser] product-json (${platform}) enriched ${h}: `
+      + `${base.confidence}→${merged.confidence}`);
+  }
+  return merged;
 }
 
 // ─── Title Cleanup ────────────────────────────────────────────────────────────

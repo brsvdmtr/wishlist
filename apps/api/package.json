@@ -30,6 +30,7 @@
     "pino-roll": "^3.1.0",
     "puppeteer-core": "^24.38.0",
     "sharp": "^0.34.5",
+    "undici": "^6.21.0",
     "zod": "3.23.8"
   },
   "devDependencies": {

@@ -11,7 +11,7 @@ export type ImportQuotaState = {
 
 /**
  * The quota line for the current import allowance. Shared by the Drafts-screen
- * counter strip (below) and the home "import by link" card so the 4-branch
+ * counter strip (below) and the home "add a product by link" card so the 4-branch
  * wording lives in exactly one place.
  */
 export function importQuotaLabel({ isPro, freeLeft, freeLimit, paidLeft, locale }: ImportQuotaState): string {

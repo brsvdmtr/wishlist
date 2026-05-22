@@ -11,24 +11,24 @@ const noop = () => {};
 describe('ImportQuotaCounter', () => {
   it('PRO users see an "unlimited" line, no count', () => {
     render(<ImportQuotaCounter isPro freeLeft={0} freeLimit={5} paidLeft={0} locale="en" onUpsell={noop} />);
-    expect(screen.getByText('Unlimited imports')).toBeInTheDocument();
+    expect(screen.getByText('Unlimited')).toBeInTheDocument();
   });
 
-  it('with quota left, shows "{n} of {limit} imports left this month"', () => {
+  it('with quota left, shows "{n} of {limit} left this month"', () => {
     render(<ImportQuotaCounter isPro={false} freeLeft={3} freeLimit={5} paidLeft={0} locale="en" onUpsell={noop} />);
-    expect(screen.getByText('3 of 5 imports left this month')).toBeInTheDocument();
+    expect(screen.getByText('3 of 5 left this month')).toBeInTheDocument();
   });
 
   it('on the last free import, escalates to the warning tone', () => {
     render(<ImportQuotaCounter isPro={false} freeLeft={1} freeLimit={5} paidLeft={0} locale="en" onUpsell={noop} />);
-    const text = screen.getByText('1 of 5 imports left this month');
+    const text = screen.getByText('1 of 5 left this month');
     expect(text.parentElement?.style.background).toContain('--wb-warning-soft');
   });
 
   it('quota exhausted with no paid credits — danger tone, tappable', () => {
     render(<ImportQuotaCounter isPro={false} freeLeft={0} freeLimit={5} paidLeft={0} locale="en" onUpsell={noop} />);
     const strip = screen.getByRole('button');
-    expect(strip).toHaveTextContent('No free imports left this month');
+    expect(strip).toHaveTextContent('No free adds left this month');
     expect(strip.style.background).toContain('--wb-danger-soft');
   });
 
@@ -41,7 +41,7 @@ describe('ImportQuotaCounter', () => {
 
   it('with free quota gone but paid credits left, shows the paid balance', () => {
     render(<ImportQuotaCounter isPro={false} freeLeft={0} freeLimit={5} paidLeft={4} locale="en" onUpsell={noop} />);
-    expect(screen.getByText('4 paid imports left')).toBeInTheDocument();
+    expect(screen.getByText('4 paid adds left')).toBeInTheDocument();
   });
 
   it('a healthy counter is not tappable (no upsell affordance)', () => {
@@ -51,25 +51,25 @@ describe('ImportQuotaCounter', () => {
 });
 
 // importQuotaLabel — the shared quota-line resolver, reused by the home
-// "import by link" card so the 4-branch wording lives in one place.
+// "add a product by link" card so the 4-branch wording lives in one place.
 describe('importQuotaLabel', () => {
   it('PRO → unlimited', () => {
     expect(importQuotaLabel({ isPro: true, freeLeft: 0, freeLimit: 5, paidLeft: 0, locale: 'en' }))
-      .toBe('Unlimited imports');
+      .toBe('Unlimited');
   });
 
-  it('free quota left → "{n} of {limit} imports left this month"', () => {
+  it('free quota left → "{n} of {limit} left this month"', () => {
     expect(importQuotaLabel({ isPro: false, freeLeft: 3, freeLimit: 5, paidLeft: 0, locale: 'en' }))
-      .toBe('3 of 5 imports left this month');
+      .toBe('3 of 5 left this month');
   });
 
   it('free gone, paid credits left → paid balance', () => {
     expect(importQuotaLabel({ isPro: false, freeLeft: 0, freeLimit: 5, paidLeft: 4, locale: 'en' }))
-      .toBe('4 paid imports left');
+      .toBe('4 paid adds left');
   });
 
-  it('free + paid both exhausted → "no free imports left"', () => {
+  it('free + paid both exhausted → "no free adds left"', () => {
     expect(importQuotaLabel({ isPro: false, freeLeft: 0, freeLimit: 5, paidLeft: 0, locale: 'en' }))
-      .toBe('No free imports left this month');
+      .toBe('No free adds left this month');
   });
 });

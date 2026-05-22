@@ -87,6 +87,38 @@ export {
   scraperBudgetLeft,
 } from './scraper-api.js';
 
+// Realistic browser request headers (thin Node headers get flagged as bots)
+export { browserHeaders, acceptLanguageFor, pickUaProfile } from './http-headers.js';
+export type { UaProfile } from './http-headers.js';
+
+// Shopify / WooCommerce product-JSON endpoints (anti-bot-free structured data)
+export {
+  detectStorePlatform,
+  isWooProductPage,
+  buildShopifyJsonUrl,
+  parseShopifyJson,
+  buildWooStoreApiUrls,
+  wooSlugFromUrl,
+  parseWooJson,
+  detectShopifyCurrency,
+  sameProductUrl,
+} from './product-json.js';
+export type { StorePlatform, ProductJsonResult } from './product-json.js';
+
+// Jina Reader free fallback tier (renders from Jina's own infrastructure)
+export { isJinaReaderEnabled, fetchViaJinaReader, buildJinaReaderUrl } from './reader-api.js';
+
+// curl-impersonate — real-Chrome TLS fingerprint (beats Cloudflare/DataDome)
+export {
+  isCurlImpersonateAvailable,
+  fetchViaCurlImpersonate,
+  buildCurlImpersonateArgs,
+  curlImpersonateBin,
+} from './curl-impersonate.js';
+
+// Shared response-body helpers
+export { readCappedText } from './fetch-util.js';
+
 // Logger
 export { parseLog } from './logger.js';
 
