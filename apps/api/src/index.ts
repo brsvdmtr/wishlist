@@ -77,6 +77,7 @@ import { registerWishlistsRouter } from './routes/wishlists.routes';
 import { registerSantaRouter } from './routes/santa.routes';
 import { registerSearchRouter } from './routes/search.routes';
 import { registerResearchSurveyRouter } from './routes/research-survey.routes';
+import { registerExperimentsRouter } from './routes/experiments.routes';
 import { startCleanupSchedulers } from './schedulers/cleanup';
 import { startBillingSchedulers } from './schedulers/billing';
 import { startReferralSchedulers } from './schedulers/referral';
@@ -725,6 +726,16 @@ const researchSurveyRouter = registerResearchSurveyRouter({
   getOrCreateTgUser,
 });
 tgRouter.use(researchSurveyRouter);
+
+// ─── /tg/experiments/* sub-router (A/B experiment infrastructure) ───────────
+// Single GET /experiments/:key — server-side sticky bucket assignment for the
+// Mini App `useExperiment` hook. Per-endpoint `research.read` rate-limit lives
+// in the router itself; no idempotency middleware — the assignment write is an
+// idempotent first-exposure insert, GET-only.
+const experimentsRouter = registerExperimentsRouter({
+  getOrCreateTgUser,
+});
+tgRouter.use(experimentsRouter);
 
 // ─── /tg/referral/* sub-router (P5b split) ──────────────────────────────────
 // All 4 endpoints are GET-only (read), no path-scoped idempotency middleware

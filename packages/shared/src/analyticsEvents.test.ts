@@ -191,6 +191,15 @@ describe('PRODUCT_EVENTS — fixture snapshot', () => {
     expect(fixture).toMatchInlineSnapshot(`
       [
         {
+          "action": "assigned",
+          "domain": "experiment",
+          "name": "experiment.assigned",
+          "pii": "userId-only",
+          "sources": [
+            "server",
+          ],
+        },
+        {
           "action": "converted_to_user",
           "domain": "guest",
           "name": "guest.converted_to_user",
@@ -269,6 +278,33 @@ describe('PRODUCT_EVENTS — fixture snapshot', () => {
           "pii": "userId-only",
           "sources": [
             "server",
+          ],
+        },
+        {
+          "action": "gate_hit",
+          "domain": "santa",
+          "name": "santa.gate_hit",
+          "pii": "userId-only",
+          "sources": [
+            "server",
+          ],
+        },
+        {
+          "action": "paywall_cta_clicked",
+          "domain": "santa",
+          "name": "santa.paywall_cta_clicked",
+          "pii": "none",
+          "sources": [
+            "client",
+          ],
+        },
+        {
+          "action": "paywall_viewed",
+          "domain": "santa",
+          "name": "santa.paywall_viewed",
+          "pii": "none",
+          "sources": [
+            "client",
           ],
         },
         {

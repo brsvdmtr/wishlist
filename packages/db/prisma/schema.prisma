@@ -245,6 +245,7 @@ model User {
   calendarOnboardingSeenAt DateTime?
 
   dailyActivity            UserDailyActivity[]
+  experimentAssignments    ExperimentAssignment[]
 }
 
 model Wishlist {
@@ -1426,6 +1427,32 @@ model AnalyticsEvent {
 
   @@index([event, createdAt])
   @@index([userId, event])
+}
+
+// A/B experiment infrastructure — one sticky bucket assignment per (user,
+// experiment). Phase 0 of docs/research/06-experiment-backlog.md.
+//
+// The row is the source of truth for stickiness: once written, the variant
+// never changes when EXP_<NAME>_ROLLOUT shifts later — only ENABLED=false
+// (the kill switch) overrides it. It is also the dedup guard for the
+// `experiment.assigned` analytics event: the (userId, experimentKey) unique
+// index means the row — and the event — is created exactly once per user
+// per experiment, even under concurrent requests.
+//
+// See apps/api/src/services/experiments.service.ts and
+// docs/research/experiments/README.md.
+model ExperimentAssignment {
+  id            String   @id @default(cuid())
+  userId        String
+  experimentKey String
+  variant       String // 'control' | 'treatment'
+  holdout       Boolean  @default(false) // true → global holdout cohort
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, experimentKey])
+  @@index([experimentKey, variant])
 }
 
 // Daily product-loop rollup — one row per (userId, UTC calendar day).

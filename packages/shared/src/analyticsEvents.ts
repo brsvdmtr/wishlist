@@ -461,6 +461,48 @@ export const PRODUCT_EVENTS = [
     sources: ['server'],
     pii: 'userId-only',
   },
+  // ── Secret Santa PRO gates ──
+  // Three PRO-gated Secret Santa features: campaign type MULTI_WAVE,
+  // individual exclusion pairs, and exclusion groups. The API enforces each
+  // with a 402 pro_required; the Mini App discloses them before submit and
+  // opens a context-aware upsell. See docs/MONETIZATION.md § 16b.
+  {
+    name: 'santa.gate_hit',
+    domain: 'santa',
+    action: 'gate_hit',
+    description:
+      'A FREE user hit a Secret Santa PRO gate — the API returned 402 pro_required. props.feature: santa_multi_wave | santa_exclusions | santa_exclusion_groups. Server-authoritative — emitted by the route handler, never trusted from a client.',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'santa.paywall_viewed',
+    domain: 'santa',
+    action: 'paywall_viewed',
+    description:
+      'The Secret Santa PRO upsell sheet was rendered to a FREE user. UI impression emitted from the Mini App. props.context: santa_multi_wave | santa_exclusions | santa_exclusion_groups.',
+    sources: ['client'],
+    pii: 'none',
+  },
+  {
+    name: 'santa.paywall_cta_clicked',
+    domain: 'santa',
+    action: 'paywall_cta_clicked',
+    description:
+      'A FREE user tapped the upgrade CTA on a Secret Santa PRO upsell. Intent signal — does NOT prove payment. props.context, props.plan.',
+    sources: ['client'],
+    pii: 'none',
+  },
+  // ── Experiments (A/B infrastructure — server-assigned sticky buckets) ──
+  {
+    name: 'experiment.assigned',
+    domain: 'experiment',
+    action: 'assigned',
+    description:
+      'A user was bucketed into an experiment. Emitted server-side exactly once per (user, experiment) on first exposure — the unique ExperimentAssignment row is the dedup guard. props: key (experiment id), variant (control | treatment), holdout (true for the global 5% holdout cohort).',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
 ] as const satisfies readonly ProductEventDescriptor[];
 
 export type ProductEventName = (typeof PRODUCT_EVENTS)[number]['name'];
