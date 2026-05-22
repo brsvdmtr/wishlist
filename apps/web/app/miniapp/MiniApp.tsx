@@ -326,12 +326,14 @@ type UpsellContext =
   | 'dont_gift_banner'
   | 'curated_selection'
   | 'smart_reservations'
-  | 'bot_import'
   | 'showcase'
   | 'appearance' // v2.1: theme/accent PRO gate
   | 'birthday_reminders_advanced' // birthday-reminders Pro features (audience EXTENDED, primary wishlist, custom message, advanced windows)
   | 'pro_main' // voluntary upgrade flow (Settings → connect_pro, bot deep-link upgrade_pro). Distinct from feature-gate contexts so analytics can separate "user proactively browsed PRO" from "user hit a limit". Lifetime tile shows in every context (since 2026-05-08).
-  | 'search'; // search-driven paywall: Free user found matches in PRO-only result types (reservations / events / anti-gift / smart filters). Distinct context so paywall conversion analytics attributes by entry source.
+  | 'search' // search-driven paywall: Free user found matches in PRO-only result types (reservations / events / anti-gift / smart filters). Distinct context so paywall conversion analytics attributes by entry source.
+  | 'santa_multi_wave' // Secret Santa: MULTI_WAVE campaign type — 402 from POST /tg/santa/campaigns
+  | 'santa_exclusions' // Secret Santa: individual exclusion pairs — 402 from POST /tg/santa/campaigns/:id/exclusions
+  | 'santa_exclusion_groups'; // Secret Santa: named exclusion groups — 402 from POST /tg/santa/campaigns/:id/exclusions/groups
 
 // UpsellSheetState carries optional wishlistId for wishlist-scoped add-on offers
 type UpsellSheetState = { context: UpsellContext; wishlistId?: string } | null;
@@ -2312,13 +2314,6 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
     showTable: false,
     benefits: [t('upsell_smart_res_b1', locale), t('upsell_smart_res_b2', locale), t('upsell_smart_res_b3', locale)],
   },
-  bot_import: {
-    emoji: '🔗',
-    title: t('upsell_url_title', locale),
-    subtitle: t('upsell_url_subtitle', locale),
-    showTable: false,
-    benefits: [t('upsell_url_b1', locale), t('upsell_url_b2', locale), t('upsell_url_b3', locale)],
-  },
   showcase: {
     emoji: '✨',
     title: t('showcase_paywall_title', locale),
@@ -2333,13 +2328,13 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
   },
   appearance: {
     emoji: '🎨',
-    title: 'Персонализация внешнего вида',
-    subtitle: 'PRO открывает OLED-чёрную тему и акцентные цвета: синий, розовый, зелёный.',
+    title: t('upsell_appearance_title', locale),
+    subtitle: t('upsell_appearance_subtitle', locale),
     showTable: false,
     benefits: [
-      'OLED-чёрная тема (экономит батарею)',
-      'Акценты: синий, розовый, зелёный',
-      'Мгновенное переключение без перезагрузки',
+      t('upsell_appearance_b1', locale),
+      t('upsell_appearance_b2', locale),
+      t('upsell_appearance_b3', locale),
     ],
   },
   birthday_reminders_advanced: {
@@ -2375,6 +2370,39 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
     title: t('search_paywall_title', locale),
     subtitle: t('search_paywall_desc', locale),
     showTable: true,
+  },
+  santa_multi_wave: {
+    emoji: '🌊',
+    title: t('upsell_santa_multi_wave_title', locale),
+    subtitle: t('upsell_santa_multi_wave_subtitle', locale),
+    showTable: false,
+    benefits: [
+      t('upsell_santa_multi_wave_b1', locale),
+      t('upsell_santa_multi_wave_b2', locale),
+      t('upsell_santa_multi_wave_b3', locale),
+    ],
+  },
+  santa_exclusions: {
+    emoji: '🚫',
+    title: t('upsell_santa_excl_title', locale),
+    subtitle: t('upsell_santa_excl_subtitle', locale),
+    showTable: false,
+    benefits: [
+      t('upsell_santa_excl_b1', locale),
+      t('upsell_santa_excl_b2', locale),
+      t('upsell_santa_excl_b3', locale),
+    ],
+  },
+  santa_exclusion_groups: {
+    emoji: '👥',
+    title: t('upsell_santa_excl_groups_title', locale),
+    subtitle: t('upsell_santa_excl_groups_subtitle', locale),
+    showTable: false,
+    benefits: [
+      t('upsell_santa_excl_groups_b1', locale),
+      t('upsell_santa_excl_groups_b2', locale),
+      t('upsell_santa_excl_groups_b3', locale),
+    ],
   },
 });
 
@@ -5649,6 +5677,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [santaCreateMinBudget, setSantaCreateMinBudget] = useState('');
   const [santaCreateMaxBudget, setSantaCreateMaxBudget] = useState('');
   const [santaCreateCurrency, setSantaCreateCurrency] = useState<'RUB' | 'USD'>('RUB');
+  const [santaCreateType, setSantaCreateType] = useState<'CLASSIC' | 'MULTI_WAVE'>('CLASSIC');
   // Research survey deep-link state — populated from srvy_<inviteId> startParam.
   const [surveyInviteId, setSurveyInviteId] = useState<string | null>(null);
   // Join (from deep link)
@@ -6038,6 +6067,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       trigger: upsellTriggerRef.current,
       wishlistId: upsellSheet?.wishlistId,
     });
+    // Santa-specific paywall impression — coexists with the generic
+    // paywall.viewed above (same pattern as search.* / showcase.* events).
+    if (ctx === 'santa_multi_wave' || ctx === 'santa_exclusions' || ctx === 'santa_exclusion_groups') {
+      trackEvent('santa.paywall_viewed', { context: ctx });
+    }
     upsellTriggerRef.current = 'tap';
   }, [upsellSheet?.context, upsellSheet?.wishlistId, trackEvent]);
 
@@ -26536,6 +26570,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               plan,
               surface: 'pro_upsell_sheet',
             });
+            // Santa-specific CTA click — coexists with the generic events above.
+            if (
+              upsellSheet.context === 'santa_multi_wave' ||
+              upsellSheet.context === 'santa_exclusions' ||
+              upsellSheet.context === 'santa_exclusion_groups'
+            ) {
+              trackEvent('santa.paywall_cta_clicked', { context: upsellSheet.context, plan });
+            }
           }
           void handleUpgradeToPro(plan);
         }}
@@ -27654,6 +27696,37 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 style={{ width: '100%', background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 16px', fontSize: 15, color: C.text, fontFamily: font, boxSizing: 'border-box' }}
               />
             </div>
+            {/* Campaign type — Classic is free; Multi-wave is PRO. Disclosed
+                here so a FREE user sees the gate before submit, not as a 402. */}
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, display: 'block', marginBottom: 6 }}>{t('santa_create_type_label', locale)}</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {(['CLASSIC', 'MULTI_WAVE'] as const).map(ct => (
+                  <button
+                    key={ct}
+                    onClick={() => setSantaCreateType(ct)}
+                    style={{
+                      flex: 1, padding: '10px 0', borderRadius: 12, border: `2px solid ${santaCreateType === ct ? C.accent : C.border}`,
+                      background: santaCreateType === ct ? `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.125)` : C.card,
+                      color: santaCreateType === ct ? C.accent : C.textMuted,
+                      fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: font,
+                    }}
+                  >
+                    {ct === 'CLASSIC'
+                      ? t('santa_create_type_classic', locale)
+                      : `${planInfo.code === 'PRO' ? '' : '🔒 '}${t('santa_create_type_multi', locale)}`}
+                  </button>
+                ))}
+              </div>
+              {santaCreateType === 'MULTI_WAVE' && planInfo.code !== 'PRO' && (
+                <button
+                  onClick={() => showUpsell('santa_multi_wave')}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', background: `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.063)`, border: 'none', borderRadius: 12, padding: '10px 14px', fontSize: 13, color: C.accent, marginTop: 8, cursor: 'pointer', fontFamily: font }}
+                >
+                  🔒 {t('santa_create_type_pro_hint', locale)}
+                </button>
+              )}
+            </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, display: 'block', marginBottom: 6 }}>{t('santa_create_desc_label', locale)}</label>
               <textarea
@@ -27717,7 +27790,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 if (!santaCreateTitle.trim()) return;
                 setSantaCreateLoading(true);
                 try {
-                  const body: Record<string, unknown> = { title: santaCreateTitle.trim(), currency: santaCreateCurrency };
+                  const body: Record<string, unknown> = { title: santaCreateTitle.trim(), type: santaCreateType, currency: santaCreateCurrency };
                   if (santaCreateDesc.trim()) body.description = santaCreateDesc.trim();
                   if (santaCreateMinBudget) body.minBudget = parseInt(santaCreateMinBudget, 10);
                   if (santaCreateMaxBudget) body.maxBudget = parseInt(santaCreateMaxBudget, 10);
@@ -27737,6 +27810,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     setSantaCampaigns(prev => ({ ...prev, owned: [{ ...json.campaign, participantCount: 0 }, ...prev.owned] }));
                     pushToast(t('done', locale), 'success');
                     setScreen('santa-campaign');
+                  } else if (res.status === 402) {
+                    // PRO gate (multi-wave) — open the upsell instead of a toast.
+                    showUpsell('santa_multi_wave');
                   } else {
                     pushToast(t('error_generic', locale), 'error');
                   }
@@ -30117,9 +30193,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       {t('santa_excl_add_pair', locale)}
                     </button>
                   ) : (
-                    <div style={{ background: `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.063)`, borderRadius: 12, padding: '10px 14px', fontSize: 13, color: C.accent, marginTop: 4 }}>
-                      🔒 {t('santa_excl_pro_hint', locale)}
-                    </div>
+                    <button
+                      onClick={() => showUpsell('santa_exclusions')}
+                      style={{ display: 'block', width: '100%', textAlign: 'left', background: `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.063)`, border: 'none', borderRadius: 12, padding: '10px 14px', fontSize: 13, color: C.accent, marginTop: 4, cursor: 'pointer', fontFamily: font }}
+                    >
+                      🔒 {t('santa_excl_pairs_pro_hint', locale)}
+                    </button>
                   )}
                 </div>
 
@@ -30192,9 +30271,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     </button>
                   ) : (
                     santaExclGroups.length === 0 && (
-                      <div style={{ background: `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.063)`, borderRadius: 12, padding: '10px 14px', fontSize: 13, color: C.accent, marginTop: 4 }}>
-                        🔒 {t('santa_excl_pro_hint', locale)}
-                      </div>
+                      <button
+                        onClick={() => showUpsell('santa_exclusion_groups')}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', background: `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.063)`, border: 'none', borderRadius: 12, padding: '10px 14px', fontSize: 13, color: C.accent, marginTop: 4, cursor: 'pointer', fontFamily: font }}
+                      >
+                        🔒 {t('santa_excl_groups_pro_hint', locale)}
+                      </button>
                     )
                   )}
                 </div>

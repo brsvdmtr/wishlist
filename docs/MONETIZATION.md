@@ -100,6 +100,9 @@ All limits and feature gates are **enforced server-side**. The client performs p
 | Curated Selections | `POST /tg/curated-selections` | `isPro` → 403 |
 | Profile Subscriptions | `POST /tg/profiles/:id/subscribe` | `isPro` → 403 |
 | Birthday Reminders advanced (audience EXTENDED, primary wishlist, custom message, 7d/1d friend + 14d/7d owner windows) | `PATCH /tg/me/birthday-settings` | `isPro` → 402 `{ error: 'pro_required', feature: 'birthday_reminders_advanced', context: '<field>' }` |
+| Secret Santa multi-wave campaign | `POST /tg/santa/campaigns` (type `MULTI_WAVE`) | `isPro` → 402 `{ error: 'pro_required', feature: 'santa_multi_wave' }` |
+| Secret Santa exclusion pairs | `POST /tg/santa/campaigns/:id/exclusions` | `isPro` → 402 `{ error: 'pro_required', feature: 'santa_exclusions' }` |
+| Secret Santa exclusion groups | `POST /tg/santa/campaigns/:id/exclusions/groups` (+ `.../groups/:gid/members`) | `isPro` → 402 `{ error: 'pro_required', feature: 'santa_exclusion_groups' }` |
 
 ### Reservation PRO — Beta-gated via `hasReservationPro()`
 
@@ -284,7 +287,10 @@ type UpsellContext =
   | 'participant_limit' // defined; not wired — reserve 402 shows toast_max_participants, not this upsell
   | 'subscription_limit'// triggered on follow 402 (показывает до 5 подписок)
   | 'sort_recommended'  // triggered on recommended sort click (client-only)
-  | 'birthday_reminders_advanced'; // triggered on PATCH /tg/me/birthday-settings 402
+  | 'birthday_reminders_advanced' // triggered on PATCH /tg/me/birthday-settings 402
+  | 'santa_multi_wave'      // triggered on POST /tg/santa/campaigns 402 (type MULTI_WAVE)
+  | 'santa_exclusions'      // triggered on POST /tg/santa/campaigns/:id/exclusions 402
+  | 'santa_exclusion_groups'; // triggered on POST /tg/santa/campaigns/:id/exclusions/groups 402
 ```
 
 Each context has a dedicated `emoji`, `title`, `subtitle`, and optional `benefits[]` list, defined in `getUpsellContent(locale)` in `MiniApp.tsx`. Keys are in `packages/shared/src/i18n.ts`.
@@ -318,6 +324,11 @@ All paywall text lives in `packages/shared/src/i18n.ts`.
 `settings_hints` + `settings_desc_hints`
 `settings_subscriptions` + `settings_desc_subscriptions` ← new
 `settings_privacy_pro` + `settings_desc_privacy_pro` ← new
+
+### Secret Santa PRO gates
+`santa_create_type_pro_hint` (create-form disclosure)
+`santa_excl_pairs_pro_hint` · `santa_excl_groups_pro_hint` (exclusions-screen disclosure)
+`upsell_santa_multi_wave_*` · `upsell_santa_excl_*` · `upsell_santa_excl_groups_*` (upsell sheet)
 
 ---
 
@@ -547,6 +558,43 @@ When a PRO user downgrades to FREE, the DB values for `birthdayAudience`, `birth
 - API: `apps/api/src/index.ts` — `PATCH /tg/me/birthday-settings`, `processBirthdayReminders` scheduler.
 - Mini App: `apps/web/app/miniapp/MiniApp.tsx` — Settings → 🎂 День рождения section, paywall context wiring, `getUpsellContent('birthday_reminders_advanced')`.
 - Schema: `packages/db/prisma/schema.prisma` — `UserProfile.birthday*` fields, `BirthdayReminderDelivery`, `BirthdayReminderMute`.
+
+---
+
+## 16b. Secret Santa PRO Gates
+
+The Secret Santa domain ships three PRO-gated features. A **basic (classic) campaign is free** — any user can create one, invite participants, run the draw, and exchange gifts. The three gates below add organizer power-features and are enforced server-side in `apps/api/src/routes/santa.routes.ts`.
+
+### Pro-gated features
+
+| Feature | Endpoint(s) | FREE behaviour | PRO unlocks |
+|---|---|---|---|
+| **Multi-wave campaign** (`type: 'MULTI_WAVE'`) | `POST /tg/santa/campaigns` | 402 `pro_required` | A campaign type that runs several gift rounds in one campaign. `CLASSIC` is the free default. |
+| **Exclusion pairs** | `POST /tg/santa/campaigns/:id/exclusions` | 402 `pro_required` | Block specific participant pairs from drawing each other (couples, relatives). |
+| **Exclusion groups** | `POST /tg/santa/campaigns/:id/exclusions/groups`, `POST .../groups/:gid/members` | 402 `pro_required` | Named groups — no member draws another member. One rule replaces many pairs. |
+
+All three checks are `getUserEntitlement(userId).isPro`. The 402 body is `{ error: 'pro_required', feature }` where `feature` is `santa_multi_wave`, `santa_exclusions`, or `santa_exclusion_groups`. Read endpoints (`GET .../exclusions`) and the delete/rename endpoints are owner-only but **not** PRO-gated — a user who downgrades keeps read access and can still remove existing rules.
+
+### Paywall contexts
+
+`UpsellContext` gains `santa_multi_wave`, `santa_exclusions`, `santa_exclusion_groups` (see § 7). `getUpsellContent(locale)` renders each with its own title / subtitle / benefits. i18n key prefixes: `upsell_santa_multi_wave_*`, `upsell_santa_excl_*`, `upsell_santa_excl_groups_*`.
+
+### Pre-submit disclosure (no surprise 402s)
+
+The Mini App discloses each gate **before** the user submits, so a FREE user never first learns of a gate from an error:
+
+- **Create screen** — a campaign-type selector offers `Classic` (free) and `Multi-wave 🔒`. A FREE user selecting multi-wave sees an inline PRO hint (`santa_create_type_pro_hint`) above the submit button; the hint opens the upsell. Submitting anyway still returns a clean 402 → upsell.
+- **Exclusions screen** — FREE users see a tappable locked hint (`santa_excl_pairs_pro_hint` / `santa_excl_groups_pro_hint`) in place of the add buttons; tapping it opens the upsell.
+
+### Analytics
+
+| Event | Source | When |
+|---|---|---|
+| `santa.gate_hit` | server | A 402 `pro_required` is returned by one of the three gates. `props.feature` names the gate. |
+| `santa.paywall_viewed` | client | A Santa upsell sheet is rendered. `props.context`. |
+| `santa.paywall_cta_clicked` | client | The upgrade CTA is tapped from a Santa upsell. `props.context`, `props.plan`. |
+
+All three are registered in `PRODUCT_EVENTS` (`packages/shared/src/analyticsEvents.ts`). `santa.gate_hit` is server-only (hard-denied at `/tg/telemetry` so a client cannot spoof it); the two `paywall_*` events are client-emitted from the Mini App.
 
 ---
 

@@ -851,12 +851,12 @@ Event-pass требует расширения схемы:
 
 ### P0 (1-2 недели)
 
-- [ ] Починить i18n для `appearance` UpsellContext (хардкод RU).
+- [x] Починить i18n для `appearance` UpsellContext (хардкод RU). **Fixed 2026-05-22** — 5 ключей `upsell_appearance_*` × 6 локалей; `getUpsellContent` резолвит через `t()`. См. BUGFIX_LESSONS 2026-05-22.
 - [ ] URL-import: hard 402 → graceful credit fallback с counter в UI. Дать 5 free imports/мес. (Вариант A core.)
 - [x] Hints: hard 402 → 3 free/мес. **Shipped 2026-05-21** — FREE-квота списывается при доставке hint (DELIVERED), не при создании волны; idempotent audit-ledger `HintQuotaCharge`; grace-доставка если квота кончилась между созданием и доставкой. См. `services/hint-credits.ts`.
 - [ ] Participant limit FREE: 5 → 10. (Update PLANS.FREE.participants in entitlement.ts.)
 - [ ] Document или удалить 3 Santa PRO gates. Если оставлять — добавить в Settings PRO card features list и в getProBenefits.
-- [ ] Удалить `bot_import` upsell context-сироту (или подключить).
+- [x] Удалить `bot_import` upsell context-сироту. **Fixed 2026-05-22** — мёртвый член union'а `UpsellContext` + дубль-ветка `url_import` удалены; bot import-limit → upgrade флоу уже идёт через контекст `pro_main`.
 - [ ] Cancel-flow bottom sheet — выяснить почему не рендерится (git log по `cancel_feat_`); восстановить или формально удалить из доки.
 
 ### P1 (1 мес)

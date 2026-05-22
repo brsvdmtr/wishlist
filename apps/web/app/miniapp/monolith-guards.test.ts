@@ -109,3 +109,38 @@ describe('MiniApp.tsx — file shape sanity', () => {
     expect(lines).toBeGreaterThan(20_000); // current ~33 246
   });
 });
+
+describe('MiniApp.tsx — Pro-upsell content guards (2026-05-22 monetization audit)', () => {
+  // Source: docs/research/03-monetization-paywall-audit.md §8.7–8.8.
+  // Extraction of getUpsellContent from the monolith is still deferred, so
+  // these stay grep-style guards on the source text — same approach as the
+  // L3 / user.session_started guards above.
+
+  it('the appearance upsell builds copy via t(), with no hardcoded Russian', () => {
+    // §8.8: getUpsellContent.appearance shipped hardcoded Cyrillic
+    // title/subtitle/benefits while every other context resolved copy via
+    // t(). A re-hardcode (or a dropped key) regresses non-RU users to
+    // Russian on the theme/accent paywall.
+    const block = MINI_APP_SRC.match(/\n {2}appearance: \{[\s\S]*?\n {2}\},/);
+    if (!block) throw new Error('getUpsellContent.appearance entry not found');
+    const src = block[0];
+    for (const call of [
+      "t('upsell_appearance_title', locale)",
+      "t('upsell_appearance_subtitle', locale)",
+      "t('upsell_appearance_b1', locale)",
+      "t('upsell_appearance_b2', locale)",
+      "t('upsell_appearance_b3', locale)",
+    ]) {
+      expect(src.includes(call), `appearance upsell missing ${call}`).toBe(true);
+    }
+    expect(/[А-Яа-яЁё]/.test(src), 'appearance upsell still contains hardcoded Cyrillic').toBe(false);
+  });
+
+  it('the dead bot_import upsell context is fully removed', () => {
+    // §8.7: bot_import was a UpsellContext union member with a
+    // getUpsellContent entry duplicating url_import, but had zero triggers —
+    // the bot's import-limit→upgrade path deep-links to the 'pro_main'
+    // context instead. Removed 2026-05-22.
+    expect(MINI_APP_SRC).not.toMatch(/bot_import/);
+  });
+});

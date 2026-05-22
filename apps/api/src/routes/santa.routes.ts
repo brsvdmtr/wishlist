@@ -63,6 +63,7 @@ import { zodError } from '../lib/http';
 import { getRequestLocale } from '../lib/locale';
 import { ITEM_ORDER_BY } from '../sort';
 import logger from '../logger';
+import { trackProductEvent } from '../services/analytics';
 
 // Shape of the Telegram initData user object — duplicated from index.ts to
 // avoid coupling routes/* to a non-exported local type.
@@ -943,7 +944,10 @@ export function registerSantaRouter(deps: SantaRouterDeps): Router {
     // PRO gate for MULTI_WAVE
     if (parsed.data.type === 'MULTI_WAVE') {
       const ent = await getUserEntitlement(user.id);
-      if (!ent.isPro) return res.status(402).json({ error: 'pro_required', feature: 'santa_multi_wave' });
+      if (!ent.isPro) {
+        trackProductEvent({ event: 'santa.gate_hit', userId: user.id, props: { feature: 'santa_multi_wave' } });
+        return res.status(402).json({ error: 'pro_required', feature: 'santa_multi_wave' });
+      }
     }
 
     const now = new Date();
@@ -1835,7 +1839,10 @@ export function registerSantaRouter(deps: SantaRouterDeps): Router {
     if (!await checkIsOrganizer(campaignId, campaign, user.id)) return res.status(403).json({ error: 'Forbidden' });
 
     const ent = await getUserEntitlement(user.id);
-    if (!ent.isPro) return res.status(402).json({ error: 'pro_required', feature: 'santa_exclusions' });
+    if (!ent.isPro) {
+      trackProductEvent({ event: 'santa.gate_hit', userId: user.id, props: { feature: 'santa_exclusions' } });
+      return res.status(402).json({ error: 'pro_required', feature: 'santa_exclusions' });
+    }
 
     const { userId1, userId2 } = parsed.data;
     // Normalize order to prevent (A,B) and (B,A) both existing
@@ -1873,7 +1880,10 @@ export function registerSantaRouter(deps: SantaRouterDeps): Router {
 
     const parsed = z.object({
       label: z.string().min(1).max(60).trim(),
-      memberUserIds: z.array(z.string().min(1)).min(2).max(50).optional().default([]),
+      // No `.min()`: an omitted field defaults to [], which zod re-validates
+      // through this inner type — a lower bound here would reject the
+      // create-empty-group-then-add-members flow the Mini App actually uses.
+      memberUserIds: z.array(z.string().min(1)).max(50).optional().default([]),
     }).safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
 
@@ -1882,7 +1892,10 @@ export function registerSantaRouter(deps: SantaRouterDeps): Router {
     if (!await checkIsOrganizer(campaignId, campaign, user.id)) return res.status(403).json({ error: 'Forbidden' });
 
     const ent = await getUserEntitlement(user.id);
-    if (!ent.isPro) return res.status(402).json({ error: 'pro_required', feature: 'santa_exclusion_groups' });
+    if (!ent.isPro) {
+      trackProductEvent({ event: 'santa.gate_hit', userId: user.id, props: { feature: 'santa_exclusion_groups' } });
+      return res.status(402).json({ error: 'pro_required', feature: 'santa_exclusion_groups' });
+    }
 
     const group = await prisma.santaExclusionGroup.create({
       data: {
@@ -1969,7 +1982,10 @@ export function registerSantaRouter(deps: SantaRouterDeps): Router {
     if (!await checkIsOrganizer(campaignId, campaign, user.id)) return res.status(403).json({ error: 'Forbidden' });
 
     const ent = await getUserEntitlement(user.id);
-    if (!ent.isPro) return res.status(402).json({ error: 'pro_required', feature: 'santa_exclusion_groups' });
+    if (!ent.isPro) {
+      trackProductEvent({ event: 'santa.gate_hit', userId: user.id, props: { feature: 'santa_exclusion_groups' } });
+      return res.status(402).json({ error: 'pro_required', feature: 'santa_exclusion_groups' });
+    }
 
     const group = await prisma.santaExclusionGroup.findUnique({ where: { id: gid } });
     if (!group || group.campaignId !== campaignId) return res.status(404).json({ error: 'Group not found' });
