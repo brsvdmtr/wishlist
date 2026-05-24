@@ -121,10 +121,10 @@ The `getItemRole(itemId, tgUser)` helper returns one of `{ role: 'owner' | 'rese
 | Method | Path | Requirement |
 |--------|------|------------|
 | GET | `/tg/reservations` | Any TG user (own reservations only) |
-| GET | `/tg/reservations/history` | Reservation-PRO only (403 otherwise) |
-| PATCH | `/tg/reservations/:itemId/meta` | Reservation-PRO only (403 otherwise) |
-| POST | `/tg/reservations/:itemId/reminder` | Reservation-PRO only (403 otherwise) |
-| DELETE | `/tg/reservations/:itemId/reminder` | Reservation-PRO only (403 otherwise) |
+| GET | `/tg/reservations/history` | Reservation-PRO only (402 `pro_required` otherwise) |
+| PATCH | `/tg/reservations/:itemId/meta` | Reservation-PRO only (402 `pro_required` otherwise) |
+| POST | `/tg/reservations/:itemId/reminder` | Reservation-PRO only (402 `pro_required` otherwise) |
+| DELETE | `/tg/reservations/:itemId/reminder` | Any TG user (reserver only) — intentionally ungated cleanup path |
 | GET/PATCH | `/tg/me/profile` | Any TG user (own profile only) |
 | POST/DELETE | `/tg/me/profile/avatar` | Any TG user (own profile only) |
 | GET/PATCH | `/tg/me/settings` | Any TG user (own settings only) |
@@ -239,10 +239,10 @@ FREE users can access PRO-gated features via credits purchased as consumable add
 | `allowSubscriptions=NOBODY` | No | Yes | 403 `{ error: 'pro_required' }` |
 | `commentPolicy=SUBSCRIBERS` | No | Yes | 403 `{ error: 'pro_required' }` |
 | Sort: `recommended` | Client only (no API gate) | Yes | Upsell shown in UI; API has no gate on sort |
-| Reservation history | `GET /tg/reservations/history` | Reservation-PRO | 403 `{ error: 'pro_required' }`. Beta-gated via `RESERVATION_PRO_BETA_IDS` |
-| Reservation notes | `PATCH /tg/reservations/:itemId/meta` | Reservation-PRO | 403 `{ error: 'pro_required' }`. Private note (max 500 chars), visible only to reserver |
-| Reservation purchased flag | `PATCH /tg/reservations/:itemId/meta` | Reservation-PRO | 403 `{ error: 'pro_required' }`. Private organizational flag |
-| Reservation reminders | `POST/DELETE /tg/reservations/:itemId/reminder` | Reservation-PRO | 403 `{ error: 'pro_required' }`. Cron sends Telegram notifications |
+| Reservation history | `GET /tg/reservations/history` | Reservation-PRO | 402 `{ error: 'pro_required', feature: 'reservation_history' }`. Unlocked by active PRO sub OR `reservation_pro_unlock` add-on OR `godMode` |
+| Reservation notes | `PATCH /tg/reservations/:itemId/meta` | Reservation-PRO | 402 `{ error: 'pro_required', feature: 'reservation_meta' }`. Private note (max 500 chars), visible only to reserver |
+| Reservation purchased flag | `PATCH /tg/reservations/:itemId/meta` | Reservation-PRO | 402 `{ error: 'pro_required', feature: 'reservation_meta' }`. Private organizational flag |
+| Reservation reminders | `POST /tg/reservations/:itemId/reminder` | Reservation-PRO | 402 `{ error: 'pro_required', feature: 'reservation_reminder' }`. Cron sends Telegram notifications. `DELETE` is ungated so users can clean up after losing access |
 | Reservation filters & sort | Client-side | Reservation-PRO | `reservationPro` flag from API enables UI controls |
 
 ### Settings Fields Silently Ignored for FREE Users

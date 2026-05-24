@@ -187,16 +187,16 @@ All category endpoints (except GET) require PRO. Max 20 user categories per wish
 |--------|------|-----|-------------|
 | GET | `/tg/reservations` | Auth user | Items reserved by the current user (status=RESERVED, reserverUserId=me) **plus** items where user is a GroupGiftParticipant (not the reserver). Includes `ownerName`, `ownerAvatarUrl`, `ownerId`, `unreadComments` per item. Each item also includes `groupGiftId` (string or null), `groupGiftRole` ('organizer' / 'participant' / null), and `groupGiftOrganizerName` (string or null, set for participant role). For Reservation-PRO users also includes `reservationMeta` (note, purchased, reminderAt) and `reservationPro: true` flag |
 
-### Reservations PRO (beta-gated)
+### Reservations PRO
 
-Access controlled by `hasReservationPro()` — currently limited to focus-group users via `RESERVATION_PRO_BETA_IDS` env var (default: `8747175307`). Will open to all PRO users in Phase 2.
+Access controlled by `hasReservationPro(user, isPro, addOns)` — unlocked by an active PRO subscription (monthly/yearly/lifetime/promo), the `reservation_pro_unlock` one-time add-on (50 ⭐), or `godMode`. Miss returns 402 `{ error: 'pro_required', feature: <name> }` and emits `feature_gate_hit_reservation_pro` analytics.
 
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
-| GET | `/tg/reservations/history` | Reservation-PRO | Past reservations (active=false). Returns items with `endedAt`, `endReason` ('unreserved' / 'completed' / 'archived'), owner info. Grouped by owner on client. **403** if not Reservation-PRO |
-| PATCH | `/tg/reservations/:itemId/meta` | Reservation-PRO | Update private note and/or purchased flag. Body: `{ note?: string (max 500), purchased?: boolean }`. Upserts `ReservationMeta`. **403** if not Reservation-PRO |
-| POST | `/tg/reservations/:itemId/reminder` | Reservation-PRO | Set reminder. Body: `{ reminderAt: ISO8601 }`. Must be in the future. Upserts `ReservationMeta`. **403** if not Reservation-PRO. **400** if date is in the past |
-| DELETE | `/tg/reservations/:itemId/reminder` | Reservation-PRO | Remove reminder. Sets `reminderAt=null`, `reminderSent=false`. **403** if not Reservation-PRO |
+| GET | `/tg/reservations/history` | Reservation-PRO | Past reservations (active=false). Returns items with `endedAt`, `endReason` ('unreserved' / 'completed' / 'archived'), owner info. Grouped by owner on client. **402 `pro_required`** if not Reservation-PRO |
+| PATCH | `/tg/reservations/:itemId/meta` | Reservation-PRO | Update private note and/or purchased flag. Body: `{ note?: string (max 500), purchased?: boolean }`. Upserts `ReservationMeta`. **402 `pro_required`** if not Reservation-PRO |
+| POST | `/tg/reservations/:itemId/reminder` | Reservation-PRO | Set reminder. Body: `{ reminderAt: ISO8601 }` or `{ reminderDates: ISO8601[] }`. At least one date must be in the future. Upserts `ReservationMeta`. **402 `pro_required`** if not Reservation-PRO. **400** if no future date provided |
+| DELETE | `/tg/reservations/:itemId/reminder` | Auth user (reserver) | Remove reminder. Sets `reminderAt=null`, `reminderSent=false`, `reminderDates=[]`. Intentionally **ungated** so users who lose Reservation-PRO access can still clean up stored reminders |
 
 ### Comments (PRO-gated)
 

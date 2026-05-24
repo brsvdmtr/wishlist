@@ -5302,7 +5302,6 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [reservationsCount, setReservationsCount] = useState(0);
   const [reservationsLoading, setReservationsLoading] = useState(false);
   const [reservationPro, setReservationPro] = useState(false);
-  const [reservationBeta, setReservationBeta] = useState(false);
   // Smart Reservations: adaptive timer for countdown display
   const [smartResNow, setSmartResNow] = useState(Date.now());
   React.useEffect(() => {
@@ -6385,7 +6384,6 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     if (json.godMode !== undefined) setGodMode(json.godMode);
     if (json.canGodMode !== undefined) setCanGodMode(json.canGodMode);
     if ((json as any).reservationPro !== undefined) setReservationPro((json as any).reservationPro);
-    if ((json as any).reservationBeta !== undefined) setReservationBeta((json as any).reservationBeta);
     setPlanLimits({ wishlists: json.plan.wishlists, items: json.plan.items });
     if (json.addOns) setAddOns(json.addOns);
     if (json.credits) setCredits(json.credits);
@@ -6413,10 +6411,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         tgFetch('/tg/secret-reservations'),
       ]);
       if (res.ok) {
-        const json = await res.json() as { reservations: ReservationItem[]; reservationPro?: boolean; reservationBeta?: boolean };
+        const json = await res.json() as { reservations: ReservationItem[]; reservationPro?: boolean };
         setReservations(json.reservations);
         if (json.reservationPro !== undefined) setReservationPro(json.reservationPro);
-        if (json.reservationBeta !== undefined) setReservationBeta(json.reservationBeta);
         const santaJson = santaRes.ok ? await santaRes.json() as { reservations: SantaReservationItem[] } : { reservations: [] };
         setSantaReservationItems(santaJson.reservations);
         let secretCount = 0;
@@ -14069,7 +14066,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     );
                   })()}
                   {/* Filters bar */}
-                  {reservationBeta && reservations.length > 0 && (
+                  {reservations.length > 0 && (
                     reservationPro ? (
                     <div style={{ display: 'flex', alignItems: 'center', padding: '12px 0 0', gap: 8 }}>
                       <button onClick={() => {
@@ -14436,7 +14433,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     ));
                   })()}
                   {/* Inline upsell for non-Pro */}
-                  {reservationBeta && !reservationPro && reservations.length > 0 && (
+                  {!reservationPro && reservations.length > 0 && (
                     <div onClick={() => setUpsellSheet({ context: 'reservation_pro' })} style={{
                       margin: '8px 0 16px', padding: 16, cursor: 'pointer',
                       background: `linear-gradient(135deg, ${C.accentSoft} 0%, rgba(212,168,83,0.06) 100%)`,

@@ -121,7 +121,6 @@ import {
   SECRET_RESERVATION_SKU,
   ONE_TIME_SKUS,
   ADDON_CAPS,
-  isReservationBeta,
   hasReservationPro,
   getSmartResLeadHours,
   hasSmartReservations,
@@ -292,7 +291,7 @@ declare global {
 
 // ─── Plan & Entitlement System ──────────────────────────────────────────────
 // All identifiers (PLANS, PRO_*, GIFT_NOTES_*, GROUP_GIFT_*, SECRET_RESERVATION_*,
-// ONE_TIME_SKUS, ADDON_CAPS, types, isReservationBeta, hasReservationPro,
+// ONE_TIME_SKUS, ADDON_CAPS, types, hasReservationPro,
 // getSmartResLeadHours, hasSmartReservations, getUserEntitlement,
 // getEffectiveEntitlements, isWishlistWritable) extracted to
 // ./services/entitlement.ts in P5s-1 (Strategy A). They are imported at
@@ -698,7 +697,6 @@ const meRouter = registerMeRouter({
   getEffectiveEntitlements,
   getUserEntitlement,
   hasReservationPro,
-  isReservationBeta,
   trackEvent,
   ACTIVE_STATUSES,
   PRO_PRICE_XTR,
@@ -910,11 +908,11 @@ tgRouter.use(selectionsArchiveRouter);
 // requireSecretReservations, buildSecretReservationSnapshot,
 // deriveSecretReservationState, smartResDerive. The rest (mapTgItem,
 // resolveUserFirstName, cancelItemHints, tgActorHash, hasReservationPro,
-// isReservationBeta, hasSmartReservations, getSmartResLeadHours, etc.) stay
+// hasSmartReservations, getSmartResLeadHours, etc.) stay
 // in index.ts because they are also consumed by items/wishlists/admin/
 // scheduler code outside this scope.
 //
-// All 12 deps are hoisted function declarations defined long before this
+// All deps are hoisted function declarations defined long before this
 // mount point, so wiring here is TDZ-safe.
 const reservationsRouter = registerReservationsRouter({
   getOrCreateTgUser,
@@ -924,7 +922,6 @@ const reservationsRouter = registerReservationsRouter({
   trackAnalyticsEvent,
   tgActorHash,
   hasReservationPro,
-  isReservationBeta,
   hasSmartReservations,
   cancelItemHints,
   getSmartResLeadHours,

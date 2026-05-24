@@ -184,14 +184,16 @@ Separate from public routes; these are TG-authenticated endpoints for the Mini A
 |---|---|---|
 | GET | `/tg/reservations` | List items currently reserved by the authenticated user. Includes wishlist context. For Reservation-PRO users, also includes `reservationMeta` and `reservationPro: true` flag. |
 
-**Reservations PRO (beta-gated)**
+**Reservations PRO**
+
+Gate: `requireReservationPro()` in [reservations.routes.ts](../apps/api/src/routes/reservations.routes.ts) — wraps `hasReservationPro()`, returns 402 `{ error: 'pro_required', feature: <name> }` on miss, emits `feature_gate_hit_reservation_pro` analytics. Unlocked by active PRO sub, `reservation_pro_unlock` add-on, or `godMode`.
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/tg/reservations/history` | Past reservations (active=false) with item details, owner info, endedAt, endReason. Gated by `hasReservationPro()`. |
-| PATCH | `/tg/reservations/:itemId/meta` | Update private note (max 500) and/or purchased flag. Upserts `ReservationMeta`. Gated by `hasReservationPro()`. |
-| POST | `/tg/reservations/:itemId/reminder` | Set reminder date (must be future). Upserts `ReservationMeta`. Gated by `hasReservationPro()`. |
-| DELETE | `/tg/reservations/:itemId/reminder` | Remove reminder. Gated by `hasReservationPro()`. |
+| GET | `/tg/reservations/history` | Past reservations (active=false) with item details, owner info, endedAt, endReason. 402 `pro_required` if not Reservation-PRO. |
+| PATCH | `/tg/reservations/:itemId/meta` | Update private note (max 500) and/or purchased flag. Upserts `ReservationMeta`. 402 `pro_required` if not Reservation-PRO. |
+| POST | `/tg/reservations/:itemId/reminder` | Set reminder date (must be future). Upserts `ReservationMeta`. 402 `pro_required` if not Reservation-PRO. |
+| DELETE | `/tg/reservations/:itemId/reminder` | Remove reminder. Intentionally ungated so users who lose access can still clean up stored reminders. |
 
 **Comments**
 
@@ -435,8 +437,8 @@ Upserts a `UserProfile` row. On create, sets `defaultCurrency` based on locale (
 ### `getUserEntitlement(userId, godMode?)`
 Queries the `Subscription` table and `PromoRedemption` table for active PRO access. Returns `{ plan, isPro, proSource, subscription, promoPro }`. Resolution order: (1) paid subscription, (2) active promo redemption, (3) god mode, (4) FREE plan.
 
-### `hasReservationPro(user, isPro)`
-Determines if a user has access to Reservation PRO features (history, notes, purchased flag, reminders, filters). Currently beta-gated: returns true if user is godMode or their `telegramId` is in `RESERVATION_PRO_BETA_IDS` env var (default: `'8747175307'`). Phase 2 will also check `isPro`.
+### `hasReservationPro(user, isPro, addOns?)`
+Determines if a user has access to Reservation PRO features (history, notes, purchased flag, reminders, filters). Returns `true` if `user.godMode` OR `isPro` OR a `reservation_pro_unlock` add-on exists. No beta-gate / env-list — the contract is uniform across all users. Centralised gate helper `requireReservationPro()` in [`apps/api/src/routes/reservations.routes.ts`](../apps/api/src/routes/reservations.routes.ts) wraps the predicate, emits `feature_gate_hit_reservation_pro` analytics and returns 402 `{ error: 'pro_required', feature: <name> }` on miss.
 
 ### `getEffectiveEntitlements(userId, godMode?)`
 Unified entitlement resolver. Combines base plan with add-on slots and credits. Returns effective limits for wishlists, subscriptions, per-wishlist item slots, seasonal decorations, hint/import credits, and Gift Notes access.

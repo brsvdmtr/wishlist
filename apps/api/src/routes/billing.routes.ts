@@ -158,7 +158,7 @@ export type BillingRouterDeps = {
   getUserEntitlement: (userId: string, godMode?: boolean) => Promise<BillingUserEntitlement>;
   trackEvent: (event: string, userId?: string, props?: Record<string, unknown>) => void;
   trackAnalyticsEvent: (input: { event: string; userId?: string; props?: Record<string, unknown> }) => void;
-  hasReservationPro: (user: { telegramId?: string | null; godMode: boolean }, isPro: boolean, addOns?: { addonType: string }[]) => boolean;
+  hasReservationPro: (user: { godMode: boolean }, isPro: boolean, addOns?: { addonType: string }[]) => boolean;
   PRO_PRICE_XTR: number;
   PRO_YEARLY_PRICE_XTR: number;
   PRO_LIFETIME_PRICE_XTR: number;

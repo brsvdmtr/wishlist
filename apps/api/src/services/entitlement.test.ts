@@ -45,7 +45,6 @@ import {
   GIFT_NOTES_PRICE_XTR,
   GROUP_GIFT_PRICE_XTR,
   SECRET_RESERVATION_PRICE_XTR,
-  isReservationBeta,
   hasReservationPro,
   getSmartResLeadHours,
   hasSmartReservations,
@@ -178,32 +177,49 @@ describe('ADDON_CAPS structure', () => {
 });
 
 describe('Pure feature predicates', () => {
-  describe('isReservationBeta', () => {
-    it('returns true for everyone (v2: open to all)', () => {
-      expect(isReservationBeta({ telegramId: null, godMode: false })).toBe(true);
-      expect(isReservationBeta({ telegramId: '123', godMode: true })).toBe(true);
-    });
-  });
+  describe('hasReservationPro — paywall/access contract', () => {
+    // Contract pinned 2026-05-24: PRO sub OR godMode OR
+    // `reservation_pro_unlock` add-on unlocks the full Reservation PRO
+    // cluster (history, notes, reminders, purchased flag, filters).
+    // The paywall promises exactly these features; the gate must mirror.
 
-  describe('hasReservationPro', () => {
-    it('godMode → true', () => {
-      expect(hasReservationPro({ godMode: true }, false)).toBe(true);
-    });
-
-    it('PRO subscription → true', () => {
+    it('PRO monthly subscriber w/o addon → access', () => {
       expect(hasReservationPro({ godMode: false }, true)).toBe(true);
     });
 
-    it('reservation_pro_unlock add-on → true', () => {
+    it('FREE user w/o addon → no access (402 territory)', () => {
+      expect(hasReservationPro({ godMode: false }, false)).toBe(false);
+      expect(hasReservationPro({ godMode: false }, false, [])).toBe(false);
+    });
+
+    it('FREE user with reservation_pro_unlock add-on → access', () => {
       expect(hasReservationPro({ godMode: false }, false, [{ addonType: 'reservation_pro_unlock' }])).toBe(true);
     });
 
-    it('unrelated add-on → false', () => {
-      expect(hasReservationPro({ godMode: false }, false, [{ addonType: 'extra_wishlist_slot' }])).toBe(false);
+    it('Lifetime PRO (treated as isPro=true at resolver) → access', () => {
+      // getUserEntitlement maps lifetime subs to isPro=true; this layer
+      // only sees the boolean, so the predicate behaves the same as monthly.
+      expect(hasReservationPro({ godMode: false }, true, [])).toBe(true);
     });
 
-    it('no signals → false', () => {
-      expect(hasReservationPro({ godMode: false }, false)).toBe(false);
+    it('godMode → access regardless of plan/addon', () => {
+      expect(hasReservationPro({ godMode: true }, false)).toBe(true);
+      expect(hasReservationPro({ godMode: true }, false, [])).toBe(true);
+      expect(hasReservationPro({ godMode: true }, true, [{ addonType: 'reservation_pro_unlock' }])).toBe(true);
+    });
+
+    it('unrelated add-on alone (e.g. wishlist_slot) → no access', () => {
+      expect(hasReservationPro({ godMode: false }, false, [{ addonType: 'wishlist_slot' }])).toBe(false);
+    });
+
+    it('mixed add-ons: presence of reservation_pro_unlock is sufficient', () => {
+      expect(
+        hasReservationPro({ godMode: false }, false, [
+          { addonType: 'wishlist_slot' },
+          { addonType: 'reservation_pro_unlock' },
+          { addonType: 'hint_credits' },
+        ]),
+      ).toBe(true);
     });
   });
 

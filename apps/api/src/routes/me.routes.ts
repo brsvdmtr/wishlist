@@ -86,11 +86,10 @@ export type MeRouterDeps = {
   // billing/Pro routers when those split out.
   getUserEntitlement: (userId: string, godMode?: boolean) => Promise<{ isPro: boolean }>;
   hasReservationPro: (
-    user: { telegramId?: string | null; godMode: boolean },
+    user: { godMode: boolean },
     isPro: boolean,
     addOns?: Array<{ addonType: string }>,
   ) => boolean;
-  isReservationBeta: (user: { telegramId?: string | null; godMode: boolean }) => boolean;
   trackEvent: (event: string, userId?: string, props?: Record<string, unknown>) => void;
   // Same narrow tuple type as in publicRouterDeps so Prisma's ItemStatus[]
   // overload resolves correctly when this is spread into a `where` clause.
@@ -112,7 +111,6 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
     getEffectiveEntitlements,
     getUserEntitlement,
     hasReservationPro,
-    isReservationBeta,
     trackEvent,
     ACTIVE_STATUSES,
     PRO_PRICE_XTR,
@@ -305,9 +303,9 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
       const godModeAllowedIds = (process.env.GOD_MODE_TELEGRAM_IDS ?? '').split(',').filter(Boolean);
       const canGodMode = user.telegramId ? godModeAllowedIds.includes(user.telegramId) : false;
   
-      // Reservation Pro feature gate
+      // Reservation Pro feature gate — PRO sub/godMode/addon unlocks the full
+      // Reservation PRO cluster (history, notes, reminders, purchased, filters).
       const reservationPro = hasReservationPro(user, ent.isPro, ent.addOns);
-      const reservationBeta = isReservationBeta(user);
   
       // Summarize add-ons for frontend
       const extraWishlistSlots = ent.addOns.filter(a => a.addonType === 'wishlist_slot').reduce((s, a) => s + a.quantity, 0);
@@ -352,7 +350,6 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
           targetRequired: s.targetRequired,
         })),
         reservationPro,
-        reservationBeta,
       });
     }),
   );

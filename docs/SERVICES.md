@@ -107,7 +107,7 @@ feature gate that calls `trackEvent`, deferred from P5s-1).
 `isLifetimeSubscription`, `PRO_SUBSCRIPTION_PERIOD`, `PRO_YEARLY_EXTEND_SECONDS`,
 `PRO_PLAN_CODE`, `GIFT_NOTES_PRICE_XTR`, `GIFT_NOTES_SKU`, `GROUP_GIFT_PRICE_XTR`,
 `GROUP_GIFT_SKU`, `SECRET_RESERVATION_PRICE_XTR`, `SECRET_RESERVATION_SKU`,
-`ONE_TIME_SKUS`, `ADDON_CAPS`, `isReservationBeta`, `hasReservationPro`,
+`ONE_TIME_SKUS`, `ADDON_CAPS`, `hasReservationPro`,
 `getSmartResLeadHours`, `hasSmartReservations`, `getUserEntitlement`,
 `getEffectiveEntitlements`, `isWishlistWritable`, `requireGiftNotes`,
 plus the canonical return-shape types.

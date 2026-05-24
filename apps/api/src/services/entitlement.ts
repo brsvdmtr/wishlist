@@ -87,14 +87,22 @@ export const PRO_PLAN_CODE = process.env.PRO_PLAN_CODE ?? 'PRO';
 export { LIFETIME_BILLING_PERIOD, PRO_LIFETIME_PERIOD_END_ISO, isLifetimeSubscription };
 
 // ─── Reservation Pro — feature gate ─────────────────────────────────────────
+//
+// Contract (since 2026-05-24): the "Reservation PRO" cluster — history,
+// private notes, reminders, purchased-flag, filters/sort — is unlocked by
+// ANY of: an active PRO subscription (monthly/yearly/lifetime/promo),
+// a one-time `reservation_pro_unlock` add-on (the typical FREE-tier
+// upgrade path, but PRO users who own it are also covered), or godMode.
+// The previous beta-gate (`isReservationBeta`) was retired after the
+// feature opened to all users — a flag that always returned `true` was
+// a footgun and made paywall/entitlement audits noisy.
 
-/** User sees the new reservation UI — v2: open to all users */
-export function isReservationBeta(user: { telegramId?: string | null; godMode: boolean }): boolean {
-  return true; // v2: feature is open to all users
-}
-
-/** User has actual Pro reservation features (Pro subscription OR one-time addon) */
-export function hasReservationPro(user: { telegramId?: string | null; godMode: boolean }, isPro: boolean, addOns?: Array<{ addonType: string }>): boolean {
+/** User has actual Pro reservation features (PRO subscription, godMode, or one-time addon) */
+export function hasReservationPro(
+  user: { godMode: boolean },
+  isPro: boolean,
+  addOns?: Array<{ addonType: string }>,
+): boolean {
   if (user.godMode) return true;
   if (isPro) return true;
   if (addOns?.some(a => a.addonType === 'reservation_pro_unlock')) return true;

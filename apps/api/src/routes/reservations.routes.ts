@@ -28,7 +28,7 @@
 //   - cancelItemHints       (line 166) — hints rule §11, do not migrate.
 //   - tgActorHash           (line 386) — also in getItemRole, items routes,
 //     group-gifts, admin scheduler.
-//   - hasReservationPro / isReservationBeta — also in me.routes.ts.
+//   - hasReservationPro — also in me.routes.ts.
 //   - hasSmartReservations  — also in PATCH /wishlists/:id (line 3346).
 //   - getSmartResLeadHours  — also at index.ts:11475 in admin/scheduler.
 //   - mapTgItem / getOrCreateTgUser / getEffectiveEntitlements / trackEvent
@@ -187,11 +187,10 @@ export type ReservationsRouterDeps = {
   trackAnalyticsEvent: (args: { event: string; userId?: string; props?: Record<string, unknown> }) => void;
   tgActorHash: (telegramId: number) => string;
   hasReservationPro: (
-    user: { telegramId?: string | null; godMode: boolean },
+    user: { godMode: boolean },
     isPro: boolean,
     addOns?: Array<{ addonType: string }>,
   ) => boolean;
-  isReservationBeta: (user: { telegramId?: string | null; godMode: boolean }) => boolean;
   hasSmartReservations: (
     ownerUser: { godMode: boolean },
     ownerIsPro: boolean,
@@ -215,7 +214,6 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
     trackAnalyticsEvent,
     tgActorHash,
     hasReservationPro,
-    isReservationBeta,
     hasSmartReservations,
     cancelItemHints,
     getSmartResLeadHours,
@@ -230,6 +228,23 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
       return false;
     }
     return true;
+  }
+
+  // Reservation PRO gate — centralises the 402 response shape and analytics
+  // event so all three call sites (history / meta / reminder) emit the same
+  // `feature_gate_hit_reservation_pro` event with the specific sub-feature in
+  // props. Mirrors `requireSecretReservations` (status 403 isn't right here —
+  // the feature CAN be purchased, so 402 is the correct semantic).
+  function requireReservationPro(
+    user: ReservationsUser,
+    ent: ReservationsEntitlements,
+    feature: 'reservation_history' | 'reservation_meta' | 'reservation_reminder',
+    res: import('express').Response,
+  ): boolean {
+    if (hasReservationPro(user, ent.isPro, ent.addOns)) return true;
+    trackEvent('feature_gate_hit_reservation_pro', user.id, { feature });
+    res.status(402).json({ error: 'pro_required', feature });
+    return false;
   }
 
   // Migrated helper (closes over getSmartResLeadHours dep). Byte-identical
@@ -454,7 +469,7 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
         });
       }
 
-      return res.json({ reservations, reservationPro: resPro, reservationBeta: isReservationBeta(user) });
+      return res.json({ reservations, reservationPro: resPro });
     }),
   );
 
@@ -465,9 +480,7 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
       const locale = getRequestLocale(req);
       const user = await getOrCreateTgUser(req.tgUser!);
       const ent = await getEffectiveEntitlements(user.id, user.godMode);
-      if (!hasReservationPro(user, ent.isPro, ent.addOns)) {
-        return res.status(402).json({ error: 'Pro feature', feature: 'reservation_history' });
-      }
+      if (!requireReservationPro(user, ent, 'reservation_history', res)) return;
 
       const metas = await prisma.reservationMeta.findMany({
         where: { reserverUserId: user.id, active: false },
@@ -1044,9 +1057,7 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
 
       const user = await getOrCreateTgUser(req.tgUser!);
       const ent = await getEffectiveEntitlements(user.id, user.godMode);
-      if (!hasReservationPro(user, ent.isPro, ent.addOns)) {
-        return res.status(402).json({ error: 'Pro feature', feature: 'reservation_meta' });
-      }
+      if (!requireReservationPro(user, ent, 'reservation_meta', res)) return;
 
       // Verify user actually has this item reserved
       const item = await prisma.item.findUnique({ where: { id: itemId }, select: { reserverUserId: true, status: true } });
@@ -1095,9 +1106,7 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
 
       const user = await getOrCreateTgUser(req.tgUser!);
       const ent = await getEffectiveEntitlements(user.id, user.godMode);
-      if (!hasReservationPro(user, ent.isPro, ent.addOns)) {
-        return res.status(402).json({ error: 'Pro feature', feature: 'reservation_reminder' });
-      }
+      if (!requireReservationPro(user, ent, 'reservation_reminder', res)) return;
 
       const item = await prisma.item.findUnique({ where: { id: itemId }, select: { reserverUserId: true, status: true } });
       if (!item || item.reserverUserId !== user.id || item.status !== 'RESERVED') {

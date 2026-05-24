@@ -2385,7 +2385,7 @@ const ru: Dict = {
   addon_desc_hints_pack_10: '10 намёков для отправки друзьям',
   addon_desc_seasonal_decoration: 'Праздничное оформление для одного вишлиста',
   addon_title_reservation_pro_unlock: 'Менеджер бронирований',
-  addon_desc_reservation_pro_unlock: 'Заметки, напоминания, история и фильтры для бронирований. Одна покупка навсегда.',
+  addon_desc_reservation_pro_unlock: 'История, заметки, напоминания, статус «Куплено» и фильтры броней. То же, что в PRO, одной покупкой навсегда.',
 
   // ── Wishlist manage menu (new items) ──────────────────────────────────────
   wl_manage_privacy: 'Настроить приватность',
@@ -5402,7 +5402,7 @@ const en: Dict = {
   addon_desc_hints_pack_10: '10 hints to send to friends',
   addon_desc_seasonal_decoration: 'Festive decoration for one wishlist',
   addon_title_reservation_pro_unlock: 'Reservation Manager',
-  addon_desc_reservation_pro_unlock: 'Notes, reminders, history and filters for reservations. One-time purchase forever.',
+  addon_desc_reservation_pro_unlock: 'History, notes, reminders, "Purchased" status and filters for reservations. Same as PRO — one-time, forever.',
 
   // ── Wishlist manage menu (new items) ──────────────────────────────────────
   wl_manage_privacy: 'Configure privacy',
@@ -7458,8 +7458,8 @@ const zhCN: Dict = {
   addon_desc_hints_pack_5: '向朋友发送 5 次提示',
   addon_desc_hints_pack_10: '向朋友发送 10 次提示',
   addon_desc_seasonal_decoration: '为一个心愿单添加节日装饰',
-  addon_title_reservation_pro_unlock: '预约管理器',
-  addon_desc_reservation_pro_unlock: '预约的备注、提醒、历史和筛选。一次购买永久有效。',
+  addon_title_reservation_pro_unlock: '预订管理器',
+  addon_desc_reservation_pro_unlock: '预订历史、备注、提醒、「已购买」状态和筛选。与 PRO 相同 — 一次购买，永久有效。',
 
   // ── Wishlist manage menu ───────────────────────────────────────────────────
   wl_manage_privacy: '隐私设置',
@@ -8397,7 +8397,7 @@ const zhCN: Dict = {
   addon_gift_notes_desc: '场合、日期和礼物创意，永久有效。',
   addon_gift_notes_title: '活动日历',
   addon_title_gift_notes_unlock: '活动日历',
-  addon_activated_reservation_pro: '预约管理器已解锁！🎯',
+  addon_activated_reservation_pro: '预订管理器已解锁！🎯',
   addon_activated_secret_reservation: '秘密预订已解锁！🔒',
   res_pro_buy_standalone: '购买 50 ⭐',
   res_detail_status_label: '状态',
@@ -10352,7 +10352,7 @@ const hi: Dict = {
   addon_desc_hints_pack_10: 'दोस्तों को 10 संकेत भेजें',
   addon_desc_seasonal_decoration: 'एक विशलिस्ट के लिए त्योहार सजावट',
   addon_title_reservation_pro_unlock: 'रिज़र्वेशन मैनेजर',
-  addon_desc_reservation_pro_unlock: 'रिज़र्वेशन के लिए नोट्स, रिमाइंडर, इतिहास और फ़िल्टर। एकबारगी खरीदारी।',
+  addon_desc_reservation_pro_unlock: 'रिज़र्वेशन का इतिहास, नोट्स, रिमाइंडर, "खरीदा गया" स्थिति और फ़िल्टर। PRO जैसा ही — एक बार खरीदें, हमेशा के लिए।',
 
   // ── Wishlist manage menu ───────────────────────────────────────────────────
   wl_manage_privacy: 'गोपनीयता सेटिंग',
@@ -13242,7 +13242,7 @@ const es: Dict = {
   addon_desc_hints_pack_10: '10 sugerencias para enviar a amigos',
   addon_desc_seasonal_decoration: 'Decoración festiva para una wishlist',
   addon_title_reservation_pro_unlock: 'Gestor de reservas',
-  addon_desc_reservation_pro_unlock: 'Notas, recordatorios, historial y filtros para reservas. Compra única para siempre.',
+  addon_desc_reservation_pro_unlock: 'Historial, notas, recordatorios, estado «Comprado» y filtros para reservas. Igual que PRO — una compra, para siempre.',
 
   // ── Wishlist manage menu ───────────────────────────────────────────────────
   wl_manage_privacy: 'Configurar privacidad',
@@ -16136,7 +16136,7 @@ const ar: Dict = {
   addon_desc_hints_pack_10: '10 تلميحات للإرسال للأصدقاء',
   addon_desc_seasonal_decoration: 'زخرفة احتفالية لقائمة واحدة',
   addon_title_reservation_pro_unlock: 'مدير الحجوزات',
-  addon_desc_reservation_pro_unlock: 'ملاحظات وتذكيرات وسجل وفلاتر للحجوزات. شراء لمرة واحدة للأبد.',
+  addon_desc_reservation_pro_unlock: 'سجل الحجوزات، الملاحظات، التذكيرات، حالة «تم الشراء» والفلاتر. مثل PRO تمامًا — شراء لمرة واحدة، إلى الأبد.',
 
   // ── Wishlist manage menu ───────────────────────────────────────────────────
   wl_manage_privacy: 'إعداد الخصوصية',

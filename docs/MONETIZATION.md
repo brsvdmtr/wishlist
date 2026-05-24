@@ -63,11 +63,11 @@ Text is sourced from `packages/shared/src/i18n.ts` keys `plan_pro_f1`–`plan_pr
 | 6 | `plan_pro_f6` | Намекнуть на подарок | Подскажи друзьям конкретную идею деликатно и быстро. | server (`features.includes('hints')` → 402) |
 | 7 | `plan_pro_f7` | До 5 подписок на вишлисты друзей | Следи за изменениями у друзей и получай обновления. | server (count >= plan.subscriptions → 402) |
 | 8 | `plan_pro_f8` | Расширенная приватность | Управляй видимостью, подписками и комментариями в своих вишлистах. | server (isPro check → 403) |
-| 10 | `plan_pro_f10` | История броней | Все прошлые и завершенные бронирования в одном месте. | server (hasReservationPro → 403) |
-| 11 | `plan_pro_f11` | Заметки к подаркам | Личные записки к забронированным желаниям — видишь только ты. | server (hasReservationPro → 403) |
-| 12 | `plan_pro_f12` | Напоминания о броне | Поставь напоминание, чтобы не забыть купить или вручить подарок. | server (hasReservationPro → 403) |
-| 13 | `plan_pro_f13` | Статус «Уже купил» | Отмечай купленные подарки и держи всё под контролем. | server (hasReservationPro → 403) |
-| 14 | `plan_pro_f14` | Фильтры и сортировка броней | Находи нужную бронь за секунду среди десятков подарков. | server (hasReservationPro → 403) |
+| 10 | `plan_pro_f10` | История броней | Все прошлые и завершенные бронирования в одном месте. | server (hasReservationPro → 402 `pro_required`) |
+| 11 | `plan_pro_f11` | Заметки к подаркам | Личные записки к забронированным желаниям — видишь только ты. | server (hasReservationPro → 402 `pro_required`) |
+| 12 | `plan_pro_f12` | Напоминания о броне | Поставь напоминание, чтобы не забыть купить или вручить подарок. | server (hasReservationPro → 402 `pro_required`) |
+| 13 | `plan_pro_f13` | Статус «Уже купил» | Отмечай купленные подарки и держи всё под контролем. | server (hasReservationPro → 402 `pro_required`) |
+| 14 | `plan_pro_f14` | Фильтры и сортировка броней | Находи нужную бронь за секунду среди десятков подарков. | client flag `reservationPro` + server gate on actions |
 
 ---
 
@@ -104,17 +104,40 @@ All limits and feature gates are **enforced server-side**. The client performs p
 | Secret Santa exclusion pairs | `POST /tg/santa/campaigns/:id/exclusions` | `isPro` → 402 `{ error: 'pro_required', feature: 'santa_exclusions' }` |
 | Secret Santa exclusion groups | `POST /tg/santa/campaigns/:id/exclusions/groups` (+ `.../groups/:gid/members`) | `isPro` → 402 `{ error: 'pro_required', feature: 'santa_exclusion_groups' }` |
 
-### Reservation PRO — Beta-gated via `hasReservationPro()`
+### Reservation PRO — `hasReservationPro()` cluster
 
-Currently limited to focus-group users via `RESERVATION_PRO_BETA_IDS` env var. Phase 2 will open to all PRO users.
+**Contract (since 2026-05-24):** the full Reservation PRO cluster — history,
+private notes, reminders, "purchased" flag, filters & sort — is unlocked by
+EITHER
 
-| Feature | Endpoint | Check |
-|---------|----------|-------|
-| Reservation history | `GET /tg/reservations/history` | `hasReservationPro()` → 403 |
-| Private notes | `PATCH /tg/reservations/:itemId/meta` | `hasReservationPro()` → 403 |
-| Purchased flag | `PATCH /tg/reservations/:itemId/meta` | `hasReservationPro()` → 403 |
-| Reminders | `POST /tg/reservations/:itemId/reminder` | `hasReservationPro()` → 403 |
-| Filters & sort | Client-side | `reservationPro` flag from API |
+1. **An active PRO subscription** (monthly / yearly / lifetime / promo-PRO),
+2. **One-time add-on `reservation_pro_unlock`** (50 ⭐, permanent — for FREE
+   users who want the cluster without committing to PRO), or
+3. **`godMode`** (admin override).
+
+The paywall **promises** these five features (PRO benefits cards
+`plan_pro_f10..f14` + the add-on `addon_desc_reservation_pro_unlock`); the
+backend **delivers** the same set via `hasReservationPro(user, isPro, addOns)`
+in [`apps/api/src/services/entitlement.ts`](../apps/api/src/services/entitlement.ts).
+There is no longer a beta gate — the previous `isReservationBeta()` /
+`RESERVATION_PRO_BETA_IDS` env var was retired once the feature opened to all.
+
+Gate emits `feature_gate_hit_reservation_pro` with `{ feature: <sub-feature> }`
+props for funnel attribution. Centralised by `requireReservationPro()` in
+[`apps/api/src/routes/reservations.routes.ts`](../apps/api/src/routes/reservations.routes.ts).
+
+| Feature | Endpoint | Check on miss |
+|---------|----------|---------------|
+| Reservation history | `GET /tg/reservations/history` | `requireReservationPro()` → 402 `{ error: 'pro_required', feature: 'reservation_history' }` |
+| Private notes | `PATCH /tg/reservations/:itemId/meta` | `requireReservationPro()` → 402 `{ error: 'pro_required', feature: 'reservation_meta' }` |
+| Purchased flag | `PATCH /tg/reservations/:itemId/meta` | Same gate as private notes (same endpoint) |
+| Reminders | `POST /tg/reservations/:itemId/reminder` | `requireReservationPro()` → 402 `{ error: 'pro_required', feature: 'reservation_reminder' }` |
+| Filters & sort | Client-side toggle | `reservationPro` flag from `GET /tg/me` / `GET /tg/reservations` — same `hasReservationPro()` result |
+
+Status code is **402** (Payment Required) — not 403 — because the feature can
+be purchased. Frontend reads `reservationPro` from `/tg/me` to decide
+upsell-vs-feature; bot has no Reservation PRO consumer (URL-import is the
+only bot-facing 402 path).
 
 ### Client-only gate (no server enforcement)
 

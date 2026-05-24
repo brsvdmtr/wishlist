@@ -36,7 +36,6 @@ function buildDeps() {
     })),
     getUserEntitlement: vi.fn(async () => ({ isPro: false })),
     hasReservationPro: vi.fn(() => false),
-    isReservationBeta: vi.fn(() => true),
     trackEvent: vi.fn(),
     ACTIVE_STATUSES: ['AVAILABLE', 'RESERVED', 'PURCHASED'] as const,
     PRO_PRICE_XTR: 100,
@@ -70,5 +69,59 @@ describe('routes/me — factory shape', () => {
 
   it('me deps factory accepts the deps contract shape (compile + runtime)', () => {
     expect(() => registerMeRouter(buildDeps())).not.toThrow();
+  });
+});
+
+describe('GET /me/plan — reservationPro contract', () => {
+  // The Mini App reads `reservationPro` from this response to decide
+  // upsell-vs-feature for filters/sort and the History tab. The dead
+  // `reservationBeta` flag must not appear in the response.
+
+  function appWith(overrides: Partial<Parameters<typeof registerMeRouter>[0]>) {
+    const deps = { ...buildDeps(), ...overrides } as Parameters<typeof registerMeRouter>[0];
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      (req as unknown as { tgUser: unknown }).tgUser = { id: 42, first_name: 'T' };
+      next();
+    });
+    app.use(registerMeRouter(deps));
+    return { app, deps };
+  }
+
+  it('FREE user with no addon → reservationPro=false in /me/plan', async () => {
+    const hasReservationPro = vi.fn(() => false);
+    const { app } = appWith({ hasReservationPro });
+    const res = await request(app).get('/me/plan');
+    expect(res.status).toBe(200);
+    expect(res.body.reservationPro).toBe(false);
+  });
+
+  it('PRO sub user → reservationPro=true in /me/plan', async () => {
+    const hasReservationPro = vi.fn(() => true);
+    const { app } = appWith({ hasReservationPro });
+    const res = await request(app).get('/me/plan');
+    expect(res.status).toBe(200);
+    expect(res.body.reservationPro).toBe(true);
+  });
+
+  it('response does NOT include the retired reservationBeta field', async () => {
+    const { app } = appWith({});
+    const res = await request(app).get('/me/plan');
+    expect(res.body).not.toHaveProperty('reservationBeta');
+  });
+
+  it('hasReservationPro is invoked with (user, ent.isPro, ent.addOns)', async () => {
+    const hasReservationPro = vi.fn(
+      (_user: { godMode: boolean }, _isPro: boolean, _addOns?: Array<{ addonType: string }>) => false,
+    );
+    const { app } = appWith({ hasReservationPro });
+    await request(app).get('/me/plan');
+    expect(hasReservationPro).toHaveBeenCalled();
+    expect(hasReservationPro).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'u-test', godMode: false }),
+      false,
+      [],
+    );
   });
 });
