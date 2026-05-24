@@ -13,25 +13,41 @@ const shared = vi.hoisted(() => ({
     findMany: vi.fn(),
     findUnique: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
     delete: vi.fn(),
     create: vi.fn(),
     count: vi.fn(),
   },
   wishlist: { findUnique: vi.fn(), findFirst: vi.fn() },
   wishlistCategory: { findUnique: vi.fn() },
-  wishlistItemPlacement: { groupBy: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
+  wishlistItemPlacement: {
+    groupBy: vi.fn(),
+    findFirst: vi.fn(),
+    findUnique: vi.fn(),
+    aggregate: vi.fn(),
+    update: vi.fn(),
+  },
   hint: { findFirst: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
 }));
 
-vi.mock('@wishlist/db', () => ({
-  prisma: {
+vi.mock('@wishlist/db', () => {
+  const prisma: Record<string, unknown> = {
     item: shared.item,
     wishlist: shared.wishlist,
     wishlistCategory: shared.wishlistCategory,
     wishlistItemPlacement: shared.wishlistItemPlacement,
     hint: shared.hint,
-  },
-}));
+    // $transaction shim: if called with a callback, run it against this same
+    // prisma stub so handler-side `tx.*` resolves to the shared mocks; if
+    // called with an array, resolve all and return their results.
+    $transaction: vi.fn(async (arg: unknown) => {
+      if (typeof arg === 'function') return (arg as (tx: unknown) => Promise<unknown>)(prisma);
+      if (Array.isArray(arg)) return Promise.all(arg as Promise<unknown>[]);
+      return null;
+    }),
+  };
+  return { prisma };
+});
 
 import { registerItemsRouter } from './items.routes';
 import { z } from 'zod';
@@ -127,10 +143,13 @@ describe('GET /items — flat item list', () => {
   });
 });
 
-describe('POST /items/:id/move-category — PRO gate', () => {
+describe('POST /items/:id/move-category — ownership gate (PRO-only gate removed 2026-05-24)', () => {
+  // Since the FREE plan ships with 1 free category per wishlist, this route
+  // can no longer be PRO-only — owners must be able to move items into their
+  // free category. Owner-check on the target category is the sole gate.
+
   it('400 when item id is missing (path-level)', async () => {
     const { app } = makeApp();
-    // Express path matches /items/:id so id missing → no match → 404 default
     const res = await request(app).post('/items//move-category').send({ categoryId: 'c1' });
     expect([400, 404]).toContain(res.status);
   });
@@ -141,50 +160,51 @@ describe('POST /items/:id/move-category — PRO gate', () => {
     expect(res.status).toBe(400);
   });
 
-  it('402 PRO required when user is FREE', async () => {
-    const { app } = makeApp();
-    const res = await request(app).post('/items/i1/move-category').send({ categoryId: 'c1' });
-    expect(res.status).toBe(402);
-    expect(res.body).toMatchObject({ error: 'Pro required', planCode: 'FREE' });
-  });
-
-  it('404 when category not found (PRO user)', async () => {
-    const deps = buildDeps({
-      getEffectiveEntitlements: vi.fn(async () => ({
-        isPro: true,
-        plan: { code: 'PRO', wishlists: 10, items: 70 },
-        effectiveWishlistLimit: 10,
-        extraItemsPerWishlist: {},
-        hasGiftNotes: false,
-        hasGroupGift: false,
-      })),
-    });
+  it('FREE user is NOT blocked: passes the gate, 404s only because the category itself is missing', async () => {
+    const { app } = makeApp(); // default FREE deps
     shared.wishlistCategory.findUnique.mockResolvedValueOnce(null);
-
-    const { app } = makeApp(deps);
     const res = await request(app).post('/items/i1/move-category').send({ categoryId: 'c1' });
     expect(res.status).toBe(404);
+    expect(res.body).toMatchObject({ error: 'Category not found' });
   });
 
-  it('403 when target category belongs to a different user', async () => {
-    const deps = buildDeps({
-      getEffectiveEntitlements: vi.fn(async () => ({
-        isPro: true,
-        plan: { code: 'PRO', wishlists: 10, items: 70 },
-        effectiveWishlistLimit: 10,
-        extraItemsPerWishlist: {},
-        hasGiftNotes: false,
-        hasGroupGift: false,
-      })),
+  it('FREE user can move an item into their own category (200)', async () => {
+    const { app } = makeApp(); // default FREE deps — caller is 'u-test'
+    shared.wishlistCategory.findUnique.mockResolvedValueOnce({
+      id: 'c-free',
+      wishlistId: 'w1',
+      wishlist: { ownerId: 'u-test' },
     });
+    shared.wishlistItemPlacement.findUnique.mockResolvedValueOnce({ id: 'p1' });
+    shared.wishlistItemPlacement.aggregate.mockResolvedValueOnce({ _max: { position: 2 } });
+    shared.wishlistItemPlacement.update.mockResolvedValueOnce({});
+    shared.item.updateMany.mockResolvedValueOnce({ count: 1 });
+
+    const res = await request(app).post('/items/i1/move-category').send({ categoryId: 'c-free' });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true });
+  });
+
+  it('403 when target category belongs to a different user (FREE deps)', async () => {
+    const { app } = makeApp();
     shared.wishlistCategory.findUnique.mockResolvedValueOnce({
       id: 'c1',
       wishlistId: 'w1',
       wishlist: { ownerId: 'other-user' },
     });
-
-    const { app } = makeApp(deps);
     const res = await request(app).post('/items/i1/move-category').send({ categoryId: 'c1' });
     expect(res.status).toBe(403);
+  });
+
+  it('400 when item has no placement in the target wishlist', async () => {
+    const { app } = makeApp();
+    shared.wishlistCategory.findUnique.mockResolvedValueOnce({
+      id: 'c1',
+      wishlistId: 'w1',
+      wishlist: { ownerId: 'u-test' },
+    });
+    shared.wishlistItemPlacement.findUnique.mockResolvedValueOnce(null);
+    const res = await request(app).post('/items/i1/move-category').send({ categoryId: 'c1' });
+    expect(res.status).toBe(400);
   });
 });

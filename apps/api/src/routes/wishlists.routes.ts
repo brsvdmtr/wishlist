@@ -61,7 +61,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import crypto from 'crypto';
-import { prisma } from '@wishlist/db';
+import { prisma, Prisma } from '@wishlist/db';
 import { t, type Locale, getOnboardingMeta } from '@wishlist/shared';
 
 import { asyncHandler } from '../lib/asyncHandler';
@@ -105,6 +105,7 @@ type WishlistsPlan = {
   wishlists: number;
   items: number;
   participants: number;
+  categoriesPerWishlist: number;
   features: readonly string[];
 };
 
@@ -1493,7 +1494,18 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
     }),
   );
 
-  // POST /tg/wishlists/:id/categories — create category (Pro only)
+  // POST /tg/wishlists/:id/categories — create category (quota-based)
+  // FREE: 1 user category per wishlist; PRO: 20. Beyond quota → 402 with
+  // paywall='categories'. The default ("Без категории") doesn't count toward
+  // the quota — it's a system row, not a user-created one.
+  //
+  // Race protection: the quota count + duplicate check + insert run in a
+  // Serializable transaction so two concurrent POSTs from the same user can't
+  // both pass `count < limit` and double-create. Postgres surfaces a
+  // serialization conflict as Prisma P2034 — we return 409 (not 503) with a
+  // dedicated `code` so the FE's `tgFetch` doesn't treat it as a maintenance
+  // outage (which would throw the response away) and the user just retries
+  // the action with a fresh Idempotency-Key.
   wishlistsRouter.post(
     '/wishlists/:id/categories',
     asyncHandler(async (req, res) => {
@@ -1505,60 +1517,91 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
       }).safeParse(req.body);
       if (!parsed.success) return zodError(res, parsed.error);
 
+      const trimmedName = parsed.data.name.trim();
+      if (!trimmedName) return res.status(400).json({ error: 'Empty name' });
+
       const user = await getOrCreateTgUser(req.tgUser!);
       const ent = await getEffectiveEntitlements(user.id);
-      if (!ent.isPro) {
-        trackEvent('feature_gate_hit_categories', user.id, { plan: ent.plan.code });
-        return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
-      }
 
       const wishlist = await prisma.wishlist.findUnique({ where: { id: wishlistId }, select: { ownerId: true } });
       if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
       if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
 
-      // Max 20 user categories per wishlist
-      const existingCount = await prisma.wishlistCategory.count({ where: { wishlistId, isDefault: false } });
-      if (existingCount >= 20) return res.status(400).json({ error: 'Category limit reached', limit: 20 });
+      const limit = ent.plan.categoriesPerWishlist ?? Infinity;
 
-      // Duplicate check (case-insensitive, trimmed)
-      const trimmedName = parsed.data.name.trim();
-      const existing = await prisma.wishlistCategory.findMany({
-        where: { wishlistId },
-        select: { name: true },
-      });
-      const isDuplicate = existing.some(c => c.name.trim().toLowerCase() === trimmedName.toLowerCase());
-      if (isDuplicate) return res.status(409).json({ error: 'Duplicate category name' });
+      type CreateOutcome =
+        | { kind: 'over_quota'; used: number }
+        | { kind: 'duplicate_name' }
+        | { kind: 'created'; category: { id: string; name: string; sortOrder: number; isDefault: boolean }; isFirst: boolean };
 
-      // Ensure default category exists
-      const defaultCat = await prisma.wishlistCategory.findFirst({ where: { wishlistId, isDefault: true } });
-      if (!defaultCat) {
-        await prisma.wishlistCategory.create({
-          data: { wishlistId, name: 'Без категории', sortOrder: 999999, isDefault: true },
-        });
+      let outcome: CreateOutcome | { kind: 'conflict' };
+      try {
+        outcome = await prisma.$transaction(
+          async (tx): Promise<CreateOutcome> => {
+            const existingCount = await tx.wishlistCategory.count({ where: { wishlistId, isDefault: false } });
+            if (existingCount >= limit) {
+              return { kind: 'over_quota', used: existingCount };
+            }
+
+            const existing = await tx.wishlistCategory.findMany({
+              where: { wishlistId },
+              select: { name: true },
+            });
+            if (existing.some(c => c.name.trim().toLowerCase() === trimmedName.toLowerCase())) {
+              return { kind: 'duplicate_name' };
+            }
+
+            // Ensure default ("Без категории") exists before adding the first user category.
+            const defaultCat = await tx.wishlistCategory.findFirst({ where: { wishlistId, isDefault: true } });
+            if (!defaultCat) {
+              await tx.wishlistCategory.create({
+                data: { wishlistId, name: 'Без категории', sortOrder: 999999, isDefault: true },
+              });
+            }
+
+            // New category gets sortOrder = max existing + 1 (default stays last via its 999999 sentinel).
+            const maxOrder = await tx.wishlistCategory.aggregate({
+              where: { wishlistId, isDefault: false },
+              _max: { sortOrder: true },
+            });
+            const nextOrder = (maxOrder._max.sortOrder ?? -1) + 1;
+
+            const category = await tx.wishlistCategory.create({
+              data: { wishlistId, name: trimmedName, sortOrder: nextOrder, isDefault: false },
+              select: { id: true, name: true, sortOrder: true, isDefault: true },
+            });
+
+            return { kind: 'created', category, isFirst: existingCount === 0 };
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+          outcome = { kind: 'conflict' };
+        } else {
+          throw err;
+        }
       }
 
-      // New category gets sortOrder = max existing + 1 (before default)
-      const maxOrder = await prisma.wishlistCategory.aggregate({
-        where: { wishlistId, isDefault: false },
-        _max: { sortOrder: true },
-      });
-      const nextOrder = (maxOrder._max.sortOrder ?? -1) + 1;
+      if (outcome.kind === 'over_quota') {
+        if (!ent.isPro) {
+          // FREE hit the free-tier ceiling — surface as paywall, not generic 400.
+          trackEvent('feature_gate_hit_categories', user.id, { plan: ent.plan.code, used: outcome.used, limit });
+          return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code, paywall: 'categories' });
+        }
+        return res.status(400).json({ error: 'Category limit reached', limit });
+      }
+      if (outcome.kind === 'duplicate_name') return res.status(409).json({ error: 'Duplicate category name' });
+      if (outcome.kind === 'conflict') return res.status(409).json({ error: 'Concurrent write conflict, please retry', code: 'CATEGORY_CONCURRENT_WRITE' });
 
-      const category = await prisma.wishlistCategory.create({
-        data: { wishlistId, name: trimmedName, sortOrder: nextOrder, isDefault: false },
-        select: { id: true, name: true, sortOrder: true, isDefault: true },
-      });
-
-      trackEvent('wishlist_category_created', user.id, { wishlistId, categoryId: category.id, name: trimmedName });
-
-      // Return isFirst flag so client can show onboarding hint
-      const isFirst = existingCount === 0;
-
-      return res.json({ category, isFirst });
+      trackEvent('wishlist_category_created', user.id, { wishlistId, categoryId: outcome.category.id, name: outcome.category.name });
+      return res.json({ category: outcome.category, isFirst: outcome.isFirst });
     }),
   );
 
-  // PATCH /tg/wishlists/:wlId/categories/:catId — rename category (Pro only)
+  // PATCH /tg/wishlists/:wlId/categories/:catId — rename category.
+  // Open to all owners: a FREE user who created their 1 free category must
+  // still be able to rename it. Quota is enforced on CREATE only.
   wishlistsRouter.patch(
     '/wishlists/:wlId/categories/:catId',
     asyncHandler(async (req, res) => {
@@ -1571,8 +1614,6 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
       if (!parsed.success) return zodError(res, parsed.error);
 
       const user = await getOrCreateTgUser(req.tgUser!);
-      const ent = await getEffectiveEntitlements(user.id);
-      if (!ent.isPro) return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
 
       const wishlist = await prisma.wishlist.findUnique({ where: { id: wlId }, select: { ownerId: true } });
       if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
@@ -1582,8 +1623,11 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
       if (!category || category.wishlistId !== wlId) return res.status(404).json({ error: 'Category not found' });
       if (category.isDefault) return res.status(400).json({ error: 'Cannot rename default category' });
 
-      // Duplicate check
+      // Trim + reject whitespace-only names (Zod min(1) accepts "   ").
       const trimmedName = parsed.data.name.trim();
+      if (!trimmedName) return res.status(400).json({ error: 'Empty name' });
+
+      // Duplicate check
       const siblings = await prisma.wishlistCategory.findMany({
         where: { wishlistId: wlId, id: { not: catId } },
         select: { name: true },
@@ -1604,7 +1648,9 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
     }),
   );
 
-  // DELETE /tg/wishlists/:wlId/categories/:catId — delete category, move items to default (Pro only)
+  // DELETE /tg/wishlists/:wlId/categories/:catId — delete category, move items to default.
+  // Open to all owners — needed so FREE users can free up their one quota slot
+  // (delete then create a different category). Owner-check is the only gate.
   wishlistsRouter.delete(
     '/wishlists/:wlId/categories/:catId',
     asyncHandler(async (req, res) => {
@@ -1612,8 +1658,6 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
       if (!wlId || !catId) return res.status(400).json({ error: 'Missing ids' });
 
       const user = await getOrCreateTgUser(req.tgUser!);
-      const ent = await getEffectiveEntitlements(user.id);
-      if (!ent.isPro) return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
 
       const wishlist = await prisma.wishlist.findUnique({ where: { id: wlId }, select: { ownerId: true } });
       if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
@@ -1689,7 +1733,9 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
     }),
   );
 
-  // POST /tg/wishlists/:id/categories/reorder — reorder categories (Pro only)
+  // POST /tg/wishlists/:id/categories/reorder — reorder categories.
+  // Open to all owners; trivial no-op for FREE with a single user category,
+  // but kept consistent so the UI doesn't have to branch on plan.
   wishlistsRouter.post(
     '/wishlists/:id/categories/reorder',
     asyncHandler(async (req, res) => {
@@ -1702,8 +1748,6 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
       if (!parsed.success) return zodError(res, parsed.error);
 
       const user = await getOrCreateTgUser(req.tgUser!);
-      const ent = await getEffectiveEntitlements(user.id);
-      if (!ent.isPro) return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
 
       const wishlist = await prisma.wishlist.findUnique({ where: { id: wishlistId }, select: { ownerId: true } });
       if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });

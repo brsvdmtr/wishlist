@@ -45,6 +45,10 @@ export const PLANS = {
     items: 20,       // reduced from 30; add-ons fill the gap; MAX tier will have 200+
     participants: 10, // raised from 5 — a birthday with 6+ guests is the core scenario
     subscriptions: 2,
+    // One free user category per wishlist (the "Без категории" default doesn't count).
+    // Beyond this, CREATE returns 402 with paywall='categories'; rename/delete/reorder
+    // and item move-category stay open so the FREE category is fully usable.
+    categoriesPerWishlist: 1,
     features: [] as string[],
   },
   PRO: {
@@ -53,6 +57,7 @@ export const PLANS = {
     items: 70,       // reduced from 100; MAX tier will be 200+
     participants: 20,
     subscriptions: 5, // reduced from 7; 5 covers active users well; MAX will offer 15+
+    categoriesPerWishlist: 20,
     features: ['comments', 'url_import', 'hints'],
   },
 } as const;

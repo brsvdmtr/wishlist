@@ -274,6 +274,18 @@ type PlanInfo = {
   features: string[];
 };
 
+// Per-plan category quota (mirrors `categoriesPerWishlist` in
+// apps/api/src/services/entitlement.ts `PLANS`). Keep these in sync — the API
+// is the source of truth, but the FE needs the number to render the counter
+// and decide whether to open the create sheet or the upsell. If a future plan
+// (e.g. MAX) raises the limit, update both sides; the server returns 402 if
+// the FE-side check is stale.
+const FREE_CATEGORY_LIMIT = 1;
+const PRO_CATEGORY_LIMIT = 20;
+function categoryLimitFor(planCode: PlanInfo['code']): number {
+  return planCode === 'PRO' ? PRO_CATEGORY_LIMIT : FREE_CATEGORY_LIMIT;
+}
+
 type BillingPeriod = 'monthly' | 'yearly' | 'lifetime';
 type SubscriptionInfo = {
   id: string;
@@ -24043,27 +24055,49 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <span style={{ fontSize: 20 }}>↕️</span>
             <span>{t('wl_reorder', locale)}</span>
           </button>
-          {/* Create category */}
-          <button
-            onClick={() => {
-              if (planInfo.code === 'FREE') { setShowWlManage(false); showUpsell('categories'); return; }
-              setShowWlManage(false);
-              setCatCreateName('');
-              setShowCatCreate(true);
-            }}
-            style={{
-              background: 'var(--wb-card)', border: '1px solid var(--wb-border)', borderRadius: 16, padding: '16px 18px',
-              textAlign: 'start', cursor: 'pointer', fontFamily: font,
-              fontSize: 15, fontWeight: 500, letterSpacing: '-0.012em',
-              color: 'var(--wb-text)', display: 'flex', alignItems: 'center', gap: 12,
-              WebkitBackdropFilter: 'blur(14px)' as never,
-              backdropFilter: 'blur(14px)' as never,
-            }}
-          >
-            <span style={{ fontSize: 20 }}>📂</span>
-            {t('cat_create', locale)}
-            {planInfo.code === 'FREE' && <ProBadge style={{ marginLeft: 'auto' }} />}
-          </button>
+          {/* Create category — FREE gets 1 free per wishlist; PRO up to 20. */}
+          {(() => {
+            const categoryLimit = categoryLimitFor(planInfo.code);
+            const used = userCategories.length;
+            const atLimit = used >= categoryLimit;
+            // FREE at quota → upsell. PRO at quota (20) → noop toast; rare enough
+            // that we don't render a different UI for it.
+            const goesToUpsell = planInfo.code === 'FREE' && atLimit;
+            const counterLabel = planInfo.code === 'FREE'
+              ? `${used}/${categoryLimit}`
+              : null;
+            return (
+              <button
+                onClick={() => {
+                  if (goesToUpsell) { setShowWlManage(false); showUpsell('categories'); return; }
+                  if (atLimit) {
+                    pushToast(t('cat_limit_error', locale), 'info');
+                    return;
+                  }
+                  setShowWlManage(false);
+                  setCatCreateName('');
+                  setShowCatCreate(true);
+                }}
+                style={{
+                  background: 'var(--wb-card)', border: '1px solid var(--wb-border)', borderRadius: 16, padding: '16px 18px',
+                  textAlign: 'start', cursor: 'pointer', fontFamily: font,
+                  fontSize: 15, fontWeight: 500, letterSpacing: '-0.012em',
+                  color: 'var(--wb-text)', display: 'flex', alignItems: 'center', gap: 12,
+                  WebkitBackdropFilter: 'blur(14px)' as never,
+                  backdropFilter: 'blur(14px)' as never,
+                }}
+              >
+                <span style={{ fontSize: 20 }}>📂</span>
+                <span>{t('cat_create', locale)}</span>
+                {counterLabel && (
+                  <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--wb-text-muted)', fontWeight: 500 }}>
+                    {counterLabel}
+                  </span>
+                )}
+                {goesToUpsell && <ProBadge style={{ marginLeft: counterLabel ? 8 : 'auto' }} />}
+              </button>
+            );
+          })()}
           {/* Manage categories (reorder) — only when user categories exist */}
           {hasUserCategories && (
             <button

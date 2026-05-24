@@ -250,7 +250,11 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
     }),
   );
 
-  // POST /tg/items/:id/move-category — move single item to category (Pro only)
+  // POST /tg/items/:id/move-category — move single item to a category.
+  // Open to all owners since 2026-05-24: the FREE plan ships with 1 free
+  // category per wishlist, and that category has to be usable. Owner-check
+  // on the target category (its wishlist must belong to the caller) is the
+  // sole gate — a FREE user can only target categories they own.
   itemsRouter.post(
     '/items/:id/move-category',
     asyncHandler(async (req, res) => {
@@ -263,8 +267,6 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
       if (!parsed.success) return zodError(res, parsed.error);
 
       const user = await getOrCreateTgUser(req.tgUser!);
-      const ent = await getEffectiveEntitlements(user.id);
-      if (!ent.isPro) return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
 
       // Target category defines which wishlist this move applies to.
       // For shared items, we update the PLACEMENT in that wishlist — placements
@@ -312,7 +314,10 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
     }),
   );
 
-  // POST /tg/items/bulk-move-category — bulk move items to category (Pro only)
+  // POST /tg/items/bulk-move-category — bulk move items to a category.
+  // Same model as the single move-category route above: any owner can target
+  // a category they own; the PRO gate is gone since FREE now ships with 1
+  // free category and that category must be writable.
   itemsRouter.post(
     '/items/bulk-move-category',
     asyncHandler(async (req, res) => {
@@ -323,8 +328,6 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
       if (!parsed.success) return zodError(res, parsed.error);
 
       const user = await getOrCreateTgUser(req.tgUser!);
-      const ent = await getEffectiveEntitlements(user.id);
-      if (!ent.isPro) return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
 
       // Verify target category
       const targetCat = await prisma.wishlistCategory.findUnique({
