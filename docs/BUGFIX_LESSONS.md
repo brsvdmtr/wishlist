@@ -5,6 +5,120 @@ New entries go at the top.
 
 ---
 
+## 2026-05-24 — Lifecycle `dead_air`: stopped-touch не считался → пул залипал на месяц
+
+### Симптом
+
+`lifecycle_dead_air` warn в `api.log.2026-05-24.1` (threshold=24,
+candidatesFound=400). С 2026-05-23 14:14 UTC и далее: 41+ цикл подряд
+`touchesSent=0` при стабильном пуле 400+ кандидатов. Последний реальный
+touch — 2026-05-23 14:14. SQL-симуляция гейтов давала 90 кандидатов,
+проходящих все ранние фильтры (classifier / shouldStop / caps / cadence /
+MAX_WAVES), но scheduler упорно скипал всех.
+
+### Root cause
+
+Двойной учёт одного и того же touch-records — несогласованный между
+`episodeTouches`-каунтером и upsert-«если уже есть, скип»-гардом.
+
+`checkLifecycleCaps` считал «открытые» touches:
+
+```ts
+prisma.lifecycleTouch.count({ where: { userId, segment, sentAt: { not: null }, stoppedAt: null } })
+```
+
+Touch с `stopReason ∈ {delivery_failed, chat_not_found, bot_blocked}` имеет
+`stoppedAt != null` → не попадает в счёт → `episodeTouches = 0` →
+`nextTouchNumber = 1`.
+
+Дальше в loop body upsert на `(userId, episodeKey, touchNumber=1)` находит
+уже существующую stopped-запись (sentAt стампнут на прошлой попытке),
+возвращает её как есть, и следующая строка коротит:
+
+```ts
+if (touch.sentAt) continue;
+```
+
+Юзер выпадает из рассылки до следующего календарного месяца, когда
+`episodeKey` рольёт (`S1_user_2026-05` → `S1_user_2026-06`) и upsert
+создаст новую запись.
+
+Симптом проявился именно в конце мая, потому что:
+1. 2026-05-01 был бурст создания 124 S1 touch-1 записей за день
+   (типичный месячный rollover).
+2. К 2026-05-22 reachable-пул высох: 305 / 478 historical S1 touch-1
+   записей имели stop-reason (delivery_failed/chat_not_found/bot_blocked).
+   Все эти юзеры уже имели «сожжённую» майскую запись и более не были
+   достижимы до 2026-06.
+3. Module-scope counter `lifecycleDeadCycles` обнуляется на рестарт api.
+   Между деплоями реже стали — counter дотянул до threshold=24 и warn
+   зафайерил впервые.
+
+Это та же ошибка-класса, что фикс на line 339–342 уже описывает для
+`transient_failure` («The earlier version stamped sentAt+stoppedAt on every
+failure, which permanently sank the touch for the rest of the monthly
+episode»). Предыдущий фикс закрыл только transient-кейс; permanent-кейсы
+(`bot_blocked`/`chat_not_found`/`delivery_failed`) остались на сломанной
+семантике.
+
+### Урок
+
+Если двум разным гардам нужно решить «эта попытка уже была», они должны
+смотреть на ОДНО И ТО ЖЕ множество записей. Любое расхождение фильтров
+(один считает open-only, другой смотрит «есть запись с sentAt») создаёт
+тихий тупик: первый говорит «можно», второй — «уже было».
+
+Месячный `episodeKey` — это календарный «окно эпизода». Cap-счётчик
+должен фильтроваться по тому же окну, иначе он либо тащит lifetime-историю
+(блокирует возвращающихся юзеров навсегда), либо игнорирует свежие
+попытки (порождает текущий dead-air).
+
+### Правило
+
+- Когда два места кода сравнивают «существует ли уже X», у них должны быть
+  идентичные условия отбора. Если одно фильтрует по `stoppedAt: null`,
+  второе обязано тоже учитывать `stoppedAt`. Расхождение = баг.
+- В лайфсайкл-флоу: cap-счётчик по сегменту/эпизоду должен ВКЛЮЧАТЬ
+  stopped touches. Stop-reason — это «попытка состоялась с известным
+  исходом», а не «попытки не было».
+- Episode-cap должен фильтроваться по тому же `episodeKey`, что и upsert,
+  чтобы окна не разъезжались. `segment + stoppedAt: null` пересекалось
+  с lifetime → блокировало возвращающихся юзеров с 3+ delivered touches
+  в истории.
+- Module-scope counters (`lifecycleDeadCycles`) — это сигнал, не лекарство.
+  Counter обнуляется рестартами, так что dead-air ловится только если
+  процесс прожил threshold * cadence часов. Это нужно учитывать при
+  выборе threshold: 24 циклов ≈ 24 часа без рестарта.
+
+### Лучший код
+
+```ts
+// ❌ До: считаем «открытые» touches per-сегмент lifetime →
+// stopped запись в текущем месяце не считается, upsert находит её,
+// `if (touch.sentAt) continue` морозит юзера до 1-го числа след. месяца.
+prisma.lifecycleTouch.count({
+  where: { userId, segment, sentAt: { not: null }, stoppedAt: null },
+}),
+
+// ✅ После: считаем ВСЕ попытки в текущем monthly episodeKey, включая stopped.
+// Совпадает с тем, что проверяет upsert ниже по коду. Окна одинаковые,
+// семантика «попытка состоялась» — единая.
+const monthKey = now.toISOString().slice(0, 7);
+const episodeKey = `${segment}_${userId}_${monthKey}`;
+prisma.lifecycleTouch.count({
+  where: { userId, episodeKey, sentAt: { not: null } },
+}),
+```
+
+Regression test: `apps/api/src/schedulers/lifecycle.test.ts` →
+«counts current-monthly-episode attempts via episodeKey (not
+segment+stoppedAt:null)». Pre-fix mock возвращает 0 на старую сигнатуру
+where, тест валит `expect(sendLifecycleDM).toHaveBeenCalledTimes(1)`.
+Post-fix: mock возвращает 1 на новую сигнатуру, `nextTouchNumber=2`,
+upsert создаёт свежую запись, sendDM зовётся.
+
+---
+
 ## 2026-05-22 — Группа-исключение Secret Santa не создаётся: zod `.min(2)` валит дефолтный `[]`
 
 ### Симптом

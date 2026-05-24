@@ -104,4 +104,83 @@ describe('startLifecycleScheduler', () => {
     await vi.advanceTimersByTimeAsync(HOURLY_MS);
     expect(prisma.user.findMany).toHaveBeenCalledTimes(3);
   });
+
+  // Regression: 2026-05-23 dead-air. A monthly touch stamped sentAt+stoppedAt
+  // (delivery_failed / chat_not_found) froze the user for the rest of the
+  // calendar month, because `episodeTouches` filtered out stopped touches
+  // (counter stayed at 0) while the upsert downstream short-circuited on the
+  // existing record (sentAt set) → continue. Whole `WOULD_SEND` cohort dried up.
+  it('counts current-monthly-episode attempts via episodeKey (not segment+stoppedAt:null)', async () => {
+    vi.setSystemTime(new Date('2026-05-24T17:00:00Z'));
+
+    const userId = 'u-stuck';
+    const chatId = '111';
+
+    prisma.user.findMany.mockResolvedValue([{
+      id: userId,
+      telegramChatId: chatId,
+      telegramId: 1,
+      updatedAt: new Date('2026-05-21T10:00:00Z'), // 3.3d inactive
+      createdAt: new Date('2026-04-01T00:00:00Z'),
+      profile: { notifyMarketing: true, languageMode: 'auto', manualLanguage: null, normalizedLocale: null, language: null },
+    }] as never);
+
+    // Two findUnique call shapes: classifier (selects wishlists) and
+    // shouldStopLifecycle (selects profile.notifyMarketing).
+    prisma.user.findUnique.mockImplementation((args: unknown) => {
+      const a = args as { select?: { wishlists?: unknown; profile?: unknown } };
+      if (a.select?.wishlists) {
+        // Empty wishlists → S1
+        return Promise.resolve({
+          id: userId,
+          updatedAt: new Date('2026-05-21T10:00:00Z'),
+          createdAt: new Date('2026-04-01T00:00:00Z'),
+          wishlists: [],
+        }) as never;
+      }
+      return Promise.resolve({
+        id: userId,
+        updatedAt: new Date('2026-05-21T10:00:00Z'),
+        profile: { notifyMarketing: true },
+      }) as never;
+    });
+
+    // DB state: one stopped May S1 touch 1 exists (chat_not_found).
+    // Post-fix count call shape: { userId, episodeKey: 'S1_u-stuck_2026-05', sentAt: { not: null } } → returns 1.
+    // Pre-fix shape: { userId, segment: 'S1', sentAt: { not: null }, stoppedAt: null } → returns 0 (BUG).
+    prisma.lifecycleTouch.count.mockImplementation((args: unknown) => {
+      const w = (args as { where?: Record<string, unknown> }).where ?? {};
+      const epKey = w.episodeKey as string | undefined;
+      const stoppedAtFilter = w.stoppedAt;
+      if (epKey === `S1_${userId}_2026-05` && stoppedAtFilter === undefined) {
+        return Promise.resolve(1);
+      }
+      return Promise.resolve(0);
+    });
+
+    // Upsert: if scheduler asks for touchNumber=1, return the existing stopped row
+    // (pre-fix path — should NOT happen after fix). For touchNumber=2, return a
+    // fresh pending row that will be sent.
+    (prisma.lifecycleTouch as unknown as { upsert: ReturnType<typeof vi.fn> }).upsert = vi.fn().mockImplementation((args: unknown) => {
+      const tn = (args as { where: { userId_episodeKey_touchNumber: { touchNumber: number } } })
+        .where.userId_episodeKey_touchNumber.touchNumber;
+      if (tn === 1) {
+        return Promise.resolve({ id: 't1-stopped', sentAt: new Date('2026-05-01'), stoppedAt: new Date('2026-05-01'), deepLinkPayload: 'create_wishlist' });
+      }
+      return Promise.resolve({ id: `t${tn}-new`, sentAt: null, stoppedAt: null, deepLinkPayload: 'create_wishlist' });
+    });
+
+    start();
+    await vi.advanceTimersByTimeAsync(HOURLY_MS);
+
+    // Post-fix: episodeTouches=1 → nextTouchNumber=2 → upsert touch 2 → send.
+    // Pre-fix: episodeTouches=0 → nextTouchNumber=1 → upsert returns stopped row (sentAt) → continue → no send.
+    expect(sendLifecycleDM).toHaveBeenCalledTimes(1);
+    expect(sendLifecycleDM).toHaveBeenCalledWith(
+      chatId,
+      expect.any(String),
+      expect.any(String),
+      expect.stringContaining('startapp='),
+    );
+  });
 });

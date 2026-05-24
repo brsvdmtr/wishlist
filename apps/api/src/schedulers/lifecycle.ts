@@ -148,6 +148,10 @@ export function startLifecycleScheduler(deps: LifecycleSchedulerDeps): void {
     const h72ago = new Date(now.getTime() - LIFECYCLE_MSG_COOLDOWN_HOURS * 60 * 60 * 1000);
     const d45ago = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000);
     const d60ago = new Date(now.getTime() - LIFECYCLE_PROMO_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
+    // Match the episodeKey built later in the loop body — counts attempts in
+    // the CURRENT monthly episode only, not lifetime across months.
+    const monthKey = now.toISOString().slice(0, 7);
+    const episodeKey = `${segment}_${userId}_${monthKey}`;
 
     const [recentMsg, marketing45d, promoRecent, episodeTouches] = await Promise.all([
       // Any message sent in last 72h?
@@ -156,8 +160,15 @@ export function startLifecycleScheduler(deps: LifecycleSchedulerDeps): void {
       prisma.lifecycleTouch.count({ where: { userId, sentAt: { gte: d45ago } } }),
       // Any promo offer in 60 days?
       prisma.lifecycleTouch.findFirst({ where: { userId, offerCode: { not: null }, sentAt: { gte: d60ago } } }),
-      // Current episode touches (same segment, sent)
-      prisma.lifecycleTouch.count({ where: { userId, segment, sentAt: { not: null }, stoppedAt: null } }),
+      // Attempts in the current monthly episode — including stopped touches.
+      // Previously filtered by `segment + stoppedAt: null`, which undercounted:
+      // a touch stamped sentAt+stoppedAt (delivery_failed / chat_not_found)
+      // didn't bump the counter, yet the upsert downstream returned the same
+      // row and `if (touch.sentAt) continue` short-circuited — freezing the
+      // user from any further attempt until the calendar-month rollover.
+      // That's the root cause of `lifecycle_dead_air` 2026-05-23 (all 90 pass-
+      // the-gates candidates were stuck on an already-stamped May touch).
+      prisma.lifecycleTouch.count({ where: { userId, episodeKey, sentAt: { not: null } } }),
     ]);
 
     return {
