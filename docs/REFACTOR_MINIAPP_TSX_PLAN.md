@@ -644,4 +644,40 @@ bytes — it unlocks F3–F6.
 
 ---
 
-### F2 — pending
+### F2 — done @ 2026-05-25 (analysis only, no commit-bytes shipped)
+
+**Deliverable:** [`docs/MINIAPP_DECOMPOSITION_MAP.md`](./MINIAPP_DECOMPOSITION_MAP.md).
+
+**Coverage:** 53 sections mapped, ~20,637 LOC (60 % of file). The
+remaining ~13,600 LOC are hooks, helpers, and state declarations —
+those land in F3 (hooks) and F5 (lib extraction).
+
+**Surprises:**
+- **Gift Notes Detail = 4,604 LOC** in a single section (lines
+  23283–27886). 14 % of the entire file. Bigger than any other screen
+  by 2.6×. F4 Wave C alone (Gift Notes cluster) projects ~100-140 KB
+  brotli saving — bigger than F0+F1 combined.
+- Santa cluster (9 screens, 3,310 LOC) is highly seasonal — cold-load
+  penalty Nov-Jan but dead weight Feb-Oct. Wave B target.
+- 8 sections (>500 LOC each) account for 11,547 LOC = **34 % of the
+  file in just 8 screens**. Extracting them gets the bulk of the win.
+
+**Recommended F4 sequencing** (in `MINIAPP_DECOMPOSITION_MAP.md`):
+- Wave A: cold-path static screens (FAQ, Legal, Changelog, Public
+  Profile, Referral). ~1.4k LOC, ~25-40 KB brotli. Template-PR setup.
+- Wave B: Santa cluster. ~3.3k LOC, ~60-90 KB brotli.
+- Wave C: Gift Notes (single biggest win). ~5k LOC, ~100-140 KB brotli.
+- Wave D: Settings + Profile + medium screens. ~4.4k LOC, ~80-120 KB.
+- Wave E: tab-1 screens — extracted for maintainability, kept eager.
+
+**Realistic post-F6 target:** **−240 to −360 KB brotli** off the main
+chunk (from 522 KB today). Combined with F7 hooks lift: ~180 KB
+initial JS achievable.
+
+**Constraints:** F3 (hooks) MUST precede F4 (screens), otherwise
+extracted screens become props-bloat. Wave A is the on-ramp — use FAQ
+as the smallest possible template PR.
+
+---
+
+### F3 — pending
