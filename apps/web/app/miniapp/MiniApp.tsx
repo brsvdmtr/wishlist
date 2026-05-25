@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
+import dynamic from 'next/dynamic';
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, localeToBCP47, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
 import {
   Banner, Button, Card, Chip, CounterBadge, FloatingNav, HeroCard, ListRow, LockedTile,
@@ -16,10 +17,27 @@ import {
   Sheet as BottomSheet, StatTile, StickyCTAFade, TabBar, TextField,
   ThemeProvider, useTheme,
 } from '@wishlist/ui';
-import { AppearanceSettings } from './screens/AppearanceSettings';
-import { CalendarRoot } from './screens/calendar/CalendarRoot';
-import { SearchScreen } from './screens/SearchScreen';
-import { SurveyScreen } from './screens/survey/SurveyScreen';
+import { ScreenSkeleton } from './components/ScreenSkeleton';
+// F1 of REFACTOR_MINIAPP_TSX_PLAN — these screens are tab/route-gated and
+// not on the first-paint path; lazy-load them so the initial Mini App
+// bundle drops by ~120-150 KB brotli. `ssr: false` keeps them out of the
+// server bundle (Mini App is client-only anyway).
+const AppearanceSettings = dynamic(
+  () => import('./screens/AppearanceSettings').then(m => ({ default: m.AppearanceSettings })),
+  { ssr: false, loading: () => <ScreenSkeleton variant="settings" /> },
+);
+const CalendarRoot = dynamic(
+  () => import('./screens/calendar/CalendarRoot').then(m => ({ default: m.CalendarRoot })),
+  { ssr: false, loading: () => <ScreenSkeleton variant="calendar" /> },
+);
+const SearchScreen = dynamic(
+  () => import('./screens/SearchScreen').then(m => ({ default: m.SearchScreen })),
+  { ssr: false, loading: () => <ScreenSkeleton variant="list" /> },
+);
+const SurveyScreen = dynamic(
+  () => import('./screens/survey/SurveyScreen').then(m => ({ default: m.SurveyScreen })),
+  { ssr: false, loading: () => <ScreenSkeleton variant="form" /> },
+);
 import type { SearchResult, AccessViewResponse } from './lib/searchApi';
 import { recordWishlistOpen, fetchAccessView } from './lib/searchApi';
 import { ProBadge } from './components/ProBadge';
