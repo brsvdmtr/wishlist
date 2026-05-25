@@ -2,11 +2,17 @@
 //
 // Priority chain, top→bottom:
 //   1. profile.displayName  — user's custom WishBoard handle (already an
-//                             explicit personalization signal). NOTE: in
-//                             prod the profile is lazy-loaded (loadProfile
-//                             fires only on /profile navigation), so for a
-//                             first-tap guest the profile source is
-//                             best-effort; analytics will skew toward
+//                             explicit personalization signal). NOTE:
+//                             loadProfile() is invoked fire-and-forget
+//                             during bootstrap (MiniApp.tsx:9702), so
+//                             by the time most guests open a reserve
+//                             sheet the profile usually exists — but
+//                             a guest who taps Reserve faster than the
+//                             /tg/me/profile round-trip will see
+//                             profileData=null. The race window is
+//                             real for deeplink-then-tap flows, so the
+//                             profile source is best-effort and prod
+//                             analytics will skew toward
 //                             tg_full / tg_first in practice.
 //   2. tg first + last      — full Telegram name when both are present.
 //   3. tg first              — fallback to the legacy single-field prefill.

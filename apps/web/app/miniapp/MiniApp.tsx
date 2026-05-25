@@ -11563,13 +11563,20 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // edit *away from* in the first place. `lenAtFirstEdit` is the value
   // length at the moment of first divergence — not the final submitted
   // length (that's captured separately on item_reserved.displayNameSource).
+  //
+  // Comparison is trimmed on both sides so a trailing space / leading
+  // space (common from voice input or auto-suggest) doesn't count as an
+  // edit. The API will also trim before storing (guestName.trim() in the
+  // POST body), so whitespace-only "edits" are noise — matching this here
+  // keeps the chip, the edited event, and the displayNameSource classifier
+  // (in handleReserve) in lockstep.
   const handleGuestNameChange = useCallback((next: string) => {
     setGuestName(next);
     if (
       !guestNameEditedFiredRef.current &&
       guestNamePrefill &&
       guestNamePrefill.source !== 'none' &&
-      next !== guestNamePrefill.value
+      next.trim() !== guestNamePrefill.value
     ) {
       guestNameEditedFiredRef.current = true;
       trackEvent('reservation.display_name_edited', {
@@ -25703,7 +25710,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 autoFocus
               />
               {guestNamePrefill && guestNamePrefill.source !== 'none' && (() => {
-                const edited = guestName !== guestNamePrefill.value;
+                // Trimmed comparison — matches the handleGuestNameChange and
+                // handleReserve classifier so whitespace-only divergence
+                // never flips the chip to green.
+                const edited = guestName.trim() !== guestNamePrefill.value;
                 const labelKey = edited
                   ? 'reserve_prefill_edited'
                   : guestNamePrefill.source === 'profile'
