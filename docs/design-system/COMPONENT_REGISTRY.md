@@ -376,7 +376,7 @@ Visual source of truth: [`./mockups/approved/`](./mockups/approved).
 | `StickyCTA` (bottom fade + button) | `legacy` | Pattern 5 in `SCREEN_PATTERNS.md` | Phase 2 wave 1 | Wraps a single primary button |
 | `Toast` | `legacy` (works, needs extraction) | **Not codified in mockups** | Phase 2 wave 2 | **Needs own mockup** before canonical |
 | `EmptyState` | `legacy` | Pattern 7 | Phase 2 wave 2 | Needs mockup of illustration slot |
-| `Skeleton` | `legacy` | ad-hoc | Phase 2 wave 2 | Per-layout variants needed |
+| `Skeleton` | `provisional` (2026-05-25) | `packages/ui/src/Skeleton.tsx` | — | 4 variants: `list` / `form` / `calendar` / `settings`. Promoted from `legacy` after extraction for F1 lazy-loading. Decision log: `DESIGN_DECISIONS.md#2026-05-25--skeleton-primitive-extracted-to-packages-ui`. |
 | `Input` / `TextArea` | `legacy` | `inputStyle` at MiniApp.tsx:654 | Phase 3 | Needs error/help-slot mockup |
 | `IconButton` | `legacy` | 44×44 tap target | Phase 2 wave 1 | `aria-label` required |
 | `Menu` / dropdown | `legacy` | ad-hoc | Phase 3 | Focus-trap handling |

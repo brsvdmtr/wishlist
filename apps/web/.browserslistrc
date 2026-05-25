@@ -1,3 +1,35 @@
+# Browser targets for SWC downlevel-compile (NOT for Next.js polyfills).
+#
+# What this actually controls:
+# - SWC's `target` for the bundle output (modern syntax kept, no ES5
+#   transpilation of native async/await, optional chaining, etc.).
+# - Tailwind / autoprefixer / cssnano vendor-prefix output.
+#
+# What this does NOT control (counter-intuitively):
+# - The contents of `polyfills-*.js`. Next.js 15 polyfills are gated by
+#   the framework's own baseline target and shipped regardless of
+#   browserslist. After F0 + F1 the polyfills-*.js hash and size were
+#   unchanged — verified by direct measurement. See
+#   `docs/BUGFIX_LESSONS.md#2026-05-25` for the investigation.
+#
+# Why keep this file then:
+# - SWC downlevel-target IS browserslist-driven. A narrower target lets
+#   SWC keep more modern syntax in shipped JS, which is slightly smaller
+#   and parses slightly faster than transpiled ES5/ES2015.
+# - Tailwind purge + autoprefixer use it.
+# - Setting an honest target avoids the "what minimum browsers do we
+#   actually support?" question becoming undefined behaviour.
+#
+# Targets reflect Telegram WebView reality:
+# - Telegram iOS: Safari 14+ (iOS 14+ required for current Telegram).
+# - Telegram Android: system Chrome WebView, typically 90+ on supported
+#   Android versions.
+# - Telegram Desktop: Chromium-based, modern.
+#
+# DO NOT also set `browserslist` in `apps/web/package.json` — browserslist
+# refuses to load with two sources present (defensive throw). Local
+# `pnpm -C apps/web build` will fail with a clear error if you add both.
+
 iOS >= 14
 Safari >= 14
 Chrome >= 90

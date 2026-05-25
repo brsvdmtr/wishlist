@@ -1,30 +1,50 @@
-import React from 'react';
+'use client';
 
-type ScreenSkeletonVariant = 'list' | 'form' | 'calendar' | 'settings';
-
-interface ScreenSkeletonProps {
-  variant?: ScreenSkeletonVariant;
-}
+import React, { type CSSProperties } from 'react';
+import { radius, spacing, keyframes } from '@wishlist/ui-tokens';
 
 /**
- * Loading placeholder for `next/dynamic({ ssr: false })` screens.
- * Renders a skeleton that roughly matches the layout of the target
- * screen so the transition doesn't flash empty.
+ * Loading placeholder primitive. Renders a stack of shimmering blocks
+ * that roughly match the layout of the target screen so dynamic-import
+ * transitions don't flash empty.
  *
- * F1 of the MiniApp.tsx decomposition (docs/REFACTOR_MINIAPP_TSX_PLAN.md).
+ * Variants are intentionally coarse — they're shape hints, not pixel
+ * matches. Use the closest match; the goal is to occupy roughly the
+ * same vertical space the real screen will, so layout doesn't jump
+ * when the chunk resolves.
+ *
+ * Approval: `DESIGN_DECISIONS.md#2026-05-25--skeleton-primitive-extracted-to-packages-ui`.
+ * Registry: promoted from `legacy` → `provisional` 2026-05-25.
+ *
+ * @status provisional (2026-05-25)
  */
-export function ScreenSkeleton({ variant = 'list' }: ScreenSkeletonProps) {
+export type SkeletonVariant = 'list' | 'form' | 'calendar' | 'settings';
+
+export interface SkeletonProps {
+  variant?: SkeletonVariant;
+  /** Accessible label announced by screen readers. Caller is expected
+   *  to localize. Defaults to "Loading" (English) for the cases where
+   *  the skeleton renders before any locale context is available
+   *  (initial dynamic chunk fetch). */
+  label?: string;
+  style?: CSSProperties;
+}
+
+const SHIMMER_ANIMATION = `${keyframes.skeletonShimmer} 1.5s ease-in-out infinite`;
+
+export function Skeleton({ variant = 'list', label = 'Loading', style }: SkeletonProps) {
   return (
     <div
       role="status"
       aria-busy="true"
-      aria-label="Loading"
+      aria-label={label}
       style={{
         minHeight: 320,
-        padding: '12px 0',
+        padding: `${spacing[3]}px 0`,
         display: 'flex',
         flexDirection: 'column',
-        gap: 12,
+        gap: spacing[3],
+        ...style,
       }}
     >
       <SkeletonBlock width="40%" height={28} />
@@ -68,12 +88,12 @@ export function ScreenSkeleton({ variant = 'list' }: ScreenSkeletonProps) {
 function SkeletonBlock({ width, height }: { width: string | number; height: number }) {
   return (
     <div
-      className="animate-pulse"
       style={{
         width,
         height,
-        borderRadius: 14,
+        borderRadius: radius.lg,
         background: 'var(--wb-surface, rgba(255,255,255,0.035))',
+        animation: SHIMMER_ANIMATION,
         flexShrink: 0,
       }}
     />
@@ -82,9 +102,9 @@ function SkeletonBlock({ width, height }: { width: string | number; height: numb
 
 function SkeletonRow() {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: spacing[3] }}>
       <SkeletonBlock width={48} height={48} />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: spacing[1.5] }}>
         <SkeletonBlock width="60%" height={14} />
         <SkeletonBlock width="40%" height={12} />
       </div>

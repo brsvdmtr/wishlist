@@ -101,6 +101,70 @@ describe('MiniApp.tsx — user.session_started emitter guard (2026-05-20 regress
   });
 });
 
+describe('MiniApp.tsx — F1 lazy-screen regression guard (2026-05-25)', () => {
+  // F1 of REFACTOR_MINIAPP_TSX_PLAN wraps 4 already-extracted screens
+  // in `next/dynamic({ ssr: false })` so they fetch as separate chunks
+  // and don't bloat the initial `miniapp/page-*.js` bundle. Combined
+  // saving: ~−84 KB brotli on initial.
+  //
+  // An "innocent" PR that converts any of these back to a static
+  // `import { X } from './screens/...'` would silently destroy the
+  // perf win — no test or type check would notice. These regex
+  // guards make that revert visible in CI.
+
+  const LAZY_SCREENS = [
+    { name: 'AppearanceSettings', path: './screens/AppearanceSettings' },
+    { name: 'CalendarRoot',       path: './screens/calendar/CalendarRoot' },
+    { name: 'SearchScreen',       path: './screens/SearchScreen' },
+    { name: 'SurveyScreen',       path: './screens/survey/SurveyScreen' },
+  ] as const;
+
+  for (const { name, path } of LAZY_SCREENS) {
+    it(`${name} is wrapped in next/dynamic with ssr:false`, () => {
+      // Must match the canonical pattern:
+      //   const Name = dynamic(
+      //     () => import('./screens/...').then(m => ({ default: m.Name })),
+      //     { ssr: false, loading: ... },
+      //   );
+      // Tolerant of whitespace / line-breaks; strict on the wrapper
+      // and the ssr:false toggle.
+      const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const dynamicCall = new RegExp(
+        `const\\s+${name}\\s*=\\s*dynamic\\(\\s*\\(\\)\\s*=>\\s*import\\(['"]${escapedPath}['"]\\)`,
+      );
+      expect(MINI_APP_SRC, `${name} must be dynamic()-wrapped`).toMatch(dynamicCall);
+      // The ssr:false toggle is what keeps the chunk out of the server
+      // bundle — verify it appears in the same `const Name = dynamic(...)`
+      // statement. We anchor on `const Name` and stop at the next
+      // `);` — that's the dynamic() statement terminator.
+      const block = MINI_APP_SRC.match(
+        new RegExp(`const\\s+${name}\\s*=\\s*dynamic\\([\\s\\S]*?\\);`),
+      );
+      expect(block, `dynamic() block for ${name} not found`).not.toBeNull();
+      expect(block![0], `${name} dynamic() block missing ssr:false`).toMatch(/ssr:\s*false/);
+    });
+
+    it(`${name} is NOT also statically imported (would defeat dynamic())`, () => {
+      // A residual `import { Name } from '...'` line would force the
+      // bundler to include the chunk eagerly, no matter what dynamic()
+      // says about it.
+      const staticImport = new RegExp(
+        `import\\s*\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from\\s*['"][^'"]*${name}['"]`,
+      );
+      expect(MINI_APP_SRC, `${name} must not also be statically imported`).not.toMatch(staticImport);
+    });
+  }
+
+  it('Skeleton loading fallback uses @wishlist/ui primitive (not feature-local clone)', () => {
+    // Per design-system rule: feature-local skeleton clones are banned.
+    // The 4 dynamic() blocks must use the `Skeleton` from @wishlist/ui.
+    expect(MINI_APP_SRC).toMatch(/import\s*\{[^}]*\bSkeleton\b[^}]*\}\s*from\s*['"]@wishlist\/ui['"]/);
+    // Each dynamic() block has a loading: () => <Skeleton ...
+    const loadingCount = (MINI_APP_SRC.match(/loading:\s*\(\)\s*=>\s*<Skeleton\b/g) ?? []).length;
+    expect(loadingCount).toBeGreaterThanOrEqual(4);
+  });
+});
+
 describe('MiniApp.tsx — file shape sanity', () => {
   it('is the expected monolith size (~33k LOC, well above the extraction threshold)', () => {
     // When this drops below 5 000 LOC an extraction wave landed and the

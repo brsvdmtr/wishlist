@@ -1,8 +1,18 @@
 # Refactor plan — `apps/web/app/miniapp/MiniApp.tsx` decomposition
 
-**Status as of 2026-05-25.** Plan only. F0 (quick-win bundle config) is
-landing in the same PR that introduces this document; F1–F7 are scoped but
-not started. Track is **open**.
+**Status as of 2026-05-25.** F0 and F1 are **done and deployed** (see
+Phase log at the bottom of this file for measured deltas). F2–F7 are
+scoped but not started. Track is **open**.
+
+**Realism note.** F0 and F1 both came in under the projected savings:
+F0 ~−3 KB vs projected ~−10–20 KB brotli; F1 ~−84 KB vs projected
+~−120–150 KB brotli. The projection-to-actual ratio is roughly **55–65%**.
+The F2–F7 brotli-savings numbers below were drafted at the same time
+as the F0/F1 projections and should be read with the same discount.
+Conservatively: assume each phase delivers ~60% of the projected
+brotli reduction. Closure target (≤ 200 KB brotli initial) probably
+ends up at ~300–350 KB brotli, which is still a 2× improvement
+over today's 666 KB — good, but not what was originally promised.
 
 This document is **self-contained**: an agent picking up the front-end
 perf-debt track should not need to read prior conversation. Everything
@@ -556,27 +566,82 @@ F0 → F1 ──→ F2 ──→ F3 ──→ F5 ──→ F7
 
 ---
 
-## Tracking
-
-When phases land, this doc gets updated with the same `Status` /
-`Δ on MiniApp.tsx` table at the top and a per-phase entry at the
-bottom:
-
-```
 ## Phase log
 
-### F0 — done @ <commit-hash> on <date>
-- next.config.mjs: optimizePackageImports
-- apps/web/package.json: browserslist
-- Bundle delta: -X KB raw / -Y KB brotli on initial
+### F0 — done @ `6525761` on 2026-05-25
 
-### F1 — done @ <commit-hash> on <date>
-- 4 dynamic() imports for screens (Calendar, Search, Survey, Appearance)
-- ScreenSkeleton primitive added
-- Bundle delta: -X KB brotli on initial; first-paint test on 1 Mbps: A s → B s
-- Smoke: iOS Telegram OK, Android Telegram OK, Desktop Telegram OK
+- `next.config.mjs`: `experimental.optimizePackageImports:
+  ['@wishlist/shared', '@wishlist/ui']`.
+- `apps/web/package.json`: `browserslist` field added.
+- `docs/REFACTOR_MINIAPP_TSX_PLAN.md` created.
 
-…
-```
+**Bundle delta (measured against pre-F0 baseline):**
+- `miniapp/page-*.js`: 2 456 737 b → 2 437 852 b raw (−18.9 KB, −0.8%)
+- `miniapp/page-*.js`: 569 KB → 566 KB brotli (**−3 KB**, −0.5%)
+- `polyfills-*.js`: hash unchanged → 0 effect on polyfill bundle
 
-Until F1 lands, this is **plan only**.
+**Lessons (recorded in `BUGFIX_LESSONS.md`):**
+- Next.js 15 polyfills are NOT controlled by browserslist; they have
+  their own baseline target. The `browserslist` source therefore
+  affects only SWC's downlevel-compile target and CSS prefixing,
+  not the polyfill file size. Original F0 projection (−10–20 KB
+  brotli) assumed browserslist would shrink polyfills — wrong.
+
+### F1 — done @ `9c1e220` (initial, failed deploy) + `c7a84c6` (fix) on 2026-05-25
+
+- `MiniApp.tsx`: 4 static imports replaced with `next/dynamic({ ssr:
+  false })` for `AppearanceSettings`, `CalendarRoot`, `SearchScreen`,
+  `SurveyScreen`.
+- `apps/web/.browserslistrc` added (later F1-followup: `package.json`
+  field removed — see deploy incident below).
+- `packages/ui/src/Skeleton.tsx` added (F1-followup): provisional
+  primitive with 4 layout variants (`list` / `form` / `calendar` /
+  `settings`). Promoted from `legacy` in `COMPONENT_REGISTRY.md`.
+  Decision log: `DESIGN_DECISIONS.md#2026-05-25--skeleton-primitive`.
+- `apps/web/test/skeleton.test.tsx` added — per-variant layout-shape
+  assertions, a11y contract, design-system contract (radius / animation
+  / theme var).
+- `apps/web/app/miniapp/monolith-guards.test.ts` extended with regex
+  guards that each of the 4 screens stays wrapped in `dynamic()` —
+  catches an "innocent revert to static import" PR before it ships.
+
+**Bundle delta (measured against post-F0 baseline):**
+- `miniapp/page-*.js`: 2 437 852 b → 2 259 367 b raw (−178 KB, −7.3%)
+- `miniapp/page-*.js`: 566 KB → 520 KB brotli (**−46 KB**, −8.1%)
+- Plus new lazy chunks (NOT counted in initial load):
+  - `907.*.js` 132 KB raw (probable CalendarRoot tree)
+  - `30.*.js` 25 KB raw
+  - `927.*.js` 22 KB raw
+
+**Cumulative F0+F1 vs pre-F0 baseline:**
+- Total initial JS: ~750 KB → **666 KB brotli (−84 KB, −11%)**
+- 4 lazy chunks now fetch on-demand (Calendar/Search/Survey/Appearance
+  tab open)
+
+**Deploy incident.** F1 commit `9c1e220` shipped `.browserslistrc` and
+left the F0 `browserslist` field in `package.json` — browserslist
+defensively throws when both sources exist. CI Docker build failed
+on `pnpm build:web`. Prod was unaffected (old container kept running).
+Fix `c7a84c6` removed the `package.json` field, kept `.browserslistrc`,
+and added a lesson to `BUGFIX_LESSONS.md` (2026-05-25 browserslist
+double-source entry): **`tsc --noEmit` is not a substitute for
+`pnpm -C apps/web build` on config-changing PRs.**
+
+**Smoke status.** Local Next build succeeded; prod health-check
+(release `c7a84c6`) green on all 6 mandatory checks (migrations,
+api health, containers, bot heartbeat, lifecycle, errors-24h). Real
+Telegram smoke on iOS/Android/Desktop **NOT yet executed** by the
+agent — flagged for owner verification per the
+`feedback_verify_real_surface` rule.
+
+**Realism gap.** Projected −120–150 KB brotli; delivered −46 KB on
+the page chunk / −84 KB on total initial JS. Gap explained by the
+4 extracted screens being only ~6 000 of the ~34 000 LOC monolith;
+the rest of `MiniApp.tsx` (modals, sheets, main-tab screens, hooks,
+helpers) stays in `page-*.js`. Going forward, expect each phase to
+hit ~60% of its projected brotli savings. F2 (mapping) doesn't ship
+bytes — it unlocks F3–F6.
+
+---
+
+### F2 — pending

@@ -14,30 +14,9 @@ import {
   SettingsSection as DSSettingsSection,
   SettingsToggle as DSSettingsToggle,
   SettingsDivider,
-  Sheet as BottomSheet, StatTile, StickyCTAFade, TabBar, TextField,
+  Sheet as BottomSheet, Skeleton, StatTile, StickyCTAFade, TabBar, TextField,
   ThemeProvider, useTheme,
 } from '@wishlist/ui';
-import { ScreenSkeleton } from './components/ScreenSkeleton';
-// F1 of REFACTOR_MINIAPP_TSX_PLAN — these screens are tab/route-gated and
-// not on the first-paint path; lazy-load them so the initial Mini App
-// bundle drops by ~120-150 KB brotli. `ssr: false` keeps them out of the
-// server bundle (Mini App is client-only anyway).
-const AppearanceSettings = dynamic(
-  () => import('./screens/AppearanceSettings').then(m => ({ default: m.AppearanceSettings })),
-  { ssr: false, loading: () => <ScreenSkeleton variant="settings" /> },
-);
-const CalendarRoot = dynamic(
-  () => import('./screens/calendar/CalendarRoot').then(m => ({ default: m.CalendarRoot })),
-  { ssr: false, loading: () => <ScreenSkeleton variant="calendar" /> },
-);
-const SearchScreen = dynamic(
-  () => import('./screens/SearchScreen').then(m => ({ default: m.SearchScreen })),
-  { ssr: false, loading: () => <ScreenSkeleton variant="list" /> },
-);
-const SurveyScreen = dynamic(
-  () => import('./screens/survey/SurveyScreen').then(m => ({ default: m.SurveyScreen })),
-  { ssr: false, loading: () => <ScreenSkeleton variant="form" /> },
-);
 import type { SearchResult, AccessViewResponse } from './lib/searchApi';
 import { recordWishlistOpen, fetchAccessView } from './lib/searchApi';
 import { ProBadge } from './components/ProBadge';
@@ -63,6 +42,36 @@ import {
   CLIENT_BUG_CODES,
 } from './idempotency';
 import { parseReservationReminderPayload, parseEventReminderPayload, parseSurveyInvitePayload, looksLikeId } from './startParam';
+
+// ═══════════════════════════════════════════════════════
+// LAZY SCREENS (F1 — REFACTOR_MINIAPP_TSX_PLAN)
+// ═══════════════════════════════════════════════════════
+// These screens are tab/route-gated and not on the first-paint path;
+// lazy-load them so the initial Mini App bundle drops. `ssr: false`
+// keeps them out of the server bundle (Mini App is client-only).
+// Skeleton fallback prevents flash-of-empty while the dynamic chunk
+// fetches on the first tap.
+//
+// Regression guard: `monolith-guards.test.ts` asserts these stay
+// dynamic — a future "innocent" static import would silently
+// destroy the perf win.
+
+const AppearanceSettings = dynamic(
+  () => import('./screens/AppearanceSettings').then(m => ({ default: m.AppearanceSettings })),
+  { ssr: false, loading: () => <Skeleton variant="settings" /> },
+);
+const CalendarRoot = dynamic(
+  () => import('./screens/calendar/CalendarRoot').then(m => ({ default: m.CalendarRoot })),
+  { ssr: false, loading: () => <Skeleton variant="calendar" /> },
+);
+const SearchScreen = dynamic(
+  () => import('./screens/SearchScreen').then(m => ({ default: m.SearchScreen })),
+  { ssr: false, loading: () => <Skeleton variant="list" /> },
+);
+const SurveyScreen = dynamic(
+  () => import('./screens/survey/SurveyScreen').then(m => ({ default: m.SurveyScreen })),
+  { ssr: false, loading: () => <Skeleton variant="form" /> },
+);
 
 // ═══════════════════════════════════════════════════════
 // TELEGRAM TYPES

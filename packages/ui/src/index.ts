@@ -61,3 +61,8 @@ export {
   type SettingsActionRowProps,
   type SettingsActionRowTone,
 } from './SettingsList';
+
+// Wave-5 extraction (2026-05-25, `provisional`) — loading placeholder
+// for `next/dynamic` screens. Promoted from `legacy` per registry; see
+// `DESIGN_DECISIONS.md#2026-05-25--skeleton-primitive-extracted-to-packages-ui`.
+export { Skeleton, type SkeletonProps, type SkeletonVariant } from './Skeleton';
