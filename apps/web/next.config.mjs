@@ -19,6 +19,13 @@ const nextConfig = {
     // Next's eslint runner not being workspace-aware in a monorepo.
     ignoreDuringBuilds: true,
   },
+  experimental: {
+    // Rewrites `import { x } from '<pkg>'` to deep imports so unused
+    // barrel exports don't end up in the Mini App bundle. Workspace
+    // packages benefit the most — @wishlist/shared re-exports zod
+    // schemas, i18n tables, analytics events, etc.
+    optimizePackageImports: ['@wishlist/shared', '@wishlist/ui'],
+  },
 };
 
 export default nextConfig;
