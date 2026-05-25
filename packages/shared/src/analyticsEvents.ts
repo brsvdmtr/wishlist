@@ -319,6 +319,15 @@ export const PRODUCT_EVENTS = [
     sources: ['server'],
     pii: 'userId-only',
   },
+  {
+    name: 'wishlist.default_created',
+    domain: 'wishlist',
+    action: 'default_created',
+    description:
+      'Auto-created REGULAR wishlist (E04 activation) materialised for a user with zero existing REGULAR wishlists. Fires from the bootstrap path (/tg/me/profile) when isDefault=true row is freshly inserted. Idempotent — repeat bootstraps for the same user do NOT re-emit. Distinct from wishlist.created (manual / onboarding create).',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
   // ── Paywall UI (client-allowed) ──
   {
     name: 'paywall.viewed',

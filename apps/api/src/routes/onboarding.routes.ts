@@ -153,6 +153,11 @@ export type OnboardingRouterDeps = {
   runReferralProgressHook: (userId: string, milestone: 'first_wishlist' | 'first_item') => Promise<void>;
   importUrlForUser: (userId: string, url: string, headerHostname: string | undefined, importMethod: string) => Promise<ImportUrlResult>;
   getOrCreateDraftsWishlist: (userId: string) => Promise<{ id: string }>;
+  /** E04 — used by POST /onboarding/create-wishlist to find an auto-created default wishlist (isDefault=true) so it can be renamed in place instead of duplicated. */
+  getOrCreateDefaultWishlist: (
+    userId: string,
+    locale: Locale,
+  ) => Promise<{ id: string; slug: string; title: string; isDefault: boolean; alreadyExisted: boolean }>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mapTgItem at index.ts:1286 takes a structurally-typed Item; runtime callers below pass partial selects.
   mapTgItem: (item: any) => any;
 };
@@ -165,6 +170,7 @@ export function registerOnboardingRouter(deps: OnboardingRouterDeps): Router {
     runReferralProgressHook,
     importUrlForUser,
     getOrCreateDraftsWishlist,
+    getOrCreateDefaultWishlist,
     mapTgItem,
   } = deps;
 
@@ -771,21 +777,59 @@ export function registerOnboardingRouter(deps: OnboardingRouterDeps): Router {
         return res.status(400).json({ error: 'Wrong variant' });
       }
 
-      // Create the wishlist
+      // Create / claim the wishlist.
+      //
+      // E04 — delegate the "is there a default to rename?" decision to the
+      // service so this handler stays race-safe AT THE SAME TIME as it
+      // reuses a single source of truth. Sequence (review iter-1 fix #5 +
+      // #6):
+      //
+      //   1. `getOrCreateDefaultWishlist` — idempotent + race-safe via the
+      //      partial unique index `(ownerId) WHERE isDefault=true` and
+      //      P2002 catch. On return, the user is guaranteed to own at
+      //      least one REGULAR wishlist — either the bootstrap-created
+      //      default (isDefault=true), a prior manual create
+      //      (isDefault=false), or the row we just created here.
+      //   2. If `ensured.isDefault === true` → RENAME in place. The
+      //      handler picks up the bootstrap row, applies the user's title,
+      //      clears the flag, and propagates `position=0` +
+      //      inheritedCommentPolicy. Items from SYSTEM_DRAFTS get moved
+      //      into the same id below — single REGULAR wishlist, no
+      //      orphan default.
+      //   3. If `ensured.isDefault === false` → the user already owns a
+      //      non-default REGULAR (returning user, manual create + delete-
+      //      items combo that bypassed the eligibility "has_real_items"
+      //      check). Defensively CREATE a new named wishlist alongside
+      //      rather than renaming their existing one — that would silently
+      //      stomp on a wishlist they intentionally named. This branch is
+      //      rare; the eligibility gate should keep most users out of it.
       const position = 0; // top position for first wishlist
       const profile = await prisma.userProfile.findUnique({ where: { userId: user.id }, select: { commentsEnabled: true } });
       const inheritedCommentPolicy = profile?.commentsEnabled === false ? 'SUBSCRIBERS' : 'ALL';
-      const wishlist = await prisma.wishlist.create({
-        data: {
-          slug: `wl-${crypto.randomUUID().slice(0, 12)}`,
-          ownerId: user.id,
-          title: parsed.data.title.trim(),
-          type: 'REGULAR',
-          position,
-          commentPolicy: inheritedCommentPolicy,
-        },
-        select: { id: true, slug: true, title: true, description: true, deadline: true },
-      });
+      const locale = getRequestLocale(req);
+      const ensured = await getOrCreateDefaultWishlist(user.id, locale);
+      const wishlist = ensured.isDefault
+        ? await prisma.wishlist.update({
+            where: { id: ensured.id },
+            data: {
+              title: parsed.data.title.trim(),
+              isDefault: false,
+              position,
+              commentPolicy: inheritedCommentPolicy,
+            },
+            select: { id: true, slug: true, title: true, description: true, deadline: true },
+          })
+        : await prisma.wishlist.create({
+            data: {
+              slug: `wl-${crypto.randomUUID().slice(0, 12)}`,
+              ownerId: user.id,
+              title: parsed.data.title.trim(),
+              type: 'REGULAR',
+              position,
+              commentPolicy: inheritedCommentPolicy,
+            },
+            select: { id: true, slug: true, title: true, description: true, deadline: true },
+          });
 
       // Collect all onboarding item IDs to move.
       // Bug history: manualItemIds was missing here, so items the user added
@@ -828,7 +872,8 @@ export function registerOnboardingRouter(deps: OnboardingRouterDeps): Router {
         data: { metaJson: newMeta as any },
       });
 
-      const locale = getRequestLocale(req);
+      // `locale` is already in scope from the rename/create block above —
+      // no need to re-resolve from the request.
       trackEvent('onboarding_create_wishlist_success', user.id, {
         onboarding_key: ONBOARDING_KEY,
         version: ONBOARDING_VERSION,

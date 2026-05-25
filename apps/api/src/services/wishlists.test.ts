@@ -11,25 +11,48 @@ const shared = vi.hoisted(() => ({
   item: { findMany: vi.fn(), update: vi.fn() },
   wishlistItemPlacement: { findFirst: vi.fn() },
   wishlist: { findFirst: vi.fn(), create: vi.fn(), count: vi.fn() },
+  trackProductEvent: vi.fn(),
 }));
 
-vi.mock('@wishlist/db', () => ({
-  prisma: {
-    item: shared.item,
-    wishlistItemPlacement: shared.wishlistItemPlacement,
-    wishlist: shared.wishlist,
-  },
+vi.mock('@wishlist/db', async () => {
+  // Real Prisma namespace for the P2002 error class — test sets it on the
+  // mocked module so `err instanceof Prisma.PrismaClientKnownRequestError`
+  // inside the service code resolves correctly.
+  const actual = await vi.importActual<typeof import('@wishlist/db')>('@wishlist/db');
+  return {
+    Prisma: actual.Prisma,
+    prisma: {
+      item: shared.item,
+      wishlistItemPlacement: shared.wishlistItemPlacement,
+      wishlist: shared.wishlist,
+    },
+  };
+});
+
+vi.mock('./analytics', () => ({
+  trackProductEvent: shared.trackProductEvent,
 }));
 
+import { Prisma } from '@wishlist/db';
 import {
   DRAFTS_ITEM_LIMIT,
   reassignPrimaryBeforeWishlistDelete,
   createGetOrCreateDraftsWishlist,
+  createGetOrCreateDefaultWishlist,
+  DEFAULT_WISHLIST_EMOJI,
   evaluateGuestConversion,
 } from './wishlists';
 
 beforeEach(() => {
-  for (const m of [shared.item.findMany, shared.item.update, shared.wishlistItemPlacement.findFirst, shared.wishlist.findFirst, shared.wishlist.create, shared.wishlist.count]) {
+  for (const m of [
+    shared.item.findMany,
+    shared.item.update,
+    shared.wishlistItemPlacement.findFirst,
+    shared.wishlist.findFirst,
+    shared.wishlist.create,
+    shared.wishlist.count,
+    shared.trackProductEvent,
+  ]) {
     m.mockReset();
   }
 });
@@ -140,6 +163,184 @@ describe('createGetOrCreateDraftsWishlist', () => {
     await factory('user-3');
 
     expect(trackEvent.mock.calls[0]![2]).toMatchObject({ isFirstAnyWishlist: false });
+  });
+});
+
+describe('createGetOrCreateDefaultWishlist (E04)', () => {
+  const buildFactory = () => {
+    const trackEvent = vi.fn();
+    return { trackEvent, factory: createGetOrCreateDefaultWishlist({ trackEvent }) };
+  };
+
+  it('returns existing REGULAR wishlist when user already owns one — no create, no events', async () => {
+    const { trackEvent, factory } = buildFactory();
+    shared.wishlist.findFirst.mockResolvedValueOnce({
+      id: 'wl-manual',
+      slug: 'wl-abc123def456',
+      title: 'Мои подарки',
+      isDefault: false,
+    });
+
+    const result = await factory('user-1', 'ru');
+
+    expect(result).toEqual({
+      id: 'wl-manual',
+      slug: 'wl-abc123def456',
+      title: 'Мои подарки',
+      isDefault: false,
+      alreadyExisted: true,
+    });
+    expect(shared.wishlist.create).not.toHaveBeenCalled();
+    expect(trackEvent).not.toHaveBeenCalled();
+    expect(shared.trackProductEvent).not.toHaveBeenCalled();
+  });
+
+  it('returns existing default (isDefault=true) on repeat bootstrap — no duplicate, no events', async () => {
+    const { trackEvent, factory } = buildFactory();
+    shared.wishlist.findFirst.mockResolvedValueOnce({
+      id: 'wl-default-existing',
+      slug: 'wl-aaaaaaaaaaaa',
+      title: 'Мой вишлист',
+      isDefault: true,
+    });
+
+    const result = await factory('user-2', 'ru');
+
+    expect(result.alreadyExisted).toBe(true);
+    expect(result.id).toBe('wl-default-existing');
+    expect(shared.wishlist.create).not.toHaveBeenCalled();
+    expect(trackEvent).not.toHaveBeenCalled();
+    expect(shared.trackProductEvent).not.toHaveBeenCalled();
+  });
+
+  it('creates a fresh REGULAR wishlist with localized title + 🎁 + isDefault=true and emits BOTH legacy + new events', async () => {
+    const { trackEvent, factory } = buildFactory();
+    shared.wishlist.findFirst.mockResolvedValueOnce(null);
+    shared.wishlist.create.mockResolvedValueOnce({
+      id: 'wl-new',
+      slug: 'wl-newuuid12345',
+      title: 'Мой вишлист',
+      isDefault: true,
+    });
+
+    const result = await factory('user-3', 'ru');
+
+    expect(result).toEqual({
+      id: 'wl-new',
+      slug: 'wl-newuuid12345',
+      title: 'Мой вишлист',
+      isDefault: true,
+      alreadyExisted: false,
+    });
+    expect(shared.wishlist.create).toHaveBeenCalledOnce();
+    const arg = shared.wishlist.create.mock.calls[0]![0];
+    expect(arg.data).toMatchObject({
+      ownerId: 'user-3',
+      title: 'Мой вишлист',
+      emoji: DEFAULT_WISHLIST_EMOJI,
+      type: 'REGULAR',
+      isDefault: true,
+    });
+    expect(arg.data.slug).toMatch(/^wl-[a-f0-9-]{12}$/);
+    // Legacy wishlist_created — keeps funnel/cohort dashboards counting all
+    // wishlist creations including the E04 cohort.
+    expect(trackEvent).toHaveBeenCalledWith('wishlist_created', 'user-3', expect.objectContaining({
+      wishlistId: 'wl-new',
+      wishlistType: 'REGULAR',
+      source: 'auto_default',
+      platform: 'system',
+      isFirstRegularWishlist: true,
+    }));
+    // New PRODUCT_EVENTS taxonomy — E04-specific signal.
+    expect(shared.trackProductEvent).toHaveBeenCalledOnce();
+    expect(shared.trackProductEvent).toHaveBeenCalledWith({
+      event: 'wishlist.default_created',
+      userId: 'user-3',
+      props: { wishlistId: 'wl-new', locale: 'ru' },
+    });
+  });
+
+  it('honors English locale — title resolved via t(default_wishlist_title, en)', async () => {
+    const { trackEvent, factory } = buildFactory();
+    shared.wishlist.findFirst.mockResolvedValueOnce(null);
+    shared.wishlist.create.mockResolvedValueOnce({
+      id: 'wl-en',
+      slug: 'wl-enenenenenen',
+      title: 'My wishlist',
+      isDefault: true,
+    });
+
+    await factory('user-4', 'en');
+
+    const arg = shared.wishlist.create.mock.calls[0]![0];
+    expect(arg.data.title).toBe('My wishlist');
+    expect(trackEvent).toHaveBeenCalled();
+    expect(shared.trackProductEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ props: expect.objectContaining({ locale: 'en' }) }),
+    );
+  });
+
+  it('recovers from a P2002 race (partial-unique-index OR slug collision) by re-fetching whichever REGULAR won — emits NO events on race recovery', async () => {
+    const { trackEvent, factory } = buildFactory();
+    // Initial findFirst: empty (we believe we need to create)
+    shared.wishlist.findFirst.mockResolvedValueOnce(null);
+    // Create racing with another bootstrap → P2002
+    const p2002 = new Prisma.PrismaClientKnownRequestError('Unique constraint', {
+      code: 'P2002',
+      clientVersion: 'test',
+    });
+    shared.wishlist.create.mockRejectedValueOnce(p2002);
+    // Re-fetch picks up the racing-side write
+    shared.wishlist.findFirst.mockResolvedValueOnce({
+      id: 'wl-raced-in',
+      slug: 'wl-rcrcrcrcrcrc',
+      title: 'Мой вишлист',
+      isDefault: true,
+    });
+
+    const result = await factory('user-5', 'ru');
+
+    expect(result).toEqual({
+      id: 'wl-raced-in',
+      slug: 'wl-rcrcrcrcrcrc',
+      title: 'Мой вишлист',
+      isDefault: true,
+      alreadyExisted: true,
+    });
+    // Critical: on race recovery the loser must NOT double-emit events
+    // (the winner already emitted them when its own create succeeded).
+    expect(trackEvent).not.toHaveBeenCalled();
+    expect(shared.trackProductEvent).not.toHaveBeenCalled();
+  });
+
+  it('rethrows non-P2002 Prisma errors (defensive — caller decides what to do)', async () => {
+    const { trackEvent, factory } = buildFactory();
+    shared.wishlist.findFirst.mockResolvedValueOnce(null);
+    const otherErr = new Prisma.PrismaClientKnownRequestError('foreign-key', {
+      code: 'P2003',
+      clientVersion: 'test',
+    });
+    shared.wishlist.create.mockRejectedValueOnce(otherErr);
+
+    await expect(factory('user-6', 'ru')).rejects.toBe(otherErr);
+    expect(trackEvent).not.toHaveBeenCalled();
+    expect(shared.trackProductEvent).not.toHaveBeenCalled();
+  });
+
+  it('prefers oldest REGULAR by createdAt asc when multiple exist (canonical "first")', async () => {
+    const { factory } = buildFactory();
+    shared.wishlist.findFirst.mockResolvedValueOnce({
+      id: 'wl-oldest',
+      slug: 'wl-oldoldoldold',
+      title: 'Первый',
+      isDefault: false,
+    });
+
+    await factory('user-7', 'ru');
+
+    const arg = shared.wishlist.findFirst.mock.calls[0]![0];
+    expect(arg.where).toEqual({ ownerId: 'user-7', type: 'REGULAR' });
+    expect(arg.orderBy).toEqual({ createdAt: 'asc' });
   });
 });
 

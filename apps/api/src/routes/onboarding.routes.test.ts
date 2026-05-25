@@ -31,6 +31,10 @@ function buildDeps() {
     runReferralProgressHook: vi.fn(async () => {}),
     importUrlForUser: vi.fn(async () => ({ item: { id: 'new', sourceDomain: null }, wishlistId: 'drafts', parseStatus: 'ok' as const })),
     getOrCreateDraftsWishlist: vi.fn(async () => ({ id: 'drafts' })),
+    getOrCreateDefaultWishlist: vi.fn(async () => ({
+      id: 'wl-default-test', slug: 'wl-test12345678', title: 'My wishlist',
+      isDefault: true, alreadyExisted: false,
+    })),
     mapTgItem: vi.fn((it) => it),
   } as Parameters<typeof registerOnboardingRouter>[0];
 }

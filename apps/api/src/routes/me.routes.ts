@@ -27,6 +27,7 @@ import {
 import { asyncHandler } from '../lib/asyncHandler';
 import { zodError } from '../lib/http';
 import { getRequestLocale } from '../lib/locale';
+import logger from '../logger';
 import { getOrCreateProfile } from '../profile.js';
 import { upload } from '../uploads/upload.config';
 import { processImage } from '../uploads/imageProcessor';
@@ -91,6 +92,11 @@ export type MeRouterDeps = {
     addOns?: Array<{ addonType: string }>,
   ) => boolean;
   trackEvent: (event: string, userId?: string, props?: Record<string, unknown>) => void;
+  /** E04 — bootstrap auto-creates the user's first REGULAR wishlist if missing. Idempotent, fire-and-forget; failures must not break /me/profile. */
+  getOrCreateDefaultWishlist: (
+    userId: string,
+    locale: Locale,
+  ) => Promise<{ id: string; slug: string; title: string; isDefault: boolean; alreadyExisted: boolean }>;
   // Same narrow tuple type as in publicRouterDeps so Prisma's ItemStatus[]
   // overload resolves correctly when this is spread into a `where` clause.
   ACTIVE_STATUSES: readonly ('AVAILABLE' | 'RESERVED' | 'PURCHASED')[];
@@ -112,6 +118,7 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
     getUserEntitlement,
     hasReservationPro,
     trackEvent,
+    getOrCreateDefaultWishlist,
     ACTIVE_STATUSES,
     PRO_PRICE_XTR,
     PRO_YEARLY_PRICE_XTR,
@@ -362,6 +369,18 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
       const user = await getOrCreateTgUser(req.tgUser!);
       const locale = getRequestLocale(req);
       const profile = await getOrCreateProfile(user.id, locale);
+      // E04 — guarantee the user has at least one REGULAR wishlist by the
+      // time bootstrap returns. Fire-and-forget: a creation failure must
+      // never break the profile read (every screen depends on it), and
+      // the service is idempotent so the next /me/profile call will retry
+      // naturally. Log non-recovered failures so they surface in
+      // /opt/wishlist/logs/api/api.log.* — silently swallowing here was
+      // the original review finding (iter-1 must-fix #3): a degraded E04
+      // path would have produced the exact "empty home screen" bug E04
+      // exists to prevent, with zero diagnostic signal.
+      getOrCreateDefaultWishlist(user.id, locale).catch((err) =>
+        logger.warn({ err, userId: user.id }, 'e04_default_wishlist_bootstrap_failed'),
+      );
       const ent = await getEffectiveEntitlements(user.id, user.godMode);
   
       // God mode whitelist

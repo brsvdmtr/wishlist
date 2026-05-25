@@ -1,0 +1,26 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Wishlist.isDefault — E04 activation flag
+--
+-- Marks the auto-created default REGULAR wishlist that the bootstrap path
+-- (/tg/me/profile -> services/wishlists.ts:getOrCreateDefaultWishlist)
+-- materialises for new users who have zero REGULAR wishlists. The flag is
+-- cleared by POST /tg/onboarding/create-wishlist when the user names their
+-- first wishlist — the row is RENAMED rather than duplicated, so a user
+-- who completes onboarding ends up with exactly one wishlist (their named
+-- one) and no orphan default.
+--
+-- Idempotency contract: the bootstrap creator returns the existing REGULAR
+-- wishlist for users who already have one (manual or onboarding-named),
+-- so a repeat bootstrap NEVER creates a second default. The flag itself
+-- is not part of that idempotency key; it's an after-the-fact marker so
+-- onboarding's create-wishlist can find and rename the auto-created stub.
+--
+-- Additive + non-blocking: PostgreSQL can add a NOT NULL BOOLEAN column
+-- with a constant DEFAULT without a table rewrite (instant metadata-only
+-- change on PG11+). Existing rows acquire false, which matches the
+-- "user-created" semantics for every wishlist that predates E04.
+-- No backfill, no index — lookups go through the existing (ownerId, type)
+-- compound index plus a runtime filter.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE "Wishlist" ADD COLUMN "isDefault" BOOLEAN NOT NULL DEFAULT false;

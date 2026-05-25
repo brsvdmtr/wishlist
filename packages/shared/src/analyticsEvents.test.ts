@@ -407,6 +407,15 @@ describe('PRODUCT_EVENTS — fixture snapshot', () => {
           ],
         },
         {
+          "action": "default_created",
+          "domain": "wishlist",
+          "name": "wishlist.default_created",
+          "pii": "userId-only",
+          "sources": [
+            "server",
+          ],
+        },
+        {
           "action": "shared",
           "domain": "wishlist",
           "name": "wishlist.shared",

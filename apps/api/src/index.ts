@@ -143,6 +143,7 @@ import {
   DRAFTS_ITEM_LIMIT,
   reassignPrimaryBeforeWishlistDelete,
   createGetOrCreateDraftsWishlist,
+  createGetOrCreateDefaultWishlist,
 } from './services/wishlists';
 import {
   ONBOARDING_KEY,
@@ -306,6 +307,15 @@ declare global {
 // registerOnboardingRouter (line ~1463) and the url-import service factory
 // just below.
 const getOrCreateDraftsWishlist = createGetOrCreateDraftsWishlist({ trackEvent });
+
+// E04 — auto-created default REGULAR wishlist for new users. Wired here so
+// the same singleton instance is passed to registerMeRouter (bootstrap call
+// in GET /tg/me/profile) AND registerOnboardingRouter (rename-on-create
+// path in POST /tg/onboarding/create-wishlist). Closes over the local
+// `trackEvent` for dual analytics emit (legacy `wishlist_created` + new
+// `wishlist.default_created`) — same factory shape as the drafts helper
+// above so the wiring contract stays uniform.
+const getOrCreateDefaultWishlist = createGetOrCreateDefaultWishlist({ trackEvent });
 
 // Wire the url-import service factory once both trackEvent and the drafts
 // helper are ready. Used by /tg/import-url, /tg/internal/import-url, and
@@ -698,6 +708,7 @@ const meRouter = registerMeRouter({
   getUserEntitlement,
   hasReservationPro,
   trackEvent,
+  getOrCreateDefaultWishlist,
   ACTIVE_STATUSES,
   PRO_PRICE_XTR,
   PRO_YEARLY_PRICE_XTR,
@@ -871,6 +882,7 @@ const onboardingRouter = registerOnboardingRouter({
   runReferralProgressHook,
   importUrlForUser,
   getOrCreateDraftsWishlist,
+  getOrCreateDefaultWishlist,
   mapTgItem,
 });
 tgRouter.use(onboardingRouter);
@@ -1089,6 +1101,7 @@ const wishlistsRouter = registerWishlistsRouter({
   mapTgItem,
   isWishlistWritable,
   reassignPrimaryBeforeWishlistDelete,
+  getOrCreateDefaultWishlist,
   runReferralProgressHook,
   notifySubscribersOfChange,
   hasSmartReservations,

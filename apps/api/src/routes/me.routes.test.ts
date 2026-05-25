@@ -37,6 +37,10 @@ function buildDeps() {
     getUserEntitlement: vi.fn(async () => ({ isPro: false })),
     hasReservationPro: vi.fn(() => false),
     trackEvent: vi.fn(),
+    getOrCreateDefaultWishlist: vi.fn(async () => ({
+      id: 'wl-default-test', slug: 'wl-test12345678', title: 'My wishlist',
+      isDefault: true, alreadyExisted: false,
+    })),
     ACTIVE_STATUSES: ['AVAILABLE', 'RESERVED', 'PURCHASED'] as const,
     PRO_PRICE_XTR: 100,
     PRO_YEARLY_PRICE_XTR: 800,

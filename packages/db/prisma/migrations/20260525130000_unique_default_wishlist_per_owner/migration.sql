@@ -1,0 +1,44 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Wishlist — unique partial index on (ownerId) WHERE isDefault = true
+--
+-- E04 hardening (review iter-1 must-fix #2). Without this constraint, two
+-- concurrent paths could race a second default into the DB:
+--
+--   T1: GET  /tg/me/profile        -> getOrCreateDefaultWishlist() reads
+--                                     findFirst -> null -> create() pending
+--   T2: POST /tg/onboarding/create-wishlist
+--                                  -> findFirst({ isDefault: true }) -> null
+--                                  -> falls into the "create new" branch
+--                                     instead of the rename branch.
+--   T1: create() commits a row with isDefault=true.
+--   T2: create() commits ANOTHER row.
+--
+-- Result: user ends up with two REGULAR wishlists, exactly the bug the E04
+-- design was meant to prevent.
+--
+-- A unique partial index `WHERE "isDefault" = true` makes the second
+-- INSERT raise P2002 (Prisma's PrismaClientKnownRequestError, code P2002).
+-- Both the service (services/wishlists.ts) and any other handler that
+-- INSERTs an `isDefault=true` row catch P2002 and fall through to a
+-- findFirst, so the losing side adopts the winning row.
+--
+-- ── Why not CONCURRENTLY?
+--
+-- Prisma's `migrate deploy` wraps each migration.sql in a single
+-- BEGIN/COMMIT transaction. PostgreSQL refuses `CREATE INDEX CONCURRENTLY`
+-- inside a transaction (errcode 25001 "active SQL transaction"), so the
+-- migration would fail on every prod deploy. Memory
+-- `feedback_concurrent_index_outside_do.md`: CONCURRENTLY ops live in
+-- `ops/migrations/*.sql` and are run manually, not in Prisma's migration
+-- runner.
+--
+-- For this index, a brief AccessExclusiveLock on Wishlist is acceptable:
+-- the table is ~100k rows at time of writing, building a partial unique
+-- index over a single boolean column scans only the matching subset
+-- (rows with isDefault=true) — at rollout time that's zero rows, since
+-- the column was just added with default=false in the prior migration.
+-- Index build is effectively instantaneous on an empty target set.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+CREATE UNIQUE INDEX "Wishlist_ownerId_isDefault_partial_key"
+  ON "Wishlist"("ownerId") WHERE "isDefault" = true;

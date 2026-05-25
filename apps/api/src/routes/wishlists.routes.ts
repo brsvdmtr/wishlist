@@ -202,6 +202,11 @@ export type WishlistsRouterDeps = {
   mapTgItem: (item: MapTgItemInput) => Record<string, unknown>;
   isWishlistWritable: (userId: string, wishlistId: string, planLimit: number) => Promise<boolean>;
   reassignPrimaryBeforeWishlistDelete: (wishlistId: string) => Promise<void>;
+  /** E04 — same service used by bootstrap (/me/profile) and onboarding (create-wishlist). POST /tg/wishlists delegates here so the rename-vs-create decision and the race vs bootstrap stay in one place. */
+  getOrCreateDefaultWishlist: (
+    userId: string,
+    locale: Locale,
+  ) => Promise<{ id: string; slug: string; title: string; isDefault: boolean; alreadyExisted: boolean }>;
   runReferralProgressHook: (userId: string, milestone: 'first_wishlist' | 'first_item') => Promise<void>;
   notifySubscribersOfChange: (
     wishlistId: string,
@@ -322,6 +327,7 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
     mapTgItem,
     isWishlistWritable,
     reassignPrimaryBeforeWishlistDelete,
+    getOrCreateDefaultWishlist,
     runReferralProgressHook,
     notifySubscribersOfChange,
     hasSmartReservations,
@@ -683,7 +689,17 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
 
       const user = await getOrCreateTgUser(req.tgUser!);
       const ent = await getEffectiveEntitlements(user.id);
-      const count = await prisma.wishlist.count({ where: { ownerId: user.id, type: 'REGULAR', archivedAt: null } });
+      // E04 — exclude `isDefault=true` rows from the quota count so the
+      // FREE plan (effectiveWishlistLimit=1) doesn't 402 the user's first
+      // manual create. Without this, a brand-new user hits "Plan limit
+      // reached" on their first home-screen "+" tap because bootstrap
+      // already populated their single allowed slot with an empty default.
+      // The default row gets RENAMED-in-place below, so post-rename the
+      // count goes from N to N+1 (the rename consumes exactly one slot)
+      // — same net behaviour as a pure insert.
+      const count = await prisma.wishlist.count({
+        where: { ownerId: user.id, type: 'REGULAR', archivedAt: null, isDefault: false },
+      });
       if (count >= ent.effectiveWishlistLimit) {
         trackEvent('feature_gate_hit_wishlist_limit', user.id, { plan: ent.plan.code, count, limit: ent.effectiveWishlistLimit });
         return res.status(402).json({ error: 'Plan limit reached', limit: ent.effectiveWishlistLimit, planCode: ent.plan.code });
@@ -694,16 +710,47 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
       // "top" is a PRO feature — FREE users always append to bottom regardless of stored value
       const addToTop = ent.isPro && profile?.newWishlistPosition === 'top';
 
+      // E04 — delegate to the shared service so the rename-vs-create
+      // decision lives in one place AND races against bootstrap's own
+      // fire-and-forget create are handled by the service's P2002 catch
+      // (review iter-2 must-fix #2). The TOCTOU bug the previous inline
+      // findFirst→create version had: T1 here finds nothing → falls to
+      // CREATE branch; meanwhile T2 (parallel /me/profile bootstrap)
+      // inserts an isDefault row; T1's create succeeds with
+      // isDefault=false, no partial-index conflict → user ends up with
+      // two REGULARs. Calling the service first guarantees that the
+      // isDefault row exists (or proves an existing manual REGULAR
+      // already covers the user), and the service's findFirst + P2002
+      // recovery handles the race atomically.
+      const locale = getRequestLocale(req);
+      const ensured = await getOrCreateDefaultWishlist(user.id, locale);
+
+      // Position selection mirrors the four legacy branches but routes
+      // through `ensured.isDefault` instead of a separate findFirst:
+      //
+      //   ensured.isDefault=true  + addToTop=true  → shift OTHER wishlists, set this=0
+      //   ensured.isDefault=true  + addToTop=false → preserve the default's existing position
+      //   ensured.isDefault=false + addToTop=true  → shift ALL existing, set new=0
+      //   ensured.isDefault=false + addToTop=false → append to max+1
       let newPosition: number;
-      if (addToTop) {
-        // Shift all existing REGULAR non-archived wishlists up by 1, then insert at 0
+      if (ensured.isDefault) {
+        if (addToTop) {
+          await prisma.wishlist.updateMany({
+            where: { ownerId: user.id, type: 'REGULAR', archivedAt: null, id: { not: ensured.id } },
+            data: { position: { increment: 1 } },
+          });
+          newPosition = 0;
+        } else {
+          const current = await prisma.wishlist.findUnique({ where: { id: ensured.id }, select: { position: true } });
+          newPosition = current?.position ?? 0;
+        }
+      } else if (addToTop) {
         await prisma.wishlist.updateMany({
           where: { ownerId: user.id, type: 'REGULAR', archivedAt: null },
           data: { position: { increment: 1 } },
         });
         newPosition = 0;
       } else {
-        // Append at the end
         const maxResult = await prisma.wishlist.aggregate({
           where: { ownerId: user.id, type: 'REGULAR', archivedAt: null },
           _max: { position: true },
@@ -711,30 +758,66 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
         newPosition = (maxResult._max.position ?? -1) + 1;
       }
 
-      const slug = await generateUniqueSlug(parsed.data.title);
       // Inherit commentPolicy from profile default: commentsEnabled=false → SUBSCRIBERS, else ALL
       const inheritedCommentPolicy = profile?.commentsEnabled === false ? 'SUBSCRIBERS' : 'ALL';
-      const wishlist = await prisma.wishlist.create({
-        data: {
-          slug,
-          ownerId: user.id,
-          title: parsed.data.title,
-          deadline: parsed.data.deadline ? new Date(parsed.data.deadline) : null,
-          position: newPosition,
-          commentPolicy: inheritedCommentPolicy,
-        },
-        select: { id: true, slug: true, title: true, description: true, deadline: true },
-      });
+      const wishlist = ensured.isDefault
+        ? await prisma.wishlist.update({
+            where: { id: ensured.id },
+            data: {
+              title: parsed.data.title,
+              deadline: parsed.data.deadline ? new Date(parsed.data.deadline) : null,
+              position: newPosition,
+              commentPolicy: inheritedCommentPolicy,
+              isDefault: false,
+            },
+            select: { id: true, slug: true, title: true, description: true, deadline: true },
+          })
+        : await (async () => {
+            const slug = await generateUniqueSlug(parsed.data.title);
+            return prisma.wishlist.create({
+              data: {
+                slug,
+                ownerId: user.id,
+                title: parsed.data.title,
+                deadline: parsed.data.deadline ? new Date(parsed.data.deadline) : null,
+                position: newPosition,
+                commentPolicy: inheritedCommentPolicy,
+              },
+              select: { id: true, slug: true, title: true, description: true, deadline: true },
+            });
+          })();
+
+      // E04 — `isRenamingDefault` is true on the rename branch; we use it
+      // below to SUPPRESS the legacy `wishlist_created` emit so dashboards
+      // don't double-count the E04 cohort. The service already fired
+      // `wishlist_created` (source=auto_default) when bootstrap materialised
+      // this row; firing again here (source=manual) for the same wishlistId
+      // would inflate `COUNT(*) wishlist_created` by 2× for every E04
+      // user who reaches this endpoint. `wishlist.created` (PRODUCT_EVENTS
+      // taxonomy) keeps firing because it represents the user's "named a
+      // wishlist" intent and is distinct per business semantics.
+      const isRenamingDefault = ensured.isDefault;
 
       // Canonical analytics: wishlist_created
       const existingRegular = await prisma.wishlist.count({ where: { ownerId: user.id, type: 'REGULAR' } });
       const existingAny = await prisma.wishlist.count({ where: { ownerId: user.id } });
-      trackEvent('wishlist_created', user.id, {
-        wishlistId: wishlist.id, wishlistType: 'REGULAR', source: 'manual',
-        platform: 'miniapp',
-        isFirstRegularWishlist: existingRegular === 1,
-        isFirstAnyWishlist: existingAny === 1,
-      });
+      // E04 dual-emit guard — when this handler RENAMED the bootstrap
+      // default in place, the service already fired
+      // `wishlist_created` (source=auto_default) at bootstrap creation
+      // time. Re-firing with source=manual for the same wishlistId
+      // would double-count the E04 cohort in COUNT(*) dashboards.
+      // `wishlist.created` (PRODUCT_EVENTS taxonomy) and
+      // `first_regular_wishlist_created` keep firing because they
+      // represent user-initiated naming, which IS new business
+      // information independent of the bootstrap auto-create signal.
+      if (!isRenamingDefault) {
+        trackEvent('wishlist_created', user.id, {
+          wishlistId: wishlist.id, wishlistType: 'REGULAR', source: 'manual',
+          platform: 'miniapp',
+          isFirstRegularWishlist: existingRegular === 1,
+          isFirstAnyWishlist: existingAny === 1,
+        });
+      }
       if (existingRegular === 1) trackEvent('first_regular_wishlist_created', user.id, { wishlistId: wishlist.id, source: 'manual', platform: 'miniapp' });
 
       trackAnalyticsEvent({ event: 'wishlist.created', userId: user.id, props: { source: 'miniapp' } });

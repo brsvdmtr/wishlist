@@ -270,6 +270,22 @@ model Wishlist {
 
   type WishlistType @default(REGULAR)
 
+  /// Marks the auto-created default REGULAR wishlist materialised for new
+  /// users at bootstrap (E04 activation). Cleared by either
+  /// POST /tg/onboarding/create-wishlist OR POST /tg/wishlists when the
+  /// user names their first wishlist — both sites RENAME the row in place
+  /// (preserving id, items, placements) rather than insert a duplicate.
+  /// Backfill is not required; pre-existing rows stay false. See
+  /// services/wishlists.ts:createGetOrCreateDefaultWishlist.
+  ///
+  /// A partial unique index `(ownerId) WHERE isDefault = true` enforces
+  /// "at most one default per owner" at the DB level — Prisma DSL doesn't
+  /// support partial indexes, so the constraint lives in the migration
+  /// `20260525130000_unique_default_wishlist_per_owner/migration.sql`.
+  /// Both bootstrap and onboarding-rename catch P2002 on that index and
+  /// fall through to a re-fetch to handle the race.
+  isDefault Boolean @default(false)
+
   // Don't Gift (per-wishlist override)
   dontGiftMode        String   @default("global") // "global" | "local" | "hidden"
   dontGiftPresets     String[] @default([])
