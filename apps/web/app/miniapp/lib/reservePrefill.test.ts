@@ -95,4 +95,42 @@ describe('resolveReservePrefill', () => {
       resolveReservePrefill({ first_name: 'Дмитрий', last_name: '🎮' }, null),
     ).toEqual({ value: 'Дмитрий 🎮', source: 'tg_full' });
   });
+
+  it('caps a 100-char tg_first at 64 chars (no last_name path)', () => {
+    const result = resolveReservePrefill({ first_name: 'A'.repeat(100) }, null);
+    expect(result.source).toBe('tg_first');
+    expect(result.value).toHaveLength(64);
+  });
+
+  it('caps a 100-char profile.displayName at 64 (API allows 100, sheet uses 64)', () => {
+    // API contract: me.routes.ts allows displayName up to 100, but the
+    // reserve endpoint caps at 64. The helper must clamp to the lower bound.
+    const result = resolveReservePrefill(null, { displayName: 'Я'.repeat(100) });
+    expect(result.source).toBe('profile');
+    expect(result.value).toHaveLength(64);
+  });
+
+  it('caps emoji-heavy names at code-point boundaries (no orphan surrogates)', () => {
+    // 33 game-controller emoji = 66 UTF-16 code units. Naive `.slice(0,64)`
+    // would split the 33rd surrogate pair and corrupt the rendered string.
+    // capByCodePoints must keep an integral number of code points.
+    const result = resolveReservePrefill(null, { displayName: '🎮'.repeat(33) });
+    expect(result.source).toBe('profile');
+    // 64 code points = 64 emoji code points = 64 full surrogate pairs
+    // (since each emoji here is a single code point but two code units).
+    // We expect exactly 64 emoji preserved AND no trailing orphan.
+    expect(Array.from(result.value)).toHaveLength(33);
+    // Sanity: no replacement chars, no orphan high surrogates (\uD800-\uDBFF
+    // at the very end without a paired low surrogate).
+    const lastUnit = result.value.charCodeAt(result.value.length - 1);
+    expect(lastUnit >= 0xD800 && lastUnit <= 0xDBFF).toBe(false);
+  });
+
+  it('caps a long emoji name down to 64 code points exactly', () => {
+    const result = resolveReservePrefill(null, { displayName: '🎮'.repeat(80) });
+    expect(result.source).toBe('profile');
+    // 80 emoji input → cap to 64 code points = 64 full emoji = 128 code units.
+    expect(Array.from(result.value)).toHaveLength(64);
+    expect(result.value.length).toBe(128);
+  });
 });

@@ -32,7 +32,7 @@ import { SnowflakeOverlay } from './components/SnowflakeOverlay';
 import { SantaAvatar, santaAliasHue } from './components/SantaAvatar';
 import { UserAvatar } from './components/UserAvatar';
 import { getEmoji, extractFirstEmoji, EMOJIS } from './lib/emoji';
-import { resolveReservePrefill, type ReservePrefillSource } from './lib/reservePrefill';
+import { resolveReservePrefill, MAX_DISPLAY_NAME_LEN, type ReservePrefillSource } from './lib/reservePrefill';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
 import { initSentry, captureException } from './sentry';
 import {
@@ -5599,8 +5599,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // for the "edited" comparison). Cleared when the sheet closes.
   const [guestNamePrefill, setGuestNamePrefill] = useState<{ value: string; source: ReservePrefillSource } | null>(null);
   // Tracks whether reservation.display_name_edited has already fired for the
-  // current sheet open — we only emit it once per open, on the first edit.
-  const [guestNameEditedFired, setGuestNameEditedFired] = useState(false);
+  // current sheet open. A ref (not state) because: nothing in the render
+  // tree depends on it, and a ref guarantees the same-tick guard holds even
+  // when rapid keystrokes batch updates. Reset to false on sheet open and
+  // on the "Reset to prefilled" click so the event re-arms.
+  const guestNameEditedFiredRef = useRef(false);
 
   // Comments
   const [comments, setComments] = useState<CommentDTO[]>([]);
@@ -11524,14 +11527,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // --- Guest actions
   // E15 — open the public-reserve BottomSheet with the display name prefilled
   // from the guest's identity. Single helper replaces 5 inline prefill paths
-  // so the source-selection rule and analytics fire identically from every
-  // entry point (item detail, list cards, group-gift CTAs, etc.).
+  // (item detail + 4 list-card variants) so the source-selection rule and
+  // the prefilled-event fire identically from every entry point. Group-gift
+  // create/join also use resolveReservePrefill (silently, no sheet UI) so
+  // the same priority chain governs all guest displayName payloads.
   const openReserveSheet = useCallback((item: GuestItem) => {
     const prefill = resolveReservePrefill(tgUser, profileData);
     setReservingItem(item);
     setGuestName(prefill.value);
     setGuestNamePrefill(prefill);
-    setGuestNameEditedFired(false);
+    guestNameEditedFiredRef.current = false;
     if (prefill.source !== 'none') {
       trackEvent('reservation.display_name_prefilled', {
         source: prefill.source,
@@ -11549,30 +11554,32 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     setReservingItem(null);
     setGuestName('');
     setGuestNamePrefill(null);
-    setGuestNameEditedFired(false);
+    guestNameEditedFiredRef.current = false;
   }, []);
 
   // E15 — wraps setGuestName so the first edit (relative to the prefilled
   // value) emits reservation.display_name_edited exactly once per open. We
   // skip the event when the source is `none` because there was nothing to
-  // edit *away from* in the first place.
+  // edit *away from* in the first place. `lenAtFirstEdit` is the value
+  // length at the moment of first divergence — not the final submitted
+  // length (that's captured separately on item_reserved.displayNameSource).
   const handleGuestNameChange = useCallback((next: string) => {
     setGuestName(next);
     if (
-      !guestNameEditedFired &&
+      !guestNameEditedFiredRef.current &&
       guestNamePrefill &&
       guestNamePrefill.source !== 'none' &&
       next !== guestNamePrefill.value
     ) {
-      setGuestNameEditedFired(true);
+      guestNameEditedFiredRef.current = true;
       trackEvent('reservation.display_name_edited', {
         originalSource: guestNamePrefill.source,
-        finalLen: next.length,
+        lenAtFirstEdit: next.length,
         clearedFully: next.trim().length === 0,
         itemId: reservingItem?.id ?? null,
       });
     }
-  }, [guestNameEditedFired, guestNamePrefill, reservingItem, trackEvent]);
+  }, [guestNamePrefill, reservingItem, trackEvent]);
 
   const handleReserve = async () => {
     if (!reservingItem || !guestName.trim()) return;
@@ -11594,7 +11601,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       // Birthday-funnel attribution: when this reservation came from a `br_*`
       // deeplink session, the wrapper adds birthdaySource + deliveryId props so
       // we can measure deeplink → reservation conversion in God Mode.
-      trackBirthdayAttributedEvent('item_reserved', { itemId: reservingItem.id });
+      //
+      // E15 — `displayNameSource` enriches the primary KPI event so analysts
+      // can read "reservation success rate by prefill source" without joining
+      // three events. Values:
+      //   - <source>           : prefilled and untouched (e.g. 'tg_full')
+      //   - <source>_edited    : prefilled but user changed the value
+      //   - 'manual'           : no prefill was available; user typed from scratch
+      const displayNameSource = (!guestNamePrefill || guestNamePrefill.source === 'none')
+        ? 'manual'
+        : guestName.trim() === guestNamePrefill.value
+          ? guestNamePrefill.source
+          : `${guestNamePrefill.source}_edited`;
+      trackBirthdayAttributedEvent('item_reserved', { itemId: reservingItem.id, displayNameSource });
       pushToast(t('reserve_success', locale), 'success');
       closeReserveSheet();
     } finally {
@@ -25672,8 +25691,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             )}
             <div>
-              <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('reserve_name_label', locale)}</label>
-              <input style={inputStyle} placeholder={t('reserve_name_placeholder', locale)} value={guestName} onChange={(e) => handleGuestNameChange(e.target.value)} autoFocus />
+              <label htmlFor="reserve-display-name" style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('reserve_name_label', locale)}</label>
+              <input
+                id="reserve-display-name"
+                style={inputStyle}
+                placeholder={t('reserve_name_placeholder', locale)}
+                value={guestName}
+                onChange={(e) => handleGuestNameChange(e.target.value)}
+                maxLength={MAX_DISPLAY_NAME_LEN}
+                aria-describedby={guestNamePrefill && guestNamePrefill.source !== 'none' ? 'reserve-display-name-hint' : undefined}
+                autoFocus
+              />
               {guestNamePrefill && guestNamePrefill.source !== 'none' && (() => {
                 const edited = guestName !== guestNamePrefill.value;
                 const labelKey = edited
@@ -25682,14 +25710,25 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     ? 'reserve_prefill_from_profile'
                     : 'reserve_prefill_from_tg';
                 return (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 11, color: edited ? C.green : C.textMuted }}>
+                  <div
+                    id="reserve-display-name-hint"
+                    aria-live="polite"
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 11, color: edited ? C.green : C.textMuted }}
+                  >
                     <span style={{ width: 6, height: 6, borderRadius: '50%', background: edited ? C.green : C.accent, flexShrink: 0 }} />
                     <span>{t(labelKey, locale)}</span>
                     {edited && (
                       <button
                         type="button"
-                        onClick={() => setGuestName(guestNamePrefill.value)}
-                        style={{ marginLeft: 'auto', background: 'none', border: 'none', color: C.accent, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: font, padding: 0 }}
+                        onClick={() => {
+                          setGuestName(guestNamePrefill.value);
+                          // Re-arm the edited event so a subsequent edit after
+                          // Reset emits a fresh `display_name_edited`. Without
+                          // this the second edit would be silent and analysts
+                          // would lose the edit→reset→edit signal.
+                          guestNameEditedFiredRef.current = false;
+                        }}
+                        style={{ marginInlineStart: 'auto', background: 'none', border: 'none', color: C.accent, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: font, padding: 0 }}
                       >
                         {t('reserve_prefill_reset', locale)}
                       </button>
@@ -31326,7 +31365,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       currency: groupGiftCreateItem.currency,
                       deadline: ggDeadline || undefined,
                       note: ggNote || undefined,
-                      displayName: tgUser?.first_name,
+                      displayName: resolveReservePrefill(tgUser, profileData).value || undefined,
                       myAmount: ggMyAmount ? Number(ggMyAmount) : 0,
                     }),
                     idempotency: { action: `gg.create:${groupGiftCreateItemId}` },
@@ -31849,7 +31888,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     method: 'POST',
                     body: JSON.stringify({
                       amount: Number(joinAmt) || 0,
-                      displayName: tgUser?.first_name,
+                      displayName: resolveReservePrefill(tgUser, profileData).value || undefined,
                     }),
                     idempotency: { action: `gg.join:${gg.id}` },
                   });

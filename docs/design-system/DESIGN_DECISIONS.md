@@ -32,6 +32,52 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-05-25 — E15: display-name prefill chip in reserve sheet (approved)
+
+**Type:** approval
+
+**Decision.** The public-reserve BottomSheet (and that sheet only — secret
+reservations stay untouched) now prefills the guest's display-name input
+from a priority chain (UserProfile.displayName → Telegram first+last →
+Telegram first → empty) and shows a small chip under the input revealing
+the source ("From your Telegram profile" / "From your WishBoard profile").
+Once the guest edits the value, the chip flips to green "Edited" with a
+"Reset" affordance that restores the prefilled value. Mockup promoted
+from `mockups/proposed/` to
+[`mockups/approved/e15-reservation-prefill.html`](./mockups/approved/e15-reservation-prefill.html).
+
+**Context / why.** E15 was one of the top quick-wins in the experiment
+backlog — every public reserve today asks the guest "What's your name?"
+even though we already know it from Telegram. The chip is the smallest
+UI affordance that makes the prefill source visible and reversible
+without surfacing an extra screen or sheet. Surprise-mode privacy
+invariant is preserved end-to-end: the API contract on POST
+`/tg/items/:id/reserve` is unchanged and owner endpoints still strip
+reserver identity (locked by
+`apps/api/test/integration/surprise-mode-privacy.test.ts`).
+
+**Supersedes.** Nothing. The status quo was a one-line inline prefill
+(`setGuestName(tgUser?.first_name ?? '')`) repeated at 5 call-sites with
+no source attribution.
+
+**Impact.**
+- No registry rows touched — the chip is a feature-local affordance
+  built from existing tokens (`C.accent`, `C.green`, `C.textMuted`)
+  and inline styles, NOT a new `@wishlist/ui` primitive. A reusable
+  `<HintChip>` is a candidate for later promotion when a second
+  consumer appears.
+- 4 new i18n keys × 6 locales in `packages/shared/src/i18n.ts`:
+  `reserve_prefill_from_tg`, `reserve_prefill_from_profile`,
+  `reserve_prefill_edited`, `reserve_prefill_reset`.
+- Group-gift create + join paths reuse the same `resolveReservePrefill`
+  helper (silent, no chip) so the priority chain is uniform across all
+  guest displayName payloads.
+- No breaking changes for consumers.
+
+**Approved by.** Dmitry.
+
+---
+
 ## 2026-05-22 — URL-import onboarding empty state (3-step explainer)
 
 **Type:** approval
