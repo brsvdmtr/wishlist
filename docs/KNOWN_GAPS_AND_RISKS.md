@@ -164,14 +164,14 @@
 - **Impact**: Bad migration requires manual SQL to fix
 - **Mitigation**: Always backup before migration
 
-### 28. SSL Certificate Auto-Renewal NOT Configured on Vultr
-- **Risk**: Let's Encrypt certs expire every 90 days; without auto-renewal the site goes down on expiry
-- **Current state (verified 2026-05-03 via `admin-ops exec-shell`)**:
-  - Cert is valid: `notAfter=Jul 16 23:53:26 2026 GMT` (issued Apr 17, ~73 days runway from migration day)
-  - `which certbot` → not found on Vultr; no `certbot.timer` in `systemctl list-timers`; no certbot entry in cron
-  - The certificate files in `/etc/letsencrypt/live/wishlistik.ru/` were carried over from the old Timeweb host; the renewal hook stayed there
-- **Required action before mid-July 2026**: install certbot on Vultr (`apt-get install certbot python3-certbot-nginx`) and run `certbot --nginx -d wishlistik.ru -d www.wishlistik.ru`, or migrate to `acme.sh` / a comparable renewer. Verify with `certbot renew --dry-run` and confirm `certbot.timer` is `enabled` + `active`.
-- **Severity**: HIGH (not a Timeweb-decommission blocker, but firm deadline ≈ 2026-07-16)
+### 28. SSL Certificate Auto-Renewal on Vultr
+- **Status**: RESOLVED (2026-05-25) — see [docs/ops/ssl-renewal.md](ops/ssl-renewal.md)
+- **Re-check**: certbot 2.1.0 was already installed; `certbot.timer` is `enabled + active` (twice daily); HTTP-01 challenge succeeds through Cloudflare proxy (`certbot renew --dry-run` green)
+- **Hardening added 2026-05-25**:
+  - Deploy hook `/etc/letsencrypt/renewal-hooks/deploy/01-nginx-reload.sh` (defense-in-depth `nginx -t` + reload; sends Telegram alert if either step fails so a silent reload failure can't strand nginx on the previous cert for 60 days)
+  - Daily expiry monitor [ops/vultr/ssl-expiry-monitor.sh](../ops/vultr/ssl-expiry-monitor.sh) (entry in [ops/cron/root.crontab](../ops/cron/root.crontab) at 09:00 UTC) sends Telegram alert to `ADMIN_ALERT_CHAT_IDS` on bucket transitions (14d → 7d → 3d → 0d); deduped via `/var/lib/wishlist/ssl-monitor.last-bucket` so on-call doesn't get 14 identical messages
+- **Residual risk (LOW)**: alert delivery is single-track (Telegram). If `certbot.timer` AND the Telegram bot both fail simultaneously, the origin cert can expire silently. Cloudflare's browser-visible TLS is unaffected (CF rotates its edge cert independently), but origin TLS going stale would break CF→origin handshake under Full/Strict. Recommend pairing with an external uptime check that observes browser-visible TLS via CF edge (covered separately under risk #25 monitoring).
+- **Original observation was wrong**: the 2026-05-03 check via `admin-ops exec-shell` reported "certbot not installed", but `which certbot` on the host returns `/usr/bin/certbot`. Likely an exec-shell PATH issue, not a real gap. The Apr 17 cert renewal in `/etc/letsencrypt/archive/` confirms the timer has been firing successfully since long before the gap was filed.
 
 ### 30. Client-Only PRO Gate for Recommended Sort
 - **Risk**: Guest sort "Recommended" is shown as PRO on client, but no server-side enforcement
@@ -274,7 +274,7 @@
 | Automated upload backup | DONE | Same archive, `uploads.tar` |
 | .env template with comments | DONE | Full `.env.example` in repo root |
 | Health check monitoring | DONE | `ops/watchdog/health-watchdog.mjs` cron + GitHub Actions health-check |
-| SSL renewal on Vultr | HIGH (deadline ~2026-07-16) | certbot not installed; current cert valid until Jul 16 — see risk #28 |
+| SSL renewal on Vultr | DONE (2026-05-25) | certbot.timer active, dry-run green, deploy hook + 14d Telegram monitor — see risk #28 and [docs/ops/ssl-renewal.md](ops/ssl-renewal.md) |
 
 ---
 
