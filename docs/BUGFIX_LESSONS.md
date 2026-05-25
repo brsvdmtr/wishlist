@@ -5,6 +5,79 @@ New entries go at the top.
 
 ---
 
+## 2026-05-25 — Maintenance UI ломалось из-за HTML-подмены API ответа (двойной regression)
+
+### Симптом
+
+После релиза `8943664` включил `MAINTENANCE_MODE=true` на проде для
+визуальной проверки новой v2.1 заглушки. В Telegram Mini App пользователь
+увидел **не нашу новую заглушку**, а generic «Нет связи / Нет
+подключения к интернету» с тарелкой 📡 и красной надписью «Ошибка
+загрузки». То есть L3-экран maintenance не рендерился совсем.
+
+### Root cause
+
+Два независимых слоя одновременно подменяли JSON-ответ API
+`503 + {code:"MAINTENANCE"}` на HTML-заглушку:
+
+1. **nginx** в `location /api/` имел `proxy_intercept_errors on`, в
+   сочетании с server-level `error_page 502 503 504 /maintenance.html` →
+   503 от API превращался в HTML.
+2. **CF Worker** (новый в этом же релизе) проверял `Accept` хедер через
+   `wantsHtml()` который возвращал `true` для `*/*` и пустого Accept.
+   Браузерный `fetch()` шлёт `Accept: */*` по умолчанию → Worker
+   подменял ответ.
+
+В итоге Mini App'овский `tgFetch` получал HTML, не мог распарсить как
+JSON, падал в generic error path вместо детекта `code:MAINTENANCE` →
+показывал «Нет связи».
+
+Curl-тесты ничего не ловили потому что я использовал `Accept:
+text/html` или умолчания, не воспроизводящие fetch().
+
+### Lesson
+
+1. **API endpoints (`/api/*`, `/tg/*`, `/internal/*`) НИКОГДА не должны
+   иметь свой ответ подменён HTML'ом ни на каком промежуточном слое.**
+   Их потребитель — JS код, ожидающий JSON. HTML ломает парсер →
+   fallback на generic error.
+2. **Любой fallback по `Accept` хедеру должен требовать ЯВНЫЙ
+   `text/html`, а не `*/*`.** Потому что `*/*` — дефолт для fetch/XHR,
+   а ему нужен JSON, не HTML.
+3. **Тестировать на реальной поверхности (Telegram Mini App), а не
+   через curl с произвольными хедерами.** Curl скрыл оба бага.
+
+### Rule
+
+- nginx `proxy_intercept_errors on` — **только** на root location
+  (web/Next.js), никогда на /api/, /uploads/, /tg/. Документировать
+  комментарием в шаблоне.
+- CF Worker / любой edge fallback: `wantsHtml()` = `accept.includes('text/html')`.
+  Никаких `*/*` или пустого Accept fallback.
+- Любая новая middleware которая мутирует тело ответа: явный guard
+  "только для не-API путей" или "только Accept: text/html".
+
+### Better code
+
+- `ops/vultr/nginx-wishlistik.conf.template` — убрал
+  `proxy_intercept_errors on;` из `location /api/` и `location /uploads/`,
+  добавил комментарий с обоснованием.
+- `infra/cloudflare/maintenance-worker/src/index.ts` — `wantsHtml()`
+  упрощено до `accept.includes('text/html')`. Регрессионный тест
+  `passes through 503 to fetch()/XHR caller (Accept: */*) so Mini App
+  sees real JSON` в `test/worker.test.ts`.
+- Прод-конфиг nginx обновлён live (`sudo sed -i` + `nginx -s reload`).
+- Worker задеплоен `wrangler deploy`.
+
+### Related
+
+- 2026-05-25 follow-up к [этой записи ниже]: исходное обещание
+  «уведомим в бот» сломалось ещё и из-за того, что без этого фикса
+  L3 экран вообще не показывался, и `POST /tg/maintenance-exposure`
+  не уходил → exposure не записывался → recovery-уведомление никому.
+
+---
+
 ## 2026-05-25 — Maintenance recovery promise was a half-truth at L1 (post-CF migration)
 
 ### Симптом

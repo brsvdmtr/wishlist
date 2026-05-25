@@ -172,6 +172,29 @@ describe('pass-through', () => {
     expect(res.status).toBe(502);
   });
 
+  it('passes through 503 to fetch()/XHR caller (Accept: */*) so Mini App sees real JSON', async () => {
+    // Regression: when API returns 503 + {code:MAINTENANCE}, the Mini App's
+    // fetch() needs to read the JSON body to detect maintenance mode.
+    // Default Accept for fetch() is */* — worker must NOT substitute HTML here.
+    originResponse = () => new Response('{"error":"Service temporarily unavailable","code":"MAINTENANCE"}', {
+      status: 503,
+      headers: { 'content-type': 'application/json' },
+    });
+    const env = makeEnv();
+    const res = await worker.fetch(
+      new Request('https://wishlistik.ru/api/tg/bootstrap', {
+        method: 'POST',
+        headers: { accept: '*/*', 'content-type': 'application/json' },
+        body: '{}',
+      }),
+      env,
+      makeCtx(),
+    );
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { code: string };
+    expect(body.code).toBe('MAINTENANCE');
+  });
+
   it('serves maintenance HTML on origin 502 for browser request', async () => {
     originResponse = () => new Response('bad gateway', { status: 502 });
     const env = makeEnv();

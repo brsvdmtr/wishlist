@@ -211,8 +211,14 @@ function serveFallbackOrPassthroughError(req: Request, _err: unknown): Response 
 }
 
 function wantsHtml(req: Request): boolean {
+  // Require an EXPLICIT text/html in Accept. Browser navigations send
+  // "text/html,application/xhtml+xml,..." — they get the maintenance UI.
+  // JS fetch() / XHR / curl default to "*/*" — they should get the origin's
+  // real JSON response (e.g. {code:MAINTENANCE}) so the Mini App can detect
+  // maintenance mode and render the in-app L3 screen with full UX (haptics,
+  // exposure POST, etc.) instead of falling into a generic error path.
   const accept = (req.headers.get('accept') || '').toLowerCase();
-  return accept.includes('text/html') || accept.includes('*/*') || accept === '';
+  return accept.includes('text/html');
 }
 
 function jsonResp(body: unknown, status: number = 200): Response {
