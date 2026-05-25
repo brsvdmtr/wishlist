@@ -680,4 +680,80 @@ as the smallest possible template PR.
 
 ---
 
+### F4 Wave A — done @ `9501c5a` on 2026-05-26 (cold-path static screens)
+
+Extracted 4 Settings-reached screens + their bulky locale-data tables:
+
+- `apps/web/app/miniapp/screens/FAQScreen.tsx`
+- `apps/web/app/miniapp/screens/ChangelogScreen.tsx`
+- `apps/web/app/miniapp/screens/LegalMenuScreen.tsx`
+- `apps/web/app/miniapp/screens/LegalDocViewerScreen.tsx`
+- `apps/web/app/miniapp/screens/data/release-notes.ts` (391 LOC)
+- `apps/web/app/miniapp/screens/data/legal-docs.ts` (748 LOC)
+- `apps/web/app/miniapp/screens/data/release-notes-latest.ts` (tiny eager stub
+  so the main chunk only references the latest id, not the full array)
+
+MiniApp.tsx shrank from 34,257 → 32,838 lines (−1,419 LOC, −4.1 %). The 4
+extracted screens own their own accordion state internally (`faqOpenId`,
+`changelogOpenId` declarations removed from parent). `legalDocId` stays at
+parent level — it's routing state shared between menu and viewer.
+
+**Bundle delta (measured against post-F1 baseline on prod, release `9501c5a`):**
+- `miniapp/page-*.js`: 2 259 367 b → 2 044 369 b raw (**−215 KB, −9.5 %**)
+- `miniapp/page-*.js`: 520 KB → 455 KB brotli (**−65 KB, −12.5 %**)
+
+**Vs F2 projection:** Wave A was projected at −25..−40 KB brotli (after the
+60 % discount). Actual: **−65 KB brotli — comfortably beat projection** because
+LEGAL_DOCS contains ~750 LOC of multi-locale legal text that compresses well in
+context but each-locale-block-separately drops big in brotli when split into its
+own chunk.
+
+**Realism update:** the 60 %-of-projection heuristic looks pessimistic on
+text-heavy waves. Wave C (Gift Notes) ships similar locale-text mass, so its
+projected −100..−140 KB brotli may also land at or above the high end.
+
+**Process notes for future waves:**
+- `git checkout HEAD <file>` to restore was needed after one botched
+  sed-based deletion accidentally consumed ~25 type definitions that lived
+  between the RELEASE_NOTES and LEGAL_DOCS blocks. Future bulk-deletions
+  should anchor on `^const NAME` / `^];` text boundaries via Python regex,
+  NOT on `LINE_BEFORE_NEXT_BLOCK - 2` arithmetic.
+- 2-round code review: the first pass caught a stranded 2 MB `MiniApp.tsx.bak`
+  in working tree (added `*.bak` to `.gitignore`), dead `faqOpenId` /
+  `changelogOpenId` state that wasn't cleared by the extraction (parent no
+  longer needed it), and a truncated comment block in `release-notes.ts`.
+  Final score: 9/10. Pattern works — keep using iterative review for each
+  wave.
+
+---
+
+### F3 — pending (precondition for Waves B+ at full quality)
+
+After Wave A's measurement, Waves B/C/D look more expensive than the map
+suggested because the per-screen `useState` coupling in MiniApp.tsx is
+deeper than F2 estimated. Specifically:
+
+- **Wave B (Santa)** — 20+ `santa*` state vars + 8+ callbacks shared across
+  the 9 screens. Extracting screens one-at-a-time without F3 first means
+  each screen gets a 30+ prop interface that's brittle to maintain.
+- **Wave C (Gift Notes)** — 18 `gn*` state vars (lines 4556–4580) including
+  form state, paywall access cache, and edit state. Same prop-explosion
+  risk as Wave B.
+
+**Decision:** do F3 (per-cluster state hooks — `useSantaState`,
+`useGiftNotesState`, `useReferralState`) BEFORE Waves B+. F3 alone moves
+state declarations out of MiniApp.tsx (smaller main chunk) and gives each
+screen extraction a clean hook boundary instead of a props bag.
+
+Estimated effort: 1-2 hours per cluster hook × 4 clusters = 4-8 hours, no
+user-facing perf change yet but unblocks Wave B/C/D cleanly.
+
+Alternative if speed is the urgent priority: ship a **SantaRoot cluster
+file** + **GiftNotesRoot cluster file** that move JSX out of MiniApp.tsx but
+accept verbose props bags from the parent. Bundle savings still real
+(JSX compresses well in brotli) but architecture is interim-state until F3
+lands. Expected: ~30-50 KB brotli per cluster file vs full projection.
+
+---
+
 ### F3 — pending
