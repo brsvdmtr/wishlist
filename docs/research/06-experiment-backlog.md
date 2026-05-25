@@ -16,7 +16,7 @@
 - Guest-режим обнаруживает owner-collision (Flow 19) и переключается тихо — поэтому «owner-as-guest» не путает метрики reservation.
 - PRO стек: Monthly 100 ⭐ / Yearly 800 ⭐ / Lifetime 2 490 ⭐. Lifetime — anchor (введён 2026-05-09, ещё не успел зарелаксировать конверсию Monthly).
 - Add-ons: Group Gift 79 ⭐, Secret Reservation 24 ⭐, Smart Reservations 39 ⭐ / wishlist, Gift Notes 19 ⭐ (PRO incl.).
-- Referral — feature-flag off (`ReferralProgramConfig.enabled = false`); не идёт в backlog как «вкл/выкл», а только как сегмент сравнения, если включится.
+- Referral — feature-flag off (`ReferralProgramConfig.enabled = false` с 2026-05-25; до этого был случайно ON 38 дней — см. [`referral-decision.md`](./referral-decision.md)); не идёт в backlog как «вкл/выкл», а только как сегмент сравнения, если включится.
 - Лайфтайм-данные хранятся в `AnalyticsEvent` (90-day TTL, см. `KNOWN_GAPS_AND_RISKS.md` § 43) — эксперименты с window > 90d требуют отдельной таблицы.
 
 **Что считаем «знаком к пивоту»:**
@@ -592,7 +592,7 @@
 - **Server perf / infra** — растут только из guardrail-нарушений (capacity issues).
 - **B2B / agency tooling** — отдельная стратегия, если возникнет необходимость pivot.
 - **Web public landing** (`/w/:slug` SSR pages) — на текущем traffic mix < 5 % от Mini App; см. `KNOWN_GAPS_AND_RISKS.md` § 21.
-- **Referral program ON/OFF** — пока feature-flag off; включение — отдельный launch event, не A/B.
+- **Referral program ON/OFF** — пока feature-flag off (флипнут обратно 2026-05-25); включение — отдельный launch event, не A/B. Prerequisites + 7 re-enable gates: [`referral-decision.md § 7`](./referral-decision.md#7-re-enable-gates-что-закрыть-до-следующего-флипа).
 - **AI-powered wish suggestions** — слишком далеко от текущей feature surface, требует отдельной discovery.
 
 ---

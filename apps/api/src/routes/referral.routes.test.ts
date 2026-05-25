@@ -12,6 +12,34 @@ const shared = vi.hoisted(() => ({
   referralProgramConfig: { findUnique: vi.fn() },
 }));
 
+const fullConfig = {
+  id: 'default',
+  enabled: false,
+  rewardDaysInviter: 30,
+  grantStrategy: 'stack',
+  requireWishlist: true,
+  requireItem: true,
+  qualificationWindowDays: 14,
+  monthlyRewardCap: 3,
+  yearlyRewardCap: 12,
+  fraudAutoRejectThreshold: 80,
+  fraudReviewThreshold: 40,
+  fraudReviewEnabled: true,
+  fraudSignalWeights: {},
+  showInviteeNamesInUi: false,
+  entryPointProfile: true,
+  entryPointPaywall: true,
+  entryPointHomeBanner: true,
+  entryPointPostShare: true,
+  notifyInviterArrival: true,
+  notifyInviterStepProgress: false,
+  notifyInviterReward: false,
+  notifyInviteeWelcome: false,
+  rolloutPercent: 100,
+  configVersion: 'v1',
+  updatedAt: new Date(),
+};
+
 vi.mock('@wishlist/db', () => ({
   prisma: new Proxy({}, {
     get(_target, key) {
@@ -20,7 +48,7 @@ vi.mock('@wishlist/db', () => ({
       return map[key] ?? new Proxy({}, { get() { return vi.fn().mockResolvedValue(null); } });
     },
   }),
-  loadReferralConfig: vi.fn(async () => ({ enabled: false, notifyInviterReward: false })),
+  loadReferralConfig: vi.fn(async () => fullConfig),
   isInRollout: vi.fn(() => false),
 }));
 
@@ -68,5 +96,21 @@ describe('referral — factory + boot', () => {
     const { app } = makeApp();
     const res = await request(app).get('/referral/rules-config');
     expect([200, 500]).toContain(res.status); // depends on the mocked config shape
+  });
+
+  it('GET /referral/rules-config does NOT expose entryPointPostShare (deprecated 2026-05-25, no UI consumer)', async () => {
+    // Backstop for the B3 gate in docs/research/referral-decision.md.
+    // The DB column + admin endpoint still accept entryPointPostShare for
+    // backward-compat with admin-ops.yml, but the public response must not
+    // include it — there is no UI consumer to honour the flag.
+    const { app } = makeApp();
+    const res = await request(app).get('/referral/rules-config');
+    expect(res.status).toBe(200);
+    expect(res.body?.ui).toBeDefined();
+    expect(res.body.ui).not.toHaveProperty('entryPointPostShare');
+    // Sanity: the remaining three entry-point flags ARE still exposed.
+    expect(res.body.ui).toHaveProperty('entryPointProfile');
+    expect(res.body.ui).toHaveProperty('entryPointPaywall');
+    expect(res.body.ui).toHaveProperty('entryPointHomeBanner');
   });
 });

@@ -5,6 +5,174 @@ New entries go at the top.
 
 ---
 
+## 2026-05-25 — Referral program: «включена в проде, но не запущена» — 38 дней невидимого funnel
+
+### Симптом
+
+При аудите состояния Referral Program обнаружено расхождение между документацией
+и проденым состоянием:
+
+- `docs/research/06-experiment-backlog.md` утверждал «`ReferralProgramConfig.enabled = false`»
+- Прод: `enabled=true, rolloutPercent=100`, last update 2026-04-17 ручным workflow
+- 54/315 пользователей уже получили `referralCode`
+- Mini App рендерил Profile-tile, Paywall sheet и Home banner с приглашением
+- **0 атрибуций** в DB за 38 дней
+- 11 типов referral.* событий в `AnalyticsEvent`, ВСЕ — только launch-day тестирование 2026-04-17
+
+UI-engagement события (`referral.entry_point_impression`, `share_intent`,
+`rules_opened`, `home_banner_dismissed` и т.д.) emit'ились во фронтенде, но
+**физически не попадали в DB**: 0 строк в `AnalyticsEvent` за 38 дней при
+54 пользователях с реф-кодами.
+
+### Root cause
+
+Программа состояла из трёх независимых слоёв, каждый из которых имел свой
+gap:
+
+1. **Telemetry allowlist gap.** `/tg/telemetry` фильтрует события через
+   `ANALYTICS_EVENT_PREFIXES` (префиксный allowlist) +
+   `ANALYTICS_EVENT_EXACT` (точечный). Префикс `referral.` **не входил**
+   ни в один из них — все UI события дропались **молча** на ingress.
+   Комментарий в коде даже это объяснял: "Today these are de-facto
+   blocked because their domain prefix (`referral.`) isn't in
+   ANALYTICS_EVENT_PREFIXES".
+2. **Bot defense-in-depth gap.** `apps/bot/src/index.ts` в `/start ref_X`
+   ветке вызывал `tryCreateAttribution` **без** предварительной проверки
+   `config.enabled`. Защита держалась только на data-layer гейте внутри
+   `tryCreateAttribution`. Любой сбой загрузки конфига или регресс
+   гейта мгновенно ломал bot-side kill-switch.
+3. **Fraud signal emit gap.** `packages/db/src/referral.ts:processReward`
+   считал fraud score, но **не emit'ил** `referral.fraud_signal_*` и
+   `referral.fraud_score_calculated` — потому что @wishlist/db не имел
+   импорта на analytics-хелперы. 12 событий в allowlist при 0 emit
+   в коде.
+4. **Dead UI flag.** `entryPointPostShare` жил в DB / admin endpoint /
+   `/tg/referral/rules-config` response / TypeScript type — но ни одного
+   рендерера не было написано. Чистый dead code, который вводил в
+   заблуждение при чтении конфига.
+
+### Урок
+
+«Feature flag = OFF» в документации **не равно** проденому состоянию. Прод
+— единственный источник правды для feature flags. Аналогично: «событие
+есть в allowlist» **не равно** «событие реально попадает в `AnalyticsEvent`».
+Между двумя точками — три фильтра (frontend buffer flush, telemetry
+ingestion allowlist, prisma write success), и без proxy-метрики "ratio
+emitted vs ingested per event name" любой из них может молча убить
+половину funnel.
+
+Конкретно для рефералки: telemetry allowlist должен быть **производным**
+от typed-таксономии (`PRODUCT_EVENTS` + `ANALYTICS_EVENTS`), а не
+параллельным списком. Расхождение `~10/68` events emitted в данном случае
+— прямое следствие того, что список событий растёт в одном файле, а
+ingress-фильтр в другом.
+
+### Правило
+
+1. **Аудит state drift раз в квартал** для всех singleton-config таблиц
+   (`ReferralProgramConfig`, `SantaGlobalConfig`, `SantaSeasonConfig`, etc.):
+   сравнить значения в проде с тем, что утверждает `docs/research/*.md`.
+   Drift = либо обновить docs, либо вернуть прод в соответствие.
+2. **Любой новый event с домен-префиксом** (`<domain>.<action>`) должен
+   быть либо добавлен в `ANALYTICS_EVENT_EXACT` (client-trustable) либо
+   явно отнесён к `LEGACY_SERVER_ONLY_EVENTS` (server-only). Префиксное
+   расширение `ANALYTICS_EVENT_PREFIXES` — только когда **все** event'ы
+   домена client-trustable.
+3. **Сервисы с feature flag MUST иметь explicit kill-switch на каждом
+   слое**, который умеет инициировать действие (bot handler, API route,
+   scheduler), не только на data layer. Defense-in-depth: один сломавшийся
+   гейт ≠ полностью открытая фича.
+4. **DB layer (@wishlist/db) может emit'ить в `AnalyticsEvent` напрямую**
+   через `prisma.analyticsEvent.create` — это допустимо, если событие
+   неразрывно связано с состоянием, которое DB layer и так пишет (fraud
+   scoring, attribution lifecycle). Не нужно «обязательно через сервис».
+5. **Re-enable gate для рефералки на следующий запуск** (см.
+   `docs/research/referral-decision.md § 7`):
+   - `referral.invitee_converted_to_paid` уже emit'ится в
+     `apps/bot/src/analytics.ts:150` — но не выстреливает до первой
+     реальной атрибуции с конверсией. Не код-gap, а usage-gap.
+   - `referral.invitee_retained_d7/d30` теперь покрыт ежедневным
+     scheduler'ом (`apps/api/src/schedulers/referral-retention.ts`).
+
+### Лучший код
+
+- **Прод как single source of truth:**
+  ```bash
+  ssh vultr 'docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist \
+    -c "SELECT enabled, rolloutPercent, configVersion, updatedByAdminId \
+        FROM \"ReferralProgramConfig\";"'
+  ```
+- **Telemetry allowlist расширение exact-match, не prefix:**
+  ```ts
+  // apps/api/src/routes/telemetry.routes.ts
+  const ANALYTICS_EVENT_EXACT = new Set<string>([
+    'api_server_error', 'pro_cta_clicked', 'error_boundary_triggered',
+    // referral.* — client-trustable UI engagement events only.
+    'referral.entry_point_impression',
+    'referral.share_intent',
+    // ... ~22 client names
+    // NB: server-authoritative names (referral.attributed, fraud_signal_*,
+    // invitee_converted_to_paid) intentionally NOT here.
+  ]);
+  ```
+- **Bot defense-in-depth (короткое замыкание):**
+  ```ts
+  // apps/bot/src/index.ts /start ref_ branch, line 0 before DB lookups
+  const earlyConfig = await loadReferralConfig(prisma);
+  if (!earlyConfig.enabled) {
+    prisma.analyticsEvent.create({
+      data: { event: 'referral.feature_flag_evaluated', userId: user?.id ?? null,
+              props: { flag: 'enabled', value: false, context: 'bot.start', refCode } },
+    }).catch(() => {});
+    return ctx.reply(t('bot_referral_welcome', locale), ...);
+  }
+  ```
+- **DB-layer emit для неразрывной с state корреляции:**
+  ```ts
+  // packages/db/src/referral.ts: processReward, after computeFraudSignals
+  prisma.analyticsEvent.create({
+    data: { event: 'referral.fraud_score_calculated', userId: att.inviterUserId,
+            props: { attributionId, score, signalCount: signals.length } },
+  }).catch(() => {});
+  for (const hit of signals) {
+    prisma.analyticsEvent.create({
+      data: { event: `referral.fraud_signal_${hit.signal}`, userId: att.inviterUserId,
+              props: { attributionId, weight: hit.weight, score, ...hit.details } },
+    }).catch(() => {});
+  }
+  ```
+
+### Files
+
+- `docs/research/referral-decision.md` — полный decision doc (§ 1–9)
+- `docs/research/06-experiment-backlog.md` — обновлён factual lines 19, 595
+- `apps/api/src/routes/telemetry.routes.ts` — exact-match allowlist для UI событий
+- `apps/api/src/routes/telemetry.routes.test.ts` — 6 новых тестов
+- `apps/bot/src/index.ts` — defense-in-depth kill-switch в /start ref_
+- `apps/web/app/miniapp/MiniApp.tsx:5145` — удалён `entryPointPostShare` из типа
+- `apps/api/src/routes/referral.routes.ts:481` — удалён из `/rules-config` response
+- `apps/api/src/routes/referral.routes.test.ts` — тест на отсутствие поля
+- `packages/db/src/referral.ts:processReward` — emit fraud_* событий
+- `packages/db/src/referral.test.ts` — 4 новых fraud-emit теста (mock prisma.analyticsEvent.create)
+- `apps/api/src/schedulers/referral-retention.ts` — новый daily scheduler
+- `apps/api/src/schedulers/referral-retention.test.ts` — 5 тестов d7/d30 cohort + idempotency
+- `apps/api/src/index.ts` — регистрация retention scheduler
+
+### Prod action
+
+```sql
+-- Выполнено 2026-05-25 13:47 UTC через PATCH /admin/referral/config
+UPDATE "ReferralProgramConfig"
+SET enabled=false,
+    configVersion='v2-disabled-2026-05-25',
+    updatedByAdminId='manual-decision-2026-05-25',
+    updatedAt=NOW()
+WHERE id='default';
+-- Cache invalidated by endpoint; referral.config_changed event emitted.
+```
+
+---
+
 ## 2026-05-25 — E04: auto-created default wishlist — двойной wishlist после онбординга легко пропустить
 
 ### Симптом (предотвращён, не отгружен)

@@ -782,6 +782,35 @@ export async function processReward(
     score = computed.score;
     signals = computed.signals;
 
+    // Telemetry: one fraud_score_calculated + one fraud_signal_<name> per
+    // triggered signal. Fire-and-forget — never blocks the reward decision.
+    // These events were declared in the allowlist on launch but never wired
+    // to emit (root cause: this is a @wishlist/db layer file with no analytics
+    // import path; we use direct prisma.analyticsEvent.create here to stay
+    // self-sufficient). Added 2026-05-25 as part of the referral re-enable
+    // gates (see docs/research/referral-decision.md § 7.4).
+    prisma.analyticsEvent.create({
+      data: {
+        event: 'referral.fraud_score_calculated',
+        userId: att.inviterUserId,
+        props: { attributionId, score, signalCount: signals.length },
+      },
+    }).catch(() => {});
+    for (const hit of signals) {
+      prisma.analyticsEvent.create({
+        data: {
+          event: `referral.fraud_signal_${hit.signal}`,
+          userId: att.inviterUserId,
+          props: {
+            attributionId,
+            weight: hit.weight,
+            score,
+            ...hit.details,
+          },
+        },
+      }).catch(() => {});
+    }
+
     // 2. If auto-reject threshold — short-circuit to REJECTED with FRAUD_REJECTED
     if (score >= config.fraudAutoRejectThreshold) {
       await prisma.referralAttribution.update({
@@ -807,6 +836,13 @@ export async function processReward(
           triggeredSignals: signals as unknown as Prisma.InputJsonValue,
         },
       });
+      prisma.analyticsEvent.create({
+        data: {
+          event: 'referral.fraud_review_queued',
+          userId: att.inviterUserId,
+          props: { attributionId, score, signalCount: signals.length },
+        },
+      }).catch(() => {});
       return { kind: 'review_queued', attributionId, fraudScore: score, signals };
     }
   }

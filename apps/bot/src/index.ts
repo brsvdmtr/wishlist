@@ -777,6 +777,7 @@ if (!token) {
     if (payload?.startsWith('ref_')) {
       // ── Referral deep link: ?start=ref_<CODE> ──────────────────────────────
       // Flow:
+      //   0. Defense-in-depth: short-circuit if program disabled.
       //   1. Parse code, resolve to inviter.
       //   2. Resolve/create the invitee user (already upserted at top of /start).
       //   3. Call tryCreateAttribution — first-touch, idempotent.
@@ -784,6 +785,37 @@ if (!token) {
       //   5. Notify inviter if config says so.
       //   6. Reply to invitee with Mini App button.
       const refCode = payload.slice('ref_'.length);
+
+      // Step 0: program kill-switch. tryCreateAttribution already returns
+      // { kind: 'program_disabled' } when config.enabled=false
+      // (packages/db/src/referral.ts:364), but checking here saves the
+      // redundant DB roundtrips (resolveReferralCode → user.findUnique →
+      // tryCreateAttribution → markFirstBotStart) and gives the invitee a
+      // clean welcome rather than an error path. If the config load itself
+      // fails, fall through to the original flow — that path has its own
+      // gating downstream.
+      try {
+        const earlyConfig = await loadReferralConfig(prisma);
+        if (!earlyConfig.enabled) {
+          logger.info({ telegramId, refCode }, '[referral] /start ref_ while program disabled — ignoring');
+          prisma.analyticsEvent.create({
+            data: {
+              event: 'referral.feature_flag_evaluated',
+              userId: user?.id ?? null,
+              props: { flag: 'enabled', value: false, context: 'bot.start', refCode },
+            },
+          }).catch(() => {});
+          return ctx.reply(
+            t('bot_referral_welcome', locale),
+            Markup.inlineKeyboard([
+              Markup.button.webApp(t('bot_referral_open_btn', locale), MINI_APP_URL),
+            ]),
+          );
+        }
+      } catch (cfgErr) {
+        logger.warn({ err: cfgErr, telegramId }, '[referral] config load failed in /start ref_; falling through');
+      }
+
       try {
         const inviter = await resolveReferralCode(prisma, refCode);
 

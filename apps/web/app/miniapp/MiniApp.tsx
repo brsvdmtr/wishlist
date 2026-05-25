@@ -5142,7 +5142,6 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       entryPointProfile: boolean;
       entryPointPaywall: boolean;
       entryPointHomeBanner: boolean;
-      entryPointPostShare: boolean;
     };
     configVersion: string;
   };

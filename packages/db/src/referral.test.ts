@@ -236,6 +236,12 @@ type MockSubscription = {
   cancelAtPeriodEnd: boolean;
 };
 
+type MockAnalyticsEvent = {
+  event: string;
+  userId: string | null;
+  props: Record<string, unknown> | null;
+};
+
 interface MockState {
   config: ReferralProgramConfig;
   users: MockUser[];
@@ -243,6 +249,7 @@ interface MockState {
   attributions: MockAttribution[];
   rewards: MockReward[];
   subscriptions: MockSubscription[];
+  analyticsEvents: MockAnalyticsEvent[];
   nextId: number;
 }
 
@@ -303,6 +310,7 @@ function initialState(overrides: Partial<MockState> = {}): MockState {
     attributions: [],
     rewards: [],
     subscriptions: [],
+    analyticsEvents: [],
     nextId: 1,
     ...overrides,
   };
@@ -566,6 +574,17 @@ function makeMockPrisma(state: MockState): PrismaClient {
         if (!sub) throw new Error('Record not found');
         Object.assign(sub, args.data);
         return sub;
+      },
+    },
+    analyticsEvent: {
+      create: async (args: { data: { event: string; userId?: string | null; props?: unknown } }) => {
+        const row: MockAnalyticsEvent = {
+          event: args.data.event,
+          userId: args.data.userId ?? null,
+          props: (args.data.props ?? null) as Record<string, unknown> | null,
+        };
+        state.analyticsEvents.push(row);
+        return row;
       },
     },
     $transaction: async <T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> => fn(m),
@@ -1415,6 +1434,82 @@ describe('processReward', () => {
     expect(state.attributions[0]!.status).toBe('REWARDED');
     // Pre-existing fraudScore is preserved (not zeroed out).
     expect(state.attributions[0]!.fraudScore).toBe(45);
+  });
+
+  // Fraud signal emit — regression for the 2026-05-25 gap where
+  // referral.fraud_signal_* events were declared in the allowlist but never
+  // emitted (root cause: @wishlist/db has no analytics import path). Direct
+  // prisma.analyticsEvent.create calls inside processReward close the gap.
+  it('emits referral.fraud_score_calculated once per non-skipFraudCheck run', async () => {
+    const state = initialState();
+    seedQualifiedAtt(state);
+    await processReward(makeMockPrisma(state), 'a1');
+    const scoreEvents = state.analyticsEvents.filter((e) => e.event === 'referral.fraud_score_calculated');
+    expect(scoreEvents).toHaveLength(1);
+    expect(scoreEvents[0]!.props).toMatchObject({ attributionId: 'a1', signalCount: 0 });
+  });
+
+  it('emits referral.fraud_signal_ip_cluster when ip_cluster fires', async () => {
+    const state = initialState({
+      config: defaultConfig({ fraudAutoRejectThreshold: 200, fraudReviewThreshold: 200 }),
+    });
+    seedQualifiedAtt(state, { ipHash: 'shared' });
+    // Cluster of 4 (1 + 3 padding) → triggers ip_cluster (weight=30)
+    for (let i = 0; i < 3; i++) {
+      state.attributions.push({
+        ...state.attributions[0]!,
+        id: `pad${i}`,
+        invitedUserId: `pad${i}`,
+        ipHash: 'shared',
+      });
+    }
+    await processReward(makeMockPrisma(state), 'a1');
+    const ipClusterEvents = state.analyticsEvents.filter(
+      (e) => e.event === 'referral.fraud_signal_ip_cluster',
+    );
+    expect(ipClusterEvents).toHaveLength(1);
+    expect(ipClusterEvents[0]!.userId).toBe('inviter');
+    expect(ipClusterEvents[0]!.props).toMatchObject({
+      attributionId: 'a1',
+      weight: 30,
+      ipHash: 'shared',
+    });
+  });
+
+  it('emits referral.fraud_review_queued when score lands in review band', async () => {
+    const state = initialState({
+      config: defaultConfig({ fraudAutoRejectThreshold: 200, fraudReviewThreshold: 10 }),
+    });
+    seedQualifiedAtt(state, { ipHash: 'shared' });
+    for (let i = 0; i < 3; i++) {
+      state.attributions.push({
+        ...state.attributions[0]!,
+        id: `pad${i}`,
+        invitedUserId: `pad${i}`,
+        ipHash: 'shared',
+      });
+    }
+    const res = await processReward(makeMockPrisma(state), 'a1');
+    expect(res.kind).toBe('review_queued');
+    const reviewEvents = state.analyticsEvents.filter(
+      (e) => e.event === 'referral.fraud_review_queued',
+    );
+    expect(reviewEvents).toHaveLength(1);
+    expect(reviewEvents[0]!.props).toMatchObject({ attributionId: 'a1', score: 30 });
+  });
+
+  it('does NOT emit fraud_signal events when skipFraudCheck=true (admin approve)', async () => {
+    // Admin approve path re-uses the frozen score the admin saw. Re-emitting
+    // signals would double-count in the analytics funnel.
+    const state = initialState();
+    seedQualifiedAtt(state, { ipHash: 'shared' });
+    state.attributions[0]!.fraudScore = 45;
+    state.attributions[0]!.triggeredSignals = [{ signal: 'ip_cluster', weight: 30, details: {} }];
+    await processReward(makeMockPrisma(state), 'a1', { skipFraudCheck: true });
+    const fraudEmits = state.analyticsEvents.filter(
+      (e) => e.event.startsWith('referral.fraud_signal_') || e.event === 'referral.fraud_score_calculated',
+    );
+    expect(fraudEmits).toHaveLength(0);
   });
 
   it('returns already_granted on idempotency collision', async () => {

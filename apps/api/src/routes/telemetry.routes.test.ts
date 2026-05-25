@@ -180,6 +180,76 @@ describe('POST /telemetry — PRODUCT_EVENTS source-permission gate', () => {
     expect(acceptedNames).toEqual(['item_opened', 'paywall.viewed']);
   });
 
+  // Referral UI events were silently dropped before 2026-05-25 because the
+  // `referral.` prefix was not on ANALYTICS_EVENT_PREFIXES. We added each
+  // client-trustable name to ANALYTICS_EVENT_EXACT instead of opening the
+  // prefix (the latter would also let clients spoof server-authoritative
+  // referral events like `referral.attributed` / `fraud_signal_*`).
+  it('accepts referral.entry_point_impression (client UI engagement)', async () => {
+    const res = await request(makeApp()).post('/telemetry').send({
+      events: [{ event: 'referral.entry_point_impression', ts: Date.now(), props: { entryPoint: 'profile_tile' } }],
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, accepted: 1, dropped: 0 });
+  });
+
+  it('accepts referral.share_intent, referral.share_completed, referral.rules_opened (client funnel)', async () => {
+    const res = await request(makeApp()).post('/telemetry').send({
+      events: [
+        { event: 'referral.share_intent', ts: Date.now(), props: { channel: 'telegram' } },
+        { event: 'referral.share_completed', ts: Date.now(), props: { channel: 'telegram' } },
+        { event: 'referral.rules_opened', ts: Date.now() },
+      ],
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, accepted: 3, dropped: 0 });
+  });
+
+  it('still HARD-DENIES referral.attributed (server-authoritative, must not be spoofed)', async () => {
+    const res = await request(makeApp()).post('/telemetry').send({
+      events: [{ event: 'referral.attributed', ts: Date.now(), props: { refCode: 'fake' } }],
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, accepted: 0, dropped: 1 });
+    expect(shared.analyticsEvent.createMany).not.toHaveBeenCalled();
+  });
+
+  it('still HARD-DENIES referral.qualified and referral.rewarded (server-authoritative)', async () => {
+    const res = await request(makeApp()).post('/telemetry').send({
+      events: [
+        { event: 'referral.qualified', ts: Date.now() },
+        { event: 'referral.rewarded', ts: Date.now() },
+      ],
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, accepted: 0, dropped: 2 });
+  });
+
+  it('still HARD-DENIES referral.fraud_signal_velocity (server-only fraud scoring)', async () => {
+    // A client should NEVER be able to mint fraud signals — those come only
+    // from server-side processReward. Keeping these on exact-match (not prefix)
+    // ensures `referral.fraud_signal_*` stays denied.
+    const res = await request(makeApp()).post('/telemetry').send({
+      events: [{ event: 'referral.fraud_signal_velocity', ts: Date.now() }],
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, accepted: 0, dropped: 1 });
+  });
+
+  it('batch with referral.* events: keeps UI, drops server-only', async () => {
+    const res = await request(makeApp()).post('/telemetry').send({
+      events: [
+        { event: 'referral.entry_point_clicked', ts: Date.now() },     // UI → keep
+        { event: 'referral.attributed', ts: Date.now() },              // server-only → DENY
+        { event: 'referral.share_completed', ts: Date.now() },         // UI → keep
+        { event: 'referral.fraud_score_calculated', ts: Date.now() },  // server-only → DENY
+        { event: 'referral.home_banner_dismissed', ts: Date.now() },   // UI → keep
+      ],
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, accepted: 3, dropped: 2 });
+  });
+
   it('batch with one unknown event still accepts the rest (regression guard)', async () => {
     const res = await request(makeApp()).post('/telemetry').send({
       events: [

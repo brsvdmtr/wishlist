@@ -81,6 +81,7 @@ import { registerExperimentsRouter } from './routes/experiments.routes';
 import { startCleanupSchedulers } from './schedulers/cleanup';
 import { startBillingSchedulers } from './schedulers/billing';
 import { startReferralSchedulers } from './schedulers/referral';
+import { startReferralRetentionSchedulers } from './schedulers/referral-retention';
 import { startSantaSchedulers, runSantaStartupJobs } from './schedulers/santa';
 import {
   startReservationReminderScheduler,
@@ -1652,6 +1653,11 @@ startBillingSchedulers({ prisma, logger, getUserEntitlement, PLANS });
 // extracted to ./schedulers/referral.ts. Cadence and log labels
 // preserved byte-identical.
 startReferralSchedulers({ prisma, logger, trackAnalyticsEvent, sweepExpiredPendingAttributions });
+
+// Referral retention scheduler (daily): emits invitee_retained_d7/d30 for
+// LTV/ROI tracking. See apps/api/src/schedulers/referral-retention.ts +
+// docs/research/referral-decision.md § 7.3.
+startReferralRetentionSchedulers({ prisma, logger, trackAnalyticsEvent });
 
 // ─── Lifecycle / Win-back scheduler (hourly) ─────────────────────────────────
 // Scans users, classifies into segments S1–S4, creates LifecycleTouch records,

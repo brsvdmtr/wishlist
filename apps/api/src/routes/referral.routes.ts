@@ -478,7 +478,9 @@ export function registerRefRouter(deps: RefRouterDeps): Router {
           entryPointProfile: config.entryPointProfile,
           entryPointPaywall: config.entryPointPaywall,
           entryPointHomeBanner: config.entryPointHomeBanner,
-          entryPointPostShare: config.entryPointPostShare,
+          // entryPointPostShare removed 2026-05-25 — no UI consumer was ever
+          // written. Admin PATCH endpoint still accepts the field for
+          // backward-compat with admin-ops.yml automation; DB column stays.
         },
         configVersion: config.configVersion,
       });

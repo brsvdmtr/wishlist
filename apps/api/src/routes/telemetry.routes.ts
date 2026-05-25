@@ -59,6 +59,38 @@ const ANALYTICS_EVENT_PREFIXES = [
 ];
 const ANALYTICS_EVENT_EXACT = new Set<string>([
   'api_server_error', 'pro_cta_clicked', 'error_boundary_triggered',
+  // ── referral.* client-trustable UI engagement events ──────────────────────
+  // Added 2026-05-25 — before this, /tg/telemetry silently dropped all
+  // referral UI events (referral. prefix not in ANALYTICS_EVENT_PREFIXES),
+  // so entry-point impression / click / share funnels were invisible in
+  // AnalyticsEvent. We deliberately use exact-match (not prefix) because
+  // ~40 server-authoritative referral.* events live alongside in ANALYTICS_EVENTS
+  // (attributed / qualified / rewarded / fraud_* / config_changed / bot_*),
+  // and a prefix would allow a client to spoof them. See docs/research/
+  // referral-decision.md § 7.1.
+  'referral.entry_point_impression',
+  'referral.entry_point_clicked',
+  'referral.home_banner_dismissed',
+  'referral.screen_opened',
+  'referral.screen_load_failed',
+  'referral.rules_opened',
+  'referral.history_opened',
+  'referral.history_load_failed',
+  'referral.share_action_sheet_opened',
+  'referral.link_copied',
+  'referral.share_intent',
+  'referral.share_completed',
+  'referral.share_failed',
+  'referral.reminder_drafted',
+  'referral.onboarding_started',
+  'referral.onboarding_step_viewed',
+  'referral.code_generation_failed',
+  'referral.deeplink_open_failed',
+  'referral.landing_render_blocked',
+  'referral.banner_impression_but_no_click_session',
+  'referral.client_js_error',
+  'referral.celebration_viewed',
+  'referral.celebration_cta_clicked',
 ]);
 // Legacy server-authoritative events that live in ANALYTICS_EVENTS (not yet
 // migrated to PRODUCT_EVENTS). They MUST be hard-denied at ingest. Today these
