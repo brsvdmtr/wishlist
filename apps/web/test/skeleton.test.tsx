@@ -13,6 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { Skeleton } from '@wishlist/ui';
+import { radius } from '@wishlist/ui-tokens';
 
 function shimmerBlocks(container: HTMLElement): HTMLElement[] {
   // Skeleton blocks are the only animated div children — animation token
@@ -20,6 +21,12 @@ function shimmerBlocks(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll('div')).filter((el) => {
     return (el as HTMLElement).style.animation?.includes('skeletonShimmer');
   }) as HTMLElement[];
+}
+
+function firstShimmer(container: HTMLElement): HTMLElement {
+  const blocks = shimmerBlocks(container);
+  expect(blocks.length, 'expected at least one shimmer block').toBeGreaterThan(0);
+  return blocks[0]!;
 }
 
 function rootStyle(container: HTMLElement): CSSStyleDeclaration {
@@ -33,7 +40,8 @@ describe('Skeleton — a11y contract', () => {
       const { container } = render(<Skeleton variant={variant} />);
       const root = container.querySelector('[role="status"]');
       expect(root, `variant=${variant}`).not.toBeNull();
-      // React serializes boolean `aria-busy={true}` to the string "true".
+      // React serializes the JSX boolean `aria-busy={true}` to the
+      // string attribute value "true" in the DOM.
       expect(root?.getAttribute('aria-busy'), `variant=${variant}`).toBe('true');
     }
   });
@@ -72,7 +80,7 @@ describe('Skeleton — layout-stability contract', () => {
     expect(heights).toContain('44px');  // submit button
   });
 
-  it('calendar variant renders header + 88px banner + 220px grid + day rows (8 shimmers)', () => {
+  it('calendar variant renders header + 88px banner + 220px grid + day rows (10 shimmers)', () => {
     const { container } = render(<Skeleton variant="calendar" />);
     const heights = shimmerBlocks(container).map((el) => el.style.height);
     expect(heights).toContain('88px');  // banner
@@ -107,7 +115,7 @@ describe('Skeleton — layout-stability contract', () => {
 describe('Skeleton — design-system contract', () => {
   it('uses the canonical skeletonShimmer animation (not Tailwind animate-pulse)', () => {
     const { container } = render(<Skeleton />);
-    const block = shimmerBlocks(container)[0];
+    const block = firstShimmer(container);
     expect(block.style.animation).toContain('skeletonShimmer');
     // Explicit guard: must NOT use Tailwind's animate-pulse class as a substitute.
     expect(block.className).not.toContain('animate-pulse');
@@ -115,13 +123,16 @@ describe('Skeleton — design-system contract', () => {
 
   it('block background uses theme CSS var so accent switching propagates', () => {
     const { container } = render(<Skeleton />);
-    const block = shimmerBlocks(container)[0];
+    const block = firstShimmer(container);
     expect(block.style.background).toContain('--wb-surface');
   });
 
-  it('block border-radius uses radius.lg (14px) from tokens', () => {
+  it('block border-radius binds to the radius.lg token (not a hard-coded number)', () => {
+    // Asserting against the imported token guarantees this test moves
+    // with the token if it's ever rescaled, rather than silently
+    // regressing to the old value.
     const { container } = render(<Skeleton />);
-    const block = shimmerBlocks(container)[0];
-    expect(block.style.borderRadius).toBe('14px');
+    const block = firstShimmer(container);
+    expect(block.style.borderRadius).toBe(`${radius.lg}px`);
   });
 });

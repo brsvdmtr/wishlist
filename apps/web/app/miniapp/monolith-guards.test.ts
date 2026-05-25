@@ -148,6 +148,13 @@ describe('MiniApp.tsx — F1 lazy-screen regression guard (2026-05-25)', () => {
       // A residual `import { Name } from '...'` line would force the
       // bundler to include the chunk eagerly, no matter what dynamic()
       // says about it.
+      //
+      // KNOWN GAP: this regex anchors on a path ending in the symbol name
+      // (`./screens/.../Name`). If `screens/` ever grows a barrel
+      // `index.ts` that re-exports the screen, a future
+      // `import { CalendarRoot } from './screens/calendar'` would slip
+      // through. Tighten this guard if `screens/index.ts` ever lands —
+      // for now no barrel exists.
       const staticImport = new RegExp(
         `import\\s*\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from\\s*['"][^'"]*${name}['"]`,
       );

@@ -38,8 +38,11 @@ Every primitive has a **status** in
 
 ### Not yet extracted (Phase 3 targets — all `legacy` today)
 `Input`, `TextArea`, `IconButton`, `Toast`, `ScreenHeader`, `StickyCTA`,
-`EmptyState`, `Skeleton`, `Menu`, `OnboardingSplash`, `GroupGiftProgress`,
+`EmptyState`, `Menu`, `OnboardingSplash`, `GroupGiftProgress`,
 `PaywallHero`, `ReservationTTLControl`, `SecretReservationStateStrip`.
+
+`Skeleton` was extracted 2026-05-25 — now `provisional` in `@wishlist/ui`
+(`packages/ui/src/Skeleton.tsx`). See registry + DESIGN_DECISIONS.
 
 Do not clone any of these in feature code — lift into `packages/ui`
 first with a registry entry.
@@ -524,7 +527,9 @@ Approved visual targets in mockups but not extracted:
 - `Toast` — visual language **not codified yet** in approved mockups.
   Phase 2 extraction needs its own mockup.
 - `EmptyState` — warm empty-state with emoji + title + CTA.
-- `Skeleton` — per-layout loading skeletons.
+- ~~`Skeleton`~~ — extracted 2026-05-25. Now in `@wishlist/ui` as
+  `provisional` with 4 layout variants (`list` / `form` / `calendar` /
+  `settings`). See `packages/ui/src/Skeleton.tsx`.
 - `OnboardingSplash` — `v2-onboarding.html` four-screen template.
 - `PaywallHero` — specific `Card variant="hero"` composition.
 - `SecretReservationStateStrip` — left-edge 3px state-colored strip.

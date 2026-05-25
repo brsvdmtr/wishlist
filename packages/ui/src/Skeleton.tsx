@@ -1,7 +1,7 @@
 'use client';
 
 import React, { type CSSProperties } from 'react';
-import { radius, spacing, keyframes } from '@wishlist/ui-tokens';
+import { radius, spacing, animation } from '@wishlist/ui-tokens';
 
 /**
  * Loading placeholder primitive. Renders a stack of shimmering blocks
@@ -30,13 +30,11 @@ export interface SkeletonProps {
   style?: CSSProperties;
 }
 
-const SHIMMER_ANIMATION = `${keyframes.skeletonShimmer} 1.5s ease-in-out infinite`;
-
 export function Skeleton({ variant = 'list', label = 'Loading', style }: SkeletonProps) {
   return (
     <div
       role="status"
-      aria-busy="true"
+      aria-busy={true}
       aria-label={label}
       style={{
         minHeight: 320,
@@ -93,7 +91,7 @@ function SkeletonBlock({ width, height }: { width: string | number; height: numb
         height,
         borderRadius: radius.lg,
         background: 'var(--wb-surface, rgba(255,255,255,0.035))',
-        animation: SHIMMER_ANIMATION,
+        animation: animation.shimmer,
         flexShrink: 0,
       }}
     />
