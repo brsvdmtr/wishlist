@@ -1,6 +1,7 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+  - 'infra/cloudflare/*'
 
 # pnpm v10 blocks dependency build scripts by default. This allowlist makes
 # installs work in CI and on fresh machines without manual approval.

@@ -645,10 +645,10 @@ const ru: Dict = {
   error_open_in_telegram_btn: 'Открыть в Telegram',
 
   // ── Maintenance screen ────────────────────────────────────────────────────
-  maintenance_title: 'Технические работы',
-  maintenance_body: 'Сервис временно недоступен. Мы уже работаем над этим — загляни через пару минут.',
+  maintenance_title: 'Скоро вернёмся',
+  maintenance_body: 'Мы знаем о проблеме и уже её решаем. Загляни через пару минут — всё снова будет на месте.',
   maintenance_retry: 'Попробовать снова',
-  maintenance_notify_hint: 'Когда всё восстановится, мы сообщим в бот.',
+  maintenance_notify_hint: 'Как только всё заработает — напишем сюда, в бот.',
   bot_maintenance: '⚙️ Сервис временно на техобслуживании. Когда всё восстановится — мы напишем вам сюда.',
   maintenance_recovery_text: 'Привет! Мы всё починили 🛠\nБот снова работает — заходи, всё на месте ✨',
   maintenance_recovery_btn: 'Открыть бот',
@@ -3699,10 +3699,10 @@ const en: Dict = {
   error_open_in_telegram_btn: 'Open in Telegram',
 
   // ── Maintenance screen ────────────────────────────────────────────────────
-  maintenance_title: 'Maintenance',
-  maintenance_body: 'Service is temporarily unavailable. We\'re already working on it — check back in a few minutes.',
+  maintenance_title: "We'll be right back",
+  maintenance_body: "We know about this and we're on it. Check back in a few minutes — everything will be right where you left it.",
   maintenance_retry: 'Try again',
-  maintenance_notify_hint: 'We\'ll notify you here when service is back.',
+  maintenance_notify_hint: "We'll message you here the moment we're back.",
   bot_maintenance: '⚙️ Service is temporarily under maintenance. We\'ll message you here when it\'s back.',
   maintenance_recovery_text: 'Hey! We fixed everything 🛠\nThe bot is back up — come on in, nothing\'s lost ✨',
   maintenance_recovery_btn: 'Open bot',
@@ -6725,10 +6725,10 @@ const zhCN: Dict = {
   error_open_in_telegram_btn: '在 Telegram 中打开',
 
   // ── Maintenance screen ────────────────────────────────────────────────────
-  maintenance_title: '维护中',
-  maintenance_body: '服务暂时不可用，我们正在处理——请几分钟后再试。',
+  maintenance_title: '我们马上回来',
+  maintenance_body: '我们已经知道问题，正在处理中。几分钟后再来——一切都会回到原位。',
   maintenance_retry: '重试',
-  maintenance_notify_hint: '恢复后我们会通知您。',
+  maintenance_notify_hint: '一切恢复后，我们会立刻在这里给您发消息。',
   bot_maintenance: '⚙️ 服务正在维护中。恢复后我们会通知您。',
   maintenance_recovery_text: '嗨！我们修好啦 🛠\n机器人恢复正常了，快来看看吧 ✨',
   maintenance_recovery_btn: '打开机器人',
@@ -9623,10 +9623,10 @@ const hi: Dict = {
   error_open_in_telegram_btn: 'Telegram में खोलें',
 
   // ── Maintenance screen ────────────────────────────────────────────────────
-  maintenance_title: 'रखरखाव जारी है',
-  maintenance_body: 'सेवा अस्थायी रूप से अनुपलब्ध है। हम काम कर रहे हैं — कुछ मिनट बाद फिर से आएं।',
+  maintenance_title: 'हम जल्दी वापस आएंगे',
+  maintenance_body: 'हमें समस्या के बारे में पता है और हम इसे ठीक कर रहे हैं। कुछ मिनट बाद आएं — सब कुछ अपनी जगह पर होगा।',
   maintenance_retry: 'फिर से प्रयास करें',
-  maintenance_notify_hint: 'सेवा वापस आने पर हम आपको सूचित करेंगे।',
+  maintenance_notify_hint: 'जैसे ही सब ठीक होगा — हम आपको यहीं संदेश भेजेंगे।',
   bot_maintenance: '⚙️ सेवा अस्थायी रूप से रखरखाव में है। वापस आने पर हम यहां संदेश भेजेंगे।',
   maintenance_recovery_text: 'नमस्ते! हमने सब ठीक कर दिया 🛠\nबॉट फिर से काम कर रहा है — आइए, सब सही है ✨',
   maintenance_recovery_btn: 'बॉट खोलें',
@@ -12518,10 +12518,10 @@ const es: Dict = {
   error_open_in_telegram_btn: 'Abrir en Telegram',
 
   // ── Maintenance screen ────────────────────────────────────────────────────
-  maintenance_title: 'Mantenimiento',
-  maintenance_body: 'El servicio no está disponible temporalmente. Ya estamos trabajando en ello — vuelve en unos minutos.',
+  maintenance_title: 'Volveremos pronto',
+  maintenance_body: 'Sabemos del problema y ya lo estamos resolviendo. Vuelve en unos minutos — todo estará donde lo dejaste.',
   maintenance_retry: 'Intentar de nuevo',
-  maintenance_notify_hint: 'Te avisaremos cuando el servicio esté de vuelta.',
+  maintenance_notify_hint: 'Te escribiremos aquí en cuanto todo vuelva a funcionar.',
   bot_maintenance: '⚙️ El servicio está en mantenimiento. Te avisaremos aquí cuando vuelva a funcionar.',
   maintenance_recovery_text: '¡Hola! Ya lo arreglamos todo 🛠\nEl bot vuelve a funcionar — entra, todo está en su sitio ✨',
   maintenance_recovery_btn: 'Abrir bot',
@@ -15414,10 +15414,10 @@ const ar: Dict = {
   error_open_in_telegram_btn: 'فتح في Telegram',
 
   // ── Maintenance screen ────────────────────────────────────────────────────
-  maintenance_title: 'صيانة',
-  maintenance_body: 'الخدمة غير متاحة مؤقتاً. نعمل على ذلك — عد بعد دقائق.',
+  maintenance_title: 'سنعود قريباً',
+  maintenance_body: 'نعلم بالأمر ونعمل على حله. عد بعد دقائق — كل شيء سيكون في مكانه.',
   maintenance_retry: 'حاول مجدداً',
-  maintenance_notify_hint: 'سنبلغك عندما تعود الخدمة.',
+  maintenance_notify_hint: 'سنراسلك هنا فور عودة كل شيء.',
   bot_maintenance: '⚙️ الخدمة قيد الصيانة مؤقتاً. سنراسلك هنا عندما تعود.',
   maintenance_recovery_text: 'مرحباً! أصلحنا كل شيء 🛠\nالبوت يعمل مجدداً — ادخل، كل شيء في مكانه ✨',
   maintenance_recovery_btn: 'فتح البوت',

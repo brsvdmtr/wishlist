@@ -4,12 +4,18 @@ import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vites
 import express from 'express';
 import request from 'supertest';
 
-// hint.findUnique is explicit + controllable (the /hints/credit tests drive
-// it); every other prisma.* access falls through to a permissive null stub.
-const db = vi.hoisted(() => ({ hintFindUnique: vi.fn() }));
+// hint.findUnique + user.findUnique are explicit + controllable; every other
+// prisma.* access falls through to a permissive null stub.
+const db = vi.hoisted(() => ({
+  hintFindUnique: vi.fn(),
+  userFindUnique: vi.fn(),
+}));
 
 vi.mock('@wishlist/db', () => ({
-  prisma: new Proxy({ hint: { findUnique: db.hintFindUnique } } as Record<string, unknown>, {
+  prisma: new Proxy({
+    hint: { findUnique: db.hintFindUnique },
+    user: { findUnique: db.userFindUnique },
+  } as Record<string, unknown>, {
     get(target, key) {
       if (key in target) return target[key as string];
       return new Proxy({}, { get() { return vi.fn().mockResolvedValue(null); } });
@@ -160,5 +166,170 @@ describe('internal — credit endpoints', () => {
     expect(res.body.outcome).toBe('not_delivered');
     // The route threads the REAL hint status — it never assumes DELIVERED.
     expect(mockHintCharge).toHaveBeenCalledWith('u-bot', 'h-sent', 'SENT', false);
+  });
+});
+
+describe('internal — maintenance/ingest-buffered', () => {
+  const KEY = 'test-internal-key';
+  type Deps = Parameters<typeof registerInternalRouter>[0];
+
+  function buildDeps(over: Partial<Deps> = {}): Deps {
+    return {
+      getUserEntitlement: vi.fn(async () => ({ plan: { features: [] as string[] }, isPro: false })),
+      importUrlForUser: vi.fn(async () => ({ parseStatus: 'ok' as const })),
+      DRAFTS_ITEM_LIMIT: 20,
+      recordMaintenanceExposure: vi.fn(async () => 'incident-abc'),
+      trackEvent: vi.fn(),
+      ...over,
+    } as Deps;
+  }
+
+  function makeApp(deps: Deps) {
+    const app = express();
+    app.use(express.json());
+    app.use(registerInternalRouter(deps));
+    return app;
+  }
+
+  beforeAll(() => { process.env.BOT_TOKEN = KEY; });
+  afterAll(() => { delete process.env.BOT_TOKEN; });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db.userFindUnique.mockResolvedValue(null);
+  });
+
+  it('requires X-INTERNAL-KEY auth', async () => {
+    const res = await request(makeApp(buildDeps()))
+      .post('/maintenance/ingest-buffered')
+      .send({ records: [] });
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects malformed body (records missing)', async () => {
+    const res = await request(makeApp(buildDeps()))
+      .post('/maintenance/ingest-buffered')
+      .set('X-INTERNAL-KEY', KEY)
+      .send({});
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects records with invalid tg_user_id', async () => {
+    const res = await request(makeApp(buildDeps()))
+      .post('/maintenance/ingest-buffered')
+      .set('X-INTERNAL-KEY', KEY)
+      .send({ records: [{ tg_user_id: 'not-a-number', _key: 'k1' }] });
+    expect(res.status).toBe(400);
+  });
+
+  it('accepts empty records list', async () => {
+    const deps = buildDeps();
+    const res = await request(makeApp(deps))
+      .post('/maintenance/ingest-buffered')
+      .set('X-INTERNAL-KEY', KEY)
+      .send({ records: [] });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      ok: true, ingested: 0, skipped: 0, failed: 0, total: 0, ingestedKeys: [],
+    });
+    expect(deps.recordMaintenanceExposure).not.toHaveBeenCalled();
+  });
+
+  it('ingests records for existing users', async () => {
+    db.userFindUnique.mockImplementation(({ where }) => {
+      if (where?.telegramId === '42') return Promise.resolve({ id: 'u-42', telegramChatId: '42' });
+      if (where?.telegramId === '43') return Promise.resolve({ id: 'u-43', telegramChatId: '43' });
+      return Promise.resolve(null);
+    });
+    const deps = buildDeps();
+    const res = await request(makeApp(deps))
+      .post('/maintenance/ingest-buffered')
+      .set('X-INTERNAL-KEY', KEY)
+      .send({
+        records: [
+          { tg_user_id: 42, chat_id: 42, locale: 'ru', surface: 'static', _key: 'exposure:2026-05-25:42' },
+          { tg_user_id: 43, chat_id: 43, locale: 'en', surface: 'static', _key: 'exposure:2026-05-25:43' },
+        ],
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.ingested).toBe(2);
+    expect(res.body.skipped).toBe(0);
+    expect(res.body.failed).toBe(0);
+    expect(res.body.ingestedKeys.sort()).toEqual([
+      'exposure:2026-05-25:42', 'exposure:2026-05-25:43',
+    ]);
+    expect(deps.recordMaintenanceExposure).toHaveBeenCalledTimes(2);
+    expect(deps.recordMaintenanceExposure).toHaveBeenCalledWith('u-42', 'static', 'ru', '42');
+    expect(deps.recordMaintenanceExposure).toHaveBeenCalledWith('u-43', 'static', 'en', '43');
+  });
+
+  it('skips records for missing users but still ACKs their keys (avoid infinite buffer retry)', async () => {
+    db.userFindUnique.mockResolvedValue(null);
+    const deps = buildDeps();
+    const res = await request(makeApp(deps))
+      .post('/maintenance/ingest-buffered')
+      .set('X-INTERNAL-KEY', KEY)
+      .send({
+        records: [
+          { tg_user_id: 999, _key: 'exposure:x:999' },
+        ],
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.ingested).toBe(0);
+    expect(res.body.skipped).toBe(1);
+    expect(res.body.ingestedKeys).toEqual(['exposure:x:999']);
+    expect(deps.recordMaintenanceExposure).not.toHaveBeenCalled();
+  });
+
+  it('does NOT ACK a record that failed mid-ingest (recordMaintenanceExposure threw)', async () => {
+    db.userFindUnique.mockResolvedValue({ id: 'u-10', telegramChatId: '10' });
+    const deps = buildDeps({
+      recordMaintenanceExposure: vi.fn().mockRejectedValue(new Error('DB transient')),
+    });
+    const res = await request(makeApp(deps))
+      .post('/maintenance/ingest-buffered')
+      .set('X-INTERNAL-KEY', KEY)
+      .send({ records: [{ tg_user_id: 10, _key: 'exposure:x:10' }] });
+    expect(res.status).toBe(200);
+    expect(res.body.ingested).toBe(0);
+    expect(res.body.failed).toBe(1);
+    expect(res.body.ingestedKeys).toEqual([]); // unacked → watchdog will retry next round
+  });
+
+  it('falls back to user.telegramChatId when record has no chat_id', async () => {
+    db.userFindUnique.mockResolvedValue({ id: 'u-7', telegramChatId: '777' });
+    const deps = buildDeps();
+    await request(makeApp(deps))
+      .post('/maintenance/ingest-buffered')
+      .set('X-INTERNAL-KEY', KEY)
+      .send({ records: [{ tg_user_id: 7, locale: 'ru', surface: 'static', _key: 'k' }] });
+    expect(deps.recordMaintenanceExposure).toHaveBeenCalledWith('u-7', 'static', 'ru', '777');
+  });
+
+  it('handles a mixed batch (some ingested, some skipped, some failed)', async () => {
+    db.userFindUnique.mockImplementation(({ where }) => {
+      if (where?.telegramId === '1') return Promise.resolve({ id: 'u-1', telegramChatId: '1' });
+      if (where?.telegramId === '2') return Promise.resolve({ id: 'u-2', telegramChatId: '2' });
+      return Promise.resolve(null); // tg=3 → not found
+    });
+    const expose = vi.fn().mockImplementation(async (userId: string) => {
+      if (userId === 'u-2') throw new Error('DB blip');
+      return 'inc-1';
+    });
+    const deps = buildDeps({ recordMaintenanceExposure: expose });
+    const res = await request(makeApp(deps))
+      .post('/maintenance/ingest-buffered')
+      .set('X-INTERNAL-KEY', KEY)
+      .send({
+        records: [
+          { tg_user_id: 1, _key: 'k1' },
+          { tg_user_id: 2, _key: 'k2' },
+          { tg_user_id: 3, _key: 'k3' },
+        ],
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.ingested).toBe(1);
+    expect(res.body.skipped).toBe(1);
+    expect(res.body.failed).toBe(1);
+    expect(res.body.ingestedKeys.sort()).toEqual(['k1', 'k3']);
   });
 });

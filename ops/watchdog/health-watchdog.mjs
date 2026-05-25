@@ -28,6 +28,11 @@
  *   WATCHDOG_STATE_FILE   — state JSON (default: /var/lib/wishlist/watchdog/state.json)
  *   WATCHDOG_TIMEOUT_MS   — HTTP probe timeout, ms (default: 15000)
  *   MAINTENANCE_MODE      — if "true", skip ALL alerting (planned downtime)
+ *   CF_DRAIN_SECRET       — shared secret with the CF maintenance worker
+ *                            (POSTed via `wrangler secret put CF_DRAIN_SECRET`).
+ *                            Required for the L1 KV drain during recovery.
+ *                            If unset, drain is silently skipped (L1 users not
+ *                            notified — L2/L3 still work).
  *
  * Run via the flock wrapper to avoid overlapping cron runs:
  *   star/5 * * * * /opt/wishlist/ops/watchdog/run-health-watchdog.sh
@@ -86,6 +91,13 @@ const LEGACY_STATE_FILES = [
 ];
 const TIMEOUT_MS = Number(process.env.WATCHDOG_TIMEOUT_MS ?? 15000);
 const MAINTENANCE = (process.env.MAINTENANCE_MODE ?? '').toLowerCase() === 'true';
+
+// CF maintenance worker (bound to the same hostname, so the drain endpoint is
+// served from BASE_URL itself). Empty CF_DRAIN_SECRET disables the drain step
+// — useful when running this watchdog against a dev API without a worker.
+const CF_DRAIN_SECRET = process.env.CF_DRAIN_SECRET ?? '';
+const CF_DRAIN_URL = `${BASE_URL}/__cf-maintenance-drain`;
+const CF_DRAIN_MAX_BATCHES = 10; // safety: ≤10 × 1000 = 10k records per recovery cycle
 
 if (!BASE_URL) {
   console.error('[watchdog] WATCHDOG_BASE_URL is not set');
@@ -355,7 +367,7 @@ async function fetchZeroExposureCandidates() {
 
 // ─── Internal API caller (maintenance recovery flow) ─────────────────────────
 
-async function callInternalApi(path, method = 'POST') {
+async function callInternalApi(path, method = 'POST', body = null) {
   const url = `${BASE_URL}/api/internal${path}`;
   try {
     const controller = new AbortController();
@@ -363,14 +375,93 @@ async function callInternalApi(path, method = 'POST') {
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json', 'X-INTERNAL-KEY': BOT_TOKEN },
+      body: body ? JSON.stringify(body) : undefined,
       signal: controller.signal,
     });
     clearTimeout(timer);
-    const body = await res.json().catch(() => ({}));
-    return { ok: res.ok, status: res.status, body };
+    const respBody = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, body: respBody };
   } catch (err) {
     return { ok: false, status: 0, body: {}, error: String(err) };
   }
+}
+
+// ─── CF Worker KV drain ─────────────────────────────────────────────────────
+// Called once before each `send-recovery-notifications` invocation. Pulls
+// L1-buffered exposures from the CF maintenance worker, POSTs them to the
+// API as `MaintenanceExposure` rows, then DELETEs the acked keys from KV.
+// Loops until the worker reports `has_more=false` (capped at CF_DRAIN_MAX_BATCHES
+// to bound a single watchdog run). Returns {drained, ingested, batches, error?}.
+async function drainCfMaintenanceBuffer() {
+  if (!CF_DRAIN_SECRET) {
+    console.log('[watchdog] CF_DRAIN_SECRET not set — skipping CF KV drain');
+    return { drained: 0, ingested: 0, batches: 0 };
+  }
+
+  let totalDrained = 0;
+  let totalIngested = 0;
+  let totalSkipped = 0;
+  let batches = 0;
+
+  for (let i = 0; i < CF_DRAIN_MAX_BATCHES; i++) {
+    let drainBody;
+    try {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
+      const drainRes = await fetch(CF_DRAIN_URL, {
+        method: 'GET',
+        headers: { 'x-drain-secret': CF_DRAIN_SECRET },
+        signal: ac.signal,
+      });
+      clearTimeout(timer);
+      if (!drainRes.ok) {
+        console.error(`[watchdog] CF drain GET failed: ${drainRes.status}`);
+        return { drained: totalDrained, ingested: totalIngested, skipped: totalSkipped, batches, error: `drain_${drainRes.status}` };
+      }
+      drainBody = await drainRes.json();
+    } catch (err) {
+      console.error(`[watchdog] CF drain GET error: ${err}`);
+      return { drained: totalDrained, ingested: totalIngested, skipped: totalSkipped, batches, error: String(err) };
+    }
+
+    const records = drainBody.records ?? [];
+    if (records.length === 0) break;
+
+    totalDrained += records.length;
+    batches++;
+
+    const ingestRes = await callInternalApi('/maintenance/ingest-buffered', 'POST', { records });
+    if (!ingestRes.ok) {
+      console.error(`[watchdog] CF ingest failed: ${JSON.stringify(ingestRes.body)}`);
+      return { drained: totalDrained, ingested: totalIngested, skipped: totalSkipped, batches, error: 'ingest_failed' };
+    }
+
+    const ingestedKeys = ingestRes.body.ingestedKeys ?? [];
+    totalIngested += ingestRes.body.ingested ?? 0;
+    totalSkipped += ingestRes.body.skipped ?? 0;
+
+    if (ingestedKeys.length > 0) {
+      try {
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
+        await fetch(CF_DRAIN_URL, {
+          method: 'DELETE',
+          headers: { 'x-drain-secret': CF_DRAIN_SECRET, 'content-type': 'application/json' },
+          body: JSON.stringify({ keys: ingestedKeys }),
+          signal: ac.signal,
+        });
+        clearTimeout(timer);
+      } catch (err) {
+        // Records already ingested into DB (idempotent on next round-trip too),
+        // and KV TTL will expire them within 7 days. Soft-fail.
+        console.error(`[watchdog] CF drain DELETE failed: ${err}`);
+      }
+    }
+
+    if (!drainBody.has_more) break;
+  }
+
+  return { drained: totalDrained, ingested: totalIngested, skipped: totalSkipped, batches };
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -434,6 +525,10 @@ if (isDown) {
       await runSql(
         `UPDATE "MaintenanceIncident" SET status = 'recovered', "endedAt" = NOW(), "recoveryConfirmedAt" = NOW(), "updatedAt" = NOW() WHERE status IN ('active', 'recovering')`,
       );
+      const drainResult = await drainCfMaintenanceBuffer();
+      if (drainResult.batches > 0 || drainResult.error) {
+        console.log(`[watchdog] CF drain: ${drainResult.drained} drained, ${drainResult.ingested} ingested, ${drainResult.skipped} skipped in ${drainResult.batches} batch(es)${drainResult.error ? ` (error: ${drainResult.error})` : ''}`);
+      }
       const notifyRes = await callInternalApi('/maintenance/send-recovery-notifications');
       if (notifyRes.ok) {
         const { sent = 0, failed = 0 } = notifyRes.body;
@@ -457,7 +552,11 @@ if (isDown) {
         const recoveryRes = await callInternalApi('/maintenance/check-recovery');
         if (recoveryRes.ok && recoveryRes.body.recovered) {
           console.log(`[watchdog] recovering incident found, sending notifications...`);
-          const notifyRes = await callInternalApi('/maintenance/send-recovery-notifications');
+          const drainResult = await drainCfMaintenanceBuffer();
+      if (drainResult.batches > 0 || drainResult.error) {
+        console.log(`[watchdog] CF drain: ${drainResult.drained} drained, ${drainResult.ingested} ingested, ${drainResult.skipped} skipped in ${drainResult.batches} batch(es)${drainResult.error ? ` (error: ${drainResult.error})` : ''}`);
+      }
+      const notifyRes = await callInternalApi('/maintenance/send-recovery-notifications');
           if (notifyRes.ok) {
             console.log(`[watchdog] recovery notifications: ${notifyRes.body.sent} sent, ${notifyRes.body.failed} failed`);
           }

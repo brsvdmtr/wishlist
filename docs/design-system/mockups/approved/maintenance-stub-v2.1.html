@@ -1,25 +1,37 @@
 <!doctype html>
 <!--
-  WishBoard maintenance stub (canonical, v2.1).
-  Source-of-truth mirror: docs/design-system/mockups/approved/maintenance-stub-v2.1.html.
+  DRAFT v3 — Maintenance stub v2.1 (full-screen, warm copy, with notification promise)
+  Status: proposed (awaiting approval)
 
-  Deployment targets — keep both bit-for-bit identical to this file:
-    1. ops/maintenance/maintenance.html (THIS FILE) — nginx error_page 502 503 504
-       Wired in: ops/vultr/nginx-wishlistik.conf.template lines 30-34.
-       Reached at L2 (nginx up, upstream Next.js or API down).
-    2. infra/cloudflare/maintenance-worker/src/maintenance.html.txt — CF Worker.
-       Reached at L1 (origin completely unreachable from CF edge).
+  Changes vs v2:
+    - Warmer, more reassuring copy ("Скоро вернёмся" instead of "Технические работы").
+    - Notification hint RESTORED across all 6 locales — now backed by CF Worker + KV
+      buffer architecture (see notes below). Promise becomes deliverable at L1 too.
 
-  Notification flow:
-    HTML reads window.Telegram.WebApp.initData (HMAC-signed Bot API payload).
-    fire-and-forget POST → /__cf-maintenance-exposure (worker-only path).
-    Worker validates HMAC(BOT_TOKEN), writes KV with 7-day TTL.
-    Watchdog (ops/watchdog/health-watchdog.mjs) drains KV on recovery →
-    /internal/maintenance/ingest-buffered → existing send-recovery-notifications
-    fan-out via bot. End result: user gets a recovery message even when L1 fired.
+  Deployment targets (this exact file is the source-of-truth):
+    1. ops/maintenance/maintenance.html — nginx `error_page 502 503 504` (L2: web down, API alive).
+    2. infra/cloudflare/maintenance-worker/src/maintenance.html.txt — embedded into the
+       CF Worker that intercepts origin-unreachable codes (521/522/523/524/525/526/520)
+       (L1: origin completely unreachable).
+    Both deployments serve the IDENTICAL bytes — design language is uniform across slices.
 
-  Self-contained — NO external assets. Works when origin is dead.
-  Locales (6): ru, en, zh-CN, hi, es, ar. RTL: ar. prefers-reduced-motion respected.
+  Notification flow at L1 (after CF Worker + KV ships):
+    - HTML reads window.Telegram.WebApp.initData (auth payload signed by Bot API).
+    - POSTs to /__cf-maintenance-exposure (worker-owned path, never proxied to origin).
+    - Worker validates initData HMAC server-side → extracts user_id, locale → writes
+      KV record `exposure:<bucket>:<tg_user_id>` with 7-day TTL.
+    - When origin recovers, the watchdog (ops/watchdog/health-watchdog.mjs) pulls buffered
+      records via /__cf-maintenance-drain (shared-secret) and ingests them as
+      MaintenanceExposure rows. Existing recovery-notification fan-out (internal.routes.ts
+      /maintenance/send-recovery-notifications) then notifies them via bot.
+
+  Notification flow at L2 (nginx-served):
+    - Same POST hits the live API (since only web is down, API is up) → same result.
+  Notification flow at L3 (in-app screen): existing in-app POST /tg/maintenance-exposure path.
+
+  Self-contained — NO external assets (CDN, fonts, scripts). Works when origin is dead.
+  Locales (6): ru, en, zh-CN, hi, es, ar. RTL: ar. Reduced-motion respected.
+  Tap target ≥ 48px. Safe-area aware.
 -->
 <html lang="ru" dir="ltr" data-loc="ru">
 <head>
@@ -181,6 +193,7 @@
     }
     .hint svg { width: 14px; height: 14px; opacity: 0.7; flex-shrink: 0; }
 
+    /* RTL */
     [dir="rtl"] body, [dir="rtl"] .btn { letter-spacing: 0; }
     [data-loc="hi"] h1, [data-loc="ar"] h1 { letter-spacing: 0; }
 
@@ -317,6 +330,7 @@
       }
       if (dict.title) document.title = dict.title + ' — WishBoard';
 
+      // Telegram WebView polish
       try {
         if (window.Telegram && window.Telegram.WebApp) {
           window.Telegram.WebApp.ready();
@@ -327,9 +341,9 @@
       } catch (e) {}
 
       // Fire-and-forget exposure record so recovery notification reaches this user.
-      // L1 (origin unreachable): intercepted by CF Worker which writes to KV buffer.
-      // L2 (nginx error_page):    same POST reaches the live API → /tg/maintenance-exposure path.
-      // keepalive=true: browser still sends if user navigates away immediately.
+      // At L1 (origin unreachable) this is intercepted by CF Worker (KV buffer).
+      // At L2 (nginx 502) this hits the live API → /tg/maintenance-exposure path.
+      // keepalive=true ensures the browser sends it even on immediate navigation.
       try {
         var initData = (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) || '';
         if (initData) {

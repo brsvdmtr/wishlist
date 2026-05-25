@@ -4,6 +4,11 @@ Cron-driven health monitor for Wishlistik prod. Runs every 5 minutes on the
 Vultr Amsterdam host, probes `https://wishlistik.ru/{,/api/health/deep,/api/tg/bootstrap}`,
 and pushes Telegram alerts to `ADMIN_ALERT_CHAT_IDS` on state changes.
 
+On recovery, also drains the Cloudflare maintenance worker's KV exposure
+buffer (L1 users who hit the static stub while origin was unreachable) and
+hands them to the API for recovery-notification fan-out. End-to-end picture
+across L1/L2/L3 lives in [`docs/MAINTENANCE_FLOW.md`](../../docs/MAINTENANCE_FLOW.md).
+
 ## Files
 
 | Path | Role |
@@ -35,10 +40,19 @@ cron interval the alert latency floor is ~5 minutes and the worst case is
 
 After promotion, the watchdog keeps reading the state file as "I am in an
 incident" until it sees `RECOVERY_THRESHOLD` (= 3) consecutive healthy
-ticks. Then it sends `🟢 Wishlistik RECOVERED`, marks every
-`active|recovering` `MaintenanceIncident` row as `recovered`, and calls
-`/api/internal/maintenance/send-recovery-notifications` to fan out
-push notifications to the affected users.
+ticks. Then it:
+
+1. Sends `🟢 Wishlistik RECOVERED`.
+2. Marks every `active|recovering` `MaintenanceIncident` row as `recovered`.
+3. **Drains the CF maintenance worker's KV exposure buffer** —
+   `GET /__cf-maintenance-drain` (with `x-drain-secret`) → batched POST to
+   `/api/internal/maintenance/ingest-buffered` → `DELETE /__cf-maintenance-drain`
+   for the ack'd keys. Loops while `has_more=true` (capped at 10 batches ≈
+   10k records per recovery cycle). Soft-fails if `CF_DRAIN_SECRET` is unset
+   or the worker is unreachable — L2/L3 notifications still go out.
+4. Calls `/api/internal/maintenance/send-recovery-notifications` to fan out
+   push notifications to every affected user (now including L1 users that
+   were just ingested from KV).
 
 ### Zero-exposure incident detector
 
@@ -162,6 +176,7 @@ external dependencies — pure `node:test`.
 | `WATCHDOG_REQUIRE_FLOCK` | `true` | fail-closed (exit 2) if `flock(1)` is unavailable; set literal `false` to opt out on dev/macOS without util-linux |
 | `WATCHDOG_NODE_BIN` | `node` | wrapper's Node executable (testing) |
 | `MAINTENANCE_MODE` | `false` | when `true`, suppresses ALL alerts |
+| `CF_DRAIN_SECRET` | (empty = skip drain) | shared secret with the CF maintenance worker; mirror of `wrangler secret put CF_DRAIN_SECRET`. Required for L1 recovery notifications |
 
 ## Known follow-ups (NOT covered by this hardening)
 

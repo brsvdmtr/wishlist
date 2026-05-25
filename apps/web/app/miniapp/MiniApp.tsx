@@ -13156,27 +13156,91 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         </div>
       )}
 
-      {/* ── MAINTENANCE ── */}
+      {/* ── MAINTENANCE — v2.1 full-screen (matches ops/maintenance/maintenance.html static stub) ── */}
       {screen === 'maintenance' && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 16, padding: 24 }}>
-          <div style={{ fontSize: 48 }}>🔧</div>
-          <div style={{ fontSize: 18, fontWeight: 700, textAlign: 'center', color: C.text }}>
+        <div
+          role="alert"
+          aria-live="polite"
+          style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            minHeight: '100vh', padding: '40px 24px', textAlign: 'center', position: 'relative',
+          }}
+        >
+          {/* Glow orb — slowly spinning gear under a pulsing aura */}
+          <div
+            aria-hidden
+            style={{
+              width: 124, height: 124, marginBottom: 36, position: 'relative',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <div style={{
+              position: 'absolute', inset: -32, borderRadius: '50%',
+              background: 'radial-gradient(circle, var(--wb-accent-soft-strong), transparent 70%)',
+              animation: 'glowPulse 3.2s ease-in-out infinite',
+            }} />
+            <div style={{
+              width: 124, height: 124, borderRadius: '50%',
+              background: 'linear-gradient(135deg, var(--wb-accent-strong), var(--wb-accent-deep))',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow:
+                '0 20px 48px var(--wb-accent-shadow),' +
+                ' inset 0 1px 0 rgba(255,255,255,0.30),' +
+                ' inset 0 -1px 0 rgba(0,0,0,0.22)',
+              animation: 'float 4.4s ease-in-out infinite',
+            }}>
+              <svg
+                width={54} height={54} viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" strokeWidth={2}
+                strokeLinecap="round" strokeLinejoin="round"
+                style={{ color: '#fff', animation: 'wbSpin 14s linear infinite' }}
+                aria-hidden
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </div>
+          </div>
+
+          <h1 style={{
+            fontSize: 26, fontWeight: 700, letterSpacing: '-0.024em',
+            color: 'var(--wb-text)', margin: '0 0 12px', maxWidth: 290,
+          }}>
             {t('maintenance_title', locale)}
-          </div>
-          <div style={{ fontSize: 15, color: C.textSec, textAlign: 'center', lineHeight: 1.5 }}>
+          </h1>
+          <p style={{
+            fontSize: 16, color: 'var(--wb-text-secondary)', lineHeight: 1.5,
+            margin: '0 0 32px', maxWidth: 300,
+          }}>
             {t('maintenance_body', locale)}
-          </div>
-          <div style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', lineHeight: 1.4, marginTop: 4 }}>
-            {t('maintenance_notify_hint', locale)}
-          </div>
+          </p>
+
           <Button
             variant="primary"
             fullWidth={false}
-            style={{ marginTop: 8, width: 200 }}
+            style={{ width: '100%', maxWidth: 280 }}
             onClick={() => { setScreen('loading'); window.location.reload(); }}
           >
             {t('maintenance_retry', locale)}
           </Button>
+
+          <div style={{
+            margin: '22px 0 0', fontSize: 13, color: 'var(--wb-text-muted)',
+            lineHeight: 1.45, maxWidth: 280,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+          }}>
+            <svg
+              width={14} height={14} viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" strokeWidth={2}
+              strokeLinecap="round" strokeLinejoin="round"
+              style={{ opacity: 0.7, flexShrink: 0 }}
+              aria-hidden
+            >
+              <path d="M22 2L11 13" />
+              <path d="M22 2l-7 20-4-9-9-4 20-7z" />
+            </svg>
+            <span>{t('maintenance_notify_hint', locale)}</span>
+          </div>
         </div>
       )}
 

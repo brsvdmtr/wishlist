@@ -1,0 +1,29 @@
+{
+  "name": "@wishlist/maintenance-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker that serves the WishBoard maintenance page when origin is unreachable, and buffers L1 user exposures into KV so recovery notifications still reach them.",
+  "scripts": {
+    "prebuild": "node scripts/bundle-html.mjs",
+    "build": "tsc --noEmit",
+    "predev": "node scripts/bundle-html.mjs",
+    "dev": "wrangler dev",
+    "predeploy": "node scripts/bundle-html.mjs && pnpm run build",
+    "deploy": "wrangler deploy",
+    "pretest": "node scripts/bundle-html.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "secret:bot-token": "wrangler secret put BOT_TOKEN",
+    "secret:drain": "wrangler secret put CF_DRAIN_SECRET",
+    "kv:create": "wrangler kv namespace create MAINTENANCE_EXPOSURES",
+    "kv:list": "wrangler kv key list --binding MAINTENANCE_EXPOSURES",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20251001.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.0",
+    "wrangler": "^3.114.0"
+  }
+}

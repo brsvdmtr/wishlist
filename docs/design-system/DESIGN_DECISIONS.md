@@ -32,6 +32,109 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-05-25 — Skeleton primitive extracted to `packages/ui`
+
+**Type:** status-change
+
+**Decision.** The `Skeleton` placeholder is promoted from `legacy` to
+`provisional` in `COMPONENT_REGISTRY.md` and lives in
+`packages/ui/src/Skeleton.tsx`. Four variants — `list`, `form`,
+`calendar`, `settings` — each renders a different shape signature so
+the placeholder roughly matches the target screen's vertical occupancy
+(no layout shift on chunk resolve). Animation uses the canonical
+`keyframes.skeletonShimmer` token; radius and gaps come from
+`radius.lg` / `spacing[3]`; background uses `var(--wb-surface)` so
+accent switching propagates without re-renders.
+
+**Context / why.** F1 of the MiniApp.tsx decomposition wraps four big
+extracted screens (`AppearanceSettings`, `CalendarRoot`, `SearchScreen`,
+`SurveyScreen`) in `next/dynamic({ ssr: false })`. Dynamic imports
+require a `loading` fallback to avoid flash-of-empty; per
+`UI_IMPLEMENTATION_RULES` "every interactive surface needs … loading …
+state." `Skeleton` was already registered as a wave-2 extraction
+target with the note "per-layout variants needed" — F1 needed it now,
+so the extraction happened together with the consumer. No mockup-first
+gate because the placeholder is the simplest possible shape match and
+the registry direction was already approved.
+
+**Supersedes.** Replaces an inline `ScreenSkeleton` component that
+briefly landed in `apps/web/app/miniapp/components/` during F1 before
+the design-system review caught the violation. The inline file is
+deleted in the same commit as this entry.
+
+**Impact.**
+- Component registry row `Skeleton` updated from `legacy` to
+  `provisional`. Registry path now points to
+  `packages/ui/src/Skeleton.tsx`.
+- 4 lazy-loaded screen call-sites in `MiniApp.tsx` (`AppearanceSettings`,
+  `CalendarRoot`, `SearchScreen`, `SurveyScreen`) now import `Skeleton`
+  from `@wishlist/ui` for their `loading` fallback.
+- No breaking changes for existing consumers (this primitive had no
+  prior consumers).
+- Tests: `apps/web/test/skeleton.test.tsx` covers per-variant
+  layout signatures, a11y contract, design-system contract
+  (radius / animation / theme var).
+
+**Approved by.** Dmitry.
+
+---
+
+## 2026-05-25 — Maintenance UX v2.1 (full-screen, warm, 6-locale)
+
+**Type:** approval
+
+**Decision.** The maintenance UX is unified across all three failure layers
+(L1 = Cloudflare edge / origin unreachable, L2 = nginx `error_page 502/503/504`,
+L3 = API in `MAINTENANCE_MODE`) on a single v2.1 visual language: glowing
+violet orb with a slowly spinning gear under a pulsing aura, full-screen
+content on the v2.1 mesh gradient, no card frame. Copy reframed from clinical
+("Технические работы") to warm and reassuring ("Скоро вернёмся" / "We'll be
+right back" / 4 more locales). The "we'll notify you in the bot" promise is
+now consistent across all three layers — the L1 gap is closed by the new
+Cloudflare Worker + KV exposure buffer (see `docs/MAINTENANCE_FLOW.md`).
+Mockups promoted: [`mockups/approved/maintenance-stub-v2.1.html`](./mockups/approved/maintenance-stub-v2.1.html)
+(static, deployed to nginx + CF Worker) and
+[`mockups/approved/maintenance-screen-v2.1.html`](./mockups/approved/maintenance-screen-v2.1.html)
+(in-app L3 review preview).
+
+**Context / why.** A user-reported incident on 2026-05-25 surfaced two
+problems at once: (a) after the CF migration on 2026-05-22, the beautiful
+nginx maintenance stub stopped showing for whole-host outages because CF's
+own 502 page intercepts before reaching nginx; (b) the in-app maintenance
+screen still used a 🔧 emoji and pre-v2.1 styling, not aligned with the
+April refresh. Bundling both fixes lets us ship a coherent "we're down"
+experience that holds whether the outage is a Cloudflare-edge issue, an
+nginx-upstream issue, or a planned API maintenance — and that delivers on
+the recovery-notification promise in all three.
+
+**Supersedes.**
+- Old static stub: `ops/maintenance/maintenance.html` (pre-2026-05-25 RU/EN
+  hardcoded, plain card on `#111827`, emoji 🔧).
+- Old in-app screen: `apps/web/app/miniapp/MiniApp.tsx` screen `'maintenance'`
+  inline block (pre-v2.1 `C.text`/`C.textSec` color helpers, fixed 200px button).
+
+**Impact.**
+- `packages/shared/src/i18n.ts` — 4 maintenance keys × 6 locales rewritten
+  (warm copy). `bot_maintenance` and `maintenance_recovery_text` deliberately
+  unchanged — those are working production keys; tone alignment can be a
+  follow-up if needed.
+- `ops/maintenance/maintenance.html` replaced with the canonical v2.1 stub
+  (bit-for-bit mirror of `mockups/approved/maintenance-stub-v2.1.html`).
+- `apps/web/app/miniapp/MiniApp.tsx` screen `'maintenance'` rewritten on
+  v2.1 tokens (`var(--wb-accent-*)`, `var(--wb-text-*)`) + existing globals.css
+  keyframes (`wbSpin`, `float`, `glowPulse`) — no new primitives required.
+- New CF Worker package `infra/cloudflare/maintenance-worker/` (separate
+  Worker, scoped to `wishlistik.ru/*`) — see `docs/MAINTENANCE_FLOW.md` for
+  the L1 exposure-buffer flow.
+- `prefers-reduced-motion` honoured in both static stub and in-app screen.
+- No `@wishlist/ui` primitive added — `Button` reused; the orb is a one-off
+  decorative element (per design-system guidance, decoration that isn't
+  repeated across screens stays inline).
+
+**Approved by.** Dmitry.
+
+---
+
 ## 2026-05-25 — E15: display-name prefill chip in reserve sheet (approved)
 
 **Type:** approval

@@ -5,6 +5,103 @@ New entries go at the top.
 
 ---
 
+## 2026-05-25 — Maintenance recovery promise was a half-truth at L1 (post-CF migration)
+
+### Симптом
+
+После миграции на Cloudflare 2026-05-22 пользователи стали получать
+**CF-дефолтную страницу `502 Bad Gateway`** вместо нашей красивой заглушки
+"Технические работы" при недоступности origin. И главное — обещание из
+заглушки "когда восстановится, мы сообщим в бот" в этом сценарии **никогда
+не выполнялось**, потому что:
+
+1. Пользователь видел CF 502 (а не нашу `maintenance.html`).
+2. Даже если бы видел нашу — статический HTML никакого `POST
+   /tg/maintenance-exposure` не делал (его делает только in-app экран из
+   `MiniApp.tsx`).
+3. Watchdog при recovery шёл по `MaintenanceExposure` строкам в БД и слал
+   recovery-сообщение только тем, чьи exposure записаны → L1 пользователи в
+   эту воронку не попадали вообще.
+
+Обещание формально было правдой только для L3 (in-app, API в режиме
+MAINTENANCE_MODE). Для L1 (origin недоступен с CF edge) — заведомо ложь.
+
+### Root cause
+
+Текст "мы сообщим в бот" жил в `packages/shared/src/i18n.ts` и применялся
+**и в** static stub, **и в** in-app экране, **без проверки** что у этих двух
+поверхностей радикально разные пути записи exposure:
+
+- L3 in-app: `POST /tg/maintenance-exposure` (API reachable) → строка в
+  `MaintenanceExposure` → попадает в `send-recovery-notifications` fan-out.
+- L1 static stub: **никакого POST вообще** — пользователь видит HTML, и
+  всё. Это устроило бы при наличии записи "в этот момент кто-то был
+  exposed", но такой записи не было.
+
+После CF миграции это стало особенно ощутимо, потому что L1 случаи начали
+происходить чаще (CF default 5xx ↔ нашей заглушки): любой network blip
+между CF edge и нашим origin показывает CF 502, не nginx-овую страницу.
+
+### Lesson
+
+1. **Любое end-to-end обещание ("мы что-то сделаем") должно
+   реверс-инженериться от обещания до источника фактов.** Если ты пишешь "мы
+   уведомим", открой fan-out код, спроси "откуда берётся список адресатов",
+   потом "как туда попадают записи", и проверь что **все** UI-поверхности,
+   делающие обещание, попадают в этот список. Иначе обещание превращается в
+   обман на доле трафика.
+2. **Многослойный fallback требует многослойного контракта.** L1/L2/L3 — не
+   "три способа показать один и тот же экран", это три независимых runtime
+   environment'а с разными возможностями (статический HTML vs JS-bundle vs
+   полноценный API access). Контракт для пользовательского обещания должен
+   проверяться в каждом из них или **обещание не делается** в тех слоях, где
+   нельзя гарантировать.
+3. **CF миграции расширяют поверхность отказов в новые места.** До CF
+   "origin недоступен" означало "хост лёг" (редкость). После CF тот же
+   класс события включает любой network blip между POP и origin — это
+   нормальная фоновая частота, не редкость. Соответственно UX-обещания,
+   которые раньше срабатывали "почти всегда", стали "иногда".
+
+### Rule
+
+- **Перед добавлением CDN/proxy/edge-слоя** перед origin, перечислить все
+  UX-обещания, делаемые на origin-served страницах, и проверить какие из
+  них всё ещё выполнимы при недоступности origin. Несовместимые либо
+  переписать (снять обещание), либо обеспечить на уровне edge (worker + KV
+  буфер, как в этом фиксе).
+- **Каждое обещание в i18n строке** ("уведомим", "напомним", "сохраним")
+  обязано иметь рядом ссылку на код, который это обещание держит. Если
+  такой код не существует или зависит от условия не во всех путях — либо
+  переписать строку (вынести обещание под условие), либо построить
+  недостающую часть (как L1 KV буфер).
+
+### Better code
+
+- Static stub (`ops/maintenance/maintenance.html`) теперь шлёт
+  fire-and-forget POST на `/__cf-maintenance-exposure` — worker валидирует
+  Telegram initData по HMAC и пишет в CF KV namespace
+  `MAINTENANCE_EXPOSURES` с TTL 7 дней.
+- Watchdog (`ops/watchdog/health-watchdog.mjs`) на recovery дренит KV
+  через worker, отдаёт батчем в `/internal/maintenance/ingest-buffered`,
+  откуда они становятся обычными `MaintenanceExposure` строками и попадают
+  в существующий `send-recovery-notifications` fan-out.
+- Идемпотентность гарантируется `@@unique([incidentId, userId, surface])`
+  на `MaintenanceExposure` + watchdog DELETE на ack'нутые KV ключи только
+  после успешного ingest (at-least-once).
+- Kill switch: `MAINTENANCE_WORKER_DISABLED=1` в `wrangler.toml` →
+  redeploy → worker превращается в pass-through, нет влияния на прод.
+- Полная схема: [`MAINTENANCE_FLOW.md`](./MAINTENANCE_FLOW.md).
+
+### Related
+
+- `docs/design-system/DESIGN_DECISIONS.md` 2026-05-25 запись по новому
+  v2.1 visual'у заглушки.
+- CF Worker: `infra/cloudflare/maintenance-worker/`.
+- 35 unit/integration тестов в worker'е + 8 новых тестов для
+  `/internal/maintenance/ingest-buffered`.
+
+---
+
 ## 2026-05-25 — Browserslist double-source: prod build fails after F1 deploy
 
 ### Симптом

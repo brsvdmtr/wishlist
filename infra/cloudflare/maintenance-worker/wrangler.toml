@@ -1,0 +1,41 @@
+name = "wishlist-maintenance-worker"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+account_id = "2e54560360d0ce9bd32b5079b8f33e3b"
+
+# Route binds the worker to all traffic on the prod zone. The worker
+# decides per-request whether to pass-through to origin or serve the
+# maintenance fallback (based on origin response status).
+[[routes]]
+pattern = "wishlistik.ru/*"
+zone_id = "e98ef6854fcc5620f1ac712f9b48c6e0"
+
+[[routes]]
+pattern = "www.wishlistik.ru/*"
+zone_id = "e98ef6854fcc5620f1ac712f9b48c6e0"
+
+# KV namespace for buffering L1 maintenance exposures.
+# One-time setup:
+#   wrangler kv namespace create MAINTENANCE_EXPOSURES
+# Then paste the returned `id` into the line below, replacing the placeholder.
+[[kv_namespaces]]
+binding = "MAINTENANCE_EXPOSURES"
+id = "5f8523bda03e4fa396a239c34c54bc50"
+
+[vars]
+# Origin host (for logging / future use). Worker forwards via the original
+# request URL by default; the host header survives.
+ORIGIN_HOST = "wishlistik.ru"
+
+# Kill switch: set to "1" and redeploy to make the worker a pure pass-through.
+# Useful during incident debugging — disables all maintenance handling without
+# touching code or unbinding the route.
+MAINTENANCE_WORKER_DISABLED = "0"
+
+# Secrets (set via `wrangler secret put <name>`, NOT in this file):
+#   BOT_TOKEN       — Telegram bot token, used for initData HMAC verification.
+#   CF_DRAIN_SECRET — shared secret with watchdog; guards /__cf-maintenance-drain.
+
+[observability]
+enabled = true
+head_sampling_rate = 1.0

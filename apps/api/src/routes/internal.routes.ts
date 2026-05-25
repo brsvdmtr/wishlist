@@ -478,5 +478,70 @@ export function registerInternalRouter(deps: InternalRouterDeps): Router {
     }),
   );
 
+  // POST /internal/maintenance/ingest-buffered — drain CF-Worker KV records into MaintenanceExposure.
+  // Watchdog calls this after fetching buffered exposures from the L1 CF Worker
+  // (origin-unreachable case where the user could not reach /tg/maintenance-exposure directly).
+  // Idempotent: recordMaintenanceExposure upserts on (incidentId, userId, surface).
+  // Returns `ingestedKeys` so the caller can DELETE the corresponding KV entries.
+  internalRouter.post(
+    '/maintenance/ingest-buffered',
+    asyncHandler(async (req, res) => {
+      const parsed = z.object({
+        records: z.array(z.object({
+          tg_user_id: z.number().int().positive(),
+          chat_id: z.number().int().optional(),
+          locale: z.string().max(16).default('ru'),
+          surface: z.string().max(32).default('static'),
+          ts: z.string().optional(),
+          _key: z.string().min(1).max(128),
+        })).max(2000),
+      }).safeParse(req.body);
+      if (!parsed.success) return zodError(res, parsed.error);
+
+      const { records } = parsed.data;
+      let ingested = 0;
+      let skipped = 0;
+      let failed = 0;
+      const ingestedKeys: string[] = [];
+
+      for (const r of records) {
+        const telegramId = String(r.tg_user_id);
+        try {
+          const user = await prisma.user.findUnique({ where: { telegramId } });
+          if (!user) {
+            skipped++;
+            trackEvent('maintenance_ingest_skipped', 'system', {
+              reason: 'user_not_found',
+              telegramId,
+              key: r._key,
+            });
+            // We still ack the key so the buffer doesn't keep re-sending it.
+            ingestedKeys.push(r._key);
+            continue;
+          }
+          const chatId = r.chat_id ? String(r.chat_id) : (user.telegramChatId ?? null);
+          await recordMaintenanceExposure(user.id, r.surface, r.locale, chatId);
+          ingested++;
+          ingestedKeys.push(r._key);
+        } catch (err) {
+          failed++;
+          logger.warn({ err: String(err), key: r._key }, 'maintenance ingest failed for record');
+          // Don't ack — leave in buffer for next drain attempt; KV TTL bounds the retry window.
+        }
+      }
+
+      if (ingested > 0 || skipped > 0) {
+        trackEvent('maintenance_buffer_ingested', 'system', {
+          ingested,
+          skipped,
+          failed,
+          total: records.length,
+        });
+      }
+
+      return res.json({ ok: true, ingested, skipped, failed, total: records.length, ingestedKeys });
+    }),
+  );
+
   return internalRouter;
 }
