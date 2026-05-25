@@ -113,10 +113,15 @@ describe('MiniApp.tsx — F1 lazy-screen regression guard (2026-05-25)', () => {
   // guards make that revert visible in CI.
 
   const LAZY_SCREENS = [
-    { name: 'AppearanceSettings', path: './screens/AppearanceSettings' },
-    { name: 'CalendarRoot',       path: './screens/calendar/CalendarRoot' },
-    { name: 'SearchScreen',       path: './screens/SearchScreen' },
-    { name: 'SurveyScreen',       path: './screens/survey/SurveyScreen' },
+    { name: 'AppearanceSettings',   path: './screens/AppearanceSettings' },
+    { name: 'CalendarRoot',         path: './screens/calendar/CalendarRoot' },
+    { name: 'SearchScreen',         path: './screens/SearchScreen' },
+    { name: 'SurveyScreen',         path: './screens/survey/SurveyScreen' },
+    // F4 Wave A — cold-path static screens reached only via Settings.
+    { name: 'FAQScreen',            path: './screens/FAQScreen' },
+    { name: 'ChangelogScreen',      path: './screens/ChangelogScreen' },
+    { name: 'LegalMenuScreen',      path: './screens/LegalMenuScreen' },
+    { name: 'LegalDocViewerScreen', path: './screens/LegalDocViewerScreen' },
   ] as const;
 
   for (const { name, path } of LAZY_SCREENS) {

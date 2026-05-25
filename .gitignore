@@ -28,3 +28,4 @@ coverage
 # Local design-system scratch — a working copy of the wishboard-design
 # skill that already lives (tracked) at .claude/skills/wishboard-design/.
 redisign/
+*.bak

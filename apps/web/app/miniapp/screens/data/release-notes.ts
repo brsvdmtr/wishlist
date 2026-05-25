@@ -1,0 +1,393 @@
+// Release notes data — auto-extracted from MiniApp.tsx (F4 Wave A).
+// CONSUMERS:
+//   - apps/web/app/miniapp/screens/ChangelogScreen.tsx (lazy, sole UI)
+//   - apps/web/app/miniapp/MiniApp.tsx imports ONLY LATEST_RELEASE_ID from
+//     release-notes-latest.ts so the array itself stays out of the main chunk.
+//
+// WHEN ADDING A NEW RELEASE: bump LATEST_RELEASE_ID in release-notes-latest.ts
+// to match the new top id (the file is intentionally hand-synced; tree-shaking
+// cannot prove only the id is needed otherwise the array pulls into the main chunk).
+
+// Localisation contract: `ru` + `en` are REQUIRED for every item; the four
+// other supported locales (zh-CN, hi, es, ar) are optional and fall back
+// to `en` at render time. Older entries shipped before the 6-locale
+// expansion deliberately omit the optional fields — that's fine, they
+// degrade to EN for non-RU users exactly like before.
+type ReleaseNoteItem = {
+  ru: string;
+  en: string;
+  'zh-CN'?: string;
+  hi?: string;
+  es?: string;
+  ar?: string;
+};
+export type ReleaseNote = { id: string; date: string; items: ReleaseNoteItem[] };
+export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    id: '2026-05-21',
+    date: '21.05.2026',
+    items: [
+      {
+        ru: '🌍 Импорт по ссылке заработал с маркетплейсами по всему миру — Amazon, AliExpress, eBay, Flipkart, Walmart, JD.com, Target и десятки других в России, Индии, Китае, США и Европе. Раньше распознавались только 7 российских магазинов',
+        en: '🌍 URL import now works with marketplaces worldwide — Amazon, AliExpress, eBay, Flipkart, Walmart, JD.com, Target and dozens more across Russia, India, China, the USA and Europe. Previously only 7 Russian stores were recognised',
+        'zh-CN': '🌍 链接导入现已支持全球的购物平台 — Amazon、AliExpress、eBay、Flipkart、Walmart、JD.com、Target 以及俄罗斯、印度、中国、美国和欧洲的数十个其他平台。此前只能识别 7 个俄罗斯商店',
+        hi: '🌍 लिंक से इम्पोर्ट अब दुनिया भर के मार्केटप्लेस के साथ काम करता है — Amazon, AliExpress, eBay, Flipkart, Walmart, JD.com, Target और रूस, भारत, चीन, अमेरिका व यूरोप के दर्जनों अन्य। पहले सिर्फ़ 7 रूसी स्टोर पहचाने जाते थे',
+        es: '🌍 La importación por enlace ahora funciona con marketplaces de todo el mundo — Amazon, AliExpress, eBay, Flipkart, Walmart, JD.com, Target y decenas más en Rusia, India, China, EE. UU. y Europa. Antes solo se reconocían 7 tiendas rusas',
+        ar: '🌍 الاستيراد عبر الرابط يعمل الآن مع المتاجر حول العالم — Amazon وAliExpress وeBay وFlipkart وWalmart وJD.com وTarget وعشرات غيرها في روسيا والهند والصين والولايات المتحدة وأوروبا. سابقاً كان يُتعرَّف على 7 متاجر روسية فقط',
+      },
+      {
+        ru: '🆓 Импорт по ссылке открыли на бесплатном тарифе — 5 импортов в месяц бесплатно. На PRO по-прежнему без лимита, а если нужно больше — можно докупить пакет импортов',
+        en: '🆓 URL import is now available on the FREE plan — 5 free imports every month. PRO stays unlimited, and you can top up with an import pack if you need more',
+        'zh-CN': '🆓 链接导入现已在免费套餐中开放 — 每月 5 次免费导入。PRO 依然不限次数，需要更多可以购买导入包',
+        hi: '🆓 लिंक से इम्पोर्ट अब फ्री प्लान पर भी उपलब्ध — हर महीने 5 मुफ़्त इम्पोर्ट। PRO पर अब भी असीमित, और ज़्यादा चाहिए तो इम्पोर्ट पैक खरीदा जा सकता है',
+        es: '🆓 La importación por enlace ya está disponible en el plan gratuito — 5 importaciones gratis al mes. PRO sigue siendo ilimitado, y puedes comprar un paquete de importaciones si necesitas más',
+        ar: '🆓 الاستيراد عبر الرابط أصبح متاحاً الآن في الخطة المجانية — 5 عمليات استيراد مجانية شهرياً. تبقى PRO بلا حدود، ويمكنك شراء حزمة استيراد إذا احتجت المزيد',
+      },
+      {
+        ru: '🏠 Карточка «Импорт по ссылке» теперь всегда на главном экране, а под полем ввода виден счётчик: сколько бесплатных импортов осталось в этом месяце',
+        en: '🏠 The "Import from link" card now lives permanently on the home screen, and a counter under the input shows how many free imports are left this month',
+        'zh-CN': '🏠「链接导入」卡片现在固定显示在主页上，输入框下方的计数器会显示本月还剩多少次免费导入',
+        hi: '🏠 «लिंक से इम्पोर्ट» कार्ड अब हमेशा मुख्य स्क्रीन पर रहता है, और इनपुट के नीचे एक काउंटर दिखाता है कि इस महीने कितने मुफ़्त इम्पोर्ट बचे हैं',
+        es: '🏠 La tarjeta «Importar por enlace» ahora está siempre en la pantalla principal, y un contador debajo del campo muestra cuántas importaciones gratis quedan este mes',
+        ar: '🏠 بطاقة «الاستيراد عبر الرابط» أصبحت الآن ثابتة في الشاشة الرئيسية، وأسفل حقل الإدخال عدّاد يوضح كم عملية استيراد مجانية تبقّت هذا الشهر',
+      },
+      {
+        ru: '✏️ Если по ссылке удалось вытащить не всё — товар всё равно создаётся и сразу открывается на редактирование, чтобы дописать название, цену или фото. Неудачный импорт бесплатный лимит не тратит',
+        en: '✏️ If a link could not be fully parsed, the item is still created and opens straight in the editor so you can fill in the title, price or photo. A failed import does not spend your free quota',
+        'zh-CN': '✏️ 如果链接无法完整解析，商品仍会被创建并直接打开编辑界面，方便你补全名称、价格或照片。导入失败不会消耗免费次数',
+        hi: '✏️ अगर लिंक से सब कुछ नहीं निकल पाया — आइटम फिर भी बन जाता है और सीधे एडिटिंग में खुलता है, ताकि नाम, कीमत या फ़ोटो जोड़ सको। असफल इम्पोर्ट मुफ़्त लिमिट खर्च नहीं करता',
+        es: '✏️ Si un enlace no se pudo procesar por completo, el artículo se crea igualmente y se abre directamente en el editor para que añadas el título, el precio o la foto. Una importación fallida no consume tu cuota gratuita',
+        ar: '✏️ إذا تعذّر استخراج كل البيانات من الرابط، يُنشأ العنصر على أي حال ويُفتح مباشرة في وضع التحرير لتُكمل الاسم أو السعر أو الصورة. الاستيراد الفاشل لا يستهلك حصتك المجانية',
+      },
+      {
+        ru: '💡 Намёки больше не только для PRO — на бесплатном тарифе теперь доступно 3 намёка в месяц. Лимит расходуется, только когда намёк действительно доставлен',
+        en: '💡 Hints are no longer PRO-only — the FREE plan now includes 3 hints per month. The quota is spent only when a hint is actually delivered',
+        'zh-CN': '💡 提示不再是 PRO 专属 — 免费套餐现在每月包含 3 次提示。只有当提示真正送达时才会消耗额度',
+        hi: '💡 हिंट अब सिर्फ़ PRO के लिए नहीं — फ्री प्लान में अब हर महीने 3 हिंट मिलते हैं। लिमिट तभी खर्च होती है जब हिंट सच में डिलीवर हो जाए',
+        es: '💡 Las pistas ya no son exclusivas de PRO — el plan gratuito ahora incluye 3 pistas al mes. La cuota se gasta solo cuando una pista se entrega de verdad',
+        ar: '💡 التلميحات لم تعد حصرية لـ PRO — الخطة المجانية تشمل الآن 3 تلميحات شهرياً. تُستهلك الحصة فقط عند تسليم التلميح فعلياً',
+      },
+      {
+        ru: '🌐 Приложение полностью переведено на китайский, хинди, испанский и арабский — пользователи этих языков больше не встречают английский текст в интерфейсе',
+        en: '🌐 The app is now fully translated into Chinese, Hindi, Spanish and Arabic — users of those languages no longer run into English text in the interface',
+        'zh-CN': '🌐 应用现已完整翻译为中文、印地语、西班牙语和阿拉伯语 — 使用这些语言的用户不会再在界面中看到英文文本',
+        hi: '🌐 ऐप अब पूरी तरह से चीनी, हिंदी, स्पेनिश और अरबी में अनुवादित है — इन भाषाओं के उपयोगकर्ताओं को अब इंटरफ़ेस में अंग्रेज़ी टेक्स्ट नहीं दिखेगा',
+        es: '🌐 La app ahora está totalmente traducida al chino, hindi, español y árabe — los usuarios de esos idiomas ya no se encuentran con texto en inglés en la interfaz',
+        ar: '🌐 التطبيق مُترجَم الآن بالكامل إلى الصينية والهندية والإسبانية والعربية — لم يعد مستخدمو هذه اللغات يصادفون نصاً إنجليزياً في الواجهة',
+      },
+      {
+        ru: '🛠 Убрали ложные сообщения «Ошибка загрузки» — некоторые экраны иногда показывали ошибку при открытии, хотя с данными всё было в порядке',
+        en: '🛠 Removed false "Loading error" messages — some screens occasionally showed an error on open even though the data was perfectly fine',
+        'zh-CN': '🛠 修复了误报的「加载错误」提示 — 某些页面打开时偶尔会显示错误，尽管数据完全正常',
+        hi: '🛠 गलत «लोडिंग त्रुटि» संदेश हटाए — कुछ स्क्रीन खुलते समय कभी-कभी एरर दिखाती थीं, जबकि डेटा बिल्कुल ठीक होता था',
+        es: '🛠 Eliminamos los mensajes falsos de «Error de carga» — algunas pantallas a veces mostraban un error al abrirse aunque los datos estaban perfectamente bien',
+        ar: '🛠 أزَلْنا رسائل «خطأ في التحميل» الزائفة — كانت بعض الشاشات تُظهر أحياناً خطأً عند فتحها رغم أن البيانات سليمة تماماً',
+      },
+      {
+        ru: '🩹 Исправили баг, из-за которого приложение могло не открыться при запуске (белый экран) — загрузка снова работает стабильно',
+        en: '🩹 Fixed a bug that could stop the app from opening on launch (a white screen) — startup works reliably again',
+        'zh-CN': '🩹 修复了一个可能导致应用启动时无法打开（白屏）的问题 — 现在启动恢复稳定',
+        hi: '🩹 एक बग ठीक किया जिसकी वजह से ऐप कभी-कभी लॉन्च पर खुल नहीं पाता था (सफ़ेद स्क्रीन) — अब लोडिंग फिर से स्थिर है',
+        es: '🩹 Corregimos un error que podía impedir que la app se abriera al iniciarse (una pantalla en blanco) — el arranque vuelve a ser estable',
+        ar: '🩹 أصلَحْنا خللاً كان قد يمنع التطبيق من الفتح عند بدء التشغيل (شاشة بيضاء) — أصبح بدء التشغيل مستقراً من جديد',
+      },
+      {
+        ru: '📱 На iOS починили залипание фильтров поиска при свайпе по ним',
+        en: '📱 On iOS, fixed the search filter chips freezing when you swipe across them',
+        'zh-CN': '📱 在 iOS 上修复了滑动搜索筛选标签时卡住的问题',
+        hi: '📱 iOS पर सर्च फ़िल्टर चिप्स को स्वाइप करते समय अटकने की समस्या ठीक की',
+        es: '📱 En iOS, corregimos el bloqueo de los chips de filtro de búsqueda al deslizar sobre ellos',
+        ar: '📱 على iOS، أصلَحْنا تجمّد عناصر تصفية البحث عند التمرير فوقها',
+      },
+    ],
+  },
+  {
+    id: '2026-05-17',
+    date: '17.05.2026',
+    items: [
+      {
+        ru: '🔍 Глобальный поиск — теперь доступен в вашем боте! Тап по лупе на главном открывает поиск по всему: желаниям, вишлистам, категориям, людям, настройкам и FAQ',
+        en: '🔍 Global search — now available in your bot! Tap the magnifier on the home screen to search across everything: wishes, wishlists, categories, people, settings and FAQ',
+        'zh-CN': '🔍 全局搜索 — 现已在你的机器人中可用！点击主页上的放大镜可以搜索一切：心愿、清单、分类、联系人、设置和帮助',
+        hi: '🔍 ग्लोबल खोज — अब आपके बॉट में उपलब्ध! मुख्य स्क्रीन पर लूप टैप करके सब कुछ खोजें: विशेज़, विशलिस्ट, श्रेणियाँ, लोग, सेटिंग्स और मदद',
+        es: '🔍 Búsqueda global — ¡ya disponible en tu bot! Toca la lupa en la pantalla principal para buscar todo: deseos, listas, categorías, personas, ajustes y ayuda',
+        ar: '🔍 البحث الشامل — أصبح متاحًا الآن في بوتك! اضغط على العدسة في الشاشة الرئيسية للبحث في كل شيء: الأمنيات، القوائم، الفئات، الأشخاص، الإعدادات والمساعدة',
+      },
+      {
+        ru: '🎯 Группировка результатов и фильтры по типам — «Все / Желания / Вишлисты / Люди / Категории / Настройки», переключай в один тап',
+        en: '🎯 Grouped results with type filters — All / Wishes / Wishlists / People / Categories / Settings, switch in one tap',
+        'zh-CN': '🎯 按类型分组的结果和过滤器 —「全部 / 心愿 / 清单 / 联系人 / 分类 / 设置」，一键切换',
+        hi: '🎯 परिणाम समूह और टाइप फिल्टर — «सभी / विशेज़ / विशलिस्ट / लोग / श्रेणियाँ / सेटिंग्स», एक टैप में स्विच करें',
+        es: '🎯 Resultados agrupados con filtros por tipo — «Todos / Deseos / Listas / Personas / Categorías / Ajustes», cambia con un toque',
+        ar: '🎯 نتائج مجمّعة مع فلاتر حسب النوع — «الكل / الأمنيات / القوائم / الأشخاص / الفئات / الإعدادات»، التبديل بنقرة واحدة',
+      },
+      {
+        ru: '⚡ Smart-фильтры внутри типа: «доступные», «с ценой», «без цены», «с ссылкой», «важные», «архив»',
+        en: '⚡ Smart filters within each type: "available", "with price", "no price", "with link", "important", "archive"',
+        'zh-CN': '⚡ 类型内的智能过滤器：「可用」、「有价格」、「无价格」、「带链接」、「重要」、「归档」',
+        hi: '⚡ टाइप के अंदर स्मार्ट फिल्टर: «उपलब्ध», «कीमत के साथ», «बिना कीमत», «लिंक के साथ», «महत्वपूर्ण», «संग्रह»',
+        es: '⚡ Filtros inteligentes dentro de cada tipo: «disponibles», «con precio», «sin precio», «con enlace», «importantes», «archivo»',
+        ar: '⚡ فلاتر ذكية داخل كل نوع: «متاح»، «بسعر»، «بدون سعر»، «برابط»، «مهم»، «الأرشيف»',
+      },
+      {
+        ru: '🤫 Поиск по чужим вишлистам, которые ты когда-то открывал по ссылке, — найдём и снова откроем, пока доступ актуален; если владелец закрыл доступ — содержимое не покажем',
+        en: '🤫 Search across foreign wishlists you previously opened via a link — we find them and reopen as long as access is still live; if the owner closed access, we don\'t leak content',
+        'zh-CN': '🤫 搜索你之前通过链接打开过的其他人的清单 — 只要访问权限仍然有效，我们就会找到并重新打开；如果主人已关闭访问，则不显示内容',
+        hi: '🤫 उन दूसरों की विशलिस्ट में खोजें जिन्हें तुमने पहले लिंक से खोला था — जब तक एक्सेस सक्रिय है तब तक खोजेंगे और फिर खोलेंगे; अगर मालिक ने एक्सेस बंद कर दिया तो सामग्री नहीं दिखाएंगे',
+        es: '🤫 Busca en las listas de otros que abriste antes con un enlace — las encontramos y reabrimos mientras el acceso siga activo; si el propietario cerró el acceso, no mostramos el contenido',
+        ar: '🤫 ابحث في قوائم الآخرين التي فتحتها سابقاً عبر رابط — نجدها ونعيد فتحها طالما الوصول لا يزال متاحاً؛ إذا أغلق المالك الوصول، لا نُظهر المحتوى',
+      },
+      {
+        ru: '⭐ PRO: расширенный поиск по бронями, по календарю событий, по «что не стоит дарить» + smart-фильтры «истекают скоро», «тайные» и «мои»',
+        en: '⭐ PRO: extended search across reservations, the gift calendar, "don\'t gift" list + smart filters "expiring soon", "secret" and "mine"',
+        'zh-CN': '⭐ PRO：在预订、礼物日历和「不要送」列表中扩展搜索 + 智能过滤器「即将过期」、「秘密」和「我的」',
+        hi: '⭐ PRO: बुकिंग, गिफ्ट कैलेंडर और «न दें» सूची में विस्तारित खोज + स्मार्ट फिल्टर «जल्द समाप्त», «गुप्त» और «मेरे»',
+        es: '⭐ PRO: búsqueda ampliada en reservas, calendario de regalos y lista «no regalar» + filtros inteligentes «caducan pronto», «secreto» y «míos»',
+        ar: '⭐ PRO: بحث موسّع في الحجوزات، تقويم الهدايا، قائمة «لا تهدِ» + فلاتر ذكية «تنتهي قريباً»، «سرّي» و«لي»',
+      },
+      {
+        ru: '🔒 Поисковые запросы хранятся только на твоём устройстве — на сервер raw-запрос не уходит; тайные брони видны исключительно тебе и нигде больше не светятся',
+        en: '🔒 Search queries are stored only on your device — the raw query never reaches the server; secret reservations are only ever visible to you and surface nowhere else',
+        'zh-CN': '🔒 搜索查询仅存储在你的设备上 — 原始查询不会发送到服务器；秘密预订只有你能看到，不会在其他任何地方出现',
+        hi: '🔒 खोज क्वेरीज़ केवल तुम्हारे डिवाइस पर सहेजी जाती हैं — raw क्वेरी सर्वर तक नहीं पहुँचती; गुप्त बुकिंग केवल तुम्हें दिखती हैं और कहीं और सामने नहीं आतीं',
+        es: '🔒 Las búsquedas se guardan solo en tu dispositivo — la búsqueda en bruto nunca llega al servidor; las reservas secretas solo son visibles para ti y no aparecen en ningún otro lugar',
+        ar: '🔒 يتم تخزين استعلامات البحث على جهازك فقط — لا يصل الاستعلام الخام إلى الخادم أبداً؛ الحجوزات السرية مرئية لك وحدك ولا تظهر في أي مكان آخر',
+      },
+      {
+        ru: '🌍 Починили локализацию: русскоязычные пользователи больше не получают английские уведомления о бронях, напоминаниях и продлении Pro — все проактивные рассылки теперь идут на твоём языке',
+        en: '🌍 Localization fix: Russian-speaking users no longer receive English notifications about reservations, reminders and Pro renewal — every proactive message now goes out in your own language',
+        'zh-CN': '🌍 本地化修复：俄语用户不再收到关于预订、提醒和 Pro 续费的英文通知 — 所有主动消息现在以你的语言发送',
+        hi: '🌍 स्थानीयकरण फिक्स: रूसी-भाषी उपयोगकर्ताओं को अब बुकिंग, रिमाइंडर और Pro नवीनीकरण के बारे में अंग्रेज़ी सूचनाएँ नहीं मिलतीं — सभी सक्रिय संदेश अब तुम्हारी भाषा में जाते हैं',
+        es: '🌍 Corrección de localización: los usuarios rusoparlantes ya no reciben notificaciones en inglés sobre reservas, recordatorios y renovación de Pro — todos los mensajes proactivos ahora se envían en tu idioma',
+        ar: '🌍 إصلاح للترجمة: المستخدمون الناطقون بالروسية لم يعودوا يتلقون إشعارات إنجليزية عن الحجوزات والتذكيرات وتجديد Pro — كل الرسائل التلقائية الآن تُرسل بلغتك',
+      },
+      {
+        ru: '🎄 Сезонная рассылка Secret Santa теперь приходит на языке получателя, а не двуязычным блоком',
+        en: '🎄 The Secret Santa seasonal broadcast now arrives in the recipient\'s language instead of as a bilingual blob',
+        'zh-CN': '🎄 Secret Santa 季节性广播现在以收件人的语言发送，而不是双语合并',
+        hi: '🎄 Secret Santa सीज़नल ब्रॉडकास्ट अब प्राप्तकर्ता की भाषा में आता है, द्विभाषी ब्लॉक के रूप में नहीं',
+        es: '🎄 El anuncio estacional de Secret Santa ahora llega en el idioma del destinatario, no como bloque bilingüe',
+        ar: '🎄 إعلان Secret Santa الموسمي يصل الآن بلغة المتلقي بدلاً من مزيج ثنائي اللغة',
+      },
+    ],
+  },
+  {
+    id: '2026-05-09',
+    date: '09.05.2026',
+    items: [
+      {
+        ru: '⭐ Pro навсегда — новый тариф: 2 490 ⭐ один раз и все Pro-возможности с тобой навсегда. Без продлений, без автосписаний, без напоминаний о платеже',
+        en: '⭐ Pro Lifetime — a new tier: 2 490 ⭐ once and every Pro feature is yours forever. No renewals, no auto-charges, no payment reminders',
+        'zh-CN': '⭐ Pro 永久版 — 全新套餐：一次性 2 490 ⭐ 让所有 Pro 功能永远属于你。无需续费，无自动扣款，无付款提醒',
+        hi: '⭐ Pro हमेशा के लिए — नया प्लान: एक बार 2 490 ⭐ और सभी Pro सुविधाएँ तुम्हारी हमेशा के लिए। बिना नवीनीकरण, बिना ऑटो-कटौती, बिना भुगतान रिमाइंडर',
+        es: '⭐ Pro para siempre — nuevo plan: 2 490 ⭐ una sola vez y todas las funciones Pro son tuyas para siempre. Sin renovaciones, sin cargos automáticos, sin recordatorios de pago',
+        ar: '⭐ Pro للأبد — خطة جديدة: 2 490 ⭐ مرة واحدة وكل ميزات Pro لك للأبد. بدون تجديدات، بدون خصومات تلقائية، بدون تذكيرات دفع',
+      },
+      {
+        ru: '💎 Альтернатива месячному (100 ⭐) и годовому (800 ⭐) тарифам — для тех, кто уже понял, что Pro нравится, и хочет купить один раз и забыть про продления',
+        en: '💎 An alternative to the monthly (100 ⭐) and yearly (800 ⭐) plans — for users who already know they love Pro and want to buy once and forget about renewals',
+        'zh-CN': '💎 是月度（100 ⭐）和年度（800 ⭐）套餐的替代选择 — 适合那些已经知道自己喜欢 Pro、想要一次性买断、不再担心续费的用户',
+        hi: '💎 मासिक (100 ⭐) और वार्षिक (800 ⭐) प्लान का विकल्प — उन उपयोगकर्ताओं के लिए जो पहले से जानते हैं कि Pro पसंद है और एक बार खरीदकर नवीनीकरण के बारे में भूलना चाहते हैं',
+        es: '💎 Una alternativa a los planes mensual (100 ⭐) y anual (800 ⭐) — para usuarios que ya saben que les encanta Pro y quieren comprar una vez y olvidarse de las renovaciones',
+        ar: '💎 بديل لخطتي الشهرية (100 ⭐) والسنوية (800 ⭐) — للمستخدمين الذين يعرفون بالفعل أنهم يحبون Pro ويريدون الشراء مرة واحدة ونسيان التجديدات',
+      },
+      {
+        ru: '🛡 Если у тебя уже активен Pro навсегда, мы не дадим случайно списать звёзды за месячный или годовой тариф: лишний платёж аудируется, а твой Lifetime остаётся',
+        en: '🛡 If Pro Lifetime is already active, we won\'t let an accidental monthly or yearly charge downgrade you: the extra payment is audited and your lifetime entitlement is preserved',
+        'zh-CN': '🛡 如果你已激活 Pro 永久版，我们不会让误付的月度或年度费用降级你的套餐：多余的付款会被记录，你的永久权益保持不变',
+        hi: '🛡 अगर तुम्हारे पास Pro हमेशा के लिए सक्रिय है, तो हम गलती से मासिक या वार्षिक भुगतान को तुम्हारे प्लान को डाउनग्रेड नहीं करने देंगे: अतिरिक्त भुगतान का ऑडिट होगा और तुम्हारा Lifetime बना रहेगा',
+        es: '🛡 Si ya tienes Pro para siempre activo, no permitiremos que un cargo mensual o anual accidental te degrade: el pago extra se audita y tu Lifetime se conserva',
+        ar: '🛡 إذا كان Pro للأبد مفعّلاً لديك بالفعل، فلن ندع أي خصم شهري أو سنوي عرضي يخفّض خطتك: تتم مراجعة الدفعة الإضافية ويبقى اشتراك Lifetime كما هو',
+      },
+    ],
+  },
+  {
+    id: '2026-04-30',
+    date: '30.04.2026',
+    items: [
+      { ru: '📷 Фото к идее события теперь действительно загружается и показывается в карточке (раньше прикреплённый файл уходил «в никуда» из-за ошибки в заголовках запроса)', en: '📷 Idea photos on calendar events now actually upload and render in the card (the attached file used to silently disappear due to a bad request header)', 'zh-CN': '📷 事件创意的图片现在确实会上传并显示在卡片上（之前由于请求头错误，附件文件会静默丢失）', hi: '📷 कैलेंडर इवेंट के आइडिया फ़ोटो अब वाकई अपलोड होते हैं और कार्ड में दिखते हैं (पहले रिक्वेस्ट हेडर में गड़बड़ी की वजह से अटैच फ़ाइल चुपचाप गायब हो जाती थी)', es: '📷 Las fotos de ideas en eventos del calendario ahora sí se suben y se muestran en la tarjeta (antes el archivo adjunto desaparecía en silencio por un error en la cabecera de la solicitud)', ar: '📷 صور أفكار أحداث التقويم تُرفع وتُعرض الآن فعلاً في البطاقة (سابقاً كان الملف المرفق يختفي بصمت بسبب خطأ في رؤوس الطلب)' },
+      { ru: '⌨️ Поле «цена» при добавлении идеи к событию: курсор больше не «убегает» вниз при тапе — теперь мигает строго в инпуте, на который поставил фокус', en: '⌨️ Calendar idea price field: the caret no longer drifts off-screen on tap — it now stays in the input you focused', 'zh-CN': '⌨️ 日历创意的「价格」输入框：点击时光标不再跑掉 — 现在它会停留在你聚焦的输入框里', hi: '⌨️ कैलेंडर आइडिया का «कीमत» फ़ील्ड: टैप पर कर्सर अब इधर-उधर नहीं भागता — जिस इनपुट पर फ़ोकस किया है उसी में रहता है', es: '⌨️ Campo de precio en una idea del calendario: el cursor ya no se va al tocar — ahora se queda en el campo que enfocaste', ar: '⌨️ حقل السعر لفكرة في التقويم: لم يعد المؤشر يهرب عند الضغط — يبقى الآن في الحقل الذي ركّزت عليه' },
+      { ru: '🗓 Бейдж даты в карточке события: накануне вечером теперь корректно показывает «Завтра», а не «Сегодня» (раньше для события 1 мая, открытого вечером 30 апреля, писалось «Сегодня», хотя таймер правильно отсчитывал часы до полуночи)', en: '🗓 Event card date badge: the evening before an event now correctly reads "Tomorrow" instead of "Today" (the badge used to flip to "Today" in the evening before, even though the countdown timer was right)', 'zh-CN': '🗓 事件卡片的日期徽章：活动前一晚现在正确显示「明天」而非「今天」（以前对于 5 月 1 日的活动，在 4 月 30 日晚上打开会显示「今天」，尽管倒计时正确）', hi: '🗓 इवेंट कार्ड का दिनांक बैज: इवेंट से एक रात पहले अब सही «कल» दिखाता है, न कि «आज» (पहले 1 मई के इवेंट के लिए 30 अप्रैल की शाम «आज» लिखा था, हालांकि टाइमर सही था)', es: '🗓 Distintivo de fecha en la tarjeta del evento: la víspera por la noche ahora muestra correctamente «Mañana» en vez de «Hoy» (antes para un evento del 1 de mayo abierto la noche del 30 de abril ponía «Hoy», aunque el contador iba bien)', ar: '🗓 شارة تاريخ بطاقة الحدث: في الليلة السابقة للحدث تُظهر الآن بشكل صحيح «غداً» بدل «اليوم» (سابقاً كانت تكتب «اليوم» مع أن العداد التنازلي كان صحيحاً)' },
+    ],
+  },
+  {
+    id: '2026-04-27',
+    date: '27.04.2026',
+    items: [
+      { ru: '📅 Календарь событий — большая серия фиксов и улучшений по обратной связи', en: '📅 Event Calendar — a big batch of fixes and tweaks based on feedback', 'zh-CN': '📅 事件日历 — 根据反馈进行了大量修复和改进', hi: '📅 इवेंट कैलेंडर — फीडबैक के आधार पर बहुत सारे फिक्स और सुधार', es: '📅 Calendario de eventos — un gran lote de arreglos y mejoras según los comentarios', ar: '📅 تقويم الأحداث — مجموعة كبيرة من الإصلاحات والتحسينات بناءً على الملاحظات' },
+      { ru: '✏️ Редактирование события — теперь можно менять название, эмодзи, дату, повторение и место прямо из карточки', en: '✏️ Edit an event — change title, emoji, date, recurrence and location right from the detail screen', 'zh-CN': '✏️ 编辑事件 — 直接在详情页面修改标题、表情、日期、重复设置和地点', hi: '✏️ इवेंट संपादन — डिटेल स्क्रीन से ही टाइटल, इमोजी, तारीख, दोहराव और जगह बदलें', es: '✏️ Editar evento — cambia título, emoji, fecha, repetición y lugar directamente desde la tarjeta', ar: '✏️ تعديل الحدث — يمكنك تغيير العنوان والإيموجي والتاريخ والتكرار والمكان مباشرة من البطاقة' },
+      { ru: '💡 Идеи подарков к событию — добавляй текст, ссылку, цену и валюту, отмечай купленным или удаляй', en: '💡 Gift ideas attached to an event — add text, link, price and currency, mark as bought or delete', 'zh-CN': '💡 事件的礼物创意 — 添加文字、链接、价格和货币，标记为已购或删除', hi: '💡 इवेंट से जुड़े गिफ्ट आइडिया — टेक्स्ट, लिंक, कीमत और मुद्रा जोड़ो, खरीदा हुआ मार्क करो या डिलीट करो', es: '💡 Ideas de regalo en un evento — añade texto, enlace, precio y divisa, marca como comprado o elimina', ar: '💡 أفكار هدايا مرتبطة بالحدث — أضف نصاً ورابطاً وسعراً وعملة، أو ضع علامة «تم الشراء» أو احذف' },
+      { ru: '📷 Фото к идее — те же требования, что у желаний; тап по миниатюре открывает фото на весь экран', en: '📷 Photo on an idea — same constraints as wishlist items; tap the thumbnail to open the photo full-screen', 'zh-CN': '📷 创意上的照片 — 与心愿单项目限制相同；点击缩略图可全屏查看', hi: '📷 आइडिया पर फ़ोटो — विशलिस्ट आइटम जैसी ही शर्तें; थंबनेल पर टैप करके फ़ोटो फुल-स्क्रीन में खोलें', es: '📷 Foto en una idea — mismas restricciones que en los deseos; toca la miniatura para abrirla a pantalla completa', ar: '📷 صورة لفكرة — نفس متطلبات الأمنيات؛ اضغط على المصغرة لفتح الصورة بملء الشاشة' },
+      { ru: '🔙 Кнопка «Назад» теперь работает на всех экранах календаря (раньше на главном экране календаря не реагировала)', en: '🔙 Back button now works on every calendar screen (it used to be a no-op on the main calendar screen)', 'zh-CN': '🔙 「返回」按钮现在在日历的所有界面都能用了（之前在日历主界面上无反应）', hi: '🔙 «वापस» बटन अब कैलेंडर की हर स्क्रीन पर काम करता है (पहले कैलेंडर की मुख्य स्क्रीन पर काम नहीं करता था)', es: '🔙 El botón «Atrás» ahora funciona en todas las pantallas del calendario (antes no respondía en la pantalla principal)', ar: '🔙 زر «الرجوع» يعمل الآن في كل شاشات التقويم (سابقاً كان لا يستجيب في الشاشة الرئيسية للتقويم)' },
+      { ru: '🌍 Импорт праздников страны и дней рождения друзей — кнопки теперь всегда на главной календаря, не только в пустом состоянии', en: '🌍 Import country holidays and friends\' birthdays — buttons are now always visible on the main calendar, not only on the empty state', 'zh-CN': '🌍 导入国家节日和朋友生日 — 按钮现在始终显示在日历主页，而不仅仅是空状态', hi: '🌍 देश के त्यौहार और दोस्तों के जन्मदिन आयात — बटन अब कैलेंडर मुख्य पेज पर हमेशा दिखते हैं, सिर्फ़ खाली अवस्था में नहीं', es: '🌍 Importar festividades del país y cumpleaños de amigos — los botones ahora están siempre en el calendario principal, no sólo en estado vacío', ar: '🌍 استيراد عطل البلد وأعياد ميلاد الأصدقاء — تظهر الأزرار الآن دائماً في التقويم الرئيسي، وليس فقط في الحالة الفارغة' },
+      { ru: '⏰ Карточка ближайшего события показывает «Ближайшее», если событие не сегодня (раньше всегда писало «Сегодня»)', en: '⏰ Closest-event card now shows "Coming up" when the event isn\'t today (it always read "Today" before)', 'zh-CN': '⏰ 最近事件卡片在事件不在今天时显示「即将到来」（之前总是显示「今天」）', hi: '⏰ निकटतम इवेंट कार्ड अब «आगामी» दिखाता है जब इवेंट आज नहीं है (पहले हमेशा «आज» लिखता था)', es: '⏰ La tarjeta del próximo evento ahora muestra «Próximamente» si el evento no es hoy (antes siempre ponía «Hoy»)', ar: '⏰ بطاقة أقرب حدث تُظهر الآن «قادم» إذا لم يكن الحدث اليوم (سابقاً كانت تكتب «اليوم» دائماً)' },
+      { ru: '🎯 Режим «Год» — тап по плитке месяца открывает этот месяц, не нужно переключать вкладки вручную', en: '🎯 Year view — tap a month tile to jump into that month, no manual tab switch needed', 'zh-CN': '🎯 「年」视图 — 点击月份方块即可跳转到该月，无需手动切换标签', hi: '🎯 «वर्ष» मोड — किसी महीने की टाइल पर टैप करके उस महीने में जाएं, टैब बदलने की ज़रूरत नहीं', es: '🎯 Vista «Año» — toca el mosaico de un mes para abrir ese mes, sin cambiar de pestaña a mano', ar: '🎯 وضع «السنة» — اضغط على بلاطة شهر للقفز إلى هذا الشهر، دون الحاجة لتبديل التبويبات يدوياً' },
+      { ru: '🛠 Убрали кнопку «Готово ✓» — она удаляла событие из активных без подтверждения, что воспринималось как потеря данных', en: '🛠 Removed the "Done ✓" button — it dropped events off the active list with no confirmation, reading as accidental data loss', 'zh-CN': '🛠 移除了「完成 ✓」按钮 — 它会在没有确认的情况下把事件从活动列表中移除，看起来像意外丢失数据', hi: '🛠 «हो गया ✓» बटन हटा दिया — वह बिना पुष्टि के इवेंट को सक्रिय सूची से हटा देता था, जो डेटा हानि जैसा लगता था', es: '🛠 Quitamos el botón «Hecho ✓» — eliminaba el evento de los activos sin confirmación y parecía pérdida de datos accidental', ar: '🛠 أزلنا زر «تم ✓» — كان يحذف الحدث من النشطين بدون تأكيد، مما بدا كأنه فقدان بيانات عرضي' },
+      { ru: '🔁 Онбординг календаря больше не повторяется на новых устройствах, если у аккаунта уже есть события', en: '🔁 Calendar onboarding no longer repeats on new devices when the account already has events', 'zh-CN': '🔁 当账户已有事件时，新设备上不再重复显示日历引导', hi: '🔁 अगर अकाउंट में पहले से इवेंट हैं तो नए डिवाइस पर कैलेंडर ऑनबोर्डिंग दोबारा नहीं दिखेगी', es: '🔁 La introducción del calendario ya no se repite en dispositivos nuevos si la cuenta ya tiene eventos', ar: '🔁 لم يعد إعداد التقويم يتكرر على الأجهزة الجديدة إذا كان الحساب يحتوي على أحداث بالفعل' },
+      { ru: '🎨 Настройки → Фон приложения: «Тёмная тема» / «Чёрная тема» (раньше были «Тёмный» / «Чёрный»)', en: '🎨 Settings → App background: "Dark theme" / "Black theme" (previously "Dark" / "Black")', 'zh-CN': '🎨 设置 → 应用背景：「深色主题」/「黑色主题」（之前是「深色」/「黑色」）', hi: '🎨 सेटिंग्स → ऐप बैकग्राउंड: «डार्क थीम» / «ब्लैक थीम» (पहले «डार्क» / «ब्लैक» थे)', es: '🎨 Ajustes → Fondo de la app: «Tema oscuro» / «Tema negro» (antes eran «Oscuro» / «Negro»)', ar: '🎨 الإعدادات ← خلفية التطبيق: «وضع داكن» / «وضع أسود» (سابقاً كانتا «داكن» / «أسود»)' },
+      { ru: '📐 Блок «Календарь событий» в настройках теперь точно по ширине соседних разделов', en: '📐 The "Event calendar" tile in settings now matches the width of neighbouring sections exactly', 'zh-CN': '📐 设置中的「事件日历」模块现在与相邻部分宽度完全一致', hi: '📐 सेटिंग्स में «इवेंट कैलेंडर» ब्लॉक अब बगल के सेक्शनों की चौड़ाई से बिल्कुल मेल खाता है', es: '📐 El bloque «Calendario de eventos» en ajustes ahora coincide exactamente con el ancho de las secciones vecinas', ar: '📐 قسم «تقويم الأحداث» في الإعدادات يطابق الآن عرض الأقسام المجاورة تماماً' },
+      { ru: '🔧 Полно мелочей: артефакт-«хвост» в углу карточки события, заметная зелёная подсветка для «Каждый год», убран лишний скролл в редакторе напоминаний, фикс редактирования даты (раньше менялся только год), и многое другое', en: '🔧 Tons of polish: hero corner-tail artifact, stronger green highlight on "Every year", removed extra scroll on the reminders editor, date editing fixed (previously only the year saved), and more', 'zh-CN': '🔧 大量打磨：事件卡片角落的「尾巴」假象、「每年」更明显的绿色高亮、移除了提醒编辑器中的多余滚动、修复了日期编辑（以前只保存年份），等等', hi: '🔧 ढेर सारे छोटे सुधार: इवेंट कार्ड के कोने का «पूँछ» आर्टिफैक्ट, «हर साल» के लिए ज़्यादा हरा हाइलाइट, रिमाइंडर एडिटर से अतिरिक्त स्क्रॉल हटाया, तारीख एडिट फिक्स (पहले सिर्फ़ साल बचता था), और भी बहुत कुछ', es: '🔧 Mucho pulido: artefacto «cola» en la esquina de la tarjeta, resaltado verde más fuerte en «Cada año», quitado un scroll extra del editor de recordatorios, arreglada la edición de fecha (antes sólo guardaba el año), y más', ar: '🔧 الكثير من الصقل: زائدة في زاوية بطاقة الحدث، تمييز أخضر أوضح لـ«كل سنة»، إزالة تمرير زائد من محرر التذكيرات، إصلاح تعديل التاريخ (سابقاً كان يحفظ السنة فقط)، والمزيد' },
+    ],
+  },
+  {
+    id: '2026-04-26',
+    date: '26.04.2026',
+    items: [
+      { ru: '📅 Подарочный календарь — большое обновление: дни рождения, годовщины и праздники в одном месте, с напоминаниями и идеями подарков', en: '📅 Gift Calendar — major update: birthdays, anniversaries and holidays in one place, with reminders and gift ideas', 'zh-CN': '📅 礼物日历 — 重大更新：生日、纪念日和节日集中在一处，附带提醒和礼物创意', hi: '📅 गिफ्ट कैलेंडर — बड़ा अपडेट: जन्मदिन, सालगिरह और त्यौहार एक ही जगह, रिमाइंडर और गिफ्ट आइडिया के साथ', es: '📅 Calendario de regalos — gran actualización: cumpleaños, aniversarios y festividades en un solo lugar, con recordatorios e ideas de regalo', ar: '📅 تقويم الهدايا — تحديث كبير: أعياد الميلاد والذكريات والعطل في مكان واحد، مع تذكيرات وأفكار للهدايا' },
+      { ru: '🗓️ 4 режима просмотра: месяц / неделя / список / год — переключай как удобно', en: '🗓️ 4 view modes: month / week / list / year — switch however you like', 'zh-CN': '🗓️ 4 种视图模式：月 / 周 / 列表 / 年 — 随意切换', hi: '🗓️ 4 व्यू मोड: महीना / सप्ताह / सूची / वर्ष — जैसा सुविधाजनक लगे वैसा स्विच करो', es: '🗓️ 4 modos de vista: mes / semana / lista / año — cambia como prefieras', ar: '🗓️ 4 أوضاع للعرض: شهر / أسبوع / قائمة / سنة — بدّل كما يحلو لك' },
+      { ru: '🎨 Карточки событий с тематическими градиентами — др розовый, годовщина золотой, праздник зелёный', en: '🎨 Event cards with themed gradients — birthdays pink, anniversaries gold, holidays green', 'zh-CN': '🎨 主题渐变的事件卡片 — 生日粉色，纪念日金色，节日绿色', hi: '🎨 थीम वाले ग्रेडिएंट के इवेंट कार्ड — जन्मदिन गुलाबी, सालगिरह सुनहरी, त्यौहार हरा', es: '🎨 Tarjetas de evento con gradientes temáticos — cumpleaños rosa, aniversarios dorado, festividades verde', ar: '🎨 بطاقات أحداث بتدرجات موضوعية — أعياد الميلاد وردي، الذكريات ذهبي، الأعياد أخضر' },
+      { ru: '🔔 Гибкие напоминания — за 14 / 7 / 3 / 1 день и в день события, отдельно на каждое событие', en: '🔔 Flexible reminders — 14 / 7 / 3 / 1 day before and day-of, configurable per event', 'zh-CN': '🔔 灵活提醒 — 提前 14 / 7 / 3 / 1 天和当天，每个事件可单独配置', hi: '🔔 लचीले रिमाइंडर — 14 / 7 / 3 / 1 दिन पहले और इवेंट के दिन, हर इवेंट के लिए अलग', es: '🔔 Recordatorios flexibles — 14 / 7 / 3 / 1 días antes y el mismo día, configurables por evento', ar: '🔔 تذكيرات مرنة — قبل 14 / 7 / 3 / 1 يوم ويوم الحدث، قابلة للتخصيص لكل حدث' },
+      { ru: '✨ Мастер создания события из 4 шагов — тип, детали, напоминания, готово', en: '✨ 4-step event create wizard — type, details, reminders, done', 'zh-CN': '✨ 4 步事件创建向导 — 类型、详情、提醒、完成', hi: '✨ 4-स्टेप इवेंट क्रिएशन विज़ार्ड — टाइप, डिटेल, रिमाइंडर, हो गया', es: '✨ Asistente de creación de evento en 4 pasos — tipo, detalles, recordatorios, listo', ar: '✨ معالج إنشاء حدث من 4 خطوات — النوع، التفاصيل، التذكيرات، انتهى' },
+      { ru: '📥 Импорт дней рождения друзей из WishBoard — в один клик', en: '📥 Import friends\' birthdays from WishBoard — in one click', 'zh-CN': '📥 一键从 WishBoard 导入朋友生日', hi: '📥 WishBoard से दोस्तों के जन्मदिन एक क्लिक में आयात करो', es: '📥 Importa los cumpleaños de tus amigos desde WishBoard — en un clic', ar: '📥 استيراد أعياد ميلاد الأصدقاء من WishBoard — بنقرة واحدة' },
+      { ru: '🌍 Календари праздников 6 стран (Россия, США, Китай, Индия, Арабский мир, Испания) — с локализацией под язык приложения', en: '🌍 Country holiday calendars for 6 regions (Russia, USA, China, India, Arab world, Spain) — localized to your app language', 'zh-CN': '🌍 6 个国家/地区的节日日历（俄罗斯、美国、中国、印度、阿拉伯地区、西班牙）— 已根据应用语言本地化', hi: '🌍 6 क्षेत्रों के लिए त्यौहार कैलेंडर (रूस, अमेरिका, चीन, भारत, अरब जगत, स्पेन) — ऐप की भाषा में स्थानीयकृत', es: '🌍 Calendarios de festividades de 6 regiones (Rusia, EE. UU., China, India, mundo árabe, España) — localizados al idioma de la app', ar: '🌍 تقويمات عطل لـ 6 مناطق (روسيا، الولايات المتحدة، الصين، الهند، العالم العربي، إسبانيا) — مترجمة إلى لغة التطبيق' },
+      { ru: '🎁 Связь события с другом и его вишлистом — на странице события сразу видно идеи подарков из его списка', en: '🎁 Link an event to a friend and their wishlist — see their gift ideas right on the event page', 'zh-CN': '🎁 将事件与朋友及其心愿单关联 — 在事件页面直接看到对方清单上的礼物创意', hi: '🎁 इवेंट को दोस्त और उसकी विशलिस्ट से जोड़ो — इवेंट पेज पर ही उसकी विशलिस्ट के गिफ्ट आइडिया दिखेंगे', es: '🎁 Vincula un evento a un amigo y su lista — verás sus ideas de regalo directamente en la página del evento', ar: '🎁 اربط الحدث بصديق وقائمته — سترى أفكار هداياه مباشرة على صفحة الحدث' },
+      { ru: '💝 После события — записывай подарок и сохраняй благодарственные сообщения, попадут в годовой отчёт', en: '💝 After an event — log what you gave and save thank-you messages, all rolled into the year recap', 'zh-CN': '💝 事件结束后 — 记录所送礼物并保存感谢消息，全部汇入年度总结', hi: '💝 इवेंट के बाद — गिफ्ट दर्ज करो और थैंक-यू संदेश सहेजो, सब साल के सारांश में आएगा', es: '💝 Tras el evento — registra el regalo y guarda los mensajes de agradecimiento, todo entra en el resumen anual', ar: '💝 بعد الحدث — سجّل الهدية واحفظ رسائل الشكر، ستظهر جميعها في الملخص السنوي' },
+      { ru: '⭐ Годовой отчёт — статистика подарков за год, гистограмма по месяцам, топ-получатель, шеринг в Telegram', en: '⭐ Year recap — annual gift stats, monthly histogram, top recipient, share to Telegram', 'zh-CN': '⭐ 年度总结 — 全年送礼统计、按月柱状图、最受赠者、分享到 Telegram', hi: '⭐ साल का सारांश — सालाना गिफ्ट आँकड़े, मासिक हिस्टोग्राम, टॉप-प्राप्तकर्ता, Telegram पर शेयर', es: '⭐ Resumen anual — estadísticas anuales de regalos, histograma mensual, máximo receptor, compartir en Telegram', ar: '⭐ ملخص السنة — إحصاءات الهدايا السنوية، رسم بياني شهري، أكثر متلقٍّ، مشاركة على Telegram' },
+      { ru: '📨 Inbox уведомлений — вся история напоминаний прямо в приложении', en: '📨 Notification inbox — all reminder history inside the app', 'zh-CN': '📨 通知收件箱 — 所有提醒历史就在应用内', hi: '📨 नोटिफिकेशन इनबॉक्स — सारी रिमाइंडर हिस्ट्री ऐप के अंदर ही', es: '📨 Bandeja de notificaciones — todo el historial de recordatorios dentro de la app', ar: '📨 صندوق الإشعارات — كل سجل التذكيرات داخل التطبيق' },
+      { ru: '🎁 Кнопка «Перейти к желанию» в TG-уведомлениях о подписках — открывает желание сразу из чата', en: '🎁 "Open wish" button on TG subscription notifications — opens the wish directly from chat', 'zh-CN': '🎁 订阅类 TG 通知中的「打开心愿」按钮 — 直接从聊天打开心愿', hi: '🎁 सब्सक्रिप्शन TG नोटिफ़िकेशन में «विश खोलें» बटन — चैट से सीधे विश खोलता है', es: '🎁 Botón «Abrir deseo» en notificaciones TG de suscripciones — abre el deseo directamente desde el chat', ar: '🎁 زر «فتح الأمنية» في إشعارات TG للاشتراكات — يفتح الأمنية مباشرة من الدردشة' },
+      { ru: '🛠️ Множество мелких фиксов — отступы CTA, рендер эмодзи, наложения панелей', en: '🛠️ Many small fixes — CTA spacing, emoji rendering, panel overlap', 'zh-CN': '🛠️ 大量小修复 — CTA 间距、表情渲染、面板叠加问题', hi: '🛠️ बहुत सारे छोटे फिक्स — CTA स्पेसिंग, इमोजी रेंडर, पैनल ओवरलैप', es: '🛠️ Muchos arreglos pequeños — espaciado de CTA, render de emojis, solapamiento de paneles', ar: '🛠️ كثير من الإصلاحات الصغيرة — تباعد CTA، تصيير الإيموجي، تداخل اللوحات' },
+    ],
+  },
+  {
+    id: '2026-04-25',
+    date: '25.04.2026',
+    items: [
+      { ru: '✨ WishBot 2.0 — большое обновление: переосмыслили дизайн, переработали навигацию, ускорили всё подряд', en: '✨ WishBot 2.0 — a major refresh: redesigned, renavigated, sped up everything', 'zh-CN': '✨ WishBot 2.0 — 重大更新：重新设计、重新规划导航、全面提速', hi: '✨ WishBot 2.0 — बड़ा अपडेट: डिज़ाइन फिर से सोचा, नेविगेशन फिर से बनाया, सब कुछ तेज़ किया', es: '✨ WishBot 2.0 — gran renovación: rediseñado, navegación rehecha, todo más rápido', ar: '✨ WishBot 2.0 — تحديث كبير: أُعيد تصميمه وإعادة بناء التنقل وتسريع كل شيء' },
+      { ru: '🌈 Темы и акценты — выбери цвет интерфейса под настроение в «Профиль → Внешний вид» (PRO)', en: '🌈 Themes and accents — pick the colour that fits your mood in Profile → Appearance (PRO)', 'zh-CN': '🌈 主题与强调色 — 在「个人资料 → 外观」中选择契合心情的颜色（PRO）', hi: '🌈 थीम और एक्सेंट — मूड के हिसाब से इंटरफ़ेस का रंग चुनो «प्रोफ़ाइल → लुक» में (PRO)', es: '🌈 Temas y acentos — elige el color de la interfaz según tu ánimo en Perfil → Apariencia (PRO)', ar: '🌈 الثيمات والألوان المميزة — اختر لون الواجهة الذي يناسب مزاجك في «الملف الشخصي ← المظهر» (PRO)' },
+      { ru: '🪟 Глянцевые карточки и плавающее меню снизу — всё как в свежих iOS-приложениях', en: '🪟 Glass cards and a floating bottom nav — looks like the freshest iOS apps', 'zh-CN': '🪟 玻璃质感卡片和悬浮底部导航 — 像最新的 iOS 应用一样', hi: '🪟 ग्लॉसी कार्ड और नीचे फ्लोटिंग नैव — एकदम नए iOS ऐप जैसा', es: '🪟 Tarjetas tipo cristal y barra inferior flotante — se ve como las apps de iOS más recientes', ar: '🪟 بطاقات زجاجية وشريط تنقل سفلي عائم — يبدو كأحدث تطبيقات iOS' },
+      { ru: '🎯 Новые шрифты, скругления и тени — никаких резких углов, всё дышит', en: '🎯 New typography, radii and shadows — no sharp edges, everything breathes', 'zh-CN': '🎯 全新的字体、圆角和阴影 — 没有尖锐边角，一切都更舒展', hi: '🎯 नए फ़ॉन्ट, राउंडिंग और शैडो — कोई तीखे कोने नहीं, सब कुछ साँस लेता है', es: '🎯 Nueva tipografía, radios y sombras — sin esquinas duras, todo respira', ar: '🎯 خطوط جديدة وزوايا مدورة وظلال — لا حواف حادة، كل شيء يتنفس' },
+      { ru: '😎 Свой эмодзи рядом с названием вишлиста — теперь можно поставить любой', en: '😎 Custom emoji next to the wishlist title — pick whichever fits', 'zh-CN': '😎 心愿单标题旁的自定义表情 — 现在可以选任何你想要的', hi: '😎 विशलिस्ट के टाइटल के बगल में अपना इमोजी — अब कोई भी लगा सकते हो', es: '😎 Emoji propio junto al título de la lista — pon el que más encaje', ar: '😎 إيموجي مخصص بجوار عنوان القائمة — اختر ما يناسبك' },
+      { ru: '🚀 Куча мелочей: быстрее открывается, меньше ошибок, чище интерфейс', en: '🚀 Many small wins: faster open, fewer errors, cleaner interface', 'zh-CN': '🚀 大量小胜利：打开更快、错误更少、界面更干净', hi: '🚀 ढेर सारी छोटी जीतें: तेज़ खुलना, कम एरर, साफ़ इंटरफ़ेस', es: '🚀 Muchas mejoras pequeñas: abre más rápido, menos errores, interfaz más limpia', ar: '🚀 الكثير من المكاسب الصغيرة: فتح أسرع، أخطاء أقل، واجهة أنظف' },
+    ],
+  },
+  {
+    id: '2026-04-16',
+    date: '16.04.2026',
+    items: [
+      { ru: '🔒 PRO: Тайная бронь — бронируй чужое желание так, чтобы владелец не узнал', en: '🔒 PRO: Secret reservation — reserve a friend\'s wish without them noticing', 'zh-CN': '🔒 PRO：秘密预订 — 在对方不知情的情况下预订朋友的心愿', hi: '🔒 PRO: गुप्त बुकिंग — मालिक को बिना पता चले उसके विश को बुक करो', es: '🔒 PRO: Reserva secreta — reserva el deseo de un amigo sin que se entere', ar: '🔒 PRO: حجز سري — احجز أمنية صديقك دون أن يلاحظ' },
+      { ru: 'Без уведомлений и меток на карточке — для владельца всё выглядит как было', en: 'No notifications, no card markers — everything looks the same to the owner', 'zh-CN': '无通知，无卡片标记 — 对所有者来说一切看起来都没变', hi: 'कोई नोटिफ़िकेशन नहीं, कार्ड पर कोई निशान नहीं — मालिक के लिए सब कुछ पहले जैसा दिखेगा', es: 'Sin notificaciones ni marcas en la tarjeta — para el dueño todo se ve igual', ar: 'بلا إشعارات ولا علامات على البطاقة — يبدو كل شيء كما هو لصاحب الأمنية' },
+      { ru: 'Сохрани подарок «под сукно», вернись к нему в любой момент через раздел «Тайные брони»', en: 'Save a gift on the side and come back anytime via the "Secret reservations" section', 'zh-CN': '把礼物「藏起来」，随时通过「秘密预订」栏目回来查看', hi: 'गिफ्ट को «दबाकर» रखो, «गुप्त बुकिंग» सेक्शन से कभी भी वापस आओ', es: 'Guarda el regalo «en reserva» y vuelve cuando quieras desde la sección «Reservas secretas»', ar: 'احفظ الهدية جانباً وعد إليها في أي وقت من قسم «الحجوزات السرية»' },
+      { ru: 'Если владелец изменит желание — увидишь что поменялось; если кто-то публично забронировал — тоже подскажем', en: 'If the owner edits the wish — you\'ll see the diff; if someone else publicly reserves it — we\'ll tell you', 'zh-CN': '如果所有者修改了心愿 — 你会看到变更；如果别人公开预订了 — 我们也会告诉你', hi: 'अगर मालिक विश एडिट करे — तुम्हें फ़र्क़ दिखेगा; अगर किसी और ने पब्लिक बुकिंग कर ली — तुम्हें भी बताएंगे', es: 'Si el dueño edita el deseo — verás lo que cambió; si otra persona lo reserva públicamente — también te avisamos', ar: 'إذا عدّل المالك الأمنية — سترى ما تغيّر؛ وإذا حجزها شخص آخر علناً — سنخبرك أيضاً' },
+      { ru: 'В любой момент можно перевести в публичную бронь одним тапом', en: 'Promote a secret reservation to a public one in one tap at any time', 'zh-CN': '随时一键将秘密预订转为公开预订', hi: 'किसी भी समय एक टैप से गुप्त बुकिंग को पब्लिक बुकिंग में बदलो', es: 'Convierte una reserva secreta en pública con un solo toque en cualquier momento', ar: 'حوّل الحجز السري إلى علني بنقرة واحدة في أي وقت' },
+      { ru: 'Доступно в PRO или разово за звёзды', en: 'Included in PRO, or available as a one-time unlock for Stars', 'zh-CN': '包含在 PRO 中，或可通过 Stars 一次性解锁', hi: 'PRO में शामिल या Stars से एकमुश्त अनलॉक', es: 'Incluido en PRO, o disponible como desbloqueo único por Stars', ar: 'متاح ضمن PRO أو كفتح لمرة واحدة بـ Stars' },
+      { ru: '🔗 Общее желание — одно желание в нескольких вишлистах', en: '🔗 Shared wish — one wish across multiple wishlists', 'zh-CN': '🔗 共享心愿 — 一个心愿出现在多个清单中', hi: '🔗 साझा विश — एक विश कई विशलिस्ट में', es: '🔗 Deseo compartido — un deseo en varias listas', ar: '🔗 أمنية مشتركة — أمنية واحدة في عدة قوائم' },
+      { ru: 'При создании или редактировании — отметь, в какие ещё вишлисты добавить', en: 'When creating or editing a wish — pick additional wishlists to add it to', 'zh-CN': '创建或编辑心愿时 — 选择要添加到的其他清单', hi: 'विश बनाते या एडिट करते समय — और कौन सी विशलिस्ट में जोड़ना है चुनो', es: 'Al crear o editar — marca a qué otras listas añadirlo', ar: 'عند إنشاء الأمنية أو تعديلها — اختر القوائم الأخرى التي ستضاف إليها' },
+      { ru: 'Изменения (цена, фото, описание) синхронизируются во всех вишлистах автоматически', en: 'Changes (price, photo, description) sync across all wishlists automatically', 'zh-CN': '更改（价格、照片、描述）会自动同步到所有清单', hi: 'बदलाव (कीमत, फ़ोटो, विवरण) सभी विशलिस्ट में अपने आप सिंक होते हैं', es: 'Los cambios (precio, foto, descripción) se sincronizan en todas las listas automáticamente', ar: 'التغييرات (السعر، الصورة، الوصف) تتزامن تلقائياً في كل القوائم' },
+      { ru: 'Бронь общего желания скрывает его во всех вишлистах сразу', en: 'Reserving a shared wish hides it from all wishlists at once', 'zh-CN': '预订共享心愿会将其在所有清单中同时隐藏', hi: 'साझा विश की बुकिंग सभी विशलिस्ट में एक साथ छिपा देती है', es: 'Reservar un deseo compartido lo oculta en todas las listas a la vez', ar: 'حجز أمنية مشتركة يخفيها من جميع القوائم دفعة واحدة' },
+      { ru: 'Видно на карточке: «в N вишлистах» — тап покажет список', en: '"in N wishlists" label on the card — tap to see the list', 'zh-CN': '卡片上显示「在 N 个清单中」 — 点击查看列表', hi: 'कार्ड पर दिखेगा: «N विशलिस्ट में» — टैप करके सूची देखो', es: 'En la tarjeta verás: «en N listas» — toca para ver la lista', ar: 'ظاهر على البطاقة: «في N قوائم» — اضغط لعرض القائمة' },
+      { ru: 'В списке желаний теперь есть «Добавить в ещё» — быстрая раздача по вишлистам', en: 'New "Add to more" shortcut in the wishes list — quick placement into other wishlists', 'zh-CN': '心愿列表中新增「添加到更多」 — 快速放入其他清单', hi: 'विश सूची में अब «और जोड़ें» — विशलिस्ट में जल्दी डालने का शॉर्टकट', es: 'Nueva opción «Añadir a más» en la lista — coloca el deseo en otras listas rápidamente', ar: 'في قائمة الأمنيات الآن «أضف إلى المزيد» — توزيع سريع على القوائم' },
+    ],
+  },
+  {
+    id: '2026-04-15',
+    date: '15.04.2026',
+    items: [
+      { ru: '💬 Ответы на комментарии — прямо из уведомления от бота', en: '💬 Comment replies — right from the bot notification', 'zh-CN': '💬 回复评论 — 直接从机器人通知里', hi: '💬 कमेंट का जवाब — सीधे बॉट नोटिफ़िकेशन से', es: '💬 Responder comentarios — directamente desde la notificación del bot', ar: '💬 الرد على التعليقات — مباشرة من إشعار البوت' },
+      { ru: 'Кнопка «Ответить» под уведомлением — открывает нужное желание и подсвечивает комментарий', en: '"Reply" button under the notification — opens the exact wish and highlights the comment', 'zh-CN': '通知下方的「回复」按钮 — 打开对应心愿并高亮评论', hi: 'नोटिफ़िकेशन के नीचे «जवाब दें» बटन — सही विश खोलता है और कमेंट हाइलाइट करता है', es: 'Botón «Responder» bajo la notificación — abre el deseo exacto y resalta el comentario', ar: 'زر «الرد» تحت الإشعار — يفتح الأمنية المعنية ويُبرز التعليق' },
+      { ru: 'Над ответом виден текст исходного комментария — чтобы не потерять контекст', en: 'Preview of the original comment is shown above each reply — so the context isn\'t lost', 'zh-CN': '回复上方显示原始评论 — 不丢失上下文', hi: 'जवाब के ऊपर मूल कमेंट दिखता है — ताकि कॉन्टेक्स्ट न खोए', es: 'Encima de cada respuesta se ve el comentario original — para no perder el contexto', ar: 'نص التعليق الأصلي ظاهر فوق الرد — لكي لا يضيع السياق' },
+      { ru: 'Автор исходного комментария получает уведомление об ответе', en: 'The original comment\'s author gets notified about the reply', 'zh-CN': '原评论作者会收到回复通知', hi: 'मूल कमेंट के लेखक को जवाब का नोटिफ़िकेशन मिलेगा', es: 'El autor del comentario original recibe una notificación sobre la respuesta', ar: 'يتلقى صاحب التعليق الأصلي إشعاراً بالرد' },
+    ],
+  },
+  {
+    id: '2026-04-14',
+    date: '14.04.2026',
+    items: [
+      { ru: '✨ PRO: Подарочная витрина — личная страница с обложкой, избранными вишлистами и предпочтениями', en: '✨ PRO: Gift Showcase — a personal page with cover, featured wishlists and preferences', 'zh-CN': '✨ PRO：礼物展示页 — 个人页面，带封面、精选清单和偏好', hi: '✨ PRO: गिफ्ट शोकेस — कवर, चुनी हुई विशलिस्ट और प्राथमिकताओं वाला निजी पेज', es: '✨ PRO: Escaparate de regalos — página personal con portada, listas destacadas y preferencias', ar: '✨ PRO: واجهة الهدايا — صفحة شخصية بغلاف وقوائم مميزة وتفضيلات' },
+      { ru: 'Обложка профиля, био и закреплённые вишлисты на самом верху', en: 'Profile cover, bio and pinned wishlists pinned to the top', 'zh-CN': '顶部展示个人主页封面、简介和置顶清单', hi: 'प्रोफ़ाइल कवर, बायो और पिन की हुई विशलिस्ट सबसे ऊपर', es: 'Portada del perfil, biografía y listas fijadas arriba del todo', ar: 'غلاف الملف الشخصي والسيرة الذاتية والقوائم المثبتة في الأعلى' },
+      { ru: 'Размеры и любимые бренды — чтобы дарителям было проще выбрать', en: 'Sizes and favourite brands — to make gifting easier', 'zh-CN': '尺码与喜爱品牌 — 让送礼者更容易挑选', hi: 'साइज़ और पसंदीदा ब्रांड — ताकि गिफ्ट देने वालों को चुनना आसान हो', es: 'Tallas y marcas favoritas — para que regalar sea más fácil', ar: 'المقاسات والماركات المفضلة — لتسهيل الاختيار على المُهدين' },
+      { ru: 'Публичная ссылка на витрину — поделись одним тапом в Telegram', en: 'Public showcase link — share with one tap in Telegram', 'zh-CN': '展示页的公开链接 — 一键在 Telegram 分享', hi: 'शोकेस का पब्लिक लिंक — Telegram में एक टैप से शेयर करो', es: 'Enlace público del escaparate — comparte en Telegram con un toque', ar: 'رابط عام للواجهة — شاركه بنقرة واحدة في Telegram' },
+      { ru: 'Прогресс заполнения и предпросмотр перед публикацией', en: 'Progress tracker and preview before publishing', 'zh-CN': '填写进度跟踪和发布前预览', hi: 'भरने का प्रगति ट्रैकर और प्रकाशन से पहले प्रीव्यू', es: 'Indicador de progreso y vista previa antes de publicar', ar: 'مؤشر للإنجاز ومعاينة قبل النشر' },
+      { ru: '👤 Подписки на профили — подписывайся на чужие витрины, чтобы быстро до них возвращаться', en: '👤 Profile subscriptions — follow other users\' showcases and return to them in one tap', 'zh-CN': '👤 个人主页订阅 — 关注他人展示页，方便快速回访', hi: '👤 प्रोफ़ाइल सब्सक्रिप्शन — दूसरों के शोकेस को फॉलो करो, जल्दी वापस आने के लिए', es: '👤 Suscripciones a perfiles — sigue los escaparates de otros y vuelve a ellos con un toque', ar: '👤 الاشتراك بالملفات الشخصية — تابع واجهات الآخرين للعودة إليها بسرعة' },
+      { ru: 'Вкладка «Подписки» теперь делится на «Вишлисты» и «Профили»', en: '"Subscriptions" tab is now split into "Wishlists" and "Profiles"', 'zh-CN': '「订阅」标签现在分为「心愿单」和「个人主页」', hi: '«सब्सक्रिप्शन» टैब अब «विशलिस्ट» और «प्रोफ़ाइल» में बँट गई है', es: 'La pestaña «Suscripciones» ahora se divide en «Listas» y «Perfiles»', ar: 'تبويب «الاشتراكات» مقسوم الآن إلى «القوائم» و«الملفات الشخصية»' },
+      { ru: 'Кнопка «Подписаться» прямо в чужом профиле', en: '"Subscribe" button right inside another user\'s profile', 'zh-CN': '他人主页内即有「订阅」按钮', hi: 'दूसरे की प्रोफ़ाइल में ही «फॉलो करें» बटन', es: 'Botón «Suscribirse» dentro del perfil de otra persona', ar: 'زر «اشتراك» مباشرة داخل ملف الآخر' },
+      { ru: 'Тап по аватару владельца в чужом вишлисте — открывает его профиль', en: 'Tap the owner\'s avatar in a shared wishlist — opens their profile', 'zh-CN': '在共享清单中点击所有者头像 — 打开其个人主页', hi: 'साझा विशलिस्ट में मालिक के अवतार पर टैप — उसकी प्रोफ़ाइल खुलेगी', es: 'Toca el avatar del dueño en una lista compartida — abre su perfil', ar: 'اضغط على صورة المالك في قائمة مشتركة — تُفتح صفحته' },
+      { ru: '📅 Подарочный календарь — новый онбординг после покупки и обновлённый UI пейвола и пустого состояния', en: '📅 Gift Calendar — new post-purchase onboarding and refreshed paywall + empty state UI', 'zh-CN': '📅 礼物日历 — 全新购买后引导以及刷新的付费墙和空状态 UI', hi: '📅 गिफ्ट कैलेंडर — खरीद के बाद का नया ऑनबोर्डिंग और रिफ्रेश किया पेवॉल + खाली अवस्था UI', es: '📅 Calendario de regalos — nuevo proceso post-compra y nueva interfaz del paywall + estado vacío', ar: '📅 تقويم الهدايا — إعداد جديد بعد الشراء وواجهة محدّثة لجدار الدفع والحالة الفارغة' },
+    ],
+  },
+  {
+    id: '2026-04-13',
+    date: '13.04.2026',
+    items: [
+      { ru: '⏱ PRO: Умные брони — бронь с таймером, автоснятие, напоминания', en: '⏱ PRO: Smart Reservations — timed reservations, auto-release, reminders', 'zh-CN': '⏱ PRO：智能预订 — 限时预订、自动释放、提醒', hi: '⏱ PRO: स्मार्ट बुकिंग — टाइमर वाली बुकिंग, ऑटो-रिलीज़, रिमाइंडर', es: '⏱ PRO: Reservas inteligentes — reservas con tiempo, liberación automática, recordatorios', ar: '⏱ PRO: حجوزات ذكية — حجز بمؤقت، إصدار تلقائي، تذكيرات' },
+      { ru: 'Настрой срок брони (24ч / 48ч / 72ч / 7д) для каждого вишлиста', en: 'Set reservation TTL (24h / 48h / 72h / 7d) per wishlist', 'zh-CN': '为每个清单设置预订有效期（24 小时 / 48 小时 / 72 小时 / 7 天）', hi: 'हर विशलिस्ट के लिए बुकिंग TTL सेट करो (24घं / 48घं / 72घं / 7दिन)', es: 'Configura la duración de la reserva (24h / 48h / 72h / 7d) por lista', ar: 'اضبط مدة الحجز (24س / 48س / 72س / 7أيام) لكل قائمة' },
+      { ru: 'Даритель получает напоминание и может продлить бронь', en: 'Gifter gets a reminder and can extend the reservation', 'zh-CN': '送礼者会收到提醒，并可延长预订', hi: 'गिफ्ट देने वाले को रिमाइंडर मिलेगा और वह बुकिंग बढ़ा सकता है', es: 'Quien regala recibe un recordatorio y puede extender la reserva', ar: 'يتلقى المُهدي تذكيراً ويمكنه تمديد الحجز' },
+      { ru: 'Если бронь не продлена — желание автоматически освобождается', en: 'If not extended — the wish is automatically released', 'zh-CN': '如果未延长 — 心愿将自动释放', hi: 'अगर नहीं बढ़ाया — विश अपने आप रिलीज़ हो जाएगी', es: 'Si no se extiende — el deseo se libera automáticamente', ar: 'إذا لم يُمدَّد — تُحرَّر الأمنية تلقائياً' },
+      { ru: 'Доступно в PRO или как отдельный add-on за 15 Stars', en: 'Available with PRO or as a standalone add-on for 15 Stars', 'zh-CN': 'PRO 内可用，或作为独立附加项以 15 Stars 解锁', hi: 'PRO के साथ या 15 Stars में अलग ऐड-ऑन के रूप में उपलब्ध', es: 'Disponible con PRO o como complemento por 15 Stars', ar: 'متاح مع PRO أو كإضافة مستقلة بـ 15 Stars' },
+    ],
+  },
+  {
+    id: '2026-04-11',
+    date: '11.04.2026',
+    items: [
+      { ru: '📋 PRO: Поделиться частью вишлиста — отправь только выбранные желания', en: '📋 PRO: Share part of wishlist — send only selected wishes', 'zh-CN': '📋 PRO：分享心愿单的一部分 — 仅发送选中的心愿', hi: '📋 PRO: विशलिस्ट का हिस्सा शेयर करो — सिर्फ़ चुनी हुई विशेज़ भेजो', es: '📋 PRO: Compartir parte de la lista — envía solo los deseos seleccionados', ar: '📋 PRO: مشاركة جزء من القائمة — أرسل الأمنيات المختارة فقط' },
+      { ru: 'Ссылка открывается прямо в Telegram, можно сохранить подборку', en: 'Link opens directly in Telegram, you can save the selection', 'zh-CN': '链接直接在 Telegram 中打开，可保存选集', hi: 'लिंक Telegram में सीधे खुलता है, संग्रह सेव कर सकते हो', es: 'El enlace se abre directamente en Telegram, puedes guardar la selección', ar: 'يُفتح الرابط مباشرة في Telegram، ويمكنك حفظ المجموعة' },
+      { ru: '🚫 PRO: Что лучше не дарить — настройка для каждого вишлиста', en: '🚫 PRO: What not to gift — per-wishlist settings', 'zh-CN': '🚫 PRO：请勿赠送 — 每个清单独立设置', hi: '🚫 PRO: क्या न दें — हर विशलिस्ट के लिए अलग सेटिंग', es: '🚫 PRO: Qué no regalar — ajustes por lista', ar: '🚫 PRO: ما لا تُهدي — إعدادات لكل قائمة' },
+      { ru: 'Плашка-подсказка прямо внутри вишлиста — заполни за пару тапов', en: 'Helpful prompt right inside the wishlist — fill in with a few taps', 'zh-CN': '心愿单内提示卡片 — 几次点击即可填写', hi: 'विशलिस्ट के अंदर ही हेल्पफुल प्रॉम्प्ट — कुछ टैप में भर लो', es: 'Aviso útil dentro de la lista — rellénalo con un par de toques', ar: 'تنبيه مفيد داخل القائمة — املأه بنقرات قليلة' },
+      { ru: 'Три режима: общий список, отдельный для вишлиста или скрыть', en: 'Three modes: global list, custom per wishlist, or hide', 'zh-CN': '三种模式：全局列表、按清单单独设置或隐藏', hi: 'तीन मोड: ग्लोबल सूची, हर विशलिस्ट के लिए अलग, या छिपाओ', es: 'Tres modos: lista global, personalizada por lista u oculta', ar: 'ثلاثة أوضاع: قائمة عامة، قائمة منفصلة لكل قائمة، أو الإخفاء' },
+      { ru: 'Гости видят компактный блок с тегами и комментарием', en: 'Guests see a compact block with tags and a comment', 'zh-CN': '访客看到带标签和评论的紧凑模块', hi: 'मेहमानों को टैग और कमेंट के साथ कॉम्पैक्ट ब्लॉक दिखेगा', es: 'Los invitados ven un bloque compacto con etiquetas y comentario', ar: 'يرى الضيوف كتلة مدمجة بالعلامات وتعليق' },
+      { ru: '🔗 Управление ссылками — просматривай и отключай все активные ссылки в одном месте', en: '🔗 Link management — view and disable all active links in one place', 'zh-CN': '🔗 链接管理 — 在一个位置查看并停用所有活动链接', hi: '🔗 लिंक प्रबंधन — सभी सक्रिय लिंक एक जगह देखो और बंद करो', es: '🔗 Gestión de enlaces — consulta y desactiva todos los enlaces activos en un solo lugar', ar: '🔗 إدارة الروابط — اعرض وعطّل كل الروابط النشطة في مكان واحد' },
+      { ru: 'Детали по каждой ссылке: просмотры, подписчики, срок действия', en: 'Details per link: views, subscribers, expiry date', 'zh-CN': '每条链接的详情：浏览量、订阅者、有效期', hi: 'हर लिंक की डिटेल: व्यूज़, सब्सक्राइबर, समाप्ति तिथि', es: 'Detalles por enlace: vistas, suscriptores, fecha de caducidad', ar: 'تفاصيل لكل رابط: المشاهدات، المشتركون، تاريخ الانتهاء' },
+    ],
+  },
+  {
+    id: '2026-04-07',
+    date: '07.04.2026',
+    items: [
+      { ru: '👥 Совместный подарок — скидывайтесь на один подарок компанией', en: '👥 Group Gift — pool money together for one gift', 'zh-CN': '👥 拼单礼物 — 大家一起出钱送一份礼物', hi: '👥 सामूहिक गिफ्ट — एक ही गिफ्ट के लिए कंपनी में पैसा इकट्ठा करो', es: '👥 Regalo grupal — pongan dinero juntos para un único regalo', ar: '👥 هدية جماعية — اجمعوا المال معاً لهدية واحدة' },
+      { ru: 'Создание сбора, приглашение участников по ссылке, отслеживание прогресса', en: 'Create a collection, invite participants via link, track progress', 'zh-CN': '创建拼单、通过链接邀请参与者、跟踪进度', hi: 'कलेक्शन बनाओ, लिंक से लोगों को बुलाओ, प्रगति ट्रैक करो', es: 'Crea una colecta, invita por enlace, sigue el progreso', ar: 'أنشئ مجموعة، ادعُ المشاركين عبر رابط، وتابع التقدم' },
+      { ru: 'Чат участников внутри сбора', en: 'In-collection participant chat', 'zh-CN': '拼单内的参与者聊天', hi: 'कलेक्शन के अंदर सदस्यों की चैट', es: 'Chat de participantes dentro de la colecta', ar: 'محادثة للمشاركين داخل المجموعة' },
+      { ru: 'Закрепление реквизитов для перевода', en: 'Pin payment details for transfers', 'zh-CN': '置顶转账收款信息', hi: 'ट्रांसफ़र के लिए पेमेंट डिटेल पिन करो', es: 'Fija los datos para la transferencia', ar: 'تثبيت بيانات الدفع للتحويلات' },
+      { ru: 'Активные сборы отображаются в «Мои брони» — и для организатора, и для участников', en: 'Active collections appear in "My Reservations" — for organizer and participants', 'zh-CN': '活跃的拼单会出现在「我的预订」中 — 组织者和参与者都能看到', hi: 'सक्रिय कलेक्शन «मेरी बुकिंग» में दिखते हैं — आयोजक और सदस्यों दोनों के लिए', es: 'Las colectas activas aparecen en «Mis reservas» — para organizador y participantes', ar: 'تظهر المجموعات النشطة في «حجوزاتي» — للمنظم والمشاركين' },
+      { ru: 'Исправлена ошибка при нажатии на «Скинуться компанией»', en: 'Fixed crash when tapping "Pool together"', 'zh-CN': '修复了点击「拼单」时的崩溃', hi: '«कंपनी में डालो» पर टैप करते समय क्रैश ठीक किया', es: 'Corregido el error al tocar «Hacer colecta»', ar: 'إصلاح عطل عند الضغط على «التجميع جماعياً»' },
+    ],
+  },
+  {
+    id: '2026-04-06',
+    date: '06.04.2026',
+    items: [
+      { ru: '📂 Категории в вишлистах — группируй желания по разделам', en: '📂 Wishlist categories — organize wishes into sections', 'zh-CN': '📂 心愿单分类 — 按版块整理心愿', hi: '📂 विशलिस्ट कैटेगरी — विशेज़ को सेक्शनों में व्यवस्थित करो', es: '📂 Categorías en la lista — organiza los deseos en secciones', ar: '📂 الفئات في القائمة — رتّب الأمنيات في أقسام' },
+      { ru: 'Создание, переименование и удаление категорий', en: 'Create, rename and delete categories', 'zh-CN': '创建、重命名和删除分类', hi: 'कैटेगरी बनाओ, नाम बदलो, मिटाओ', es: 'Crear, renombrar y eliminar categorías', ar: 'إنشاء الفئات وإعادة تسميتها وحذفها' },
+      { ru: 'Перенос желаний между категориями (одно или несколько)', en: 'Move wishes between categories (single or bulk)', 'zh-CN': '在分类间移动心愿（单个或批量）', hi: 'विशेज़ को कैटेगरी के बीच में ले जाओ (एक या कई)', es: 'Mueve deseos entre categorías (uno o varios)', ar: 'نقل الأمنيات بين الفئات (واحدة أو متعددة)' },
+      { ru: 'Перетаскивание для изменения порядка категорий', en: 'Drag to reorder categories', 'zh-CN': '拖拽以重新排序分类', hi: 'कैटेगरी का क्रम बदलने के लिए ड्रैग करो', es: 'Arrastra para reordenar las categorías', ar: 'اسحب لإعادة ترتيب الفئات' },
+      { ru: 'Сворачиваемые секции — и для владельца, и для гостей', en: 'Collapsible sections — for owner and guests', 'zh-CN': '可折叠版块 — 对所有者和访客都支持', hi: 'कोलैप्सिबल सेक्शन — मालिक और मेहमान दोनों के लिए', es: 'Secciones plegables — para el dueño y para los invitados', ar: 'أقسام قابلة للطي — لصاحب القائمة والضيوف' },
+    ],
+  },
+  {
+    id: '2026-04-04',
+    date: '04.04.2026',
+    items: [
+      { ru: 'Премиум-редизайн раздела «Настройки» — карточка профиля, иконки, новый стиль', en: 'Premium Settings redesign — profile card, icons, new style', 'zh-CN': '「设置」高级重新设计 — 个人卡片、图标、新风格', hi: '«सेटिंग्स» का प्रीमियम रिडिज़ाइन — प्रोफ़ाइल कार्ड, आइकन, नया स्टाइल', es: 'Rediseño premium de «Ajustes» — tarjeta de perfil, iconos, nuevo estilo', ar: 'إعادة تصميم فاخرة لقسم «الإعدادات» — بطاقة الملف الشخصي وأيقونات وأسلوب جديد' },
+      { ru: 'Улучшена стабильность загрузки вишлистов при слабом интернете', en: 'Improved wishlist loading stability on slow networks', 'zh-CN': '弱网下心愿单加载稳定性提升', hi: 'धीमे इंटरनेट पर विशलिस्ट लोडिंग की स्थिरता बेहतर हुई', es: 'Mejorada la estabilidad de carga de listas con internet lento', ar: 'تحسين استقرار تحميل القوائم على شبكات ضعيفة' },
+    ],
+  },
+  {
+    id: '2026-04-03',
+    date: '03.04.2026',
+    items: [
+      { ru: 'Новый экран «Забронировано мной» с Pro-функциями', en: 'New "Reserved by me" screen with Pro features', 'zh-CN': '全新「我已预订」界面，含 Pro 功能', hi: '«मेरी बुकिंग» नई स्क्रीन Pro फ़ीचर्स के साथ', es: 'Nueva pantalla «Reservado por mí» con funciones Pro', ar: 'شاشة «محجوز مني» جديدة مع ميزات Pro' },
+      { ru: 'Статус покупки, заметки и напоминания для бронирований', en: 'Purchase status, notes and reminders for reservations', 'zh-CN': '购买状态、备注和预订提醒', hi: 'खरीद की स्थिति, नोट और बुकिंग रिमाइंडर', es: 'Estado de compra, notas y recordatorios para las reservas', ar: 'حالة الشراء وملاحظات وتذكيرات للحجوزات' },
+      { ru: 'История завершённых бронирований', en: 'History of completed reservations', 'zh-CN': '已完成预订的历史', hi: 'पूरी हो चुकी बुकिंग का इतिहास', es: 'Historial de reservas completadas', ar: 'سجل الحجوزات المكتملة' },
+      { ru: 'Комментарии теперь сворачиваемые во всех карточках', en: 'Comments are now collapsible across all cards', 'zh-CN': '所有卡片上的评论现在均可折叠', hi: 'अब सभी कार्ड्स में कमेंट कोलैप्स किए जा सकते हैं', es: 'Los comentarios ahora son plegables en todas las tarjetas', ar: 'التعليقات قابلة للطي الآن في كل البطاقات' },
+      { ru: 'Экран «Частые вопросы» в настройках', en: 'FAQ screen in settings', 'zh-CN': '设置中新增「常见问题」界面', hi: 'सेटिंग्स में «अक्सर पूछे जाने वाले प्रश्न» स्क्रीन', es: 'Pantalla «Preguntas frecuentes» en ajustes', ar: 'شاشة «الأسئلة الشائعة» في الإعدادات' },
+      { ru: 'Покупка Pro-функций бронирования за 50 ⭐', en: 'One-time purchase of reservation Pro for 50 ⭐', 'zh-CN': '以 50 ⭐ 一次性购买预订 Pro 功能', hi: '50 ⭐ में बुकिंग Pro फ़ीचर्स एकमुश्त खरीद', es: 'Compra única de Pro de reservas por 50 ⭐', ar: 'شراء مرة واحدة لميزات Pro للحجوزات مقابل 50 ⭐' },
+    ],
+  },
+  {
+    id: '2026-03-28',
+    date: '28.03.2026',
+    items: [
+      { ru: 'Календарь событий и подарочные заметки', en: 'Event calendar and gift notes', 'zh-CN': '事件日历与礼物备注', hi: 'इवेंट कैलेंडर और गिफ्ट नोट्स', es: 'Calendario de eventos y notas de regalo', ar: 'تقويم الأحداث وملاحظات الهدايا' },
+      { ru: 'Публичный профиль с аватаром и описанием', en: 'Public profile with avatar and bio', 'zh-CN': '带头像和简介的公开主页', hi: 'अवतार और बायो के साथ पब्लिक प्रोफ़ाइल', es: 'Perfil público con avatar y biografía', ar: 'ملف شخصي عام بصورة وسيرة' },
+      { ru: 'Улучшенный импорт товаров по ссылке', en: 'Improved link import for items', 'zh-CN': '改进的按链接导入商品', hi: 'लिंक से आइटम का बेहतर इम्पोर्ट', es: 'Importación mejorada de artículos por enlace', ar: 'تحسين استيراد العناصر بالرابط' },
+    ],
+  },
+  {
+    id: '2026-03-15',
+    date: '15.03.2026',
+    items: [
+      { ru: 'Подписки на чужие вишлисты', en: 'Subscriptions to others\' wishlists', 'zh-CN': '订阅他人心愿单', hi: 'दूसरों की विशलिस्ट पर सब्सक्रिप्शन', es: 'Suscripciones a listas de otros', ar: 'الاشتراك في قوائم الآخرين' },
+      { ru: 'Намёки на подарки для Pro-пользователей', en: 'Gift hints for Pro users', 'zh-CN': '为 Pro 用户提供的礼物暗示', hi: 'Pro उपयोगकर्ताओं के लिए गिफ्ट हिंट्स', es: 'Pistas de regalo para usuarios Pro', ar: 'تلميحات الهدايا لمستخدمي Pro' },
+      { ru: 'Улучшена производительность загрузки', en: 'Improved loading performance', 'zh-CN': '加载性能提升', hi: 'लोडिंग प्रदर्शन में सुधार', es: 'Rendimiento de carga mejorado', ar: 'تحسين أداء التحميل' },
+    ],
+  },
+];
