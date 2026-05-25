@@ -52,6 +52,8 @@ import { secureCompare } from '../lib/crypto';
 import { sendTgNotification } from '../telegram/botApi';
 import { profileToLanguageSettings, resolveUserFirstName } from '../services/locale';
 import { recordForeignWishlistAccess } from '../services/foreign-wishlist-access';
+import { makeAddonRequired, makePlanLimitReached, makeProRequired, sendPaywall } from '../services/paywall';
+import { SECRET_RESERVATION_PRICE_XTR } from '../services/entitlement';
 import logger from '../logger';
 
 // Shape of the Telegram initData user object — duplicated from index.ts to
@@ -224,7 +226,10 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
   function requireSecretReservations(ent: ReservationsEntitlements, res: import('express').Response): boolean {
     if (!ent.hasSecretReservations) {
       trackEvent('feature_gate_hit_secret_reservations');
-      res.status(403).json({ error: 'secret_reservations_required' });
+      sendPaywall(res, 402, makeAddonRequired('secret_reservations', {
+        skuCode: 'secret_reservation_unlock',
+        priceXtr: SECRET_RESERVATION_PRICE_XTR,
+      }));
       return false;
     }
     return true;
@@ -243,7 +248,7 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
   ): boolean {
     if (hasReservationPro(user, ent.isPro, ent.addOns)) return true;
     trackEvent('feature_gate_hit_reservation_pro', user.id, { feature });
-    res.status(402).json({ error: 'pro_required', feature });
+    sendPaywall(res, 402, makeProRequired(feature, { planCode: ent.isPro ? 'PRO' : 'FREE' }));
     return false;
   }
 
@@ -1252,12 +1257,18 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
       if (result.kind === 'participant_limit') {
         // Owner-attributed: it's the owner's plan ceiling that blocked the
         // reservation, and the owner is the upgrade candidate — not the guest.
+        // Status is 409 (state conflict) because the requester (guest) cannot
+        // buy PRO for the owner; the unified paywall contract reserves 402
+        // for "requester can buy/upgrade".
         trackEvent('feature_gate_hit_participant_limit', result.ownerId, {
           plan: result.ownerPlan,
           count: result.count,
           limit: result.limit,
         });
-        return res.status(402).json({ error: 'Participant limit reached', feature: 'participant_limit', limit: result.limit });
+        return sendPaywall(res, 409, makePlanLimitReached('participant_limit', {
+          limit: result.limit,
+          current: result.count,
+        }));
       }
 
       if (result.kind === 'ok') {

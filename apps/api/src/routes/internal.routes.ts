@@ -24,6 +24,7 @@ import logger from '../logger';
 import { asyncHandler } from '../lib/asyncHandler';
 import { zodError } from '../lib/http';
 import { secureCompare } from '../lib/crypto';
+import { makeAddonRequired, makePlanLimitReached, sendPaywall } from '../services/paywall';
 import { validateUrl } from '../url-parser.js';
 import { sendTgBotMessage } from '../telegram/botApi';
 import { sendAdminAlert } from '../notifications/adminAlerts';
@@ -116,13 +117,13 @@ export function registerInternalRouter(deps: InternalRouterDeps): Router {
           userId: parsed.data.userId,
           props: { source: 'bot', freeLimit: allowance.freeLimit, paidCredits: allowance.paidCredits },
         });
-        return res.status(402).json({
-          error: 'import_quota_exhausted',
-          feature: 'url_import',
+        return sendPaywall(res, 402, makeAddonRequired('url_import', {
+          skuCode: 'import_pack_10',
           freeLimit: allowance.freeLimit,
           freeUsed: allowance.freeUsed,
           paidCredits: allowance.paidCredits,
-        });
+          packs: ['import_pack_10', 'import_pack_25'],
+        }));
       }
 
       try {
@@ -134,7 +135,7 @@ export function registerInternalRouter(deps: InternalRouterDeps): Router {
         return res.status(201).json(result);
       } catch (err: any) {
         if (err.statusCode === 402) {
-          return res.status(402).json({ error: 'Drafts limit reached', limit: DRAFTS_ITEM_LIMIT });
+          return sendPaywall(res, 402, makePlanLimitReached('drafts_limit', { limit: DRAFTS_ITEM_LIMIT }));
         }
         throw err;
       }

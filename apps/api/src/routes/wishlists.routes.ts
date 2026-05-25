@@ -79,6 +79,7 @@ import { ITEM_ORDER_BY } from '../sort';
 import { recordForeignWishlistAccess, checkForeignWishlistLiveAccess } from '../services/foreign-wishlist-access';
 import { trackProductEvent } from '../services/analytics';
 import { evaluateGuestConversion } from '../services/wishlists';
+import { makeAddonRequired, makePlanLimitReached, makeProRequired, sendPaywall } from '../services/paywall';
 import logger from '../logger';
 
 // Shape of the Telegram initData user object — duplicated from index.ts to
@@ -548,7 +549,7 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
       const ent = await getEffectiveEntitlements(user.id, user.godMode);
       if (!ent.isPro) {
         trackEvent('feature_gate_hit_curated_selection', user.id, { plan: ent.plan.code });
-        return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
+        return sendPaywall(res, 402, makeProRequired('curated_selection', { planCode: ent.plan.code }));
       }
 
       const wishlist = await prisma.wishlist.findUnique({ where: { id: wishlistId }, select: { ownerId: true } });
@@ -702,7 +703,12 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
       });
       if (count >= ent.effectiveWishlistLimit) {
         trackEvent('feature_gate_hit_wishlist_limit', user.id, { plan: ent.plan.code, count, limit: ent.effectiveWishlistLimit });
-        return res.status(402).json({ error: 'Plan limit reached', limit: ent.effectiveWishlistLimit, planCode: ent.plan.code });
+        return sendPaywall(res, 402, makePlanLimitReached('wishlist_limit', {
+          limit: ent.effectiveWishlistLimit,
+          current: count,
+          planCode: ent.plan.code,
+          skuCode: 'extra_wishlist_slot',
+        }));
       }
 
       // Determine insert position + inherit privacy defaults from profile
@@ -910,26 +916,38 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
       if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
       if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
 
-      // PRO-gate advanced visibility modes
+      // PRO-gate advanced visibility modes (purchasable → 402, not 403)
       if (!isPro && (parsed.data.visibility === 'PUBLIC_PROFILE' || parsed.data.visibility === 'PRIVATE')) {
-        return res.status(403).json({ error: 'pro_required', message: 'Upgrade to Pro to use this visibility setting' });
+        return sendPaywall(res, 402, makeProRequired('wishlist_visibility', {
+          planCode: ent.plan.code,
+          message: 'Upgrade to Pro to use this visibility setting',
+        }));
       }
       if (!isPro && parsed.data.allowSubscriptions === 'NOBODY') {
-        return res.status(403).json({ error: 'pro_required', message: 'Upgrade to Pro to restrict subscriptions' });
+        return sendPaywall(res, 402, makeProRequired('wishlist_subscription_policy', {
+          planCode: ent.plan.code,
+          message: 'Upgrade to Pro to restrict subscriptions',
+        }));
       }
       if (!isPro && parsed.data.commentPolicy === 'SUBSCRIBERS') {
-        return res.status(403).json({ error: 'pro_required', message: 'Upgrade to Pro to restrict comments' });
+        return sendPaywall(res, 402, makeProRequired('wishlist_comment_policy', {
+          planCode: ent.plan.code,
+          message: 'Upgrade to Pro to restrict comments',
+        }));
       }
       // PRO-gate dontGiftMode changes (except "global" which is the default)
       if (!isPro && parsed.data.dontGiftMode && parsed.data.dontGiftMode !== 'global') {
-        return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
+        return sendPaywall(res, 402, makeProRequired('dont_gift', { planCode: ent.plan.code }));
       }
       // Smart Reservations gate: owner must have entitlement (PRO or per-wishlist add-on)
       const hasSmartResFields = parsed.data.smartReservationsEnabled !== undefined ||
         parsed.data.smartResTtlHours !== undefined || parsed.data.smartResAllowExtend !== undefined ||
         parsed.data.smartResMaxExtensions !== undefined;
       if (hasSmartResFields && !hasSmartReservations({ godMode: user.godMode }, isPro, ent.addOns, id)) {
-        return res.status(402).json({ error: 'smart_reservations_required' });
+        return sendPaywall(res, 402, makeAddonRequired('smart_reservations', {
+          skuCode: 'smart_reservations_unlock',
+          planCode: ent.plan.code,
+        }));
       }
 
       // Detect which subscriber-visible fields are changing
@@ -1207,7 +1225,12 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
       const ent = await getEffectiveEntitlements(user.id);
       const currentCount = await prisma.wishlistSubscription.count({ where: { subscriberId: user.id } });
       if (currentCount >= ent.effectiveSubscriptionLimit) {
-        return res.status(402).json({ error: 'Subscription limit reached', limit: ent.effectiveSubscriptionLimit, planCode: ent.plan.code });
+        return sendPaywall(res, 402, makePlanLimitReached('subscription_limit', {
+          limit: ent.effectiveSubscriptionLimit,
+          current: currentCount,
+          planCode: ent.plan.code,
+          skuCode: 'extra_subscription_slot',
+        }));
       }
 
       const sub = await prisma.wishlistSubscription.upsert({
@@ -1670,7 +1693,10 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
         if (!ent.isPro) {
           // FREE hit the free-tier ceiling — surface as paywall, not generic 400.
           trackEvent('feature_gate_hit_categories', user.id, { plan: ent.plan.code, used: outcome.used, limit });
-          return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code, paywall: 'categories' });
+          return sendPaywall(res, 402, makeProRequired('categories', {
+            planCode: ent.plan.code,
+            paywallTag: 'categories',
+          }));
         }
         return res.status(400).json({ error: 'Category limit reached', limit });
       }
@@ -1880,7 +1906,10 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
 
       // Read-only check for over-limit wishlists (only REGULAR)
       if (wishlist.type === 'REGULAR' && !(await isWishlistWritable(user.id, wishlistId, ent.effectiveWishlistLimit))) {
-        return res.status(402).json({ error: 'Wishlist is read-only on current plan', planCode: ent.plan.code });
+        return sendPaywall(res, 402, makeProRequired('wishlist_readonly', {
+          planCode: ent.plan.code,
+          message: 'Wishlist is read-only on current plan',
+        }));
       }
 
       // Per-wishlist item limit = plan base + any permanent item upgrades for this wishlist.
@@ -1889,7 +1918,12 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
       const itemCount = await countActivePlacementsInWishlist(wishlistId);
       if (itemCount >= effectiveItemLimit) {
         trackEvent('feature_gate_hit_item_limit', user.id, { plan: ent.plan.code, count: itemCount, limit: effectiveItemLimit });
-        return res.status(402).json({ error: 'Plan limit reached', limit: effectiveItemLimit, planCode: ent.plan.code });
+        return sendPaywall(res, 402, makePlanLimitReached('item_limit', {
+          limit: effectiveItemLimit,
+          current: itemCount,
+          planCode: ent.plan.code,
+          skuCode: 'extra_items_5',
+        }));
       }
 
       // Validate additional placement wishlists. Each must be owned by the user, REGULAR,
@@ -1910,13 +1944,23 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
           if (t.archivedAt) return res.status(400).json({ error: 'Cannot place into archived wishlist', wishlistId: id });
           // Writable under plan + capacity check
           if (!(await isWishlistWritable(user.id, id, ent.effectiveWishlistLimit))) {
-            return res.status(402).json({ error: 'Wishlist is read-only on current plan', planCode: ent.plan.code, wishlistId: id });
+            return sendPaywall(res, 402, makeProRequired('wishlist_readonly', {
+              planCode: ent.plan.code,
+              context: id,
+              message: 'Wishlist is read-only on current plan',
+            }));
           }
           const lim = ent.plan.items + (ent.extraItemsPerWishlist[id] ?? 0);
           const cnt = await countActivePlacementsInWishlist(id);
           if (cnt >= lim) {
             trackEvent('feature_gate_hit_item_limit', user.id, { plan: ent.plan.code, count: cnt, limit: lim, context: 'multi_placement' });
-            return res.status(402).json({ error: 'Plan limit reached', limit: lim, planCode: ent.plan.code, wishlistId: id });
+            return sendPaywall(res, 402, makePlanLimitReached('item_limit', {
+              limit: lim,
+              current: cnt,
+              planCode: ent.plan.code,
+              context: id,
+              skuCode: 'extra_items_5',
+            }));
           }
           validatedAdditionals.push({ id, categoryId: null });
         }
@@ -2151,7 +2195,7 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
       const ent = await getEffectiveEntitlements(user.id, user.godMode);
       if (!ent.isPro) {
         trackEvent('feature_gate_hit_dont_gift', user.id, { plan: ent.plan.code });
-        return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
+        return sendPaywall(res, 402, makeProRequired('dont_gift', { planCode: ent.plan.code }));
       }
 
       const wishlist = await prisma.wishlist.findUnique({ where: { id }, select: { ownerId: true } });

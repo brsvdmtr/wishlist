@@ -32,6 +32,7 @@ import { SnowflakeOverlay } from './components/SnowflakeOverlay';
 import { SantaAvatar, santaAliasHue } from './components/SantaAvatar';
 import { UserAvatar } from './components/UserAvatar';
 import { getEmoji, extractFirstEmoji, EMOJIS } from './lib/emoji';
+import { parsePaywallError, paywallContextFromError } from './lib/paywall';
 import { resolveReservePrefill, MAX_DISPLAY_NAME_LEN, type ReservePrefillSource } from './lib/reservePrefill';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
 import { initSentry, captureException } from './sentry';
@@ -2264,8 +2265,10 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
   },
   // Defined for completeness, but intentionally NOT wired to a trigger: a guest
   // who hits a wishlist's participant cap can't lift it by buying Pro — it's the
-  // owner's plan ceiling. Reserve 402 shows toast_max_participants instead. Do
-  // not call setUpsellSheet({ context: 'participant_limit' }). See MONETIZATION.md §7.
+  // owner's plan ceiling. Per the 2026-05 paywall unification the reserve
+  // endpoint returns 409 (state conflict, not 402) and `handleReserve` shows
+  // toast_max_participants. Do not call setUpsellSheet({ context:
+  // 'participant_limit' }). See MONETIZATION.md §7 and docs/PAYWALL_ENVELOPE.md.
   participant_limit: {
     emoji: '👥',
     title: t('upsell_part_title', locale),
@@ -6776,8 +6779,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         idempotency: { action: 'onboarding.create-wishlist' },
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({})) as { error?: string };
-        pushToast(err.error || t('error_generic', locale), 'error');
+        // Onboarding's wishlist-creation can hit the FREE plan limit when a
+        // returning user re-runs the flow with existing wishlists. Route to
+        // the upsell sheet on paywall; never surface the raw machine code.
+        const body = await res.json().catch(() => null);
+        const parsed = parsePaywallError(res.status, body);
+        const ctx = paywallContextFromError(parsed);
+        if (ctx) {
+          showUpsell(ctx, { auto: true });
+          return;
+        }
+        pushToast(parsed?.message ?? t('error_generic', locale), 'error');
         return;
       }
       const json = await res.json() as { wishlist: { id: string; slug: string; title: string; itemCount: number; reservedCount: number }; movedCount: number };
@@ -7116,7 +7128,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         body: JSON.stringify(patch),
         idempotency: { action: 'me.showcase' },
       });
-      if (res.status === 403) {
+      // Showcase save migrated 403→402 in the 2026-05 paywall unification.
+      // Accept both statuses for cached Mini App clients that still see 403
+      // from a stale backend (rolling deploy / cdn) and the new 402.
+      if (res.status === 402 || res.status === 403) {
         showUpsell('showcase');
         return false;
       }
@@ -7165,7 +7180,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         body: formData,
       });
       if (res.ok) clearActionKey('me.cover.upload');
-      if (res.status === 403) {
+      // Cover upload: 403→402 status migration (2026-05). Accept both.
+      if (res.status === 402 || res.status === 403) {
         showUpsell('showcase');
         return;
       }
@@ -7358,12 +7374,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string; feature?: string };
         if (res.status === 402) {
-          // Monthly free quota + paid credits both exhausted → quota upsell.
-          if (body.error === 'import_quota_exhausted' || body.feature === 'url_import') {
+          // Route via the unified paywall parser: maps the new envelope
+          // (error=addon_required, feature=url_import) and the six legacy
+          // variants to a single UpsellContext.
+          const parsed = parsePaywallError(res.status, body);
+          const ctx = paywallContextFromError(parsed);
+          if (ctx === 'url_import') {
             showUpsell('url_import', { auto: true });
           } else {
-            // Drafts-capacity 402 or any other plan limit — surface the message.
-            pushToast(body.error || t('toast_plan_limit', locale), 'error');
+            // Drafts-capacity 402 or any other plan limit — surface a message.
+            pushToast(parsed?.message ?? t('toast_plan_limit', locale), 'error');
           }
           return;
         }
@@ -7418,8 +7438,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         idempotency: { action: `item.move:${itemId}:${targetWishlistId}` },
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
-        pushToast(body.error || t('toast_move_error', locale), 'error');
+        // Move 402 = plan_limit_reached (item_limit) or pro_required
+        // (wishlist_readonly) post 2026-05 unification. Route to upsell if
+        // applicable; fall back to the envelope's `message` (localized server
+        // copy) before the generic toast. Never surface the raw machine code.
+        const body = await res.json().catch(() => null);
+        const parsed = parsePaywallError(res.status, body);
+        const ctx = paywallContextFromError(parsed);
+        if (ctx) {
+          showUpsell(ctx, { auto: true, wishlistId: targetWishlistId });
+          return;
+        }
+        pushToast(parsed?.message ?? t('toast_move_error', locale), 'error');
         return;
       }
       const targetWl = wishlists.find(w => w.id === targetWishlistId);
@@ -7492,8 +7522,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       });
       if (res.status === 402) {
         setPlacementsList(snapshot);
-        const body = await res.json().catch(() => ({})) as { error?: string; planCode?: string };
-        if (body.planCode === 'FREE') {
+        const body = await res.json().catch(() => ({}));
+        const parsed = parsePaywallError(res.status, body);
+        // FREE plans see the upsell sheet; PRO users hitting the per-wishlist
+        // cap fall through to a toast (their PRO plan still has a ceiling).
+        if (parsed?.planCode === 'FREE') {
           showUpsell('item_limit', { auto: true, wishlistId: targetWishlistId });
         } else {
           pushToast(t('toast_max_items', locale, { n: planLimits.items + (addOns.extraItemsPerWishlist?.[targetWishlistId] ?? 0) }), 'error');
@@ -7583,8 +7616,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         idempotency: { action: `item.bulk-move:${[...draftsSelected].sort().join(',')}:${targetWishlistId}` },
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
-        pushToast(body.error || t('toast_move_error', locale), 'error');
+        // Same paywall handling pattern as single-item move — see notes there.
+        const body = await res.json().catch(() => null);
+        const parsed = parsePaywallError(res.status, body);
+        const ctx = paywallContextFromError(parsed);
+        if (ctx) {
+          showUpsell(ctx, { auto: true, wishlistId: targetWishlistId });
+          return;
+        }
+        pushToast(parsed?.message ?? t('toast_move_error', locale), 'error');
         return;
       }
       const data = await res.json() as { moved: string[]; failed: Array<{ itemId: string; reason: string }> };
@@ -9403,13 +9443,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         // reminder click creates a stronger user expectation, so we toast
         // explicitly on missing/error rather than silently routing home.
         //
-        // 403 specifically maps to a Pro paywall: GET /tg/gift-occasions/:id
-        // is gated by `requireGiftNotes` which returns
-        // 403 { error: 'gift_notes_required' } when the user no longer has
-        // the entitlement (Pro lapsed between reminder send and click).
-        // The "occasion not yours" case returns 404, not 403, so 403 is
-        // unambiguous — route to gift-notes-paywall instead of the generic
-        // not-found toast (would misrepresent paywall as deletion).
+        // 402 (post-2026-05 unification) / 403 (cached legacy clients) maps
+        // to the Pro paywall: GET /tg/gift-occasions/:id is gated by
+        // `requireGiftNotes`, which after the unification returns
+        // 402 { error: 'addon_required', feature: 'gift_notes', skuCode:
+        // 'gift_notes_unlock' } when the user lacks the entitlement (Pro
+        // lapsed, or never bought the add-on). The "occasion not yours" case
+        // returns 404, so 402/403 unambiguously means paywall here — route
+        // to gift-notes-paywall instead of the generic not-found toast
+        // (which would misrepresent the paywall as deletion).
         const parsed = parseEventReminderPayload(startParam);
         if (parsed.kind === 'malformed') {
           trackEvent('event_reminder_deeplink_opened', { reason: 'malformed', payload: startParam });
@@ -9427,9 +9469,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           const occasionPromise = tgFetch(`/tg/gift-occasions/${encodeURIComponent(targetOccasionId)}`)
             .then(async (res) => {
               if (res.status === 404) return { kind: 'not_found' as const };
-              if (res.status === 403) {
-                const body = await res.json().catch(() => ({})) as { error?: string };
-                if (body.error === 'gift_notes_required') return { kind: 'paywall' as const };
+              if (res.status === 402 || res.status === 403) {
+                const body = await res.json().catch(() => ({})) as { error?: string; feature?: string };
+                const paywall = parsePaywallError(res.status, body);
+                const isGiftNotesGate =
+                  paywall?.feature === 'gift_notes' ||
+                  body.error === 'gift_notes_required';
+                if (isGiftNotesGate) return { kind: 'paywall' as const };
                 return { kind: 'forbidden' as const };
               }
               if (!res.ok) return { kind: 'error' as const };
@@ -11497,9 +11543,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         }),
         idempotency: { action: `wishlist.update:${currentWl.id}:privacy` },
       });
-      if (res.status === 403) {
-        const err = await res.json().catch(() => ({})) as { error?: string };
-        if (err.error === 'pro_required') { pushToast(t('settings_pro_required', locale), 'error'); return; }
+      // Wishlist privacy migrated 403→402 in the 2026-05 paywall unification.
+      // Accept both statuses: 402 from the new backend, 403 from cached
+      // legacy clients hitting an old API server during rolling deploy.
+      if (res.status === 402 || res.status === 403) {
+        const parsed = parsePaywallError(res.status, await res.json().catch(() => null));
+        if (parsed?.error === 'pro_required') { pushToast(t('settings_pro_required', locale), 'error'); return; }
         pushToast(t('toast_error_generic', locale), 'error');
         return;
       }
@@ -11597,7 +11646,20 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         body: JSON.stringify({ displayName: guestName.trim() }),
         idempotency: { action: `item.reserve:${reservingItem.id}` },
       });
-      if (res.status === 409) { pushToast(t('toast_already_reserved', locale), 'error'); return; }
+      // Participant limit migrated 402→409 in the 2026-05 paywall unification
+      // (the guest can't buy PRO for the owner — state conflict, not
+      // purchasable). Both the "item already reserved" 409 and the new
+      // participant-limit 409 land here; peek at the body to disambiguate.
+      // Keep the legacy 402 branch for cached clients hitting an old API.
+      if (res.status === 409) {
+        const parsed = parsePaywallError(res.status, await res.json().catch(() => null));
+        if (parsed?.feature === 'participant_limit') {
+          pushToast(t('toast_max_participants', locale), 'error');
+          return;
+        }
+        pushToast(t('toast_already_reserved', locale), 'error');
+        return;
+      }
       if (res.status === 402) { pushToast(t('toast_max_participants', locale), 'error'); return; }
       if (!res.ok) { pushToast(t('error_generic', locale), 'error'); return; }
       const updatedItem = { ...reservingItem, status: 'reserved' as const, reservedByDisplayName: guestName.trim(), reservedByActorHash: myActorHashRef.current };
@@ -11696,9 +11758,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         body: JSON.stringify({ note: opts?.note ?? null }),
         idempotency: { action: `item.secret-reserve:${item.id}` },
       });
-      if (res.status === 403) {
-        const err = await res.json().catch(() => ({ error: 'unknown' }));
-        if (err.error === 'secret_reservations_required') {
+      // Secret reservation migrated 403→402 in the 2026-05 paywall
+      // unification (secret_reservation_unlock add-on is purchasable). Accept
+      // both: 402 from the new backend, 403 from cached clients.
+      // The own_item path still legitimately returns 403 — disambiguate by
+      // parsing the error code.
+      if (res.status === 402 || res.status === 403) {
+        const body = await res.json().catch(() => ({ error: 'unknown' }));
+        const parsed = parsePaywallError(res.status, body);
+        const isAddonGate =
+          parsed?.feature === 'secret_reservations' ||
+          body.error === 'secret_reservations_required';
+        if (isAddonGate) {
           setSecretConfirmItem(null);
           setSecretPaywallReturnItem(item);
           setScreen('secret-reservation-paywall');
@@ -11706,7 +11777,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           trackEvent('paywall.viewed', { context: 'secret_reservation', surface: 'screen', trigger: 'auto' });
           return null;
         }
-        if (err.error === 'own_item') {
+        if (body.error === 'own_item') {
           setSecretConfirmItem(null);
           setSecretErrorKind('own_item');
           return null;
@@ -23375,7 +23446,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 setShowGnCreateOccasion(false);
                 pushToast(t('gn_add_occasion', locale), 'success');
                 try { const or = await tgFetch('/tg/gift-occasions'); if (or.ok) setGnOccasions((await or.json() as any).occasions); } catch {}
-              } else { const err = await r.json().catch(() => ({})) as { error?: string }; pushToast(err.error || 'Error', 'error'); }
+              } else {
+                // Gift Notes is gated by requireGiftNotes — post-2026-05
+                // unification this returns 402 addon_required. Route to the
+                // dedicated paywall screen instead of leaking machine codes.
+                const body = await r.json().catch(() => null) as { error?: string; feature?: string } | null;
+                const parsed = parsePaywallError(r.status, body);
+                if (parsed?.feature === 'gift_notes' || body?.error === 'gift_notes_required') {
+                  setShowGnCreateOccasion(false);
+                  setScreen('gift-notes-paywall');
+                  return;
+                }
+                pushToast(parsed?.message ?? body?.error ?? 'Error', 'error');
+              }
             }}
           >
             {t('gn_add_occasion', locale)}
@@ -23412,7 +23495,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 pushToast(t('gn_idea_saved', locale), 'success');
                 const or = await tgFetch(`/tg/gift-occasions/${gnViewingOccasion.id}`);
                 if (or.ok) setGnViewingOccasion((await or.json() as any).occasion);
-              } else { const err = await r.json().catch(() => ({})) as { error?: string }; pushToast(err.error || 'Error', 'error'); }
+              } else {
+                // Same gift-notes paywall handling as the occasion-create site.
+                const body = await r.json().catch(() => null) as { error?: string; feature?: string } | null;
+                const parsed = parsePaywallError(r.status, body);
+                if (parsed?.feature === 'gift_notes' || body?.error === 'gift_notes_required') {
+                  setShowGnAddIdea(false);
+                  setScreen('gift-notes-paywall');
+                  return;
+                }
+                pushToast(parsed?.message ?? body?.error ?? 'Error', 'error');
+              }
             }}
           >
             {t('gn_add_idea', locale)}
@@ -23454,8 +23547,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     idempotency: { action: `item.copy:${copyingItem.id}:${wl.id}` },
                   });
                   if (!r.ok) {
-                    const body = await r.json().catch(() => ({})) as { error?: string };
-                    pushToast(body.error || t('toast_save_error', locale), 'error');
+                    // Copy 402 = item_limit / wishlist_readonly. Route to
+                    // the upsell when the envelope maps to a known context;
+                    // otherwise show the localized server message rather
+                    // than the raw machine code.
+                    const body = await r.json().catch(() => null);
+                    const parsed = parsePaywallError(r.status, body);
+                    const ctx = paywallContextFromError(parsed);
+                    if (ctx) {
+                      showUpsell(ctx, { auto: true, wishlistId: wl.id });
+                      return;
+                    }
+                    pushToast(parsed?.message ?? t('toast_save_error', locale), 'error');
                     return;
                   }
                   const data = await r.json() as { item: any; targetWishlistTitle: string };
@@ -30229,8 +30332,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               await reloadExclusions();
               pushToast(t('done', locale), 'success');
             } else {
-              const err = await res.json() as { error?: string };
-              pushToast(err.error ?? t('error_generic', locale), 'error');
+              // santa_exclusions is PRO-gated → 402. Route to upsell when
+              // the envelope matches; otherwise show a localized message.
+              const body = await res.json().catch(() => null);
+              const parsed = parsePaywallError(res.status, body);
+              const ctx = paywallContextFromError(parsed);
+              if (ctx) {
+                setSantaExclAddPairOpen(false);
+                showUpsell(ctx, { auto: true });
+                return;
+              }
+              pushToast(parsed?.message ?? t('error_generic', locale), 'error');
             }
           } finally {
             setSantaExclPairSaving(false);
@@ -31381,8 +31493,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     idempotency: { action: `gg.create:${groupGiftCreateItemId}` },
                   });
                   if (!r.ok) {
-                    const err = await r.json().catch(() => ({})) as { error?: string };
-                    if (err.error === 'group_gift_required') {
+                    // Group gift migrated 403→402 in the 2026-05 paywall
+                    // unification (group_gift_unlock add-on is purchasable).
+                    // Accept both: 402 from new backend, 403 from cached
+                    // legacy clients hitting a stale API.
+                    const body = await r.json().catch(() => ({})) as { error?: string; feature?: string };
+                    const parsed = parsePaywallError(r.status, body);
+                    const isPaywall =
+                      parsed?.feature === 'group_gift' ||
+                      body.error === 'group_gift_required';
+                    if (isPaywall) {
                       setScreen('group-gift-paywall');
                     } else {
                       pushToast(t('error_generic', locale), 'error');

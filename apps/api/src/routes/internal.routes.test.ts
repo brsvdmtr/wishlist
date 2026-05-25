@@ -100,13 +100,16 @@ describe('internal — credit endpoints', () => {
     expect(mockConsume).toHaveBeenCalledWith('u-bot', { source: 'bot' });
   });
 
-  it('exhausted quota → 402 import_quota_exhausted (same model as the Mini App)', async () => {
+  it('exhausted quota → 402 unified addon_required envelope (same model as the Mini App)', async () => {
     mockAllowance.mockResolvedValue({ allowed: false, isPro: false, freeLimit: 5, freeUsed: 5, freeRemaining: 0, paidCredits: 0, source: 'none' });
     const deps = buildDeps();
     const res = await request(makeApp(deps)).post('/import-url').set('X-INTERNAL-KEY', KEY).send(body);
     expect(res.status).toBe(402);
-    expect(res.body.error).toBe('import_quota_exhausted');
-    expect(res.body.feature).toBe('url_import');
+    expect(res.body).toMatchObject({
+      error: 'addon_required',
+      feature: 'url_import',
+      skuCode: 'import_pack_10',
+    });
     expect(deps.importUrlForUser).not.toHaveBeenCalled();
     expect(mockConsume).not.toHaveBeenCalled();
   });

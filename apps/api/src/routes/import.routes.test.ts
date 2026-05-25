@@ -82,16 +82,22 @@ describe('import — credit gate', () => {
     expect(res.body.importQuota).toEqual({ importCredits: 0, freeImportsUsed: 3, freeImportsLimit: 5 });
   });
 
-  it('exhausted FREE quota → 402 import_quota_exhausted upsell envelope, not a generic 402 (test 4)', async () => {
+  it('exhausted FREE quota → 402 unified addon_required envelope (test 4 — post-2026-05 paywall unification)', async () => {
     mockAllowance.mockResolvedValue({ allowed: false, isPro: false, freeLimit: 5, freeUsed: 5, freeRemaining: 0, paidCredits: 0, source: 'none' });
     const deps = buildDeps();
     const res = await request(makeApp(deps)).post('/import-url').send(POST_BODY);
     expect(res.status).toBe(402);
-    expect(res.body.error).toBe('import_quota_exhausted');
-    expect(res.body.feature).toBe('url_import');
-    expect(res.body.freeLimit).toBe(5);
-    expect(res.body.freeUsed).toBe(5);
-    expect(res.body.paidCredits).toBe(0);
+    // Migrated to unified paywall envelope: error code is now machine-readable
+    // (addon_required), feature stays the same for FE routing, quota state
+    // preserved for the upsell sheet.
+    expect(res.body).toMatchObject({
+      error: 'addon_required',
+      feature: 'url_import',
+      skuCode: 'import_pack_10',
+      freeLimit: 5,
+      freeUsed: 5,
+      paidCredits: 0,
+    });
     expect(deps.importUrlForUser).not.toHaveBeenCalled();
     expect(mockConsume).not.toHaveBeenCalled();
     expect(deps.trackAnalyticsEvent).toHaveBeenCalledWith(

@@ -659,3 +659,18 @@ The system sends targeted messages via bot DM based on user lifecycle state:
 - **Winback**: Users who had PRO and lost it receive re-engagement messages with promo codes
 - **LifecycleTouch** model logs all lifecycle messages to prevent spam
 - **DegradationState** tracks phase transitions for triggering appropriate messages
+
+---
+
+## 19. Paywall error envelope
+
+All state-changing routes that return a 402/403/409 paywall response emit the
+**unified envelope** from [`services/paywall.ts`](../apps/api/src/services/paywall.ts).
+Full contract, status-code rules, builder usage, migration log, and
+per-endpoint contract tests are in **[docs/PAYWALL_ENVELOPE.md](PAYWALL_ENVELOPE.md)**.
+
+TL;DR:
+- **402** = user can buy/upgrade (`pro_required`, `addon_required`, `plan_limit_reached`).
+- **403** = denied; purchase wouldn't help.
+- **409** = state conflict (e.g., guest hit owner's plan limit).
+- Use `makeProRequired` / `makeAddonRequired` / `makePlanLimitReached` + `sendPaywall(res, status, body)`. Never construct the envelope inline.

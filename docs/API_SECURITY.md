@@ -641,3 +641,9 @@ container after editing `/opt/wishlist/.env`.
 | Frontend wiring (`tgFetch`) | [apps/web/app/miniapp/MiniApp.tsx](../apps/web/app/miniapp/MiniApp.tsx) — search `idempotency: { action:` |
 | i18n keys | [packages/shared/src/i18n.ts](../packages/shared/src/i18n.ts) — `error_rate_limited`, `error_ip_throttled`, `error_idempotency_in_progress`, `error_action_failed_retry`, `error_action_already_processing` |
 | Tests | [apps/api/src/security-helpers.test.ts](../apps/api/src/security-helpers.test.ts), [apps/api/src/security-idempotency.test.ts](../apps/api/src/security-idempotency.test.ts) |
+
+---
+
+## See also
+
+- [docs/PAYWALL_ENVELOPE.md](PAYWALL_ENVELOPE.md) — unified 402/403/409 paywall error contract. Every new state-changing route that gates behind PRO, an add-on SKU, or a numeric plan limit MUST emit through `sendPaywall(...)` with one of the three builders (`makeProRequired` / `makeAddonRequired` / `makePlanLimitReached`).

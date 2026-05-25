@@ -617,15 +617,23 @@ describe('requireGiftNotes', () => {
     expect(res.status).not.toHaveBeenCalled();
   });
 
-  it('returns false + writes 403 when entitlement lacks gift notes', () => {
+  it('returns false + writes 402 addon_required when entitlement lacks gift notes', () => {
+    // 2026-05 paywall unification: gift_notes_unlock is purchasable → 402,
+    // not 403. The envelope now includes feature + skuCode + priceXtr so
+    // the Mini App's ProUpsellSheet can render the add-on directly.
     const res = fakeRes();
     const result = requireGiftNotes(
       { hasGiftNotes: false } as Parameters<typeof requireGiftNotes>[0],
       res,
     );
     expect(result).toBe(false);
-    expect(res.status).toHaveBeenCalledWith(403);
-    expect(res.json).toHaveBeenCalledWith({ error: 'gift_notes_required' });
+    expect(res.status).toHaveBeenCalledWith(402);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      error: 'addon_required',
+      feature: 'gift_notes',
+      skuCode: 'gift_notes_unlock',
+      priceXtr: expect.any(Number),
+    }));
   });
 
   it('tracks the analytics event feature_gate_hit_gift_notes when blocked', () => {

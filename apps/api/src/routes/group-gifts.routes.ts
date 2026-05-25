@@ -47,6 +47,7 @@ import { t, resolveLocaleWithSource, profileToLanguageSettings } from '@wishlist
 import { asyncHandler } from '../lib/asyncHandler';
 import { zodError } from '../lib/http';
 import { sendTgNotification } from '../telegram/botApi';
+import { makeAddonRequired, sendPaywall } from '../services/paywall';
 
 // Shape of the Telegram initData user object — duplicated from index.ts to
 // avoid coupling routes/* to a non-exported local type. Structurally
@@ -189,10 +190,13 @@ export function registerGroupGiftsRouter(deps: GroupGiftsRouterDeps): Router {
       const user = await getOrCreateTgUser(tgUser);
       const ent = await getEffectiveEntitlements(user.id, user.godMode);
 
-      // Check group gift access
+      // Check group gift access — purchasable add-on → 402 with addon_required.
       if (!ent.hasGroupGift) {
         trackEvent('feature_gate_hit_group_gift', user.id);
-        return res.status(403).json({ error: 'group_gift_required', priceXtr: GROUP_GIFT_PRICE_XTR });
+        return sendPaywall(res, 402, makeAddonRequired('group_gift', {
+          skuCode: 'group_gift_unlock',
+          priceXtr: GROUP_GIFT_PRICE_XTR,
+        }));
       }
 
       // Validate the item exists and is available

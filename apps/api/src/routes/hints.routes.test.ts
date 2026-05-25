@@ -118,7 +118,7 @@ describe('POST /items/:id/hint — gate ordering', () => {
     expect(mockAllowance).not.toHaveBeenCalled();
   });
 
-  it('402 hint_quota_exhausted when a FREE user is out of quota and paid credits', async () => {
+  it('402 addon_required (hints) when a FREE user is out of quota and paid credits', async () => {
     shared.item.findUnique.mockResolvedValue(ownedItem());
     mockAllowance.mockResolvedValue({
       allowed: false, isPro: false, freeLimit: 3, freeUsed: 3, freeRemaining: 0,
@@ -129,9 +129,16 @@ describe('POST /items/:id/hint — gate ordering', () => {
     });
     const res = await request(makeApp(deps).app).post('/items/i1/hint').send({});
     expect(res.status).toBe(402);
-    expect(res.body.error).toBe('hint_quota_exhausted');
-    expect(res.body.feature).toBe('hints');
-    expect(res.body.packs).toEqual(['hints_pack_5', 'hints_pack_10']);
+    // Unified paywall envelope (2026-05): error code became machine-readable
+    // addon_required; feature stays 'hints' for FE routing; quota state still
+    // ships for the upsell sheet.
+    expect(res.body).toMatchObject({
+      error: 'addon_required',
+      feature: 'hints',
+      skuCode: 'hints_pack_5',
+      planCode: 'FREE',
+      packs: ['hints_pack_5', 'hints_pack_10'],
+    });
   });
 
   it('a user with quota passes the gate and the hint wave is created (200)', async () => {

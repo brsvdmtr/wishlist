@@ -57,6 +57,7 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { zodError } from '../lib/http';
 import { getRequestLocale } from '../lib/locale';
 import { profileToLanguageSettings } from '../services/locale';
+import { makePlanLimitReached, makeProRequired, sendPaywall } from '../services/paywall';
 import { sendTgNotification } from '../telegram/botApi';
 import { upload } from '../uploads/upload.config';
 import { processImage } from '../uploads/imageProcessor';
@@ -404,7 +405,10 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
       // Check target wishlist writable on current plan
       if (targetWl.type === 'REGULAR') {
         if (!(await isWishlistWritable(user.id, targetWl.id, ent.plan.wishlists))) {
-          return res.status(402).json({ error: t('api_wishlist_items_limit', getRequestLocale(req)), planCode: ent.plan.code });
+          return sendPaywall(res, 402, makeProRequired('wishlist_readonly', {
+            planCode: ent.plan.code,
+            message: t('api_wishlist_items_limit', getRequestLocale(req)),
+          }));
         }
       }
 
@@ -1164,7 +1168,10 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
       if (targetWl.type === 'REGULAR') {
         // Check if target wishlist is writable
         if (!(await isWishlistWritable(user.id, targetWl.id, ent.plan.wishlists))) {
-          return res.status(402).json({ error: 'Wishlist is read-only on current plan', planCode: ent.plan.code });
+          return sendPaywall(res, 402, makeProRequired('wishlist_readonly', {
+            planCode: ent.plan.code,
+            message: 'Wishlist is read-only on current plan',
+          }));
         }
         // Skip capacity check if item is already placed in target (no-op move)
         const alreadyPlaced = await prisma.wishlistItemPlacement.findUnique({
@@ -1174,7 +1181,13 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
         if (!alreadyPlaced) {
           const targetItemCount = await countActivePlacementsInWishlist(targetWl.id);
           if (targetItemCount >= ent.plan.items) {
-            return res.status(402).json({ error: t('api_wishlist_items_limit', getRequestLocale(req)), limit: ent.plan.items, planCode: ent.plan.code });
+            return sendPaywall(res, 402, makePlanLimitReached('item_limit', {
+              limit: ent.plan.items,
+              current: targetItemCount,
+              planCode: ent.plan.code,
+              skuCode: 'extra_items_5',
+              message: t('api_wishlist_items_limit', getRequestLocale(req)),
+            }));
           }
         }
       }
@@ -1247,12 +1260,21 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
       // Check item limit on target
       if (targetWl.type === 'REGULAR') {
         if (!(await isWishlistWritable(user.id, targetWl.id, ent.effectiveWishlistLimit))) {
-          return res.status(402).json({ error: 'Wishlist is read-only on current plan', planCode: ent.plan.code });
+          return sendPaywall(res, 402, makeProRequired('wishlist_readonly', {
+            planCode: ent.plan.code,
+            message: 'Wishlist is read-only on current plan',
+          }));
         }
         const effectiveItemLimit = ent.plan.items + (ent.extraItemsPerWishlist[targetWl.id] ?? 0);
         const currentCount = await countActivePlacementsInWishlist(targetWl.id);
         if (currentCount >= effectiveItemLimit) {
-          return res.status(402).json({ error: t('api_wishlist_items_limit', getRequestLocale(req)), limit: effectiveItemLimit, planCode: ent.plan.code });
+          return sendPaywall(res, 402, makePlanLimitReached('item_limit', {
+            limit: effectiveItemLimit,
+            current: currentCount,
+            planCode: ent.plan.code,
+            skuCode: 'extra_items_5',
+            message: t('api_wishlist_items_limit', getRequestLocale(req)),
+          }));
         }
       }
 
@@ -1380,7 +1402,10 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
 
       // Plan checks on target
       if (!(await isWishlistWritable(user.id, target.id, ent.effectiveWishlistLimit))) {
-        return res.status(402).json({ error: 'Wishlist is read-only on current plan', planCode: ent.plan.code });
+        return sendPaywall(res, 402, makeProRequired('wishlist_readonly', {
+          planCode: ent.plan.code,
+          message: 'Wishlist is read-only on current plan',
+        }));
       }
       // Capacity via PLACEMENT count (shared placements count too) + active-status join
       const effectiveItemLimit = ent.plan.items + (ent.extraItemsPerWishlist[target.id] ?? 0);
@@ -1391,7 +1416,12 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
         trackEvent('feature_gate_hit_item_limit', user.id, {
           plan: ent.plan.code, count: currentCount, limit: effectiveItemLimit, context: 'placement_added',
         });
-        return res.status(402).json({ error: 'Plan limit reached', limit: effectiveItemLimit, planCode: ent.plan.code });
+        return sendPaywall(res, 402, makePlanLimitReached('item_limit', {
+          limit: effectiveItemLimit,
+          current: currentCount,
+          planCode: ent.plan.code,
+          skuCode: 'extra_items_5',
+        }));
       }
 
       const placement = await ensureItemPlacement(prisma, { wishlistId: target.id, itemId: id });

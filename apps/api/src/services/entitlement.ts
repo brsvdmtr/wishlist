@@ -340,13 +340,17 @@ export type EffectiveEntitlements = Awaited<ReturnType<typeof getEffectiveEntitl
 // `deps` factory contract — Strategy A, signature unchanged).
 
 import { trackEvent } from './analytics';
+import { makeAddonRequired, sendPaywall } from './paywall';
 
-/** Gate helper: Gift Notes feature required */
+/** Gate helper: Gift Notes feature required (purchasable add-on → 402, not 403). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function requireGiftNotes(ent: EffectiveEntitlements, res: any): boolean {
   if (!ent.hasGiftNotes) {
     trackEvent('feature_gate_hit_gift_notes');
-    res.status(403).json({ error: 'gift_notes_required' });
+    sendPaywall(res, 402, makeAddonRequired('gift_notes', {
+      skuCode: 'gift_notes_unlock',
+      priceXtr: GIFT_NOTES_PRICE_XTR,
+    }));
     return false;
   }
   return true;

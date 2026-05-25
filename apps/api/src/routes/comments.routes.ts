@@ -35,6 +35,7 @@ import { z } from 'zod';
 import { prisma } from '@wishlist/db';
 import { t, resolveLocaleWithSource, type Locale } from '@wishlist/shared';
 import { profileToLanguageSettings } from '../services/locale';
+import { makeProRequired, sendPaywall } from '../services/paywall';
 
 import { asyncHandler } from '../lib/asyncHandler';
 import { zodError } from '../lib/http';
@@ -219,7 +220,7 @@ export function registerCommentsRouter(deps: CommentsRouterDeps): Router {
       const commenterEnt = ctx.role === 'owner' ? ownerEnt : await getEffectiveEntitlements(ctx.user.id);
       if (!ownerEnt.plan.features.includes('comments') && !commenterEnt.plan.features.includes('comments')) {
         trackEvent('feature_gate_hit_comments', ctx.user.id);
-        return res.status(402).json({ error: 'Pro feature', feature: 'comments', planCode: commenterEnt.plan.code });
+        return sendPaywall(res, 402, makeProRequired('comments', { planCode: commenterEnt.plan.code }));
       }
 
       // Check wishlist commentPolicy (subscribers-only restriction)

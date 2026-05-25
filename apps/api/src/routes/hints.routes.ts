@@ -38,6 +38,7 @@ import { sendTgBotMessage } from '../telegram/botApi';
 import logger from '../logger';
 import { getHintAllowance } from '../services/hint-credits';
 import { trackProductEvent } from '../services/analytics';
+import { makeAddonRequired, sendPaywall } from '../services/paywall';
 
 // Shape of the Telegram initData user object — duplicated from index.ts to
 // avoid coupling routes/* to a non-exported local type. Structurally
@@ -217,15 +218,14 @@ export function registerHintsRouter(deps: HintsRouterDeps): Router {
           userId: user.id,
           props: { freeLimit: allowance.freeLimit, paidCredits: allowance.paidCredits },
         });
-        return res.status(402).json({
-          error: 'hint_quota_exhausted',
-          feature: 'hints',
+        return sendPaywall(res, 402, makeAddonRequired('hints', {
+          skuCode: 'hints_pack_5',
           planCode: ent.plan.code,
           freeLimit: allowance.freeLimit,
           freeUsed: allowance.freeUsed,
           paidCredits: allowance.paidCredits,
           packs: ['hints_pack_5', 'hints_pack_10'],
-        });
+        }));
       }
 
       const senderChatId = user.telegramChatId;

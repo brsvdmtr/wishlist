@@ -23,6 +23,7 @@ import { zodError } from '../lib/http';
 import { getRequestLocale } from '../lib/locale';
 import { validateUrl } from '../url-parser.js';
 import { getImportAllowance, consumeImportCredit } from '../services/import-credits';
+import { makeAddonRequired, makePlanLimitReached, sendPaywall } from '../services/paywall';
 
 type TelegramUserShape = {
   id: number;
@@ -105,14 +106,14 @@ export function registerImportRouter(deps: ImportRouterDeps): Router {
           userId: user.id,
           props: { freeLimit: allowance.freeLimit, paidCredits: allowance.paidCredits },
         });
-        return res.status(402).json({
-          error: 'import_quota_exhausted',
-          feature: 'url_import',
+        return sendPaywall(res, 402, makeAddonRequired('url_import', {
+          skuCode: 'import_pack_10',
           planCode: ent.plan.code,
           freeLimit: allowance.freeLimit,
           freeUsed: allowance.freeUsed,
           paidCredits: allowance.paidCredits,
-        });
+          packs: ['import_pack_10', 'import_pack_25'],
+        }));
       }
   
       let importDomain = '';
@@ -156,7 +157,10 @@ export function registerImportRouter(deps: ImportRouterDeps): Router {
         });
   
         if (err.statusCode === 402) {
-          return res.status(402).json({ error: t('api_import_too_many', getRequestLocale(req)), limit: DRAFTS_ITEM_LIMIT });
+          return sendPaywall(res, 402, makePlanLimitReached('drafts_limit', {
+            limit: DRAFTS_ITEM_LIMIT,
+            message: t('api_import_too_many', getRequestLocale(req)),
+          }));
         }
         throw err;
       }

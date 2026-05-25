@@ -230,8 +230,12 @@ describe('POST /wishlists/:id/categories — quota gating', () => {
       .post('/wishlists/w1/categories')
       .send({ name: 'Books' });
     expect(res.status).toBe(402);
+    // 2026-05 unified envelope: error code is now machine-readable
+    // (pro_required), feature='categories' for FE routing, paywall='categories'
+    // preserved for cached Mini App clients.
     expect(res.body).toMatchObject({
-      error: 'Pro required',
+      error: 'pro_required',
+      feature: 'categories',
       planCode: 'FREE',
       paywall: 'categories',
     });

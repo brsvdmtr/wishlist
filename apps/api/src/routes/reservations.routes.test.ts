@@ -155,7 +155,9 @@ describe('Reservation PRO gate — paywall promise ↔ access alignment', () => 
       }));
       const res = await request(app).get('/reservations/history');
       expect(res.status).toBe(402);
-      expect(res.body).toEqual({ error: 'pro_required', feature: 'reservation_history' });
+      // Unified paywall envelope (2026-05) — planCode field added by the
+      // helper from the test's entitlement stub.
+      expect(res.body).toMatchObject({ error: 'pro_required', feature: 'reservation_history' });
       expect(trackEvent).toHaveBeenCalledWith(
         'feature_gate_hit_reservation_pro',
         'u-test',
@@ -171,7 +173,7 @@ describe('Reservation PRO gate — paywall promise ↔ access alignment', () => 
       }));
       const res = await request(app).patch('/reservations/it1/meta').send({ note: 'hi' });
       expect(res.status).toBe(402);
-      expect(res.body).toEqual({ error: 'pro_required', feature: 'reservation_meta' });
+      expect(res.body).toMatchObject({ error: 'pro_required', feature: 'reservation_meta' });
       expect(trackEvent).toHaveBeenCalledWith(
         'feature_gate_hit_reservation_pro',
         'u-test',
@@ -188,7 +190,7 @@ describe('Reservation PRO gate — paywall promise ↔ access alignment', () => 
       const future = new Date(Date.now() + 86_400_000).toISOString();
       const res = await request(app).post('/reservations/it1/reminder').send({ reminderAt: future });
       expect(res.status).toBe(402);
-      expect(res.body).toEqual({ error: 'pro_required', feature: 'reservation_reminder' });
+      expect(res.body).toMatchObject({ error: 'pro_required', feature: 'reservation_reminder' });
       expect(trackEvent).toHaveBeenCalledWith(
         'feature_gate_hit_reservation_pro',
         'u-test',
@@ -352,12 +354,21 @@ describe('POST /items/:id/reserve — participant limit', () => {
     return { app, trackEvent };
   }
 
-  it('blocks the 11th distinct reserver on a FREE wishlist (limit 10) with 402', async () => {
+  it('blocks the 11th distinct reserver on a FREE wishlist (limit 10) with 409 conflict', async () => {
+    // 2026-05 paywall unification: guest hitting owner's plan ceiling is a
+    // STATE conflict (the guest cannot buy PRO for the owner) — status 409,
+    // not 402. The envelope still carries feature + limit so the FE can
+    // show a "ask owner to upgrade" toast.
     const tenReservers = Array.from({ length: 10 }, (_, i) => `r${i + 1}`);
     const { app, trackEvent } = setupReserve({ existingReservers: tenReservers, limit: 10 });
     const res = await request(app).post('/items/it1/reserve').send({ displayName: 'Guest' });
-    expect(res.status).toBe(402);
-    expect(res.body).toMatchObject({ feature: 'participant_limit', limit: 10 });
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({
+      error: 'plan_limit_reached',
+      feature: 'participant_limit',
+      limit: 10,
+      current: 10,
+    });
     expect(trackEvent).toHaveBeenCalledWith(
       'feature_gate_hit_participant_limit',
       'owner1',
@@ -378,11 +389,16 @@ describe('POST /items/:id/reserve — participant limit', () => {
     );
   });
 
-  it('PRO owner limit (20) is unchanged — 20 reservers still blocks the 21st', async () => {
+  it('PRO owner limit (20) is unchanged — 20 reservers still blocks the 21st with 409', async () => {
     const twentyReservers = Array.from({ length: 20 }, (_, i) => `r${i + 1}`);
     const { app } = setupReserve({ existingReservers: twentyReservers, limit: 20, ownerPlan: 'PRO' });
     const res = await request(app).post('/items/it1/reserve').send({ displayName: 'Guest' });
-    expect(res.status).toBe(402);
-    expect(res.body).toMatchObject({ feature: 'participant_limit', limit: 20 });
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({
+      error: 'plan_limit_reached',
+      feature: 'participant_limit',
+      limit: 20,
+      current: 20,
+    });
   });
 });

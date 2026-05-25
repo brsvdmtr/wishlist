@@ -32,6 +32,7 @@ import { getOrCreateProfile } from '../profile.js';
 import { upload } from '../uploads/upload.config';
 import { processImage } from '../uploads/imageProcessor';
 import { deleteUploadFile } from '../uploads/uploadCleanup';
+import { makeProRequired, sendPaywall } from '../services/paywall';
 
 // Shape of the Telegram initData user object — duplicated from index.ts to
 // avoid coupling routes/* to a non-exported local type. Structurally
@@ -643,19 +644,19 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
     // Pro gating — reject (402) instead of silent save
     if (data.audience === 'EXTENDED' && !isPro) {
       trackEvent('birthday.pro_required_hit', user.id, { feature: 'audience_extended' });
-      return res.status(402).json({ error: 'pro_required', feature: 'birthday_reminders_advanced', context: 'audience' });
+      return sendPaywall(res, 402, makeProRequired('birthday_reminders_advanced', { context: 'audience', planCode: ent.plan.code }));
     }
     if (data.advancedWindowsEnabled === true && !isPro) {
       trackEvent('birthday.pro_required_hit', user.id, { feature: 'advanced_windows' });
-      return res.status(402).json({ error: 'pro_required', feature: 'birthday_reminders_advanced', context: 'advanced_windows' });
+      return sendPaywall(res, 402, makeProRequired('birthday_reminders_advanced', { context: 'advanced_windows', planCode: ent.plan.code }));
     }
     if (data.primaryWishlistId !== undefined && data.primaryWishlistId !== null && !isPro) {
       trackEvent('birthday.pro_required_hit', user.id, { feature: 'primary_wishlist' });
-      return res.status(402).json({ error: 'pro_required', feature: 'birthday_reminders_advanced', context: 'primary_wishlist' });
+      return sendPaywall(res, 402, makeProRequired('birthday_reminders_advanced', { context: 'primary_wishlist', planCode: ent.plan.code }));
     }
     if (data.customMessage !== undefined && data.customMessage !== null && data.customMessage.trim().length > 0 && !isPro) {
       trackEvent('birthday.pro_required_hit', user.id, { feature: 'custom_message' });
-      return res.status(402).json({ error: 'pro_required', feature: 'birthday_reminders_advanced', context: 'custom_message' });
+      return sendPaywall(res, 402, makeProRequired('birthday_reminders_advanced', { context: 'custom_message', planCode: ent.plan.code }));
     }
   
     // Validate primaryWishlistId belongs to user + is non-private
@@ -779,9 +780,9 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
       const ent = await getEffectiveEntitlements(user.id, user.godMode);
       if (!ent.isPro) {
         trackEvent('feature_gate_hit_showcase', user.id, { plan: ent.plan.code });
-        return res.status(403).json({ error: 'pro_required' });
+        return sendPaywall(res, 402, makeProRequired('showcase', { planCode: ent.plan.code }));
       }
-  
+
       const schema = z.object({
         enabled: z.boolean().optional(),
         bio: z.string().max(180).nullable().optional(),
@@ -889,9 +890,9 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
       const ent = await getEffectiveEntitlements(user.id, user.godMode);
       if (!ent.isPro) {
         trackEvent('feature_gate_hit_showcase', user.id, { plan: ent.plan.code });
-        return res.status(403).json({ error: 'pro_required' });
+        return sendPaywall(res, 402, makeProRequired('showcase', { planCode: ent.plan.code }));
       }
-  
+
       const full = await processImage(req.file.buffer, { maxDim: 1200, quality: 80, suffix: 'cover' });
   
       // Delete old cover if it exists
@@ -918,9 +919,9 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
       const profile = await getOrCreateProfile(user.id, locale);
       const ent = await getEffectiveEntitlements(user.id, user.godMode);
       if (!ent.isPro) {
-        return res.status(403).json({ error: 'pro_required' });
+        return sendPaywall(res, 402, makeProRequired('showcase', { planCode: ent.plan.code }));
       }
-  
+
       deleteUploadFile(profile.showcaseCoverUrl);
       await prisma.userProfile.update({
         where: { userId: user.id },
@@ -1233,9 +1234,9 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
       const ent = await getEffectiveEntitlements(user.id, user.godMode);
       if (!ent.isPro) {
         trackEvent('feature_gate_hit_dont_gift', user.id, { plan: ent.plan.code });
-        return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
+        return sendPaywall(res, 402, makeProRequired('dont_gift', { planCode: ent.plan.code }));
       }
-  
+
       const { presets, customItems, comment, visible } = parsed.data;
   
       const profile = await prisma.userProfile.upsert({

@@ -64,6 +64,7 @@ import { getRequestLocale } from '../lib/locale';
 import { ITEM_ORDER_BY } from '../sort';
 import logger from '../logger';
 import { trackProductEvent } from '../services/analytics';
+import { makeProRequired, sendPaywall } from '../services/paywall';
 
 // Shape of the Telegram initData user object — duplicated from index.ts to
 // avoid coupling routes/* to a non-exported local type.
@@ -946,7 +947,7 @@ export function registerSantaRouter(deps: SantaRouterDeps): Router {
       const ent = await getUserEntitlement(user.id);
       if (!ent.isPro) {
         trackProductEvent({ event: 'santa.gate_hit', userId: user.id, props: { feature: 'santa_multi_wave' } });
-        return res.status(402).json({ error: 'pro_required', feature: 'santa_multi_wave' });
+        return sendPaywall(res, 402, makeProRequired('santa_multi_wave', { planCode: ent.plan.code }));
       }
     }
 
@@ -1841,7 +1842,7 @@ export function registerSantaRouter(deps: SantaRouterDeps): Router {
     const ent = await getUserEntitlement(user.id);
     if (!ent.isPro) {
       trackProductEvent({ event: 'santa.gate_hit', userId: user.id, props: { feature: 'santa_exclusions' } });
-      return res.status(402).json({ error: 'pro_required', feature: 'santa_exclusions' });
+      return sendPaywall(res, 402, makeProRequired('santa_exclusions'));
     }
 
     const { userId1, userId2 } = parsed.data;
@@ -1894,7 +1895,7 @@ export function registerSantaRouter(deps: SantaRouterDeps): Router {
     const ent = await getUserEntitlement(user.id);
     if (!ent.isPro) {
       trackProductEvent({ event: 'santa.gate_hit', userId: user.id, props: { feature: 'santa_exclusion_groups' } });
-      return res.status(402).json({ error: 'pro_required', feature: 'santa_exclusion_groups' });
+      return sendPaywall(res, 402, makeProRequired('santa_exclusion_groups'));
     }
 
     const group = await prisma.santaExclusionGroup.create({
@@ -1984,7 +1985,7 @@ export function registerSantaRouter(deps: SantaRouterDeps): Router {
     const ent = await getUserEntitlement(user.id);
     if (!ent.isPro) {
       trackProductEvent({ event: 'santa.gate_hit', userId: user.id, props: { feature: 'santa_exclusion_groups' } });
-      return res.status(402).json({ error: 'pro_required', feature: 'santa_exclusion_groups' });
+      return sendPaywall(res, 402, makeProRequired('santa_exclusion_groups'));
     }
 
     const group = await prisma.santaExclusionGroup.findUnique({ where: { id: gid } });
