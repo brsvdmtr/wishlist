@@ -3,15 +3,62 @@ main = "src/index.ts"
 compatibility_date = "2026-05-01"
 account_id = "2e54560360d0ce9bd32b5079b8f33e3b"
 
-# Route binds the worker to all traffic on the prod zone. The worker
-# decides per-request whether to pass-through to origin or serve the
-# maintenance fallback (based on origin response status).
+# Routes are SCOPED to paths where the worker actually adds value —
+# maintenance fallback for HTML pages, JSON-envelope translation for API
+# 5xx, exposure POST + drain endpoints. Static assets (`/_next/*`,
+# `/uploads/*`, `/favicon*`) bypass the worker entirely so the cache HIT
+# path doesn't pay worker invocation overhead (~30-45 ms per asset
+# observed). On a cold Mini App boot with ~30 chunks that's ~1 sec of
+# pure savings.
+#
+# If you ever need to intercept a new path, ADD a route here — do NOT
+# regress to `wishlistik.ru/*`.
+
+# Root + Mini App page — for L1 maintenance fallback to fire on
+# direct browser navigation.
 [[routes]]
-pattern = "wishlistik.ru/*"
+pattern = "wishlistik.ru/"
 zone_id = "e98ef6854fcc5620f1ac712f9b48c6e0"
 
 [[routes]]
-pattern = "www.wishlistik.ru/*"
+pattern = "wishlistik.ru/miniapp*"
+zone_id = "e98ef6854fcc5620f1ac712f9b48c6e0"
+
+# Public wishlist deep links (`/w/<slug>`).
+[[routes]]
+pattern = "wishlistik.ru/w/*"
+zone_id = "e98ef6854fcc5620f1ac712f9b48c6e0"
+
+# API — worker passes through; on origin failure it translates the
+# response to a clean JSON envelope so the Mini App can detect maintenance.
+[[routes]]
+pattern = "wishlistik.ru/api/*"
+zone_id = "e98ef6854fcc5620f1ac712f9b48c6e0"
+
+# Worker-owned endpoints (`/__cf-maintenance-*`).
+[[routes]]
+pattern = "wishlistik.ru/__cf-maintenance-*"
+zone_id = "e98ef6854fcc5620f1ac712f9b48c6e0"
+
+# Mirror to www.wishlistik.ru.
+[[routes]]
+pattern = "www.wishlistik.ru/"
+zone_id = "e98ef6854fcc5620f1ac712f9b48c6e0"
+
+[[routes]]
+pattern = "www.wishlistik.ru/miniapp*"
+zone_id = "e98ef6854fcc5620f1ac712f9b48c6e0"
+
+[[routes]]
+pattern = "www.wishlistik.ru/w/*"
+zone_id = "e98ef6854fcc5620f1ac712f9b48c6e0"
+
+[[routes]]
+pattern = "www.wishlistik.ru/api/*"
+zone_id = "e98ef6854fcc5620f1ac712f9b48c6e0"
+
+[[routes]]
+pattern = "www.wishlistik.ru/__cf-maintenance-*"
 zone_id = "e98ef6854fcc5620f1ac712f9b48c6e0"
 
 # KV namespace for buffering L1 maintenance exposures.

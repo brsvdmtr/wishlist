@@ -61,8 +61,17 @@ export default {
       return serveFallbackOrPassthroughError(req, err);
     }
 
-    if (ORIGIN_FAILURE_STATUSES.has(originResp.status) && wantsHtml(req)) {
-      return serveMaintenanceHtml();
+    if (ORIGIN_FAILURE_STATUSES.has(originResp.status)) {
+      if (wantsHtml(req)) return serveMaintenanceHtml();
+      // JSON caller. If origin's response is already JSON (e.g. L3 API
+      // returning its own {code:MAINTENANCE}), pass it through — it likely
+      // carries useful info. If origin (or CF itself, on L1 unreachable)
+      // returned HTML, the JSON consumer can't parse it — translate to a
+      // clean JSON envelope so the Mini App's tgFetch can detect down.
+      const ct = (originResp.headers.get('content-type') || '').toLowerCase();
+      if (!ct.includes('application/json')) {
+        return jsonResp({ error: 'Service temporarily unavailable', code: 'MAINTENANCE' }, 503);
+      }
     }
     return originResp;
   },

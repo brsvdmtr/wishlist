@@ -172,10 +172,36 @@ describe('pass-through', () => {
     expect(res.status).toBe(502);
   });
 
-  it('passes through 503 to fetch()/XHR caller (Accept: */*) so Mini App sees real JSON', async () => {
-    // Regression: when API returns 503 + {code:MAINTENANCE}, the Mini App's
-    // fetch() needs to read the JSON body to detect maintenance mode.
-    // Default Accept for fetch() is */* — worker must NOT substitute HTML here.
+  it('translates HTML 5xx (CF default on L1 unreachable) to JSON envelope for fetch caller', async () => {
+    // L1 outage: CF can't reach origin → returns its synthesised 522 HTML
+    // page. A JSON caller (Mini App fetch with Accept: */*) would receive
+    // HTML and fall into "Нет связи" instead of the proper L3 maintenance
+    // screen. Worker rewraps as JSON {code:MAINTENANCE} so the Mini App
+    // detects maintenance correctly.
+    originResponse = () => new Response('<html>...CF 522 origin unreachable...</html>', {
+      status: 522,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+    });
+    const env = makeEnv();
+    const res = await worker.fetch(
+      new Request('https://wishlistik.ru/api/tg/bootstrap', {
+        method: 'POST',
+        headers: { accept: '*/*', 'content-type': 'application/json' },
+        body: '{}',
+      }),
+      env,
+      makeCtx(),
+    );
+    expect(res.status).toBe(503);
+    expect(res.headers.get('content-type')).toMatch(/application\/json/);
+    const body = (await res.json()) as { code: string };
+    expect(body.code).toBe('MAINTENANCE');
+  });
+
+  it('passes through API JSON 503 (L3 MAINTENANCE_MODE) untouched so Mini App reads its own code:MAINTENANCE', async () => {
+    // L3: API itself returns 503 + JSON {code:MAINTENANCE}. Worker must
+    // pass that through verbatim — re-wrapping would discard fields the
+    // API may add (e.g. retry_after, support_url) and lose source-of-truth.
     originResponse = () => new Response('{"error":"Service temporarily unavailable","code":"MAINTENANCE"}', {
       status: 503,
       headers: { 'content-type': 'application/json' },
