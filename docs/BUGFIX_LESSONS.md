@@ -5,6 +5,82 @@ New entries go at the top.
 
 ---
 
+## 2026-05-25 — Browserslist double-source: prod build fails after F1 deploy
+
+### Симптом
+
+После commit `9c1e220` ("F1 lazy-load 4 Mini App screens via next/dynamic")
+GitHub Actions deploy упал на стадии Docker build:
+
+```
+HookWebpackError: /app/apps/web contains both .browserslistrc and package.json with browsers
+…
+BrowserslistError: /app/apps/web contains both .browserslistrc and package.json with browsers
+…
+ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @wishlist/web@0.0.0 build: `next build`
+```
+
+Прод не пострадал — Docker не пересобрал контейнер, поэтому старый
+`wishlist-prod-web-1` остался крутиться на предыдущем релизе. Но новый
+deploy (включая весь F1 lazy-loading) **не дошёл до пользователей**.
+
+### Root cause
+
+В F0 (`6525761`) я добавил `browserslist` поле в `apps/web/package.json`.
+Замер после F0 показал, что Next.js **не подхватил** этот источник для
+полифилов (хеш `polyfills-*.js` не сменился). Я предположил, что в
+monorepo-раскладке поле в package.json игнорируется, и в F1 (`9c1e220`)
+добавил **дополнительно** `apps/web/.browserslistrc` как "более
+надёжный источник".
+
+Browserslist резолвер запрещает оба источника одновременно — это
+defensive throw, чтобы не было сомнений, какая конфигурация активна.
+Локально `tsc --noEmit` и `vitest run` это не ловят, потому что они не
+запускают Webpack / browserslist resolve. Поймала только реальная
+сборка Next.js в Docker.
+
+### Lesson
+
+1. **`tsc --noEmit` ≠ build verification.** Конфиг-уровневые ошибки
+   (browserslist source resolution, Next experimental flags,
+   tailwind purge globs) проявляются только при настоящем `next build`.
+   Перед deploy конфиг-меняющего коммита нужен **локальный
+   `pnpm -C apps/web build`**, а не только tsc.
+2. **Не дублируй источники конфигурации "на всякий случай".** Если
+   первый источник не работает — нужно понять почему, а не подкладывать
+   второй параллельно. У browserslist, eslint, tsconfig и других
+   resolver'ов есть defensive checks на double-source — это by design.
+3. **Если замер первой попытки не показал ожидаемого эффекта,
+   гипотеза о причине должна быть верифицирована до второй попытки.**
+   Я предположил "monorepo не подхватывает package.json browserslist"
+   без проверки — на самом деле он подхватывался, просто Next.js
+   polyfills имеют свой baseline target независимый от browserslist.
+
+### Rule
+
+Перед push'ем коммита, изменяющего **любой** из:
+- `next.config.mjs` (experimental flags, transpilePackages,
+  optimizePackageImports)
+- `browserslist` (где угодно — package.json / .browserslistrc /
+  browserslist field)
+- `tsconfig.json` (paths, moduleResolution)
+- `tailwind.config.ts` (content globs, plugins)
+- Dockerfile.web / Dockerfile.api
+
+**локально запустить полный `pnpm -C apps/web build`** (или
+`pnpm -C apps/api build` соответственно). `tsc --noEmit` оставляем
+для итеративной разработки внутри ветки, но конфиг-PR без локального
+билда — нет.
+
+### Better code
+
+Fix: удалить `browserslist` поле из `apps/web/package.json`, оставить
+только `.browserslistrc`. Один источник правды.
+
+После фикса prod-build проходит; F1 lazy-loading доезжает до проды.
+
+---
+
 ## 2026-05-25 — Referral program: «включена в проде, но не запущена» — 38 дней невидимого funnel
 
 ### Симптом
