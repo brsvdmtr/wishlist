@@ -49,6 +49,28 @@ suite('createGetOrCreateDefaultWishlist — real Postgres', () => {
 
   beforeAll(async () => {
     const db = getTestPrisma();
+
+    // Ensure the partial unique index exists in this test DB.
+    //
+    // The CI test job provisions the schema via `prisma db push` (fast,
+    // straight from schema.prisma) but Prisma DSL CANNOT express partial
+    // unique indexes (`WHERE isDefault = true`) — that's why the constraint
+    // lives in the hand-written migration file
+    // `20260525130000_unique_default_wishlist_per_owner/migration.sql`,
+    // which only the `migration-replay` CI job (and prod's `migrate
+    // deploy`) actually applies. Without this beforeAll step, the partial
+    // index is MISSING in the test DB, both race-recovery tests below
+    // (5-concurrent + manual-duplicate) silently mis-test the wrong
+    // behaviour, and the suite turns red on the FIRST CI push of the
+    // feature — exactly what happened in iter-3 (run 26395380959).
+    //
+    // `IF NOT EXISTS` makes this idempotent across beforeAll re-runs
+    // AND across the migrate-deploy-already-applied case in the
+    // migration-replay job (where the constraint is already there).
+    await db.$executeRawUnsafe(
+      'CREATE UNIQUE INDEX IF NOT EXISTS "Wishlist_ownerId_isDefault_partial_key" ON "Wishlist"("ownerId") WHERE "isDefault" = true',
+    );
+
     // Clean only own-prefixed data so we don't trample other files in flight.
     await db.wishlist.deleteMany({ where: { owner: { telegramId: { startsWith: PREFIX } } } });
     await db.user.deleteMany({ where: { telegramId: { startsWith: PREFIX } } });
