@@ -12,10 +12,18 @@ import fs from 'node:fs';
 import https from 'node:https';
 import path from 'node:path';
 import { prisma, resolveReferralCode, tryCreateAttribution, markFirstBotStart, loadReferralConfig, persistResolvedBucket } from '@wishlist/db';
-import { t, pluralize, detectLocale, resolveEffectiveLocale, resolveLocaleWithSource, profileToLanguageSettings, resolveMarketBucket, localeToBCP47, LIFETIME_BILLING_PERIOD, PRO_LIFETIME_PERIOD_END_ISO, HINT_LOOKUP_WINDOW_MS, type Locale } from '@wishlist/shared';
+import { t, pluralize, detectLocale, resolveEffectiveLocale, resolveLocaleWithSource, profileToLanguageSettings, resolveMarketBucket, localeToBCP47, HINT_LOOKUP_WINDOW_MS, type Locale } from '@wishlist/shared';
 import logger from './logger';
 import { emitPaymentAnalytics } from './analytics';
 import { chargeDeliveredHint } from './hint-charge';
+import {
+  applyProMonthlyPayment,
+  applyProYearlyPayment,
+  applyProLifetimePayment,
+  applyAddonPayment,
+  KNOWN_ADDON_SKUS,
+  type TelegramSuccessfulPayment,
+} from './payments';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
 // but also support running from within apps/bot (pnpm -C apps/bot start).
@@ -1172,18 +1180,13 @@ if (!token) {
         }
         const skuCode = parts[1];
         const telegramId = parts[2];
-        const KNOWN_SKUS = new Set([
-          'extra_wishlist_slot', 'extra_subscription_slot',
-          'extra_items_5', 'extra_items_15',
-          'hints_pack_5', 'hints_pack_10',
-          'import_pack_10', 'import_pack_25',
-          'seasonal_decoration',
-          'gift_notes_unlock',
-          'reservation_pro_unlock',
-          'smart_reservations_unlock',
-          'secret_reservation_unlock',
-        ]);
-        if (!skuCode || !KNOWN_SKUS.has(skuCode)) {
+        // Single source of truth — KNOWN_ADDON_SKUS is exported from
+        // ./payments and union-derived from SKU_ADDON_TYPES + SKU_CREDITS,
+        // so pre_checkout's allow-list can never drift from the processor's
+        // map again. Previously this was a hand-maintained list that
+        // dropped `group_gift_unlock`, silently breaking the group-gift
+        // purchase flow at the Telegram pre_checkout step.
+        if (!skuCode || !KNOWN_ADDON_SKUS.has(skuCode)) {
           logger.warn({ skuCode, reason: 'unknown_sku' }, 'pre_checkout rejected');
           await ctx.answerPreCheckoutQuery(false, 'Unknown SKU');
           return;
@@ -1214,14 +1217,7 @@ if (!token) {
       return next();
     }
 
-    const payment = msg.successful_payment as Record<string, unknown> & {
-      telegram_payment_charge_id: string;
-      provider_payment_charge_id?: string;
-      invoice_payload: string;
-      total_amount: number;
-      currency: string;
-      subscription_expiration_date?: number;
-    };
+    const payment = msg.successful_payment as Record<string, unknown> & TelegramSuccessfulPayment;
 
     try {
       const raw = payment.invoice_payload;
@@ -1242,117 +1238,34 @@ if (!token) {
         }
 
         const chargeId = payment.telegram_payment_charge_id;
-        const providerChargeId = payment.provider_payment_charge_id ?? null;
+        const outcome = await applyProMonthlyPayment(prisma, user.id, payment);
 
-        // Idempotency: skip duplicate webhook
-        const existing = await prisma.paymentEvent.findUnique({ where: { telegramPaymentChargeId: chargeId } });
-        if (existing) {
+        if (outcome.kind === 'duplicate') {
           logger.info({ chargeId }, 'duplicate payment, skip');
           return;
         }
-
-        // Lifetime guard: if user already has a lifetime subscription, do NOT
-        // downgrade by overwriting with monthly. This happens when a user buys
-        // lifetime while a Telegram-side monthly auto-renew is still active and
-        // Telegram subsequently fires a monthly charge. Record the PaymentEvent
-        // for audit and ack the user, but keep the lifetime row intact.
-        const existingSub = await prisma.subscription.findUnique({
-          where: { userId_planCode: { userId: user.id, planCode: 'PRO' } },
-        });
-        if (existingSub && existingSub.billingPeriod === LIFETIME_BILLING_PERIOD) {
-          await prisma.paymentEvent.create({
-            data: {
-              subscriptionId: existingSub.id,
-              userId: user.id,
-              telegramPaymentChargeId: chargeId,
-              providerPaymentChargeId: providerChargeId,
-              invoicePayload: payment.invoice_payload,
-              totalAmount: payment.total_amount,
-              currency: payment.currency,
-              eventType: 'payment_success_post_lifetime',
-              rawPayload: JSON.stringify(payment),
-            },
-          });
+        if (outcome.kind === 'lifetime_guard') {
           logger.warn({ userId: user.id, chargeId }, 'monthly payment received after lifetime — kept lifetime, audited only');
           return;
         }
-
-        const now = new Date();
-        const periodEnd = payment.subscription_expiration_date
-          ? new Date(payment.subscription_expiration_date * 1000)
-          : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-        // Snapshot prior state BEFORE the upsert so the analytics branch is
-        // unambiguous: hadActivePriorSub distinguishes a fresh activation
-        // (pro.activated) from a renewal of an already-active Pro user
-        // (subscription.renewed). Without this snapshot the upsert collapses
-        // both paths into one row, and we can't tell them apart from the
-        // post-write state alone.
-        const priorMonthly = await prisma.subscription.findUnique({
-          where: { userId_planCode: { userId: user.id, planCode: 'PRO' } },
-          select: { id: true, status: true, currentPeriodEnd: true },
-        });
-        const hadActivePriorSub =
-          !!priorMonthly && priorMonthly.status === 'ACTIVE' && priorMonthly.currentPeriodEnd > now;
-
-        await prisma.$transaction(async (tx) => {
-          const sub = await tx.subscription.upsert({
-            where: { userId_planCode: { userId: user.id, planCode: 'PRO' } },
-            create: {
-              userId: user.id,
-              planCode: 'PRO',
-              status: 'ACTIVE',
-              starsPrice: payment.total_amount,
-              telegramChargeId: chargeId,
-              currentPeriodStart: now,
-              currentPeriodEnd: periodEnd,
-              source: 'telegram_stars',
-              billingPeriod: 'monthly',
-              cancelAtPeriodEnd: false,
-            },
-            update: {
-              status: 'ACTIVE',
-              starsPrice: payment.total_amount,
-              telegramChargeId: chargeId,
-              currentPeriodStart: now,
-              currentPeriodEnd: periodEnd,
-              cancelledAt: null,
-              cancelAtPeriodEnd: false,
-              source: 'telegram_stars',
-              billingPeriod: 'monthly',
-            },
-          });
-          await tx.paymentEvent.create({
-            data: {
-              subscriptionId: sub.id,
-              userId: user.id,
-              telegramPaymentChargeId: chargeId,
-              providerPaymentChargeId: providerChargeId,
-              invoicePayload: payment.invoice_payload,
-              totalAmount: payment.total_amount,
-              currency: payment.currency,
-              eventType: 'payment_success',
-              rawPayload: JSON.stringify(payment),
-            },
-          });
-        });
+        if (outcome.kind !== 'pro_monthly_activated') return;
 
         emitPaymentAnalytics({
           userId: user.id,
           payload: payment,
           planCode: 'PRO',
           billingPeriod: 'monthly',
-          hadActivePriorSub,
+          hadActivePriorSub: outcome.hadActivePriorSub,
         });
 
         const locale = getLocale(ctx);
         const dateFmtLocale = localeToBCP47(locale);
-        const fmtDate = periodEnd.toLocaleDateString(dateFmtLocale, { day: 'numeric', month: 'long', year: 'numeric' });
+        const fmtDate = outcome.periodEnd.toLocaleDateString(dateFmtLocale, { day: 'numeric', month: 'long', year: 'numeric' });
         await ctx.reply(
           t('bot_pro_activated', locale, { date: fmtDate }),
           Markup.inlineKeyboard([Markup.button.webApp(t('bot_open_app', locale), MINI_APP_URL)]),
         );
-        logger.info({ userId: user.id, chargeId, periodEnd: periodEnd.toISOString() }, 'subscription activated');
+        logger.info({ userId: user.id, chargeId, periodEnd: outcome.periodEnd.toISOString() }, 'subscription activated');
         return;
       }
 
@@ -1373,106 +1286,34 @@ if (!token) {
         }
 
         const chargeId = payment.telegram_payment_charge_id;
-        const providerChargeId = payment.provider_payment_charge_id ?? null;
+        const outcome = await applyProYearlyPayment(prisma, user.id, payment);
 
-        // Idempotency
-        const existing = await prisma.paymentEvent.findUnique({ where: { telegramPaymentChargeId: chargeId } });
-        if (existing) {
+        if (outcome.kind === 'duplicate') {
           logger.info({ chargeId }, 'duplicate yearly payment, skip');
           return;
         }
-
-        const now = new Date();
-        const YEARLY_MS = 365 * 24 * 60 * 60 * 1000;
-
-        // Stack: yearly starts from max(now, currentPeriodEnd). Protects the
-        // user's remaining monthly entitlement when upgrading mid-cycle.
-        const existingSub = await prisma.subscription.findUnique({
-          where: { userId_planCode: { userId: user.id, planCode: 'PRO' } },
-        });
-        // Lifetime guard — never downgrade lifetime to yearly. Audit only.
-        if (existingSub && existingSub.billingPeriod === LIFETIME_BILLING_PERIOD) {
-          await prisma.paymentEvent.create({
-            data: {
-              subscriptionId: existingSub.id,
-              userId: user.id,
-              telegramPaymentChargeId: chargeId,
-              providerPaymentChargeId: providerChargeId,
-              invoicePayload: payment.invoice_payload,
-              totalAmount: payment.total_amount,
-              currency: payment.currency,
-              eventType: 'payment_success_post_lifetime',
-              rawPayload: JSON.stringify(payment),
-            },
-          });
+        if (outcome.kind === 'lifetime_guard') {
           logger.warn({ userId: user.id, chargeId }, 'yearly payment received after lifetime — kept lifetime, audited only');
           return;
         }
-        const startFrom = existingSub && existingSub.currentPeriodEnd > now
-          ? existingSub.currentPeriodEnd
-          : now;
-        const periodEnd = new Date(startFrom.getTime() + YEARLY_MS);
-        // Snapshot prior state for the renewed-vs-activated branch decision.
-        const hadActivePriorSubYearly =
-          !!existingSub && existingSub.status === 'ACTIVE' && existingSub.currentPeriodEnd > now;
-
-        await prisma.$transaction(async (tx) => {
-          const sub = await tx.subscription.upsert({
-            where: { userId_planCode: { userId: user.id, planCode: 'PRO' } },
-            create: {
-              userId: user.id,
-              planCode: 'PRO',
-              status: 'ACTIVE',
-              starsPrice: payment.total_amount,
-              telegramChargeId: chargeId,
-              currentPeriodStart: now,
-              currentPeriodEnd: periodEnd,
-              source: 'telegram_stars',
-              billingPeriod: 'yearly',
-              cancelAtPeriodEnd: true,
-            },
-            update: {
-              status: 'ACTIVE',
-              starsPrice: payment.total_amount,
-              telegramChargeId: chargeId,
-              currentPeriodEnd: periodEnd,
-              cancelledAt: null,
-              cancelAtPeriodEnd: true,
-              source: 'telegram_stars',
-              billingPeriod: 'yearly',
-            },
-          });
-          await tx.paymentEvent.create({
-            data: {
-              subscriptionId: sub.id,
-              userId: user.id,
-              telegramPaymentChargeId: chargeId,
-              providerPaymentChargeId: providerChargeId,
-              invoicePayload: payment.invoice_payload,
-              totalAmount: payment.total_amount,
-              currency: payment.currency,
-              eventType: 'payment_success_yearly',
-              rawPayload: JSON.stringify(payment),
-            },
-          });
-        });
+        if (outcome.kind !== 'pro_yearly_activated') return;
 
         emitPaymentAnalytics({
           userId: user.id,
           payload: payment,
           planCode: 'PRO',
           billingPeriod: 'yearly',
-          hadActivePriorSub: hadActivePriorSubYearly,
+          hadActivePriorSub: outcome.hadActivePriorSub,
         });
 
         const locale = getLocale(ctx);
         const dateFmtLocale = localeToBCP47(locale);
-        const fmtDate = periodEnd.toLocaleDateString(dateFmtLocale, { day: 'numeric', month: 'long', year: 'numeric' });
+        const fmtDate = outcome.periodEnd.toLocaleDateString(dateFmtLocale, { day: 'numeric', month: 'long', year: 'numeric' });
         await ctx.reply(
           t('bot_pro_activated_yearly', locale, { date: fmtDate }),
           Markup.inlineKeyboard([Markup.button.webApp(t('bot_open_app', locale), MINI_APP_URL)]),
         );
-        logger.info({ userId: user.id, chargeId, periodEnd: periodEnd.toISOString(), stackedFromExisting: existingSub?.currentPeriodEnd ?? null }, 'yearly subscription activated');
+        logger.info({ userId: user.id, chargeId, periodEnd: outcome.periodEnd.toISOString(), stackedFromExisting: outcome.stackedFromExisting }, 'yearly subscription activated');
         return;
       }
 
@@ -1496,79 +1337,20 @@ if (!token) {
         }
 
         const chargeId = payment.telegram_payment_charge_id;
-        const providerChargeId = payment.provider_payment_charge_id ?? null;
+        const outcome = await applyProLifetimePayment(prisma, user.id, payment);
 
-        // Idempotency
-        const existing = await prisma.paymentEvent.findUnique({ where: { telegramPaymentChargeId: chargeId } });
-        if (existing) {
+        if (outcome.kind === 'duplicate') {
           logger.info({ chargeId }, 'duplicate lifetime payment, skip');
           return;
         }
-
-        const now = new Date();
-        // Sentinel "no-expiry" date — single source of truth in
-        // packages/shared (PRO_LIFETIME_PERIOD_END_ISO). Both bot and
-        // apps/api/services/entitlement.ts read from the same constant so
-        // the values can never drift.
-        const lifetimePeriodEnd = new Date(PRO_LIFETIME_PERIOD_END_ISO);
-
-        const existingSub = await prisma.subscription.findUnique({
-          where: { userId_planCode: { userId: user.id, planCode: 'PRO' } },
-        });
-        // Lifetime is a state transition, not a renewal: treat any prior
-        // active monthly/yearly as "already Pro" → emit subscription.renewed,
-        // else pro.activated. We never emit pro.activated for an
-        // already-lifetime user (the LIFETIME guard above returned early).
-        const hadActivePriorSubLifetime =
-          !!existingSub && existingSub.status === 'ACTIVE' && existingSub.currentPeriodEnd > now;
-
-        await prisma.$transaction(async (tx) => {
-          const sub = await tx.subscription.upsert({
-            where: { userId_planCode: { userId: user.id, planCode: 'PRO' } },
-            create: {
-              userId: user.id,
-              planCode: 'PRO',
-              status: 'ACTIVE',
-              starsPrice: payment.total_amount,
-              telegramChargeId: chargeId,
-              currentPeriodStart: now,
-              currentPeriodEnd: lifetimePeriodEnd,
-              source: 'telegram_stars',
-              billingPeriod: LIFETIME_BILLING_PERIOD,
-              cancelAtPeriodEnd: false,
-            },
-            update: {
-              status: 'ACTIVE',
-              starsPrice: payment.total_amount,
-              telegramChargeId: chargeId,
-              currentPeriodEnd: lifetimePeriodEnd,
-              cancelledAt: null,
-              cancelAtPeriodEnd: false,
-              source: 'telegram_stars',
-              billingPeriod: LIFETIME_BILLING_PERIOD,
-            },
-          });
-          await tx.paymentEvent.create({
-            data: {
-              subscriptionId: sub.id,
-              userId: user.id,
-              telegramPaymentChargeId: chargeId,
-              providerPaymentChargeId: providerChargeId,
-              invoicePayload: payment.invoice_payload,
-              totalAmount: payment.total_amount,
-              currency: payment.currency,
-              eventType: 'payment_success_lifetime',
-              rawPayload: JSON.stringify(payment),
-            },
-          });
-        });
+        if (outcome.kind !== 'pro_lifetime_activated') return;
 
         emitPaymentAnalytics({
           userId: user.id,
           payload: payment,
           planCode: 'PRO',
           billingPeriod: 'lifetime',
-          hadActivePriorSub: hadActivePriorSubLifetime,
+          hadActivePriorSub: outcome.hadActivePriorSub,
         });
 
         const locale = getLocale(ctx);
@@ -1577,7 +1359,7 @@ if (!token) {
           Markup.inlineKeyboard([Markup.button.webApp(t('bot_open_app', locale), MINI_APP_URL)]),
         );
         logger.info(
-          { userId: user.id, chargeId, replacedPrior: existingSub?.billingPeriod ?? null },
+          { userId: user.id, chargeId, replacedPrior: outcome.replacedPrior },
           'lifetime subscription activated',
         );
         return;
@@ -1598,98 +1380,17 @@ if (!token) {
         }
 
         const chargeId = payment.telegram_payment_charge_id;
+        const outcome = await applyAddonPayment(prisma, user.id, skuCode, targetId, payment);
 
-        // Idempotency via Purchase table
-        const existingPurchase = await prisma.purchase.findUnique({ where: { telegramChargeId: chargeId } });
-        if (existingPurchase) {
+        if (outcome.kind === 'duplicate') {
           logger.info({ chargeId }, 'duplicate addon payment, skip');
           return;
         }
-
-        // SKU type lookup (replicated constants to avoid cross-app imports)
-        const SKU_ADDON_TYPES: Record<string, string | null> = {
-          extra_wishlist_slot: 'wishlist_slot',
-          extra_subscription_slot: 'subscription_slot',
-          extra_items_5: 'item_slot_5',
-          extra_items_15: 'item_slot_15',
-          seasonal_decoration: 'seasonal_decoration',
-          gift_notes_unlock: 'gift_notes_unlock',
-          reservation_pro_unlock: 'reservation_pro_unlock',
-          group_gift_unlock: 'group_gift_unlock',
-          smart_reservations_unlock: 'smart_reservations_unlock',
-          secret_reservation_unlock: 'secret_reservation_unlock',
-        };
-        const SKU_CREDITS: Record<string, { key: 'hintCredits' | 'importCredits'; amount: number }> = {
-          hints_pack_5:   { key: 'hintCredits',   amount: 5  },
-          hints_pack_10:  { key: 'hintCredits',   amount: 10 },
-          import_pack_10: { key: 'importCredits', amount: 10 },
-          import_pack_25: { key: 'importCredits', amount: 25 },
-        };
-        const SKU_PRICES: Record<string, number> = {
-          extra_wishlist_slot: 39, extra_subscription_slot: 25,
-          extra_items_5: 19, extra_items_15: 39,
-          hints_pack_5: 29, hints_pack_10: 49,
-          import_pack_10: 39, import_pack_25: 79,
-          seasonal_decoration: 29,
-          gift_notes_unlock: 19,
-          reservation_pro_unlock: 50,
-          group_gift_unlock: 79,
-          smart_reservations_unlock: 15,
-          secret_reservation_unlock: 24,
-        };
-
-        await prisma.$transaction(async (tx) => {
-          // 1. Record the purchase (idempotency log)
-          await tx.purchase.create({
-            data: {
-              userId: user.id,
-              skuCode,
-              quantity: 1,
-              targetId,
-              starsPrice: payment.total_amount,
-              telegramChargeId: chargeId,
-              invoicePayload: payment.invoice_payload,
-              status: 'completed',
-            },
-          });
-
-          // 2. Log payment event for history
-          await tx.paymentEvent.create({
-            data: {
-              userId: user.id,
-              telegramPaymentChargeId: chargeId,
-              providerPaymentChargeId: payment.provider_payment_charge_id ?? null,
-              invoicePayload: payment.invoice_payload,
-              totalAmount: payment.total_amount,
-              currency: payment.currency,
-              eventType: 'addon_payment_success',
-              rawPayload: JSON.stringify(payment),
-            },
-          });
-
-          // 3a. Permanent add-on
-          const addonType = SKU_ADDON_TYPES[skuCode];
-          if (addonType != null) {
-            const quantity = skuCode === 'extra_items_5' ? 5 : skuCode === 'extra_items_15' ? 15 : 1;
-            await tx.userAddOn.create({
-              data: { userId: user.id, addonType, quantity, targetId },
-            });
-          }
-
-          // 3b. Consumable credits
-          const creditInfo = SKU_CREDITS[skuCode];
-          if (creditInfo) {
-            await tx.userCredits.upsert({
-              where: { userId: user.id },
-              create: {
-                userId: user.id,
-                hintCredits: creditInfo.key === 'hintCredits' ? creditInfo.amount : 0,
-                importCredits: creditInfo.key === 'importCredits' ? creditInfo.amount : 0,
-              },
-              update: { [creditInfo.key]: { increment: creditInfo.amount } },
-            });
-          }
-        });
+        if (outcome.kind === 'addon_unknown_sku') {
+          logger.warn({ skuCode, chargeId }, 'addon payment for unknown SKU, ignored');
+          return;
+        }
+        if (outcome.kind !== 'addon_permanent_activated' && outcome.kind !== 'addon_consumable_activated') return;
 
         emitPaymentAnalytics({
           userId: user.id,

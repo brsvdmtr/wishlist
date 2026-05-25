@@ -5,6 +5,52 @@ New entries go at the top.
 
 ---
 
+## 2026-05-25 — `group_gift_unlock` блокировался на pre_checkout: дрейф двух SKU-списков в боте
+
+### Симптом
+
+Обнаружено во время добавления тестов billing/entitlement: KNOWN_ADDON_SKUS
+из `apps/bot/src/payments.ts` (источник правды процессора, 14 SKU) и
+inline-Set `KNOWN_SKUS` в `pre_checkout_query`-хендлере того же файла
+(13 SKU) разошлись. `group_gift_unlock` присутствовал у процессора и у
+billing-роутов apps/api, но отсутствовал в pre_checkout — Telegram
+отвечал юзеру `'Unknown SKU'` и снимал инвойс до оплаты. Пользователи,
+кликнувшие "купить Group Gift" из Mini App, никогда не могли довести
+покупку до конца.
+
+### Root cause
+
+Два независимых hand-maintained списка одних и тех же SKU. При добавлении
+`group_gift_unlock` в апреле обновили `SKU_ADDON_TYPES` и
+`ONE_TIME_SKUS` в apps/api, но забыли соответствующую запись в
+pre_checkout's `KNOWN_SKUS`. Никакого алёрта/теста, ловящего такой дрейф,
+не было — `group_gift_unlock` молча выпал из всего покупательного пути
+и баг прожил до code-review нового тест-сьюта.
+
+### Урок
+
+SKU-каталоги, дублированные между точками жизненного цикла одного и того
+же кода (валидация → обработка → анализ), — гарантированный источник
+silent drift. Любая попытка "одно из них поправить, второе тоже поправлю"
+ловит вас рукав за рукав в пределах одного PR-а и забывается через 3.
+
+### Правило
+
+SKU/catalog enum'ы используются как Set'ы валидации? **Один источник
+правды, экспортируемый из processor-модуля.** Все остальные
+allow-list'ы импортируют его, а не пересоздают руками.
+
+### Лучший код
+
+`apps/bot/src/payments.ts:KNOWN_ADDON_SKUS = new Set([...Object.keys(SKU_ADDON_TYPES), ...Object.keys(SKU_CREDITS)])`
+— union-производное, не hand-maintained. `apps/bot/src/index.ts`
+pre_checkout-хендлер импортирует `KNOWN_ADDON_SKUS` и проверяет
+`.has(skuCode)`. Тест `payments.test.ts` `KNOWN_ADDON_SKUS coverage`
+ловит расхождение между процессором и apps/api `ONE_TIME_SKUS` при
+прогоне CI.
+
+---
+
 ## 2026-05-24 — Lifecycle `dead_air`: stopped-touch не считался → пул залипал на месяц
 
 ### Симптом

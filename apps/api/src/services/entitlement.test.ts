@@ -34,6 +34,8 @@ vi.mock('./analytics', () => ({
   trackEvent: shared.trackEvent,
 }));
 
+import { PRO_LIFETIME_PERIOD_END_ISO } from '@wishlist/shared';
+
 import {
   PLANS,
   PRO_PRICE_XTR,
@@ -65,6 +67,13 @@ beforeEach(() => {
   shared.hintChargeCount.mockResolvedValue(0);
 });
 
+// Relative-date helper so the resolver's `currentPeriodEnd: { gt: new Date() }`
+// filter is always satisfied regardless of when the test runs. Avoids the
+// `Date('2099-01-01')` anti-pattern (which silently breaks once the clock
+// crosses the sentinel — admittedly 70+ years away, but the pattern is
+// the same one we'd use for shorter horizons).
+const futureDate = (days = 365) => new Date(Date.now() + days * 86_400_000);
+
 describe('PLANS catalogue', () => {
   it('FREE plan: 2 wishlists, 20 items, 10 participants, 2 subs, no features', () => {
     expect(PLANS.FREE).toMatchObject({
@@ -93,6 +102,14 @@ describe('PLANS catalogue', () => {
     expect(PLANS.PRO.items / PLANS.FREE.items).toBeCloseTo(3.5, 1);
     expect(PLANS.PRO.participants / PLANS.FREE.participants).toBe(2);
     expect(PLANS.PRO.subscriptions / PLANS.FREE.subscriptions).toBe(2.5);
+  });
+
+  it('categoriesPerWishlist: FREE=1 (one free user category), PRO=20 (no soft limit)', () => {
+    // The "Без категории" default never counts; only user-created categories
+    // consume the quota. FREE gets exactly one free slot — beyond that the
+    // create endpoint returns 402 with paywall='categories'.
+    expect(PLANS.FREE.categoriesPerWishlist).toBe(1);
+    expect(PLANS.PRO.categoriesPerWishlist).toBe(20);
   });
 });
 
@@ -308,7 +325,7 @@ describe('getUserEntitlement', () => {
     shared.subFindFirst.mockResolvedValueOnce({
       id: 'sub1',
       status: 'ACTIVE',
-      currentPeriodEnd: new Date('2099-01-01'),
+      currentPeriodEnd: futureDate(),
       cancelledAt: null,
       cancelAtPeriodEnd: false,
       billingPeriod: 'monthly',
@@ -322,7 +339,7 @@ describe('getUserEntitlement', () => {
   it('returns PRO via promo when no subscription but active redemption exists', async () => {
     shared.promoRedemptionFindFirst.mockResolvedValueOnce({
       id: 'r1',
-      expiresAt: new Date('2099-01-01'),
+      expiresAt: futureDate(),
       campaign: { code: 'WISHPRO' },
     });
     const result = await getUserEntitlement('u3');
@@ -335,7 +352,7 @@ describe('getUserEntitlement', () => {
     shared.subFindFirst.mockResolvedValueOnce({
       id: 's',
       status: 'ACTIVE',
-      currentPeriodEnd: new Date('2099-01-01'),
+      currentPeriodEnd: futureDate(),
       cancelledAt: null,
       cancelAtPeriodEnd: false,
       billingPeriod: 'monthly',
@@ -365,6 +382,91 @@ describe('getUserEntitlement', () => {
     });
     const result = await getUserEntitlement('u6');
     expect(result.promoPro?.expiresAt).toBeNull();
+  });
+
+  // ─── Priority order coverage — subscription > promo > god_mode > FREE ───
+  // Each pair of priorities tested independently so a regression that
+  // accidentally short-circuits one rung is caught at the exact rung,
+  // not as a cascading failure.
+
+  it('priority: subscription beats god_mode (godMode does NOT override an existing paid sub)', async () => {
+    shared.subFindFirst.mockResolvedValueOnce({
+      id: 'sub_real',
+      status: 'ACTIVE',
+      currentPeriodEnd: futureDate(),
+      cancelledAt: null,
+      cancelAtPeriodEnd: false,
+      billingPeriod: 'monthly',
+    });
+    const result = await getUserEntitlement('u_god_with_sub', true);
+    expect(result.proSource).toBe('subscription');
+    expect(result.subscription?.id).toBe('sub_real');
+  });
+
+  it('priority: promo beats god_mode (godMode does NOT win when an active promo exists)', async () => {
+    shared.promoRedemptionFindFirst.mockResolvedValueOnce({
+      id: 'r_active',
+      expiresAt: futureDate(),
+      campaign: { code: 'PROMO' },
+    });
+    const result = await getUserEntitlement('u_god_with_promo', true);
+    expect(result.proSource).toBe('promo');
+    expect(result.promoPro?.id).toBe('r_active');
+  });
+
+  // ─── Writer/reader parity — billingPeriod surfaces unchanged from the row ──
+  // Critical for the Mini App's "Lifetime" badge + the apps/bot lifetime
+  // guard. If billingPeriod were dropped in the resolver, the UI couldn't
+  // distinguish lifetime from monthly even though the bot writes it.
+
+  it('lifetime subscription surfaces billingPeriod="lifetime" verbatim', async () => {
+    shared.subFindFirst.mockResolvedValueOnce({
+      id: 'sub_lifetime',
+      status: 'ACTIVE',
+      // Use the shared lifetime sentinel constant directly — a future
+      // bump in PRO_LIFETIME_PERIOD_END_ISO is picked up automatically.
+      currentPeriodEnd: new Date(PRO_LIFETIME_PERIOD_END_ISO),
+      cancelledAt: null,
+      cancelAtPeriodEnd: false,
+      billingPeriod: 'lifetime',
+    });
+    const result = await getUserEntitlement('u_lifetime');
+    expect(result.isPro).toBe(true);
+    expect(result.proSource).toBe('subscription');
+    expect(result.subscription?.billingPeriod).toBe('lifetime');
+  });
+
+  it('yearly subscription surfaces billingPeriod="yearly" + cancelAtPeriodEnd=true', async () => {
+    shared.subFindFirst.mockResolvedValueOnce({
+      id: 'sub_yearly',
+      status: 'ACTIVE',
+      currentPeriodEnd: futureDate(),
+      cancelledAt: null,
+      cancelAtPeriodEnd: true, // yearly is non-recurring; bot sets this
+      billingPeriod: 'yearly',
+    });
+    const result = await getUserEntitlement('u_yearly');
+    expect(result.subscription?.billingPeriod).toBe('yearly');
+    expect(result.subscription?.cancelAtPeriodEnd).toBe(true);
+  });
+
+  // ─── Edge: CANCELLED but still inside the period — entitlement is alive ──
+  // A user who hit "cancel" before period end keeps PRO until the period
+  // actually expires. The resolver filter is `status in (ACTIVE, CANCELLED)`
+  // AND `currentPeriodEnd > now` for exactly this reason.
+
+  it('CANCELLED sub still inside currentPeriodEnd → isPro=true', async () => {
+    shared.subFindFirst.mockResolvedValueOnce({
+      id: 'sub_cancelled',
+      status: 'CANCELLED',
+      currentPeriodEnd: futureDate(),
+      cancelledAt: new Date(Date.now() - 86_400_000),
+      cancelAtPeriodEnd: true,
+      billingPeriod: 'monthly',
+    });
+    const result = await getUserEntitlement('u_cancelled');
+    expect(result.isPro).toBe(true);
+    expect(result.proSource).toBe('subscription');
   });
 });
 
@@ -431,7 +533,7 @@ describe('getEffectiveEntitlements — add-on aggregation', () => {
     shared.subFindFirst.mockResolvedValueOnce({
       id: 's',
       status: 'ACTIVE',
-      currentPeriodEnd: new Date('2099-01-01'),
+      currentPeriodEnd: futureDate(),
       cancelledAt: null,
       cancelAtPeriodEnd: false,
       billingPeriod: 'monthly',
@@ -451,7 +553,7 @@ describe('getEffectiveEntitlements — add-on aggregation', () => {
 
   it('groupGift is NOT included in PRO — requires separate add-on', async () => {
     shared.subFindFirst.mockResolvedValueOnce({
-      id: 's', status: 'ACTIVE', currentPeriodEnd: new Date('2099-01-01'),
+      id: 's', status: 'ACTIVE', currentPeriodEnd: futureDate(),
       cancelledAt: null, cancelAtPeriodEnd: false, billingPeriod: 'monthly',
     });
     const r = await getEffectiveEntitlements('u1', false);
