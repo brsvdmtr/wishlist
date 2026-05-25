@@ -32,6 +32,7 @@ import { SnowflakeOverlay } from './components/SnowflakeOverlay';
 import { SantaAvatar, santaAliasHue } from './components/SantaAvatar';
 import { UserAvatar } from './components/UserAvatar';
 import { getEmoji, extractFirstEmoji, EMOJIS } from './lib/emoji';
+import { resolveReservePrefill, type ReservePrefillSource } from './lib/reservePrefill';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
 import { initSentry, captureException } from './sentry';
 import {
@@ -5592,6 +5593,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // Guest forms
   const [reservingItem, setReservingItem] = useState<GuestItem | null>(null);
   const [guestName, setGuestName] = useState('');
+  // E15 — display-name prefill metadata. `guestNamePrefill` is set when the
+  // reserve sheet opens; `value` is the prefilled string we initially placed
+  // in the input, `source` tells us where it came from (for analytics and
+  // for the "edited" comparison). Cleared when the sheet closes.
+  const [guestNamePrefill, setGuestNamePrefill] = useState<{ value: string; source: ReservePrefillSource } | null>(null);
+  // Tracks whether reservation.display_name_edited has already fired for the
+  // current sheet open — we only emit it once per open, on the first edit.
+  const [guestNameEditedFired, setGuestNameEditedFired] = useState(false);
 
   // Comments
   const [comments, setComments] = useState<CommentDTO[]>([]);
@@ -11513,6 +11522,58 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   };
 
   // --- Guest actions
+  // E15 — open the public-reserve BottomSheet with the display name prefilled
+  // from the guest's identity. Single helper replaces 5 inline prefill paths
+  // so the source-selection rule and analytics fire identically from every
+  // entry point (item detail, list cards, group-gift CTAs, etc.).
+  const openReserveSheet = useCallback((item: GuestItem) => {
+    const prefill = resolveReservePrefill(tgUser, profileData);
+    setReservingItem(item);
+    setGuestName(prefill.value);
+    setGuestNamePrefill(prefill);
+    setGuestNameEditedFired(false);
+    if (prefill.source !== 'none') {
+      trackEvent('reservation.display_name_prefilled', {
+        source: prefill.source,
+        initialLen: prefill.value.length,
+        itemId: item.id,
+      });
+    }
+  }, [tgUser, profileData, trackEvent]);
+
+  // E15 — single close path for the reserve sheet: clears the input AND the
+  // prefill metadata so the next open re-runs resolveReservePrefill cleanly
+  // (otherwise a stale `guestNamePrefill` from the previous sheet would skew
+  // the edited-event comparison).
+  const closeReserveSheet = useCallback(() => {
+    setReservingItem(null);
+    setGuestName('');
+    setGuestNamePrefill(null);
+    setGuestNameEditedFired(false);
+  }, []);
+
+  // E15 — wraps setGuestName so the first edit (relative to the prefilled
+  // value) emits reservation.display_name_edited exactly once per open. We
+  // skip the event when the source is `none` because there was nothing to
+  // edit *away from* in the first place.
+  const handleGuestNameChange = useCallback((next: string) => {
+    setGuestName(next);
+    if (
+      !guestNameEditedFired &&
+      guestNamePrefill &&
+      guestNamePrefill.source !== 'none' &&
+      next !== guestNamePrefill.value
+    ) {
+      setGuestNameEditedFired(true);
+      trackEvent('reservation.display_name_edited', {
+        originalSource: guestNamePrefill.source,
+        finalLen: next.length,
+        clearedFully: next.trim().length === 0,
+        itemId: reservingItem?.id ?? null,
+      });
+    }
+  }, [guestNameEditedFired, guestNamePrefill, reservingItem, trackEvent]);
+
   const handleReserve = async () => {
     if (!reservingItem || !guestName.trim()) return;
     setLoading(true);
@@ -11535,8 +11596,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       // we can measure deeplink → reservation conversion in God Mode.
       trackBirthdayAttributedEvent('item_reserved', { itemId: reservingItem.id });
       pushToast(t('reserve_success', locale), 'success');
-      setReservingItem(null);
-      setGuestName('');
+      closeReserveSheet();
     } finally {
       setLoading(false);
     }
@@ -17228,7 +17288,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       <Button
                         variant="primary"
                         size="lg"
-                        onClick={() => { setReservingItem(viewingItem as GuestItem); setGuestName(tgUser?.first_name ?? ''); }}
+                        onClick={() => openReserveSheet(viewingItem as GuestItem)}
                       >
                         {t('reserve_btn', locale)}
                       </Button>
@@ -18281,7 +18341,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           item={item}
                           isGuest
                           onTap={(it: GuestItem) => { setViewingItem(it); setScreen('guest-item-detail'); }}
-                          onReserve={(w: GuestItem) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }}
+                          onReserve={(w: GuestItem) => openReserveSheet(w)}
                           onUnreserve={handleUnreserve}
                           myActorHash={myActorHashRef.current}
                           locale={locale}
@@ -18296,7 +18356,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       <WishCardGuest
                         item={item}
                         onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }}
-                        onReserve={(w) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }}
+                        onReserve={(w) => openReserveSheet(w)}
                         onUnreserve={handleUnreserve}
                         myActorHash={myActorHashRef.current}
                         locale={locale}
@@ -18386,7 +18446,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                               item={item}
                               isGuest
                               onTap={(it: GuestItem) => { setViewingItem(it); setScreen('guest-item-detail'); }}
-                              onReserve={(w: GuestItem) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }}
+                              onReserve={(w: GuestItem) => openReserveSheet(w)}
                               onUnreserve={handleUnreserve}
                               myActorHash={myActorHashRef.current}
                               locale={locale}
@@ -18402,7 +18462,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           <WishCardGuest
                             item={item}
                             onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }}
-                            onReserve={(w) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }}
+                            onReserve={(w) => openReserveSheet(w)}
                             onUnreserve={handleUnreserve}
                             myActorHash={myActorHashRef.current}
                             locale={locale}
@@ -25587,7 +25647,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           </Button>
         </div>
       </BottomSheet>
-      <BottomSheet isOpen={!!reservingItem} onClose={() => setReservingItem(null)} title={t('reserve_title', locale)}>
+      <BottomSheet isOpen={!!reservingItem} onClose={closeReserveSheet} title={t('reserve_title', locale)}>
         {reservingItem && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 12, background: C.bg, borderRadius: 12 }}>
@@ -25613,11 +25673,34 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             )}
             <div>
               <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('reserve_name_label', locale)}</label>
-              <input style={inputStyle} placeholder={t('reserve_name_placeholder', locale)} value={guestName} onChange={(e) => setGuestName(e.target.value)} autoFocus />
+              <input style={inputStyle} placeholder={t('reserve_name_placeholder', locale)} value={guestName} onChange={(e) => handleGuestNameChange(e.target.value)} autoFocus />
+              {guestNamePrefill && guestNamePrefill.source !== 'none' && (() => {
+                const edited = guestName !== guestNamePrefill.value;
+                const labelKey = edited
+                  ? 'reserve_prefill_edited'
+                  : guestNamePrefill.source === 'profile'
+                    ? 'reserve_prefill_from_profile'
+                    : 'reserve_prefill_from_tg';
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 11, color: edited ? C.green : C.textMuted }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: edited ? C.green : C.accent, flexShrink: 0 }} />
+                    <span>{t(labelKey, locale)}</span>
+                    {edited && (
+                      <button
+                        type="button"
+                        onClick={() => setGuestName(guestNamePrefill.value)}
+                        style={{ marginLeft: 'auto', background: 'none', border: 'none', color: C.accent, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: font, padding: 0 }}
+                      >
+                        {t('reserve_prefill_reset', locale)}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
             <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: t('reserve_privacy', locale) }} />
             <div style={{ display: 'flex', gap: 10 }}>
-              <Button variant="ghost" style={{ flex: 1 }} onClick={() => setReservingItem(null)}>{t('cancel', locale)}</Button>
+              <Button variant="ghost" style={{ flex: 1 }} onClick={closeReserveSheet}>{t('cancel', locale)}</Button>
               <Button
                 variant="primary"
                 style={{ flex: 2 }}

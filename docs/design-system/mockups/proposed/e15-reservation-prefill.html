@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>E15 · Display-name prefill в reservation flow</title>
+<style>
+  /* ───── v2.1 tokens (mirror of packages/ui-tokens) ───── */
+  :root {
+    --wb-bg:              #0F0F12;
+    --wb-bg-elev:         #15151A;
+    --wb-surface:         rgba(255,255,255,0.035);
+    --wb-card:            rgba(255,255,255,0.045);
+    --wb-card-strong:     rgba(255,255,255,0.07);
+    --wb-accent:          #8B7BFF;
+    --wb-accent-strong:   #B4A6FF;
+    --wb-accent-soft:     rgba(139,123,255,0.14);
+    --wb-accent-soft-strong: rgba(139,123,255,0.30);
+    --wb-success:         #4ADE80;
+    --wb-success-soft:    rgba(74,222,128,0.14);
+    --wb-warning-soft:    rgba(251,191,36,0.14);
+    --wb-text:            #FFFFFF;
+    --wb-text-secondary:  #C7CAD1;
+    --wb-text-muted:      #8F94A3;
+    --wb-border:          rgba(255,255,255,0.06);
+    --wb-border-light:    rgba(255,255,255,0.10);
+    --wb-grad-mesh:
+      radial-gradient(ellipse 80% 60% at 12% 0%, rgba(139,123,255,0.22), transparent 55%),
+      radial-gradient(ellipse 60% 50% at 100% 20%, rgba(255,120,180,0.10), transparent 55%),
+      radial-gradient(ellipse 100% 70% at 50% 110%, rgba(139,123,255,0.10), transparent 65%);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #07070A; color: var(--wb-text); font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif; }
+  body { padding: 32px 24px 80px; }
+  h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 8px; }
+  h2 { font-size: 18px; font-weight: 650; letter-spacing: -0.01em; margin: 32px 0 12px; color: var(--wb-text); }
+  .lede { font-size: 14px; color: var(--wb-text-secondary); max-width: 720px; line-height: 1.55; margin: 0 0 24px; }
+  .meta { font-size: 12px; color: var(--wb-text-muted); margin-bottom: 32px; }
+  .meta b { color: var(--wb-text-secondary); font-weight: 600; }
+  .gap { height: 24px; }
+
+  /* ───── Phone frame ───── */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 28px; max-width: 1400px; margin: 0 auto; }
+  .frame { background: var(--wb-bg); border-radius: 36px; padding: 28px 16px 16px; border: 1px solid var(--wb-border); position: relative; overflow: hidden; min-height: 600px; display: flex; flex-direction: column; }
+  .frame::before { content: ''; position: absolute; inset: 0; background: var(--wb-grad-mesh); pointer-events: none; opacity: 0.8; }
+  .frame > * { position: relative; z-index: 1; }
+  .frame-label { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--wb-text-muted); font-weight: 500; letter-spacing: 0.02em; z-index: 2; }
+  .caption { margin-top: 12px; padding: 12px 14px; background: rgba(255,255,255,0.02); border: 1px solid var(--wb-border); border-radius: 14px; font-size: 12px; color: var(--wb-text-secondary); line-height: 1.5; }
+  .caption .tag { display: inline-block; padding: 2px 8px; background: var(--wb-accent-soft); color: var(--wb-accent-strong); border-radius: 6px; font-size: 10px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; margin-right: 6px; margin-bottom: 4px; }
+  .caption .tag.danger { background: rgba(251,113,133,0.14); color: #FB7185; }
+  .caption .tag.muted { background: rgba(255,255,255,0.05); color: var(--wb-text-muted); }
+  .caption code { font-family: 'SF Mono', Menlo, monospace; font-size: 11px; padding: 1px 5px; background: rgba(255,255,255,0.05); border-radius: 4px; color: var(--wb-text); }
+
+  /* ───── Sheet (reserve BottomSheet) ───── */
+  .sheet { background: var(--wb-bg-elev); border-radius: 28px 28px 18px 18px; padding: 20px 16px 16px; backdrop-filter: blur(14px); border: 1px solid var(--wb-border); flex: 1; display: flex; flex-direction: column; gap: 16px; }
+  .sheet-handle { width: 36px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.18); margin: -8px auto 6px; }
+  .sheet-title { font-size: 17px; font-weight: 650; color: var(--wb-text); letter-spacing: -0.01em; }
+
+  .item-card { display: flex; gap: 12px; align-items: center; padding: 12px; background: var(--wb-card); border-radius: 14px; border: 1px solid var(--wb-border); }
+  .item-thumb { width: 44px; height: 44px; border-radius: 10px; background: var(--wb-accent-soft); display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+  .item-title { font-size: 14px; font-weight: 600; color: var(--wb-text); line-height: 1.3; }
+  .item-price { font-size: 13px; color: var(--wb-accent); font-weight: 700; margin-top: 2px; }
+
+  .field-label { display: block; font-size: 12px; color: var(--wb-text-secondary); margin-bottom: 6px; }
+  .input { width: 100%; padding: 12px 14px; background: var(--wb-card); border: 1px solid var(--wb-border-light); border-radius: 12px; font-size: 15px; color: var(--wb-text); font-family: inherit; outline: none; }
+  .input.focused { border-color: var(--wb-accent); box-shadow: 0 0 0 3px var(--wb-accent-soft); }
+  .input.empty { color: var(--wb-text-muted); }
+
+  .prefill-hint { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11px; color: var(--wb-text-muted); }
+  .prefill-hint .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--wb-accent); }
+  .prefill-hint.edited { color: var(--wb-success); }
+  .prefill-hint.edited .dot { background: var(--wb-success); }
+  .prefill-hint .reset-link { margin-left: auto; color: var(--wb-accent-strong); text-decoration: none; font-weight: 600; cursor: pointer; }
+
+  .privacy { font-size: 11px; color: var(--wb-text-muted); line-height: 1.5; padding: 8px 0; }
+  .privacy b { color: var(--wb-text-secondary); font-weight: 650; }
+
+  .btn-row { display: flex; gap: 8px; margin-top: auto; }
+  .btn { flex: 1; padding: 12px 16px; border-radius: 14px; font-size: 14px; font-weight: 650; cursor: pointer; border: none; font-family: inherit; transition: all 0.15s; }
+  .btn-ghost { background: transparent; color: var(--wb-text-secondary); border: 1px solid var(--wb-border-light); }
+  .btn-primary { background: var(--wb-accent); color: white; flex: 2; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ───── Events & spec sections ───── */
+  .spec { background: var(--wb-bg-elev); border-radius: 16px; padding: 20px 24px; border: 1px solid var(--wb-border); margin-bottom: 16px; max-width: 1100px; margin-left: auto; margin-right: auto; }
+  .spec h3 { font-size: 14px; font-weight: 650; margin: 0 0 12px; color: var(--wb-text); }
+  .spec table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .spec th { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--wb-border-light); color: var(--wb-text-muted); font-weight: 650; font-size: 11px; letter-spacing: 0.03em; text-transform: uppercase; }
+  .spec td { padding: 8px 10px; border-bottom: 1px solid var(--wb-border); color: var(--wb-text-secondary); vertical-align: top; }
+  .spec td code { font-family: 'SF Mono', Menlo, monospace; font-size: 11px; padding: 1px 5px; background: rgba(139,123,255,0.10); border-radius: 4px; color: var(--wb-accent-strong); }
+  .spec ul { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.6; color: var(--wb-text-secondary); }
+  .spec ul li code { font-family: 'SF Mono', Menlo, monospace; font-size: 11px; padding: 1px 5px; background: rgba(139,123,255,0.10); border-radius: 4px; color: var(--wb-accent-strong); }
+  .spec .invariant { background: rgba(74,222,128,0.07); border-left: 3px solid var(--wb-success); padding: 10px 14px; border-radius: 6px; margin-top: 12px; font-size: 12.5px; color: var(--wb-text-secondary); line-height: 1.5; }
+  .spec .invariant b { color: var(--wb-success); }
+  .spec .conflict { background: rgba(251,191,36,0.08); border-left: 3px solid #FBBF24; padding: 10px 14px; border-radius: 6px; margin-top: 12px; font-size: 12.5px; color: var(--wb-text-secondary); line-height: 1.5; }
+  .spec .conflict b { color: #FBBF24; }
+</style>
+</head>
+<body>
+
+  <h1>E15 · Display-name prefill в reservation flow</h1>
+  <p class="lede">
+    Гость открывает чужой вишлист и хочет забронировать подарок. Сейчас имя предзаполняется только из <code>tgUser.first_name</code>.
+    E15 обогащает источник prefill (UserProfile.displayName → TG full name → TG first name), добавляет визуальный индикатор «откуда», и аналитику <code>reservation.display_name_prefilled</code> / <code>reservation.display_name_edited</code>.
+  </p>
+  <p class="meta">
+    <b>Статус:</b> DRAFT 2026-05-25 · <b>Конфликт:</b> нельзя катить параллельно с E14 (оба меняют тот же sheet)
+    · <b>Surprise-mode инвариант:</b> уже залочен <code>apps/api/test/integration/surprise-mode-privacy.test.ts</code> — owner-side эндпоинты не возвращают <code>reservedByDisplayName</code> ни в каком виде.
+  </p>
+
+  <h2>1. Текущее состояние (BEFORE)</h2>
+  <div class="grid">
+    <div>
+      <div class="frame">
+        <div class="frame-label">BEFORE · сейчас в проде</div>
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <div class="sheet-title">Забронировать подарок?</div>
+          <div class="item-card">
+            <div class="item-thumb">🎁</div>
+            <div>
+              <div class="item-title">PS5 Slim Digital Edition</div>
+              <div class="item-price">42 990 ₽</div>
+            </div>
+          </div>
+          <div>
+            <label class="field-label">Твоё имя (видят другие гости)</label>
+            <input class="input" value="Дмитрий" />
+            <!-- нет hint, нет индикации откуда взято -->
+          </div>
+          <div class="privacy">🔒 Владелец вишлиста <b>не увидит</b>, кто какой подарок забронировал.</div>
+          <div class="btn-row">
+            <button class="btn btn-ghost">Отмена</button>
+            <button class="btn btn-primary">🎁 Забронировать</button>
+          </div>
+        </div>
+      </div>
+      <div class="caption">
+        <span class="tag muted">Status quo</span>
+        Подставляется только <code>tg.first_name</code>. Игнорируются <code>last_name</code> и кастомный
+        <code>UserProfile.displayName</code>. Никакой индикации, что это автозаполнение.
+        Нет события <code>reservation.display_name_prefilled</code>.
+      </div>
+    </div>
+  </div>
+
+  <h2>2. После E15 — варианты prefill source</h2>
+  <div class="grid">
+
+    <!-- Variant A: TG full name -->
+    <div>
+      <div class="frame">
+        <div class="frame-label">AFTER · A · TG full name</div>
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <div class="sheet-title">Забронировать подарок?</div>
+          <div class="item-card">
+            <div class="item-thumb">🎁</div>
+            <div>
+              <div class="item-title">PS5 Slim Digital Edition</div>
+              <div class="item-price">42 990 ₽</div>
+            </div>
+          </div>
+          <div>
+            <label class="field-label">Твоё имя (видят другие гости)</label>
+            <input class="input" value="Дмитрий Петров" />
+            <div class="prefill-hint">
+              <span class="dot"></span>
+              <span>Из твоего Telegram-профиля</span>
+            </div>
+          </div>
+          <div class="privacy">🔒 Владелец вишлиста <b>не увидит</b>, кто какой подарок забронировал.</div>
+          <div class="btn-row">
+            <button class="btn btn-ghost">Отмена</button>
+            <button class="btn btn-primary">🎁 Забронировать</button>
+          </div>
+        </div>
+      </div>
+      <div class="caption">
+        <span class="tag">A · TG full</span>
+        У гостя в Telegram заполнены <code>first_name</code> и <code>last_name</code>.
+        Подставляется <code>"Дмитрий Петров"</code>. Hint: «Из твоего Telegram-профиля».<br />
+        Event: <code>reservation.display_name_prefilled · source=tg_full · len=14</code>
+      </div>
+    </div>
+
+    <!-- Variant B: profile.displayName -->
+    <div>
+      <div class="frame">
+        <div class="frame-label">AFTER · B · WishBoard profile</div>
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <div class="sheet-title">Забронировать подарок?</div>
+          <div class="item-card">
+            <div class="item-thumb">🎁</div>
+            <div>
+              <div class="item-title">PS5 Slim Digital Edition</div>
+              <div class="item-price">42 990 ₽</div>
+            </div>
+          </div>
+          <div>
+            <label class="field-label">Твоё имя (видят другие гости)</label>
+            <input class="input" value="dimaWB" />
+            <div class="prefill-hint">
+              <span class="dot"></span>
+              <span>Из твоего профиля WishBoard</span>
+            </div>
+          </div>
+          <div class="privacy">🔒 Владелец вишлиста <b>не увидит</b>, кто какой подарок забронировал.</div>
+          <div class="btn-row">
+            <button class="btn btn-ghost">Отмена</button>
+            <button class="btn btn-primary">🎁 Забронировать</button>
+          </div>
+        </div>
+      </div>
+      <div class="caption">
+        <span class="tag">B · profile</span>
+        У гостя уже есть кастомный <code>UserProfile.displayName</code> в WishBoard (например, <code>"dimaWB"</code>).
+        Приоритет выше, чем TG identity — гость уже выразил предпочтение.<br />
+        Event: <code>reservation.display_name_prefilled · source=profile · len=6</code>
+      </div>
+    </div>
+
+    <!-- Variant C: only first_name -->
+    <div>
+      <div class="frame">
+        <div class="frame-label">AFTER · C · TG first only</div>
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <div class="sheet-title">Забронировать подарок?</div>
+          <div class="item-card">
+            <div class="item-thumb">🎁</div>
+            <div>
+              <div class="item-title">PS5 Slim Digital Edition</div>
+              <div class="item-price">42 990 ₽</div>
+            </div>
+          </div>
+          <div>
+            <label class="field-label">Твоё имя (видят другие гости)</label>
+            <input class="input" value="Дмитрий" />
+            <div class="prefill-hint">
+              <span class="dot"></span>
+              <span>Из твоего Telegram-профиля</span>
+            </div>
+          </div>
+          <div class="privacy">🔒 Владелец вишлиста <b>не увидит</b>, кто какой подарок забронировал.</div>
+          <div class="btn-row">
+            <button class="btn btn-ghost">Отмена</button>
+            <button class="btn btn-primary">🎁 Забронировать</button>
+          </div>
+        </div>
+      </div>
+      <div class="caption">
+        <span class="tag">C · TG first</span>
+        У гостя есть только <code>tg.first_name</code> (нет <code>last_name</code>, нет
+        <code>profile.displayName</code>). Идентично текущему поведению — но теперь
+        с hint, чтобы пользователь знал, откуда взялось.<br />
+        Event: <code>reservation.display_name_prefilled · source=tg_first · len=7</code>
+      </div>
+    </div>
+
+  </div>
+
+  <h2>3. Edited state и edge-cases</h2>
+  <div class="grid">
+
+    <!-- Edited -->
+    <div>
+      <div class="frame">
+        <div class="frame-label">AFTER · edited</div>
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <div class="sheet-title">Забронировать подарок?</div>
+          <div class="item-card">
+            <div class="item-thumb">🎁</div>
+            <div>
+              <div class="item-title">PS5 Slim Digital Edition</div>
+              <div class="item-price">42 990 ₽</div>
+            </div>
+          </div>
+          <div>
+            <label class="field-label">Твоё имя (видят другие гости)</label>
+            <input class="input focused" value="Дима 🎮" />
+            <div class="prefill-hint edited">
+              <span class="dot"></span>
+              <span>Изменено</span>
+              <a class="reset-link" href="#">Вернуть</a>
+            </div>
+          </div>
+          <div class="privacy">🔒 Владелец вишлиста <b>не увидит</b>, кто какой подарок забронировал.</div>
+          <div class="btn-row">
+            <button class="btn btn-ghost">Отмена</button>
+            <button class="btn btn-primary">🎁 Забронировать</button>
+          </div>
+        </div>
+      </div>
+      <div class="caption">
+        <span class="tag">edited</span>
+        Пользователь переписал prefilled значение (например, <code>"Дмитрий Петров" → "Дима 🎮"</code>).
+        Hint меняется на «Изменено» + ссылка «Вернуть» к prefilled значению.<br />
+        Event при первом изменении: <code>reservation.display_name_edited · originalSource=tg_full · finalLen=7 · clearedFully=false</code>
+      </div>
+    </div>
+
+    <!-- Empty / no TG identity -->
+    <div>
+      <div class="frame">
+        <div class="frame-label">AFTER · нет TG identity</div>
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <div class="sheet-title">Забронировать подарок?</div>
+          <div class="item-card">
+            <div class="item-thumb">🎁</div>
+            <div>
+              <div class="item-title">PS5 Slim Digital Edition</div>
+              <div class="item-price">42 990 ₽</div>
+            </div>
+          </div>
+          <div>
+            <label class="field-label">Твоё имя (видят другие гости)</label>
+            <input class="input empty" value="" placeholder="Как тебя зовут?" />
+            <!-- hint не показывается, если prefill источника не было -->
+          </div>
+          <div class="privacy">🔒 Владелец вишлиста <b>не увидит</b>, кто какой подарок забронировал.</div>
+          <div class="btn-row">
+            <button class="btn btn-ghost">Отмена</button>
+            <button class="btn btn-primary" disabled>🎁 Забронировать</button>
+          </div>
+        </div>
+      </div>
+      <div class="caption">
+        <span class="tag muted">empty</span>
+        Редкий случай — <code>tgUser</code> null или вообще без <code>first_name</code>.
+        Поле пустое, плейсхолдер виден, кнопка disabled. Hint не показывается. Никаких событий не шлём.<br />
+        <span class="tag muted">no event</span>
+      </div>
+    </div>
+
+    <!-- EN locale sanity check -->
+    <div>
+      <div class="frame">
+        <div class="frame-label">AFTER · EN locale</div>
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <div class="sheet-title">Reserve this gift?</div>
+          <div class="item-card">
+            <div class="item-thumb">🎁</div>
+            <div>
+              <div class="item-title">PS5 Slim Digital Edition</div>
+              <div class="item-price">$549</div>
+            </div>
+          </div>
+          <div>
+            <label class="field-label">Your name (visible to other guests)</label>
+            <input class="input" value="Alex Smith" />
+            <div class="prefill-hint">
+              <span class="dot"></span>
+              <span>From your Telegram profile</span>
+            </div>
+          </div>
+          <div class="privacy">🔒 The wishlist owner <b>won't see</b> who reserved which gift.</div>
+          <div class="btn-row">
+            <button class="btn btn-ghost">Cancel</button>
+            <button class="btn btn-primary">🎁 Reserve</button>
+          </div>
+        </div>
+      </div>
+      <div class="caption">
+        <span class="tag muted">i18n</span>
+        Локали: RU, EN, CN, HI, ES. Новые ключи: <code>reserve_prefill_from_tg</code>,
+        <code>reserve_prefill_from_profile</code>, <code>reserve_prefill_edited</code>,
+        <code>reserve_prefill_reset</code>. Все 5 локалей обновляются за один коммит.
+      </div>
+    </div>
+
+  </div>
+
+  <h2>4. Аналитика и контракт</h2>
+
+  <div class="spec">
+    <h3>Источники prefill (приоритет сверху вниз)</h3>
+    <table>
+      <thead><tr><th style="width: 22%">Источник</th><th style="width: 30%">Условие</th><th>Значение</th><th style="width: 18%">source=</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>profileData.displayName</code></td>
+          <td>Кастомное имя в WishBoard заполнено и не пустое</td>
+          <td><code>profileData.displayName.trim()</code></td>
+          <td><code>profile</code></td>
+        </tr>
+        <tr>
+          <td><code>tgUser.first_name + last_name</code></td>
+          <td>Оба заполнены</td>
+          <td><code>`${first} ${last}`.trim()</code></td>
+          <td><code>tg_full</code></td>
+        </tr>
+        <tr>
+          <td><code>tgUser.first_name</code></td>
+          <td>Только first_name</td>
+          <td><code>tgUser.first_name</code></td>
+          <td><code>tg_first</code></td>
+        </tr>
+        <tr>
+          <td>—</td>
+          <td>Нет TG identity</td>
+          <td><code>''</code> (пусто)</td>
+          <td><code>none</code> (событие не шлём)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="spec">
+    <h3>Аналитические события</h3>
+    <table>
+      <thead><tr><th style="width: 30%">Event</th><th style="width: 18%">Когда</th><th>Props</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>reservation.display_name_prefilled</code></td>
+          <td>При открытии sheet, если prefill источник не <code>none</code></td>
+          <td><code>{ source: 'profile' | 'tg_full' | 'tg_first', initialLen: number, itemId: string }</code></td>
+        </tr>
+        <tr>
+          <td><code>reservation.display_name_edited</code></td>
+          <td>При первом изменении значения относительно prefilled (debounced 500ms или blur)</td>
+          <td><code>{ originalSource, finalLen, clearedFully: boolean, itemId }</code></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="invariant">
+      <b>Surprise-mode инвариант:</b> оба события — клиентская аналитика гостя, отправляются с его <code>actorHash</code>,
+      не лежат в owner-side эндпоинтах. <code>apps/api/test/integration/surprise-mode-privacy.test.ts</code>
+      продолжает гарантировать, что <code>reservedByDisplayName</code> не утекает в owner DTO.
+    </div>
+  </div>
+
+  <div class="spec">
+    <h3>Что меняется в коде (ориентировочно)</h3>
+    <ul>
+      <li><b>4 точки вызова</b> <code>setGuestName(tgUser?.first_name ?? '')</code> в <code>MiniApp.tsx</code>
+        (17231, 18284, 18299, 18389, 18405) → заменяются на новый хелпер <code>resolveReservePrefill(tgUser, profileData)</code>,
+        возвращающий <code>{ value, source }</code>.</li>
+      <li>Sheet (~25590-25633): добавляется <code>prefill-hint</code> + reset-link + edited-state детекция.</li>
+      <li>Новый state: <code>guestNamePrefillSource</code> (для сравнения «изменено или нет») и
+        <code>guestNameEditedFired</code> (чтобы не дублировать событие <code>display_name_edited</code> на каждое нажатие).</li>
+      <li>5 локалей в <code>packages/shared/src/i18n.ts</code>: 4 новых ключа.</li>
+      <li><b>API не трогаем.</b> POST <code>/tg/items/:id/reserve</code> уже принимает <code>displayName</code>,
+        контракт не меняется. Прироста payload нет.</li>
+    </ul>
+    <div class="conflict">
+      <b>Конфликт с E14:</b> E14 (anonymous reserve) меняет тот же sheet — нельзя катить параллельно.
+      В <code>surprise-mode-privacy.test.ts</code> для E14 уже стоит <code>it.todo</code>.
+      Порядок: сначала E15, потом E14 поверх.
+    </div>
+    <div class="invariant" style="border-left-color: var(--wb-text-muted); background: rgba(255,255,255,0.025); margin-top: 12px;">
+      <b style="color: var(--wb-text-secondary);">Out of scope — secret reservation:</b> второй CTA на item screen
+      (<code>sr_cta_reserve_secretly</code>) открывает отдельный confirm sheet и шлёт <code>POST /tg/items/:id/secret-reserve</code>
+      с payload <code>{ note }</code> — без <code>displayName</code>. Secret-бронь невидима ни владельцу, ни другим гостям
+      (item остаётся <code>AVAILABLE</code> для всех, кроме резервирующего) — аудитории для display name просто нет.
+      E15 затрагивает только public reserve flow.
+    </div>
+  </div>
+
+  <div class="spec">
+    <h3>План тестов (по требованию задачи)</h3>
+    <ul>
+      <li><b>Unit</b> — <code>resolveReservePrefill()</code>: 4 ветки (profile / tg_full / tg_first / none) + крайние случаи (пустые строки, whitespace, длина &gt;64).</li>
+      <li><b>Component (RTL)</b> — открытие sheet с разными комбинациями <code>tgUser</code> + <code>profileData</code>: проверяем (a) значение в input, (b) text hint, (c) <code>trackEvent</code> вызывается с правильным <code>source</code>.</li>
+      <li><b>Component (RTL)</b> — изменение значения: событие <code>display_name_edited</code> шлётся один раз, повторные нажатия не плодят дубликаты; кнопка «Вернуть» восстанавливает prefilled value.</li>
+      <li><b>Integration (existing)</b> — <code>surprise-mode-privacy.test.ts</code> остаётся зелёным; добавляем кейс: после POST <code>/reserve</code> с edited значением, GET owner-side эндпоинты по-прежнему не возвращают <code>reservedByDisplayName</code>.</li>
+      <li><b>API smoke</b> — <code>reservation.succeeded</code> событие продолжает шлёться (текущий код по-прежнему вызывает <code>trackAnalyticsEvent</code> на line 1310).</li>
+    </ul>
+  </div>
+
+</body>
+</html>
