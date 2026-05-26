@@ -38,6 +38,14 @@ import {
   formatPriceForDisplay,
   formatRetryAfter,
 } from './lib/format-price';
+import {
+  PRIO_EMOJI,
+  PRIO_COLOR,
+  PRIO_BG,
+  PRIO_GRADIENT,
+  PRIO_GLOW,
+  prioEmoji,
+} from './lib/priority';
 import { parsePaywallError, paywallContextFromError } from './lib/paywall';
 import { resolveReservePrefill, MAX_DISPLAY_NAME_LEN, type ReservePrefillSource } from './lib/reservePrefill';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
@@ -319,20 +327,8 @@ function guestRecommendedScore(item: { priority: number; status: string; imageUr
   return score;
 }
 
-const PRIO_EMOJI: Record<number, string> = { 1: '🙂', 2: '😊', 3: '😍' };
-// accent color per priority level: LOW=blue-violet, MEDIUM=amber, HIGH=coral-rose
-const PRIO_COLOR: Record<number, string> = { 1: '#6B7FD4', 2: '#E8930A', 3: '#F04E6E' };
-const PRIO_BG:    Record<number, string> = { 1: 'rgba(107,127,212,0.13)', 2: 'rgba(232,147,10,0.13)', 3: 'rgba(240,78,110,0.13)' };
-const PRIO_GRADIENT: Record<number, string> = {
-  1: 'linear-gradient(90deg, #6B7FD4, #818cf8)',
-  2: 'linear-gradient(90deg, #E8930A, var(--wb-warning, #FBBF24))',
-  3: 'linear-gradient(90deg, #F04E6E, #ff6b9d)',
-};
-const PRIO_GLOW: Record<number, string> = {
-  1: 'rgba(107,127,212,0.25)',
-  2: 'rgba(232,147,10,0.3)',
-  3: 'rgba(240,78,110,0.35)',
-};
+// PRIO_EMOJI / PRIO_COLOR / PRIO_BG / PRIO_GRADIENT / PRIO_GLOW / prioEmoji
+// extracted to ./lib/priority (F5).
 
 // Card redesign — rolled out to all users
 const CARD_REDESIGN_ENABLED = true;
@@ -359,7 +355,7 @@ const getPriorities = (locale: Locale) => [
 // schedulers, bot) shipped their own RU/EN-only ternaries. Consolidating
 // removes the duplication.
 
-const prioEmoji = (p: number) => PRIO_EMOJI[p] ?? '🙂';
+// `prioEmoji` extracted to ./lib/priority alongside the PRIO_* constants (F5).
 
 // Pure price/time formatters extracted to ./lib/format-price (F5).
 // Re-exports remain absent — call sites import from MiniApp.tsx via the
