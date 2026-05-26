@@ -104,11 +104,11 @@ import type {
 } from './hooks/useSantaState';
 import type { ShowcaseData } from './hooks/useShowcaseState';
 import type { GroupGiftData } from './hooks/useGroupGiftState';
-import type { SettingsData } from './hooks/useSettingsState';
-import type {
-  ReferralMe, ReferralHistoryItem, ReferralHistoryPage, ReferralRulesConfig,
-} from './hooks/useReferralState';
-import type { ProfileData, ProfileStats } from './hooks/useProfileState';
+// SettingsData / ReferralMe / ReferralHistoryItem / ReferralRulesConfig /
+// ProfileData / ProfileStats are defined at module scope below (lifted from
+// inline useState shapes in F4 typing). Hook files re-declare matching
+// shapes for their internal returns — TypeScript composes them structurally.
+import type { ReferralHistoryPage } from './hooks/useReferralState';
 
 // ═══════════════════════════════════════════════════════
 // LAZY SCREENS (F1 — REFACTOR_MINIAPP_TSX_PLAN)
