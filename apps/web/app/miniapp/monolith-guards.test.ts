@@ -122,6 +122,8 @@ describe('MiniApp.tsx — F1 lazy-screen regression guard (2026-05-25)', () => {
     { name: 'ChangelogScreen',      path: './screens/ChangelogScreen' },
     { name: 'LegalMenuScreen',      path: './screens/LegalMenuScreen' },
     { name: 'LegalDocViewerScreen', path: './screens/LegalDocViewerScreen' },
+    // F4 Wave A++ — Gift Notes onboarding flow.
+    { name: 'GiftNotesOnboardingContent', path: './screens/GiftNotesOnboardingContent' },
   ] as const;
 
   for (const { name, path } of LAZY_SCREENS) {
