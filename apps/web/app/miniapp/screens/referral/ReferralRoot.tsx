@@ -15,12 +15,12 @@
 // opens the referral tile from Settings or the home banner (cold path:
 // settings-side, not first-paint).
 //
-// State strategy: NO dedicated state hook. Referral state lives in
-// MiniAppInner alongside callers (openReferralScreen,
-// openReferralHistoryScreen, loadReferralMe, loadReferralHistory) and
-// the home-banner / paywall entry points. Extracting to a hook would
-// split state from helpers — keep state inline and forward via ctx,
-// same trade-off as ProfileRoot/PublicProfileRoot.
+// State strategy: F7 `useReferralState` owns the cluster (10 cells —
+// rulesConfig / me + loading + error / history + cursor + loading + hasMore /
+// shareSheet / rulesOpen). Loaders (loadReferralMe, loadReferralHistory)
+// stay in MiniAppInner so they can compose with auth + analytics, but they
+// read the same `referralState` instance via destructure. Entry-point flows
+// (home banner, paywall alt CTA, profile tile) also share the same hook.
 //
 // Implementation discipline:
 // - JSX is copied verbatim from MiniApp.tsx — DO NOT migrate styles or
@@ -30,10 +30,11 @@
 //   that lived inside the referral screen IIFE stay inline here — they
 //   close over `referralMe.link` / `referralMe.shareText` and the
 //   `setReferralShareSheet` setter.
-// - `ctx` is typed as a loose interface with `any` where the original
-//   was loose; tightening to the actual ReferralMe / ReferralHistoryItem
-//   DTOs is a separate concern (those types are declared inline in
-//   MiniAppInner today).
+// - `ctx` is `ReferralState & {...}` — the F7 hook's return shape
+//   intersected with the remaining closure refs (pushToast / trackEvent /
+//   loaders / openReferralHistoryScreen). The tightening pass replaced
+//   every former `any` slot with a named DTO from MiniApp.tsx — 0 `any`
+//   remaining.
 
 'use client';
 

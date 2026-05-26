@@ -26,8 +26,9 @@
 // - JSX is copied verbatim from MiniApp.tsx — DO NOT migrate styles or
 //   refactor logic in this PR. Bundle savings only; cosmetic changes
 //   ride future on-touch PRs.
-// - `ctx` is typed as `Record<string, any>` for now; a tighter SantaRootCtx
-//   type is deferred to a follow-up.
+// - `ctx` is `SantaState & {...}` — the F3 hook's return shape intersected
+//   with remaining closure refs. The follow-up tightening pass already
+//   replaced the original `Record<string, any>` ctx with named slots.
 // - `renderSantaAlias` (the locale-aware alias formatter) is now
 //   imported directly from `lib/santa-alias` (F5) — it used to flow
 //   through `ctx`. Importing means the SANTA_ADJ / SANTA_ANIMAL

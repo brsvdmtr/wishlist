@@ -7,15 +7,18 @@
 // opens the profile tab (cold path: not first-paint, but commonly visited
 // post-onboarding).
 //
-// State strategy: NO dedicated state hook. Profile is largely a CONSUMER
-// of state owned by sibling concerns (profileData, planInfo, subscription,
-// godStats, retention, wishlists) AND it owns a tight in-screen edit-form
-// state cluster (editProfile*, bioTextareaRef, avatarInputRef,
-// showAvatarSheet, avatarUploading). The edit-form state is consumed by
-// the EditProfile + Avatar BottomSheets which live in MiniApp.tsx (not
-// in this cluster) — so extracting it into a hook would force a 3-way
-// split, not the 1-way split a hook unlocks. Keep the state inline and
-// forward via ctx — same trade-off as SettingsRoot.
+// State strategy: F7 `useProfileState` owns the cluster — server-fetched
+// profile (profileData / profileStats / profileLoading), the edit-form
+// cluster (editingProfile + 4 form fields + bioTextareaRef +
+// editProfileSaving), and the avatar-upload cluster (avatarInputRef +
+// showAvatarSheet + avatarUploading). 13 useState cells + 2 useRefs are
+// consolidated. The EditProfile + Avatar BottomSheets still live in
+// MiniApp.tsx (they're global modals not gated on `screen === 'profile'`),
+// but they read the same `profileState` instance via destructure — flipping
+// the open flag inside this cluster works because the BottomSheet
+// subscribes to the same React state cell. Sibling-owned reads
+// (planInfo, subscription, godStats, retention, wishlists) come through
+// the `ctx` bag.
 //
 // The Profile screen also embeds 4 inline UI primitives (CollapsibleBlock,
 // SectionCard, KpiRow, relativeTime) used by the god-mode analytics
@@ -26,8 +29,10 @@
 // - JSX is copied verbatim from MiniApp.tsx — DO NOT migrate styles or
 //   refactor logic in this PR. Bundle savings only; cosmetic changes
 //   ride future on-touch PRs.
-// - `ctx` types use a loose `any` bag — same trade-off as SantaRoot.
-//   ~45 closure refs total.
+// - `ctx` is `ProfileState & {...}` — the F7 hook's return shape intersected
+//   with the remaining closure refs (helpers / setters from MiniAppInner
+//   that the screen needs but the hook doesn't own). The tightening pass
+//   moved every former `any` slot to a named DTO — 0 `any` remaining.
 // - The edit-form BottomSheet and avatar-upload BottomSheet remain in
 //   MiniApp.tsx (they're global modals not gated on `screen === 'profile'`).
 //   They read setEditingProfile / setShowAvatarSheet which are also

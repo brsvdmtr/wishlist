@@ -222,12 +222,13 @@ const GroupGiftRoot = dynamic(
 );
 
 // F4 Wave D-4 — Profile screen (~1771 LOC of JSX). Cold-ish path: not
-// first-paint, but commonly visited post-onboarding. Profile is largely
-// a CONSUMER of sibling-cluster state (profileData, planInfo,
-// subscription, godStats, retention, wishlists) plus a small in-screen
-// edit-form cluster — no dedicated hook. The 2 BottomSheets the screen
-// drives (edit-profile + change-avatar) live in MiniApp.tsx as global
-// overlays; only the inline screen JSX is in this chunk.
+// first-paint, but commonly visited post-onboarding. State is owned by
+// `useProfileState` (F7) — server-fetched profile + edit-form cluster +
+// avatar-upload cluster — and the cluster also reads sibling state via
+// ctx (planInfo, subscription, godStats, retention, wishlists). The 2
+// BottomSheets the screen drives (edit-profile + change-avatar) live in
+// MiniApp.tsx as global overlays sharing the same hook instance; only the
+// inline screen JSX is in this chunk.
 const ProfileRoot = dynamic(
   () => import('./screens/profile/ProfileRoot').then(m => ({ default: m.ProfileRoot })),
   { ssr: false, loading: () => <Skeleton variant="list" /> },
@@ -235,9 +236,9 @@ const ProfileRoot = dynamic(
 
 // F4 Wave A++ — Public-profile screen (~379 LOC of JSX). Cold path:
 // only reached via `profile_{username}` deep-link or "view profile" tile
-// on a guest-view wishlist. Public-profile is a CONSUMER of state owned
-// by MiniAppInner (publicProfileData/Loading/Error, subscription state,
-// birthday context, profile data) — no dedicated hook. Helpers
+// on a guest-view wishlist. State is owned by `usePublicProfileState`
+// (F7) — username / data / loading / error / subscribed + subInFlight
+// cells. Sibling reads (BirthdayContext, profileData) and helpers
 // (subscribeToProfile, unsubscribeFromProfile, loadGuestWishlist) are
 // forwarded via ctx.
 const PublicProfileRoot = dynamic(
@@ -247,11 +248,11 @@ const PublicProfileRoot = dynamic(
 
 // F4 Wave A++ — Referral cluster (referral + referral-history, ~568 LOC
 // of JSX). Cold path: only reached via Settings tile / home banner /
-// post-share entry-point. Referral is a CONSUMER of state owned by
-// MiniAppInner (referralMe, referralHistory, referralShareSheet,
-// referralRulesOpen, referralRulesConfig) — no dedicated hook. Loader
-// helpers (loadReferralMe, loadReferralHistory, openReferralHistoryScreen)
-// are forwarded via ctx.
+// post-share entry-point. State is owned by `useReferralState` (F7) —
+// rulesConfig + me + history + share/rules-sheet cells. Loader helpers
+// (loadReferralMe, loadReferralHistory, openReferralHistoryScreen) stay
+// in MiniAppInner so they can compose with auth + analytics, and they
+// read the same hook instance via destructure.
 const ReferralRoot = dynamic(
   () => import('./screens/referral/ReferralRoot').then(m => ({ default: m.ReferralRoot })),
   { ssr: false, loading: () => <Skeleton variant="list" /> },
@@ -4582,7 +4583,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [draftsBulkLoading, setDraftsBulkLoading] = useState(false);
 
   // ── Secret Santa state ───────────────────────────────────────────────────
-  // (currentSantaCampaign moved to useSantaState hook — line 3630+)
+  // (currentSantaCampaign moved to useSantaState hook — see the
+  // `useSantaState()` destructure near line 3898 of this file.)
   // Research survey deep-link state — populated from srvy_<inviteId> startParam.
   const [surveyInviteId, setSurveyInviteId] = useState<string | null>(null);
   // Join (from deep link)
@@ -11944,7 +11946,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     tgFetch, setScreen, pushToast, trackEvent, showUpsell, setUpsellSheet,
     // card / comments primitives reused from MiniApp.tsx
     WishCardGuest, WishCardCompact, WishCardShowcase, CommentsThread,
-    // guest-view hook state (forwarded — same names, no rename)
+    // guest-view hook state (forwarded — same names, no rename). The full
+    // GuestViewState shape is intersected into `GuestViewRootCtx` so every
+    // cell + setter that the hook owns must appear here, even if not all
+    // are consumed by the GuestView JSX itself — sibling consumers
+    // (`loadGuestWishlist`, PublicProfileRoot back-nav) read them via the
+    // same React state but through the closure, not this ctx.
     guestWl, setGuestWl,
     guestItems, setGuestItems,
     guestCategories, setGuestCategories,

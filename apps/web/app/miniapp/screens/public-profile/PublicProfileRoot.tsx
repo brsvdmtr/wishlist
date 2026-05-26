@@ -7,20 +7,21 @@
 // when a visitor lands on a `profile_{username}` deep-link (cold path:
 // not first-paint, only relevant for friend-discovery flows).
 //
-// State strategy: NO dedicated state hook. publicProfile* state lives
-// in MiniAppInner alongside guest-view / birthday-context / showcase
-// state that is read by SHARED helpers (subscribeToProfile,
-// unsubscribeFromProfile, loadGuestWishlist). Extracting to a hook
-// would split state from helpers — keep state inline and forward via
-// ctx, same trade-off as ProfileRoot.
+// State strategy: F7 `usePublicProfileState` owns the cluster (6 cells —
+// username / data / loading / error / subscribed / subInFlight). Shared
+// helpers (subscribeToProfile, unsubscribeFromProfile, loadGuestWishlist)
+// live in MiniAppInner and read the same `publicProfileState` instance via
+// destructure — keeps helper/state coupling intact while the state itself
+// is owned by a single hook.
 //
 // Implementation discipline:
 // - JSX is copied verbatim from MiniApp.tsx — DO NOT migrate styles or
 //   refactor logic in this PR. Bundle savings only; cosmetic changes
 //   ride future on-touch PRs.
-// - `ctx` is typed as `Record<string, any>` for now; a tighter
-//   PublicProfileRootCtx type is deferred to a follow-up alongside the
-//   ProfileRoot/SantaRoot tightening pass.
+// - `ctx` is `PublicProfileState & {...}` — the F7 hook's return shape
+//   intersected with remaining closure refs (BirthdayContext / setScreen /
+//   guest-view loader). The tightening pass moved every former `any` slot
+//   to a named DTO — 0 `any` remaining.
 // - The birthday context Banner + birthday-attributed analytics events
 //   are forwarded (setBirthdayContext, trackBirthdayAttributedEvent)
 //   so this screen still records `birthday.banner_seen` /

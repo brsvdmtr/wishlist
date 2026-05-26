@@ -50,7 +50,7 @@ import { getEmoji } from '../../lib/emoji';
 import { ProBadge } from '../../components/ProBadge';
 import type { ComponentType, Dispatch, RefObject, SetStateAction } from 'react';
 import type {
-  CommentDTO, GuestItem, GuestSort, HomeTab, Item, PlanInfo,
+  BirthdayContext, CommentDTO, GuestItem, GuestSort, HomeTab, Item, PlanInfo,
   ReservationItem, SantaReservationItem, TgUser,
 } from '../../MiniApp';
 import type { GroupGiftData } from '../../hooks/useGroupGiftState';
@@ -73,30 +73,11 @@ export type SecretAccess = {
   priceXtr: number;
 };
 
-/**
- * Birthday-context bag — mirrors the inline useState shape near
- * MiniApp.tsx:3923. Only the read-only fields used by the guest-view
- * banner are typed here; the `setBirthdayContext` setter is still a
- * `Dispatch<SetStateAction<...>>` so functional updates type-check.
- */
-export type BirthdayContext = {
-  deliveryId: string;
-  reminderKind: string;
-  targetType: string | null;
-  targetId: string | null;
-  targetUnavailable: boolean;
-  isOwner: boolean;
-  birthdayUser: {
-    userId: string;
-    displayName: string | null;
-    username: string | null;
-    avatarThumbUrl: string | null;
-    hideYear: boolean;
-    customMessage: string | null;
-  };
-  daysUntil: number | null;
-  bannerDismissed: boolean;
-};
+// `BirthdayContext` lives at module scope in MiniApp.tsx and is imported
+// above — single source of truth shared with PublicProfileRoot + the
+// home banner. The local copy that used to live here was structurally
+// identical to the canonical one; keeping two declarations created a
+// silent-divergence risk.
 
 export type GuestViewRootCtx = GuestViewState & {
   // ── Module-level constants forwarded from MiniApp.tsx ────────────────

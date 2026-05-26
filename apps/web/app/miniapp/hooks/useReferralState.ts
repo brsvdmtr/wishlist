@@ -4,7 +4,7 @@
 // AFTER the matching Root file (ReferralRoot.tsx, F4 Wave A++) — the Root
 // already consumes these fields via the `referralRootCtx` bag.
 //
-// The cluster owns 9 state cells:
+// The cluster owns 10 state cells:
 //   - referralRulesConfig — minimal entry-point config (loaded once at
 //     app init; read by home banner, paywall alt CTA, profile tile,
 //     ReferralRoot itself).
@@ -23,63 +23,21 @@
 //
 // The 4 inline DTO types (ReferralMe, ReferralHistoryItem,
 // ReferralHistoryPage, ReferralRulesConfig) were declared inline in
-// MiniAppInner — promoted to module exports here so callers (loaders,
-// ProUpsellSheet, ReferralRoot ctx) can annotate without re-declaring.
+// MiniAppInner. Three of them (ReferralMe, ReferralHistoryItem,
+// ReferralRulesConfig) live at module scope in MiniApp.tsx — imported
+// here for the hook's internal annotations. The fourth
+// (ReferralHistoryPage) is private to this hook — the history-list
+// loader is the only consumer, never crosses the cluster-Root boundary.
 
 'use client';
 
 import { useState } from 'react';
-
-/** Matches GET /tg/referral/me response shape (apps/api/src/index.ts). */
-export type ReferralMe = {
-  enabled: boolean;
-  programEnabled: boolean;
-  inRollout: boolean;
-  rolloutPercent: number;
-  code: string | null;
-  link: string | null;
-  shareText: string | null;
-  stats: {
-    totalAttributions: number;
-    successful: number;
-    pendingActivation: number;
-    qualified: number;
-    rewarded: number;
-    pendingReview: number;
-    rejected: number;
-  };
-  caps: {
-    monthlyUsed: number;
-    monthlyCap: number;
-    yearlyUsed: number;
-    yearlyCap: number;
-    atMonthlyCap: boolean;
-    atYearlyCap: boolean;
-  };
-  reward: { daysPerRef: number; strategy: string };
-  attributedByInviter: {
-    status: 'success' | 'not_credited' | 'pending';
-    attributedAt: string;
-    qualifiedAt: string | null;
-    rewardedAt: string | null;
-  } | null;
-  proExpiryAt: string | null;
-  configVersion: string;
-};
-
-/** Matches GET /tg/referral/history response item shape. */
-export type ReferralHistoryItem = {
-  id: string;
-  status: 'ATTRIBUTED' | 'PENDING_ACTIVATION' | 'QUALIFIED' | 'REWARDED' | 'REJECTED' | 'FRAUD_REVIEW';
-  rejectReason: string | null;
-  attributedAt: string;
-  qualifiedAt: string | null;
-  rewardedAt: string | null;
-  rejectedAt: string | null;
-  invitedDisplayName: string | null;
-  progress: { firstBotStart: boolean; firstWishlist: boolean; firstItem: boolean };
-  reward: { id: string; days: number; grantedAt: string } | null;
-};
+// `ReferralMe` / `ReferralHistoryItem` / `ReferralRulesConfig` are
+// canonical in MiniApp.tsx (module-scope DTO block, lifted from inline
+// useState shapes in F4 typing). `ReferralHistoryPage` is private to this
+// hook — the history-list reducer is the only consumer, never crosses the
+// cluster-Root boundary.
+import type { ReferralMe, ReferralHistoryItem, ReferralRulesConfig } from '../MiniApp';
 
 /** GET /tg/referral/history response wrapper (cursor-paged). */
 export type ReferralHistoryPage = {
@@ -89,31 +47,7 @@ export type ReferralHistoryPage = {
 };
 
 /**
- * Minimal config subset from GET /tg/referral/rules-config. Loaded once at
- * app init and used by entry-points (paywall alt CTA, home banner,
- * post-share) to decide whether to render without hitting /me — that
- * endpoint has wider response and side-effects (may allocate a code).
- * rules-config is HTTP-cached for 60s so browsers reuse it across
- * entry-point renders in the same session.
- */
-export type ReferralRulesConfig = {
-  enabled: boolean;
-  inRollout: boolean;
-  rolloutPercent: number;
-  reward: { daysPerRef: number; strategy: string };
-  qualification: { requireWishlist: boolean; requireItem: boolean; windowDays: number };
-  caps: { monthly: number; yearly: number };
-  ui: {
-    showInviteeNamesInUi: boolean;
-    entryPointProfile: boolean;
-    entryPointPaywall: boolean;
-    entryPointHomeBanner: boolean;
-  };
-  configVersion: string;
-};
-
-/**
- * One hook for the referral cluster state (~9 useState calls collapsed
+ * One hook for the referral cluster state (10 useState calls collapsed
  * into one). Returns the inline names so MiniApp.tsx + ReferralRoot can
  * destructure without renaming any consumer call site.
  *

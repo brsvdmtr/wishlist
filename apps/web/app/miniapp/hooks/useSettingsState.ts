@@ -27,26 +27,11 @@
 'use client';
 
 import { useState } from 'react';
-import type { Locale } from '@wishlist/shared';
-
-/**
- * Settings payload returned by `GET /tg/settings` and PATCHed back via
- * `/tg/settings/patch`. Was inline in MiniAppInner — promoted to a module
- * export so consumers can annotate without re-declaring.
- */
-export type SettingsData = {
-  // Language — resolveEffectiveLocale model
-  languageMode: 'auto' | 'manual';
-  manualLanguage: Locale | null;
-  effectiveLanguage: Locale;
-  defaultCurrency: 'RUB' | 'USD';
-  notifications: { comments: boolean; reservations: boolean; subscriptions: boolean; marketing: boolean };
-  privacy: { profileVisibility: string; subscribePolicy: string; commentsEnabled: boolean; hintsEnabled: boolean };
-  appBehavior: { newWishlistPosition: string; cardDisplayMode?: string };
-  appearance?: { theme: 'dark' | 'black'; accent: 'violet' | 'blue' | 'pink' | 'green' };
-  isPro: boolean;
-  supportId?: string | null;
-};
+// `SettingsData` is canonical in MiniApp.tsx (module-scope DTO block,
+// lifted from inline useState shape in F4 typing). Single source of truth
+// for the GET /tg/settings response shape — see MiniApp.tsx near the other
+// settings DTOs.
+import type { SettingsData } from '../MiniApp';
 
 /**
  * One hook for the Settings cluster state (~3 useState calls collapsed

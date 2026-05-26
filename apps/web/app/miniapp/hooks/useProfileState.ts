@@ -44,34 +44,11 @@
 'use client';
 
 import { useRef, useState } from 'react';
-
-/**
- * Server-fetched profile object. Mirrors GET /tg/me/profile response
- * shape (apps/api/src/index.ts). Used by Profile screen + Settings +
- * EditProfile sheet + sibling cluster references.
- */
-export type ProfileData = {
-  displayName: string | null;
-  username: string | null;
-  bio: string | null;
-  avatarUrl: string | null;
-  avatarThumbUrl: string | null;
-  avatarUpdatedAt: string | null;
-  avatarPublic: boolean;
-  birthday: string | null;
-  hideYear: boolean;
-  defaultCurrency: 'RUB' | 'USD';
-};
-
-/**
- * Profile usage stats shown on the Profile screen "by the numbers" block.
- * Loaded alongside profileData via GET /tg/me/profile.
- */
-export type ProfileStats = {
-  wishlists: number; wishlistsLimit: number;
-  totalWishes: number; wishesLimit: number;
-  reservedByMe: number; archived: number;
-};
+// `ProfileData` / `ProfileStats` are canonical in MiniApp.tsx (module-scope
+// DTO block, lifted from inline useState shapes in F4 typing). Importing
+// here keeps the hook's internal annotations in lockstep with whatever
+// MiniApp.tsx + cluster Roots see — single source of truth.
+import type { ProfileData, ProfileStats } from '../MiniApp';
 
 /**
  * One hook for the Profile cluster state (~13 useState calls + 2 refs

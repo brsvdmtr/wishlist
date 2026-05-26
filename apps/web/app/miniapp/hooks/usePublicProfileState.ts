@@ -19,43 +19,10 @@
 'use client';
 
 import { useState } from 'react';
-
-/**
- * Payload returned by `GET /tg/public-profile/:username` — used by the
- * `public-profile` screen to render the public-facing profile card,
- * wishlists strip and optional showcase block.
- */
-export type PublicProfileData = {
-  profile: {
-    displayName: string | null;
-    username: string | null;
-    bio: string | null;
-    avatarUrl: string | null;
-    avatarThumbUrl: string | null;
-    isPublic: boolean;
-  };
-  wishlists: {
-    id: string;
-    slug: string;
-    title: string;
-    deadline: string | null;
-    itemCount: number;
-    reservedCount: number;
-  }[];
-  showcase: null | {
-    coverUrl: string | null;
-    bio: string | null;
-    pinned: { id: string; slug: string; title: string; itemCount: number; reservedCount: number }[];
-    preferences: string | null;
-    sizes: {
-      clothing: string | null; shoes: string | null; ring: string | null; other: string | null;
-      chest: string | null; waist: string | null; hips: string | null;
-    };
-    brands: string[];
-    antiGift: { presets: string[]; customItems: string[]; comment: string | null } | null;
-    updatedAt: string | null;
-  };
-};
+// `PublicProfileData` is canonical in MiniApp.tsx (module-scope DTO block,
+// lifted from inline useState shape in F4 typing). Single source of truth
+// for the GET /tg/public-profile/:username response shape.
+import type { PublicProfileData } from '../MiniApp';
 
 /**
  * One hook for the public-profile cluster state (~6 useState calls
