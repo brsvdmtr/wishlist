@@ -45,48 +45,28 @@ import {
 import { t, localeToBCP47, type Locale } from '@wishlist/shared';
 import { parsePaywallError } from '../../lib/paywall';
 import type { GiftNotesState } from '../../hooks/useGiftNotesState';
+import type {
+  LegacyColorBag, PushToast, SetScreen, TgFetch,
+} from '../../_shared/closure-types';
 
 /**
  * GiftNotesRootCtx — closure refs forwarded from MiniAppInner.
  *
  * Intersection of the full `GiftNotesState` (all setters keep their inferred
  * `Dispatch<SetStateAction<T>>` signatures, so `setGnX(prev => ...)` still
- * type-checks) plus the loose helpers / primitives bag. The loose half is
- * typed as `any` for now; a follow-up will pin the tgFetch / setScreen /
- * pushToast / Telegram WebApp signatures.
+ * type-checks) plus the helpers bag. Helpers now use real signatures from
+ * `_shared/closure-types` (TgFetch/SetScreen/PushToast) so call-site
+ * type-checks catch e.g. a missing `kind` on pushToast.
  */
-/**
- * Concrete shape of the legacy `C` token bag forwarded from MiniApp.tsx.
- * Locked down (vs `Record<string, string>`) so `noUncheckedIndexedAccess`
- * doesn't infer `string | undefined` for every `C.accent` / `C.bg` read —
- * the local helpers (`demoCard`, `benefit`, `card`, `templateCard`) take
- * strict `string` props.
- */
-type LegacyColorBag = {
-  bg: string; surface: string; surfaceHover: string; card: string;
-  accent: string; accentSoft: string; accentGlow: string;
-  green: string; greenSoft: string; orange: string; orangeSoft: string;
-  red: string; redSoft: string;
-  text: string; textSec: string; textMuted: string;
-  border: string; borderLight: string;
-};
-
 export type GiftNotesRootCtx = GiftNotesState & {
   // module-level constants
   C: LegacyColorBag;
   font: string;
   locale: Locale;
-  // hot-path helpers — typed `any` for now; tightening is a follow-up.
-  // The original (MiniAppInner) signatures vary slightly between callers
-  // (pushToast `kind` is required in some sites, optional in others) —
-  // accepting `any` here keeps the JSX byte-identical without a parallel
-  // type-discovery pass through MiniApp.tsx.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  tgFetch: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  setScreen: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  pushToast: any;
+  // hot-path helpers — real signatures from _shared/closure-types.
+  tgFetch: TgFetch;
+  setScreen: SetScreen;
+  pushToast: PushToast;
 };
 
 export interface GiftNotesRootProps {
