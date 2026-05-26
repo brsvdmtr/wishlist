@@ -39,21 +39,12 @@ import {
 import { t, pluralize, localeToBCP47, type Locale } from '@wishlist/shared';
 import { ProBadge } from '../../components/ProBadge';
 import { UserAvatar } from '../../components/UserAvatar';
-
-/**
- * Concrete shape of the legacy `C` token bag forwarded from MiniApp.tsx.
- * Locked down (vs `Record<string, string>`) so `noUncheckedIndexedAccess`
- * doesn't infer `string | undefined` for every `C.accent` / `C.bg` read —
- * the JSX below passes `C.accent` to `UserAvatar.accent: string` (strict).
- */
-type LegacyColorBag = {
-  bg: string; surface: string; surfaceHover: string; card: string;
-  accent: string; accentSoft: string; accentGlow: string;
-  green: string; greenSoft: string; orange: string; orangeSoft: string;
-  red: string; redSoft: string;
-  text: string; textSec: string; textMuted: string;
-  border: string; borderLight: string;
-};
+import type { ComponentType, Dispatch, SetStateAction } from 'react';
+import type { PlanInfo, TgUser } from '../../MiniApp';
+import type {
+  LegacyColorBag, PushToast, SetScreen, SetUpsellSheet,
+  ShowUpsell, TgFetch, TrackEvent,
+} from '../../_shared/closure-types';
 
 /**
  * SettingsRootCtx — closure refs forwarded from MiniAppInner.
@@ -61,8 +52,11 @@ type LegacyColorBag = {
  * The Settings screen reads many disparate pieces of state owned by sibling
  * features (profile, birthday, link mgmt, etc.). Rather than create a
  * settings-specific state hook that would just re-forward the same names,
- * we pass them straight through. Loose-typed for the same reason as
- * SantaRoot/GiftNotesRoot — tightening is a separate concern.
+ * we pass them straight through. Helpers now carry real signatures from
+ * `_shared/closure-types`; state shapes that are inline-anonymous in
+ * MiniApp.tsx (profileData / birthdaySettings / settingsData / etc.)
+ * stay loose with `any` — pinning them would require extracting those
+ * anonymous useState types into named exports, which is its own refactor.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export type SettingsRootCtx = {
@@ -72,20 +66,26 @@ export type SettingsRootCtx = {
   locale: Locale;
   CARD_REDESIGN_ENABLED: boolean;
   LATEST_RELEASE_ID: string | null;
-  // hot-path helpers
-  tgFetch: any;
-  setScreen: any;
-  pushToast: any;
-  showUpsell: any;
-  setUpsellSheet: any;
-  trackEvent: any;
-  normalizeLocale: any;
-  resolveOwnerName: any;
+  // hot-path helpers — real signatures from _shared/closure-types.
+  tgFetch: TgFetch;
+  setScreen: SetScreen;
+  pushToast: PushToast;
+  showUpsell: ShowUpsell;
+  setUpsellSheet: SetUpsellSheet;
+  trackEvent: TrackEvent;
+  normalizeLocale: typeof import('@wishlist/shared').normalizeLocale;
+  resolveOwnerName: (
+    profile: { displayName?: string | null; username?: string | null } | null | undefined,
+    tgUser: { first_name?: string | null; username?: string | null } | null | undefined,
+    fallback?: string,
+  ) => string;
   // misc state read by Settings
   scrollContainerRef: { current: HTMLDivElement | null };
-  tgUser: any;
-  tgRef: any;
-  tgLangCodeRef: any;
+  tgUser: TgUser | null;
+  tgRef: { current: Window['Telegram'] };
+  tgLangCodeRef: { current: string | undefined };
+  // Anonymous inline-useState shapes in MiniApp.tsx — kept as `any`
+  // pending a future extraction of these state cells into named types.
   profileData: any;
   settingsData: any;
   settingsLoading: boolean;
@@ -95,28 +95,31 @@ export type SettingsRootCtx = {
   hasNewInSettings: boolean;
   linkMgmtData: any;
   dontGiftData: any;
-  planInfo: any;
+  planInfo: PlanInfo;
   cardDisplayMode: string;
-  setCardDisplayMode: any;
+  setCardDisplayMode: Dispatch<SetStateAction<string>>;
   birthdaySettings: any;
   birthdaySettingsLoading: boolean;
-  setBirthdaySettings: any;
-  setBirthdaySettingsLoading: any;
-  setBirthdayMutedList: any;
-  setChangelogSeenId: any;
-  setLegalDocId: any;
-  setShowCommentsDefaultSheet: any;
-  setShowDeleteAccount: any;
-  setShowLanguageSheet: any;
-  setShowProfileVisibilitySheet: any;
-  setShowReportProblemSheet: any;
-  setShowSubscribePolicySheet: any;
-  // settings-domain helpers
-  patchSettings: any;
-  loadActiveLinks: any;
-  openDontGiftEdit: any;
-  // F1-lazy screen helper consumed inside Appearance block
-  AppearanceSettings: any;
+  setBirthdaySettings: Dispatch<SetStateAction<any>>;
+  setBirthdaySettingsLoading: Dispatch<SetStateAction<boolean>>;
+  setBirthdayMutedList: Dispatch<SetStateAction<any>>;
+  setChangelogSeenId: Dispatch<SetStateAction<string>>;
+  setLegalDocId: Dispatch<SetStateAction<string | null>>;
+  setShowCommentsDefaultSheet: Dispatch<SetStateAction<boolean>>;
+  setShowDeleteAccount: Dispatch<SetStateAction<boolean>>;
+  setShowLanguageSheet: Dispatch<SetStateAction<boolean>>;
+  setShowProfileVisibilitySheet: Dispatch<SetStateAction<boolean>>;
+  setShowReportProblemSheet: Dispatch<SetStateAction<boolean>>;
+  setShowSubscribePolicySheet: Dispatch<SetStateAction<boolean>>;
+  // settings-domain helpers (defined in MiniAppInner — useCallback)
+  patchSettings: (patch: Record<string, unknown>) => Promise<void>;
+  loadActiveLinks: () => Promise<void>;
+  openDontGiftEdit: () => Promise<void>;
+  // F1-lazy screen helper consumed inside Appearance block. The
+  // dynamic() wrapper in MiniApp.tsx erases the inner prop shape, so a
+  // ComponentType<any> matches what the consumer site can statically
+  // observe.
+  AppearanceSettings: ComponentType<any>;
 };
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
