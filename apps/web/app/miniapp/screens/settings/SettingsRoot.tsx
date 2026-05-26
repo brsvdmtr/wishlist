@@ -19,8 +19,10 @@
 // - JSX is copied verbatim from MiniApp.tsx — DO NOT migrate styles or
 //   refactor logic in this PR. Bundle savings only; cosmetic changes
 //   ride future on-touch PRs.
-// - `ctx` is typed loosely (helpers / state setters as `any`) — same
-//   trade-off as SantaRoot/GiftNotesRoot. Tightening is a follow-up.
+// - `ctx` is typed against the lifted module-scope DTOs in `MiniApp.tsx`
+//   (ProfileData / SettingsData / SantaSeason / LinkMgmtData / DontGiftData
+//   / BirthdaySettings / BirthdayMutedUser). The dynamic AppearanceSettings
+//   wrapper carries its real `AppearanceSettingsProps`.
 // - The 4 inline primitives (`SettingsSection/Row/Toggle/ActionRow`)
 //   are recreated INSIDE the screen IIFE here to preserve byte-identical
 //   behaviour (they wrap the DS primitives with santa-tint + locale-aware
@@ -41,8 +43,12 @@ import { ProBadge } from '../../components/ProBadge';
 import { UserAvatar } from '../../components/UserAvatar';
 import { resolveOwnerName } from '../../lib/wishlist-utils';
 import type { ComponentType, Dispatch, SetStateAction } from 'react';
-import type { PlanInfo, TgUser } from '../../MiniApp';
+import type {
+  BirthdayMutedUser, BirthdaySettings, DontGiftData, LinkMgmtData,
+  PlanInfo, ProfileData, SantaSeason, TgUser,
+} from '../../MiniApp';
 import type { SettingsState } from '../../hooks/useSettingsState';
+import type { AppearanceSettingsProps } from '../AppearanceSettings';
 import type {
   LegacyColorBag, PushToast, SetScreen, SetUpsellSheet,
   ShowUpsell, TgFetch, TrackEvent,
@@ -57,12 +63,9 @@ import type {
  * from `useSettingsState` (F7) — its shape is intersected in via
  * `SettingsState`, so the setters carry their inferred
  * `Dispatch<SetStateAction<T>>` signatures. Helpers carry real signatures
- * from `_shared/closure-types`; state shapes that are inline-anonymous in
- * MiniApp.tsx (profileData / birthdaySettings / etc.) stay loose with
- * `any` — pinning them would require extracting those anonymous useState
- * types into named exports, which is its own refactor.
+ * from `_shared/closure-types`; remaining state shapes carry named DTOs
+ * from `../../MiniApp` (`ProfileData` / `BirthdaySettings` / etc.).
  */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 export type SettingsRootCtx = SettingsState & {
   // module-level constants forwarded from MiniApp.tsx
   C: LegacyColorBag;
@@ -79,26 +82,26 @@ export type SettingsRootCtx = SettingsState & {
   trackEvent: TrackEvent;
   normalizeLocale: typeof import('@wishlist/shared').normalizeLocale;
   // resolveOwnerName imported directly inside this file (F5) — no longer a ctx field.
-  // misc state read by Settings
+  // misc state read by Settings — DTOs lifted from MiniApp.tsx.
   scrollContainerRef: { current: HTMLDivElement | null };
   tgUser: TgUser | null;
   tgRef: { current: Window['Telegram'] };
   tgLangCodeRef: { current: string | undefined };
-  // Anonymous inline-useState shapes in MiniApp.tsx — kept as `any`
-  // pending a future extraction of these state cells into named types.
-  profileData: any;
+  profileData: ProfileData | null;
+  // settingsData / settingsLoading provided by SettingsState intersection.
   godMode: boolean;
   showLocaleDebug: boolean;
-  santaSeason: any;
+  santaSeason: SantaSeason | null;
   hasNewInSettings: boolean;
-  linkMgmtData: any;
-  dontGiftData: any;
+  linkMgmtData: LinkMgmtData | null;
+  dontGiftData: DontGiftData | null;
   planInfo: PlanInfo;
-  birthdaySettings: any;
+  // cardDisplayMode / setCardDisplayMode provided by SettingsState intersection.
+  birthdaySettings: BirthdaySettings | null;
   birthdaySettingsLoading: boolean;
-  setBirthdaySettings: Dispatch<SetStateAction<any>>;
+  setBirthdaySettings: Dispatch<SetStateAction<BirthdaySettings | null>>;
   setBirthdaySettingsLoading: Dispatch<SetStateAction<boolean>>;
-  setBirthdayMutedList: Dispatch<SetStateAction<any>>;
+  setBirthdayMutedList: Dispatch<SetStateAction<BirthdayMutedUser[]>>;
   setChangelogSeenId: Dispatch<SetStateAction<string>>;
   setLegalDocId: Dispatch<SetStateAction<string | null>>;
   setShowCommentsDefaultSheet: Dispatch<SetStateAction<boolean>>;
@@ -111,13 +114,11 @@ export type SettingsRootCtx = SettingsState & {
   patchSettings: (patch: Record<string, unknown>) => Promise<void>;
   loadActiveLinks: () => Promise<void>;
   openDontGiftEdit: () => Promise<void>;
-  // F1-lazy screen helper consumed inside Appearance block. The
-  // dynamic() wrapper in MiniApp.tsx erases the inner prop shape, so a
-  // ComponentType<any> matches what the consumer site can statically
-  // observe.
-  AppearanceSettings: ComponentType<any>;
+  // F1-lazy screen wrapped via next/dynamic in MiniApp.tsx. We pin the
+  // inner prop shape via `AppearanceSettingsProps` so callers see the
+  // real isPro / onOpenPaywall / labels surface instead of `any`.
+  AppearanceSettings: ComponentType<AppearanceSettingsProps>;
 };
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 export interface SettingsRootProps {
   /** Active screen name; passed for symmetry with sibling Root components. */
@@ -557,7 +558,7 @@ export function SettingsRoot(props: SettingsRootProps) {
                             // Lazy-load muted list; navigation handled via inline modal
                             void tgFetch('/tg/birthday-reminders/muted').then(async (r: Response) => {
                               if (r.ok) {
-                                const data = await r.json() as { muted: any };
+                                const data = await r.json() as { muted: BirthdayMutedUser[] };
                                 setBirthdayMutedList(data.muted);
                               }
                             });
