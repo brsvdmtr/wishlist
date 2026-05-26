@@ -36,13 +36,12 @@ import { parsePaywallError } from '../../lib/paywall';
 import { resolveReservePrefill } from '../../lib/reservePrefill';
 import type { Dispatch, SetStateAction } from 'react';
 import type { GroupGiftState, GroupGiftData } from '../../hooks/useGroupGiftState';
-import type { GuestItem, Item, TgUser } from '../../MiniApp';
+import type { GuestItem, Item, ProfileData, TgUser } from '../../MiniApp';
 import type {
   LegacyColorBag, NavBack, PushToast, SetScreen,
   ShowUpsell, TgFetch, TrackEvent,
 } from '../../_shared/closure-types';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 export type GroupGiftRootCtx = GroupGiftState & {
   // module-level constants
   C: LegacyColorBag;
@@ -61,15 +60,14 @@ export type GroupGiftRootCtx = GroupGiftState & {
   buildTgDeepLink: (payload?: string) => string | null;
   handleBuyAddon: (skuCode: string, targetId?: string) => Promise<void>;
   setGuestItems: Dispatch<SetStateAction<GuestItem[]>>;
-  // misc shared state read by Group Gift. viewingItem matches the
-  // canonical `useState<(Item | GuestItem) | null>(null)`. profileData
-  // stays loose because its useState is an inline anonymous shape.
+  // misc shared state read by Group Gift — viewingItem matches the
+  // canonical `useState<(Item | GuestItem) | null>(null)`; profileData
+  // is the lifted DTO from MiniApp.tsx.
   viewingItem: (Item | GuestItem) | null;
-  profileData: any;
+  profileData: ProfileData | null;
   tgUser: TgUser | null;
   addonCheckoutLoading: boolean;
 };
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 export interface GroupGiftRootProps {
   /** Active group-gift-* screen name; controls which sub-block renders. */
@@ -369,7 +367,7 @@ export function GroupGiftRoot(props: GroupGiftRootProps) {
                   setGroupGiftData(gg);
                   pushToast(t('gg_toast_created', locale), 'success');
                   trackEvent('group_gift_created', { groupGiftId: gg.id });
-                  setGuestItems((prev: any[]) => prev.map((gi: any) => gi.id === groupGiftCreateItemId ? { ...gi, status: 'reserved' as const } : gi));
+                  setGuestItems(prev => prev.map(gi => gi.id === groupGiftCreateItemId ? { ...gi, status: 'reserved' as const } : gi));
                   setScreen('group-gift-detail');
                 } catch {
                   pushToast(t('error_generic', locale), 'error');

@@ -30,12 +30,12 @@ import React from 'react';
 import { Button, Card } from '@wishlist/ui';
 import { t, type Locale } from '@wishlist/shared';
 import type { ShowcaseState, ShowcaseData } from '../../hooks/useShowcaseState';
+import type { DontGiftData, ProfileData } from '../../MiniApp';
 import type {
   LegacyColorBag, NavBack, PushToast, SetScreen,
   ShowUpsell, TgFetch, TrackEvent,
 } from '../../_shared/closure-types';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 export type ShowcaseRootCtx = ShowcaseState & {
   // module-level constants
   C: LegacyColorBag;
@@ -74,14 +74,11 @@ export type ShowcaseRootCtx = ShowcaseState & {
   removeShowcaseCover: () => Promise<void>;
   openDontGiftEdit: () => Promise<void>;
   buildTgDeepLink: (payload?: string) => string | null;
-  // misc shared state read by Showcase. profileData / dontGiftData stay
-  // loose because their owning useStates are inline anonymous shapes
-  // in MiniApp.tsx; promoting those is a deeper refactor.
+  // misc shared state read by Showcase — DTOs lifted from MiniApp.tsx.
   scrollContainerRef: { current: HTMLDivElement | null };
-  dontGiftData: any;
-  profileData: any;
+  dontGiftData: DontGiftData | null;
+  profileData: ProfileData | null;
 };
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 export interface ShowcaseRootProps {
   /** Active showcase-* screen name; controls which sub-block renders. */
