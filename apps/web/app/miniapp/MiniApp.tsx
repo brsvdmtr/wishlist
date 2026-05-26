@@ -92,6 +92,7 @@ import { LATEST_RELEASE_ID } from './screens/data/release-notes-latest';
 import { useGiftNotesState } from './hooks/useGiftNotesState';
 import { useGroupGiftState } from './hooks/useGroupGiftState';
 import { useGuestViewState } from './hooks/useGuestViewState';
+import { useProfileState } from './hooks/useProfileState';
 import { usePublicProfileState } from './hooks/usePublicProfileState';
 import { useReferralState } from './hooks/useReferralState';
 import { useSantaState } from './hooks/useSantaState';
@@ -107,6 +108,7 @@ import type { SettingsData } from './hooks/useSettingsState';
 import type {
   ReferralMe, ReferralHistoryItem, ReferralHistoryPage, ReferralRulesConfig,
 } from './hooks/useReferralState';
+import type { ProfileData, ProfileStats } from './hooks/useProfileState';
 
 // ═══════════════════════════════════════════════════════
 // LAZY SCREENS (F1 — REFACTOR_MINIAPP_TSX_PLAN)
@@ -3720,25 +3722,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [linkMgmtConfirmRevoke, setLinkMgmtConfirmRevoke] = useState(false);
   const [linkMgmtRevoking, setLinkMgmtRevoking] = useState(false);
 
-  // Profile state
-  const [profileData, setProfileData] = useState<{
-    displayName: string | null;
-    username: string | null;
-    bio: string | null;
-    avatarUrl: string | null;
-    avatarThumbUrl: string | null;
-    avatarUpdatedAt: string | null;
-    avatarPublic: boolean;
-    birthday: string | null;
-    hideYear: boolean;
-    defaultCurrency: 'RUB' | 'USD';
-  } | null>(null);
-  const [profileStats, setProfileStats] = useState<{
-    wishlists: number; wishlistsLimit: number;
-    totalWishes: number; wishesLimit: number;
-    reservedByMe: number; archived: number;
-  } | null>(null);
-  const [profileLoading, setProfileLoading] = useState(false);
+  // Profile state — extracted to useProfileState (F7). Hook returns the
+  // SAME inline names; consumer call sites (~22 references for profileData
+  // alone across MiniApp.tsx + ProfileRoot + sibling clusters) stay
+  // byte-identical. The edit-form + avatar cells are pulled below where
+  // they used to live (so the file's reading order matches the original).
+  // DTO types (ProfileData, ProfileStats) now live in
+  // `./hooks/useProfileState.ts` and are re-imported at the top.
+  const profileState = useProfileState();
+  const {
+    profileData, setProfileData,
+    profileStats, setProfileStats,
+    profileLoading, setProfileLoading,
+  } = profileState;
 
   // Birthday Reminders — context from /tg/birthday-reminders/resolve. Set when
   // user opens Mini App via a `br_<deliveryId>` deep link. Used by:
@@ -3864,17 +3860,22 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     showcaseCoverInputRef,
   } = useShowcaseState();
   const [titlePressed, setTitlePressed] = useState(false); // pressed-state for tappable item title
-  const [editingProfile, setEditingProfile] = useState(false);
-  const [editProfileName, setEditProfileName] = useState('');
-  const [editProfileUsername, setEditProfileUsername] = useState('');
-  const [editProfileBio, setEditProfileBio] = useState('');
-  const [editProfileBirthday, setEditProfileBirthday] = useState('');
-  const [editProfileSaving, setEditProfileSaving] = useState(false);
-  const bioTextareaRef = useRef<HTMLTextAreaElement>(null);
-  // ── Avatar upload ─────────────────────────────────────────────────────────
-  const avatarInputRef = useRef<HTMLInputElement>(null);
-  const [showAvatarSheet, setShowAvatarSheet] = useState(false);
-  const [avatarUploading, setAvatarUploading] = useState(false);
+  // Profile edit-form + avatar — sourced from the same useProfileState()
+  // instance declared above. The EditProfile + Avatar BottomSheets live
+  // INSIDE MiniApp.tsx (not in ProfileRoot) so MiniApp.tsx needs the
+  // setters; ProfileRoot ALSO reads the open-flags + setters via ctx.
+  const {
+    editingProfile, setEditingProfile,
+    editProfileName, setEditProfileName,
+    editProfileUsername, setEditProfileUsername,
+    editProfileBio, setEditProfileBio,
+    editProfileBirthday, setEditProfileBirthday,
+    editProfileSaving, setEditProfileSaving,
+    bioTextareaRef,
+    avatarInputRef,
+    showAvatarSheet, setShowAvatarSheet,
+    avatarUploading, setAvatarUploading,
+  } = profileState;
 
   // Settings state — the remaining settings cells (settingsData / loading)
   // come from useSettingsState (called above near cardDisplayMode).
@@ -11498,18 +11499,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     santaReservationItemsLoading, setSantaReservationItemsLoading,
   };
 
-  // F4 Wave D-4 — context bag forwarded to the lazy-loaded ProfileRoot.
-  // Profile is a CONSUMER of state owned by sibling features (planInfo,
-  // subscription, godStats, retention, wishlists) plus a small in-screen
-  // edit-form cluster. ~45 closure refs total. Loose-typed; tightening
-  // is a follow-up.
+  // F4 Wave D-4 / F7 — context bag forwarded to the lazy-loaded ProfileRoot.
+  // Profile cluster state (server-fetched + edit-form + avatar) is now
+  // sourced from `useProfileState` (F7) and spread in via `...profileState`
+  // so ProfileRoot's `ctx: ProfileState & {...}` intersection picks up the
+  // precise inferred setter signatures. The rest are sibling-owned state
+  // (planInfo, subscription, godStats, retention, wishlists) + closure
+  // helpers (loaders, billing handlers). ~45 closure refs total.
   const profileRootCtx = {
+    // profile cluster state from useProfileState (same names)
+    ...profileState,
     // module-level constants we re-use inside profile JSX
     C, font, locale,
     // helpers + setters from MiniAppInner closure
     tgFetch, setScreen, pushToast, showUpsell, setUpsellSheet, trackEvent,
     localeToBCP47,
-    profileData, profileStats, profileLoading,
     tgUser, planInfo, subscription,
     proSource, promoPro,
     wishlists, santaSeason,
@@ -11521,16 +11525,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     setRetentionStats, setRetentionLoading, setRetentionOpen, setRetentionPeriod,
     acqPeriod, setAcqPeriod,
     activationTab, setActivationTab,
-    setEditingProfile, setEditProfileName, setEditProfileUsername,
-    setEditProfileBio, setEditProfileBirthday,
-    setShowAvatarSheet, avatarUploading,
     cancelSubLoading, setShowCancelSub,
     santaTestModeLoading, setSantaTestModeLoading,
     setShowDeleteAccount, setSettingsOriginScreen, setHomeTab,
     tgRef, hasNewInSettings, buildTgDeepLink,
     handleBuyAddon, handleReactivateSub,
     addonCheckoutLoading, addonLoadingSku, checkoutLoading,
-    setWishlistPickerSku, setProfileData,
+    setWishlistPickerSku,
     showLocaleDebug, setShowLocaleDebug,
     loadWishlists, loadAllItems, loadGlobalArchive, loadSettings,
     loadShowcase, loadSantaSeason,

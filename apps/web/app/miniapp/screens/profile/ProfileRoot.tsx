@@ -45,13 +45,14 @@ import type { ComponentType, Dispatch, SetStateAction } from 'react';
 import type {
   HomeTab, PlanInfo, Screen, SkuInfo, SubscriptionInfo, TgUser, Wishlist,
 } from '../../MiniApp';
+import type { ProfileState } from '../../hooks/useProfileState';
 import type {
   LegacyColorBag, PushToast, SetScreen, SetUpsellSheet,
   ShowUpsell, TgFetch, TrackEvent,
 } from '../../_shared/closure-types';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-export type ProfileRootCtx = {
+export type ProfileRootCtx = ProfileState & {
   // module-level constants forwarded from MiniApp.tsx
   C: LegacyColorBag;
   font: string;
@@ -65,12 +66,7 @@ export type ProfileRootCtx = {
   trackEvent: TrackEvent;
   // module-level helpers used by KpiRow/CollapsibleBlock locale formatting
   localeToBCP47: typeof localeToBCP47;
-  // Shared DTOs from MiniApp.tsx. profileData / profileStats stay loose
-  // because their owning useStates are inline anonymous shapes; pinning
-  // them would require extracting those into named types.
-  profileData: any;
-  profileStats: any;
-  profileLoading: boolean;
+  // Shared sibling-cluster state forwarded as-is.
   tgUser: TgUser | null;
   planInfo: PlanInfo;
   subscription: SubscriptionInfo;
@@ -105,15 +101,6 @@ export type ProfileRootCtx = {
   setAcqPeriod: Dispatch<SetStateAction<'24h' | '7d' | '30d'>>;
   activationTab: 'funnel' | 'onboarding' | 'acq';
   setActivationTab: Dispatch<SetStateAction<'funnel' | 'onboarding' | 'acq'>>;
-  // edit/avatar state (sheets live in MiniApp.tsx; profile screen
-  // just flips the open flags + seeds the form fields)
-  setEditingProfile: Dispatch<SetStateAction<boolean>>;
-  setEditProfileName: Dispatch<SetStateAction<string>>;
-  setEditProfileUsername: Dispatch<SetStateAction<string>>;
-  setEditProfileBio: Dispatch<SetStateAction<string>>;
-  setEditProfileBirthday: Dispatch<SetStateAction<string>>;
-  setShowAvatarSheet: Dispatch<SetStateAction<boolean>>;
-  avatarUploading: boolean;
   // subscription cancel/reactivate flow
   cancelSubLoading: boolean;
   setShowCancelSub: Dispatch<SetStateAction<boolean>>;
@@ -134,7 +121,6 @@ export type ProfileRootCtx = {
   addonLoadingSku: string | null;
   checkoutLoading: boolean;
   setWishlistPickerSku: Dispatch<SetStateAction<string | null>>;
-  setProfileData: Dispatch<SetStateAction<any>>;
   showLocaleDebug: boolean;
   setShowLocaleDebug: Dispatch<SetStateAction<boolean>>;
   loadWishlists: () => Promise<void>;
