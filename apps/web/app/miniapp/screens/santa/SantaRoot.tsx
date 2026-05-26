@@ -44,47 +44,48 @@ import { SantaAvatar } from '../../components/SantaAvatar';
 import { SnowflakeOverlay } from '../../components/SnowflakeOverlay';
 import { t, type Locale } from '@wishlist/shared';
 import { parsePaywallError, paywallContextFromError } from '../../lib/paywall';
+import type { Dispatch, SetStateAction } from 'react';
 import type {
   SantaCampaignDetail, SantaCampaignSummary, GuestItem,
+  Item, PlanInfo, Wishlist,
 } from '../../MiniApp';
 import type {
   ChatMessage, Poll, OrganizerSummary,
   ExclusionPair, ExclusionGroup,
   SantaState,
 } from '../../hooks/useSantaState';
+import type {
+  LegacyColorBag, NavBack, PushToast, SetScreen,
+  ShowUpsell, TgFetch,
+} from '../../_shared/closure-types';
 
 /**
  * SantaRootCtx — closure refs forwarded from MiniAppInner.
  *
  * Intersection of the full `SantaState` (all setters keep their inferred
  * `Dispatch<SetStateAction<T>>` signatures, so `setSantaPolls(prev => ...)`
- * still type-checks) plus the loose helpers / primitives bag. The loose
- * half is typed as a `Record<string, any>` for now; a follow-up will
- * pin Button/Card/Sheet primitive props, the tgFetch signature, and the
- * setState shape for non-santa state.
+ * still type-checks) plus the helpers / primitives bag. Helpers carry
+ * real signatures from `_shared/closure-types`; the few remaining `any`s
+ * cover anonymous useState shapes in MiniApp.tsx that aren't worth
+ * extracting just for the Root edge.
  */
 export type SantaRootCtx = SantaState & {
   // module-level constants
-  C: Record<string, string>;
+  C: LegacyColorBag;
   font: string;
   locale: Locale;
-  // hot-path helpers — typed `any` for now; tightening is a follow-up.
-  // The original (MiniAppInner) signatures vary slightly between callers
-  // (pushToast `kind` is required there, optional in some HTML primitives,
-  // showUpsell uses the `UpsellContext` union, etc.) — accepting `any`
-  // here keeps the JSX byte-identical without a parallel type-discovery
-  // pass through MiniApp.tsx.
-  tgFetch: any;
-  setScreen: any;
-  navBack: any;
-  pushToast: any;
-  showUpsell: any;
+  // hot-path helpers — real signatures from _shared/closure-types.
+  tgFetch: TgFetch;
+  setScreen: SetScreen;
+  navBack: NavBack;
+  pushToast: PushToast;
+  showUpsell: ShowUpsell;
   renderSantaAlias: (adjectiveKey: string, animalKey: string, locale: string) => string;
-  setViewingItem: any;
+  setViewingItem: Dispatch<SetStateAction<(Item | GuestItem) | null>>;
   myActorHashRef: { current: string };
   botUsername: string;
-  planInfo: any;
-  wishlists: any[];
+  planInfo: PlanInfo;
+  wishlists: Wishlist[];
   handleSantaReceiverReserve: (itemId: string) => void | Promise<void>;
   handleSantaReceiverUnreserve: (itemId: string) => void | Promise<void>;
 };
