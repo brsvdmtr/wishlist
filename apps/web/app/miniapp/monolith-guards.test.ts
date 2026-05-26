@@ -128,6 +128,10 @@ describe('MiniApp.tsx — F1 lazy-screen regression guard (2026-05-25)', () => {
     { name: 'SantaRoot', path: './screens/santa/SantaRoot' },
     // F4 Wave C — Gift Notes cluster (3 screens + 2 sheets, ~695 LOC).
     { name: 'GiftNotesRoot', path: './screens/gift-notes/GiftNotesRoot' },
+    // F4 Wave D-1 — Settings screen (~746 LOC).
+    { name: 'SettingsRoot', path: './screens/settings/SettingsRoot' },
+    // F4 Wave D-2 — Showcase cluster (editor + preview, ~858 LOC).
+    { name: 'ShowcaseRoot', path: './screens/showcase/ShowcaseRoot' },
   ] as const;
 
   for (const { name, path } of LAZY_SCREENS) {
@@ -208,6 +212,10 @@ describe('MiniApp.tsx — F3 cluster-state hook drift guard', () => {
     {
       hook: 'useSantaState',
       drift: ['santaSeason', 'santaCampaigns', 'currentSantaCampaign', 'santaChatMessages'],
+    },
+    {
+      hook: 'useShowcaseState',
+      drift: ['showcaseData', 'showcaseAvailableWishlists', 'showcaseLoading', 'showcaseBrandInput'],
     },
   ] as const;
 
