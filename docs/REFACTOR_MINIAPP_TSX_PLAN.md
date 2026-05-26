@@ -819,3 +819,62 @@ lands. Expected: ~30-50 KB brotli per cluster file vs full projection.
 ---
 
 ### F3 — pending
+
+---
+
+### F5 + F6 + F7 + Wave E — done @ `046069b` on 2026-05-26 — **bonus round**
+
+After F4 closed at 414 KB brotli, four parallel sub-agents in worktree
+isolation went after the remaining levers in one batch. All four merged
+cleanly into main.
+
+**Final main chunk: 414 KB brotli → ~295 KB brotli (−119 KB, −28.7%
+from F4-close; cumulative from 522 KB original: −227 KB, −43.5%).**
+
+Each track ran as its own sub-agent (worktree-pattern):
+
+- **Wave E** (`701fcd9`) — extract GuestViewRoot cluster (~1.16 k LOC)
+  + useGuestViewState hook (18 cells, 145 LOC). New `1761.*.js` lazy
+  chunk at 7.8 KB brotli; main chunk −3.8 KB brotli on its own.
+  Worktree: `agent-a73b00afced275c78`.
+- **F5 helpers** (`61da2af..d533f1d`, 5 commits) — extract pure
+  formatters / Santa alias corpus / priority constants / wishlist
+  utils / module-level constants to `apps/web/app/miniapp/lib/*`.
+  67 new unit tests, MiniApp.tsx −199 LOC, main chunk −3.0 KB brotli.
+  Worktree: `agent-a9a1962638dcb1691`.
+- **F7 cluster hooks** (`ef7999d..5312e7a`, 4 commits) — extract
+  useSettingsState (3 cells) + usePublicProfileState (6 cells) +
+  useReferralState (9 cells + 4 types) + useProfileState (13 cells +
+  2 refs + 2 types). 31 state cells out of MiniApp body into named
+  hooks. Worktree: `agent-a789e288acdce13e1`.
+- **Tightening pass** (`e09f313..414547a`, 5 commits) — lift all
+  inline anonymous `useState<{...}>` shapes to module-scope exports
+  (ProfileData, ProfileStats, SettingsData, SantaSeason, DontGiftData,
+  LinkMgmtData, BirthdaySettings, PublicProfileData, RetentionStats,
+  ReferralRulesConfig, ReferralMe, ReferralHistoryItem, GodStats,
+  ReferralProfileTileFromConfigProps) and consume them in 6 cluster
+  Root ctx bags. **Result: 0 `any` slots in cluster Root ctx.**
+  Worktree: `agent-a1ccb1075f8a60ad0`.
+
+**Merge mechanics.** Wave E → F5 → F7 → tightening order. Wave E + F5
+cherry-picked clean. F7 had 3 trivial additive conflicts (alphabetical
+import insertion + 2 destructure blocks where Wave E had already moved
+the cells out — take HEAD). Tightening had 5 conflicts on the same
+files F7 touched: imports merged, ctx-type intersection took HEAD
+(`SomeState &` form), and the lifted DTOs from tightening compose with
+the F7 hook destructures (the hook files internally re-declare
+structurally-identical types — TypeScript composes them fine). One
+follow-up commit (`046069b`) dropped now-duplicate type imports from
+hook files into MiniApp.tsx (TS2440 from same-name import + local
+declaration).
+
+**Tests:** 436/436 pass (was 295 at F3 start, +141 net new across F3/F4/
+F5/F7).
+
+**Verification gauntlet** at HEAD `046069b`: tsc clean, vitest 436/436,
+`pnpm build` clean. Page chunk raw 1.73 MB / brotli 302,373 B (~295 KB).
+
+**Track CLOSED** for real now. The 522 → 295 KB brotli reduction
+shipped over ~14 hours with the worktree-subagent pattern doing the
+heavy lifting. Real-world TTI on cold boots should improve roughly in
+proportion (compressed JS is the dominant Mini App cold-boot cost).
