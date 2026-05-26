@@ -34,19 +34,13 @@ import { t, localeToBCP47, type Locale } from '@wishlist/shared';
 import { UserAvatar } from '../../components/UserAvatar';
 import { parsePaywallError } from '../../lib/paywall';
 import { resolveReservePrefill } from '../../lib/reservePrefill';
+import type { Dispatch, SetStateAction } from 'react';
 import type { GroupGiftState, GroupGiftData } from '../../hooks/useGroupGiftState';
-
-/**
- * Concrete shape of the legacy `C` token bag forwarded from MiniApp.tsx.
- */
-type LegacyColorBag = {
-  bg: string; surface: string; surfaceHover: string; card: string;
-  accent: string; accentSoft: string; accentGlow: string;
-  green: string; greenSoft: string; orange: string; orangeSoft: string;
-  red: string; redSoft: string;
-  text: string; textSec: string; textMuted: string;
-  border: string; borderLight: string;
-};
+import type { GuestItem, Item, TgUser } from '../../MiniApp';
+import type {
+  LegacyColorBag, NavBack, PushToast, SetScreen,
+  ShowUpsell, TgFetch, TrackEvent,
+} from '../../_shared/closure-types';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export type GroupGiftRootCtx = GroupGiftState & {
@@ -55,21 +49,25 @@ export type GroupGiftRootCtx = GroupGiftState & {
   font: string;
   locale: Locale;
   inputStyle: React.CSSProperties;
-  // helpers + setters from MiniAppInner closure
-  tgFetch: any;
-  setScreen: any;
-  navBack: any;
-  pushToast: any;
-  trackEvent: any;
-  showUpsell: any;
-  buildTgDeepLink: any;
-  handleBuyAddon: any;
-  setGuestItems: any;
-  // misc shared state read by Group Gift
-  viewingItem: any;
+  // helpers from MiniAppInner closure — real signatures from
+  // `_shared/closure-types`.
+  tgFetch: TgFetch;
+  setScreen: SetScreen;
+  navBack: NavBack;
+  pushToast: PushToast;
+  trackEvent: TrackEvent;
+  showUpsell: ShowUpsell;
+  // domain helpers (defined in MiniAppInner — useCallback).
+  buildTgDeepLink: (payload?: string) => string | null;
+  handleBuyAddon: (skuCode: string, targetId?: string) => Promise<void>;
+  setGuestItems: Dispatch<SetStateAction<GuestItem[]>>;
+  // misc shared state read by Group Gift. viewingItem matches the
+  // canonical `useState<(Item | GuestItem) | null>(null)`. profileData
+  // stays loose because its useState is an inline anonymous shape.
+  viewingItem: (Item | GuestItem) | null;
   profileData: any;
-  tgUser: any;
-  addonCheckoutLoading: any;
+  tgUser: TgUser | null;
+  addonCheckoutLoading: boolean;
 };
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
