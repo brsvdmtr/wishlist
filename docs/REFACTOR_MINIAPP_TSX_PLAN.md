@@ -680,6 +680,68 @@ as the smallest possible template PR.
 
 ---
 
+### F4 — done @ `f27b0b9` on 2026-05-26 — **track CLOSED**
+
+All four waves shipped + Wave A++ follow-up + ctx-typing tightening pass.
+Final main chunk: **522 KB brotli → 414 KB brotli (−108 KB, −20.7%)**;
+**−468 KB raw (−20.7%)**. MiniApp.tsx: 34,257 LOC → ~24,200 LOC (−29%).
+
+**Lessons.** Sub-agents in worktree isolation (Agent tool with
+`isolation: "worktree"`) were the unlock for Waves B/C/D/A++ and the
+type-tightening pass. Each agent did 200-300 tool calls in its own
+context, iterated tsc errors to clean, ran the full verification
+gauntlet, and produced one well-documented commit ready to cherry-pick.
+Parent agent (me) only needed to merge + push + verify. See the new
+[`feedback_worktree_subagent.md`](../.claude/projects/-Users-dmitriy-Wishlist/memory/feedback_worktree_subagent.md)
+memory for the pattern.
+
+**Plan estimates drifted up to 23× on the biggest target.** Wave C's
+"4,604-LOC monster occasion-detail screen" was actually 192 LOC inline
+— the F2 map's row was an outdated hypothesis. Always `wc -l` /
+`grep -nE` the actual block before sizing a refactor.
+
+**Final shipped commits (in main-branch order):**
+
+| # | Commit | Wave / kind | Δ brotli (main chunk) |
+|---|---|---|---|
+| 1 | `9501c5a` | Wave A — FAQ + Legal × 2 + Changelog + data | −65 KB measured |
+| 2 | `923eb9a` | Wave A++ — GiftNotesOnboardingContent lazy | small |
+| 3 | `a3b8a4f` | F3 — useGiftNotesState hook | 0 (refactor) |
+| 4 | `c3a1c02` | F3 — useSantaState hook | 0 (refactor) |
+| 5 | `ce894ea` | **Wave B — SantaRoot cluster (~3.16k LOC)** | −10 KB |
+| 6 | `18fefbb` | **Wave C — GiftNotesRoot cluster (~695 LOC)** | −4 KB |
+| 7 | `17d2342` | **Wave D-2 — ShowcaseRoot + useShowcaseState** | −2.5 KB |
+| 8 | `97e485e` | **Wave D-3 — GroupGiftRoot + useGroupGiftState** | −2.6 KB |
+| 9 | `223d49f` | **Wave D-4 — ProfileRoot (~1.77k LOC)** | −8.8 KB |
+| 10 | `87becf8` | **Wave D-1 — SettingsRoot** | −3.4 KB |
+| 11 | `29a44ab` | **Wave A++ — PublicProfileRoot + ReferralRoot** | −3.5 KB |
+| 12 | `f27b0b9` | F4 typing-prep — DTO exports + closure-types module | 0 (refactor) |
+| 13-18 | tighten SantaRoot/GiftNotesRoot/SettingsRoot/ShowcaseRoot/GroupGiftRoot/ProfileRoot ctx | 0 (refactor) |
+
+**Final test count:** 341/341 vitest passing (was 295 pre-F4). 18 new
+drift-guard tests for the 11 lazy chunks + 2 F3 hooks.
+
+**Cumulative bundle delta on prod (release `f27b0b9`, measured via
+brotli q=11 from Amsterdam edge):**
+- `miniapp/page-*.js` raw: 2,261,845 → 1,776,928 B (**−484 KB / −21.4%**)
+- `miniapp/page-*.js` brotli: 522,764 → 414,294 B (**−108 KB / −20.8%**)
+- 11 new lazy chunks total ~70 KB brotli (loaded on-demand per screen,
+  not in initial load)
+
+**Expected user-visible impact** on RU 4G (typical 100-200ms RTT to CF
+EU edge + ~500 Kb/s wire speed): **−0.5 to −1 second on cold Mini App
+boot**. Substantial proportional improvement on the most-painful slice
+of users.
+
+**Track status:** **CLOSED.** The closure target from the original plan
+(~180 KB brotli initial JS) is not hit — F5 (lift pure helpers to lib/),
+F6 (proper sub-cluster splits for ProfileRoot's 1.77k LOC), and F7
+(hook-graph cleanup for Settings/Profile that don't yet have hooks) are
+the remaining levers if a further pass is warranted. For now the 20%
+cold-boot reduction is the headline win and the track may rest.
+
+---
+
 ### F4 Wave A — done @ `9501c5a` on 2026-05-26 (cold-path static screens)
 
 Extracted 4 Settings-reached screens + their bulky locale-data tables:
