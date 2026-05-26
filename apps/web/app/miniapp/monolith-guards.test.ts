@@ -201,6 +201,10 @@ describe('MiniApp.tsx — F3 cluster-state hook drift guard', () => {
       // `useState` again, the drift guard fires.
       drift: ['gnAccess', 'gnOccasions', 'gnViewingOccasion'],
     },
+    {
+      hook: 'useSantaState',
+      drift: ['santaSeason', 'santaCampaigns', 'currentSantaCampaign', 'santaChatMessages'],
+    },
   ] as const;
 
   for (const { hook, drift } of F3_HOOKS) {

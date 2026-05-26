@@ -46,9 +46,15 @@ import { parseReservationReminderPayload, parseEventReminderPayload, parseSurvey
 // chunk; only the latest id is referenced from the main chunk (changelog "new!"
 // badge in settings). HAND-SYNC on release: see release-notes-latest.ts.
 import { LATEST_RELEASE_ID } from './screens/data/release-notes-latest';
-// F3 cluster-state hook (Gift Notes). Returns the same names that used to live
-// inline as 19 useState calls — destructured at the top of MiniAppInner.
+// F3 cluster-state hooks. Each returns the same names that lived inline as
+// many useState calls — destructured at the top of MiniAppInner so consumer
+// call sites stay byte-identical.
 import { useGiftNotesState } from './hooks/useGiftNotesState';
+import { useSantaState } from './hooks/useSantaState';
+import type {
+  ChatMessage, Poll, PollResult, OrganizerSummary,
+  ExclusionPair, ExclusionGroup,
+} from './hooks/useSantaState';
 
 // ═══════════════════════════════════════════════════════
 // LAZY SCREENS (F1 — REFACTOR_MINIAPP_TSX_PLAN)
@@ -422,7 +428,7 @@ type WishlistCategory = {
   isDefault: boolean;
 };
 
-type Item = {
+export type Item = {
   id: string;
   wishlistId?: string;
   title: string;
@@ -511,7 +517,7 @@ type HistoryReservationItem = Item & {
   purchased: boolean;
 };
 
-type SantaReservationItem = Item & {
+export type SantaReservationItem = Item & {
   campaignId: string;
   campaignTitle: string;
   campaignStatus: string;
@@ -574,7 +580,7 @@ type CommentDTO = {
 
 type SantaCampaignStatus = 'DRAFT' | 'OPEN' | 'LOCKED' | 'DRAW_IN_PROGRESS' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
 
-type SantaCampaignSummary = {
+export type SantaCampaignSummary = {
   id: string;
   title: string;
   status: SantaCampaignStatus;
@@ -609,7 +615,7 @@ type SantaAliasInfo = {
   animalKey: string;
 };
 
-type SantaCampaignDetail = {
+export type SantaCampaignDetail = {
   campaign: {
     id: string; title: string; description: string | null; type: string; status: SantaCampaignStatus;
     isOwner: boolean; isOrganizer: boolean; inviteToken?: string;
@@ -645,7 +651,7 @@ type SantaCampaignDetail = {
   isMuted: boolean;
 };
 
-type SantaJoinPreview = {
+export type SantaJoinPreview = {
   id: string; title: string; description: string | null; status: string; type: string;
   minBudget: number | null; maxBudget: number | null; currency: string;
   participantCount: number; ownerName: string | null; ownerAvatarUrl: string | null;
@@ -3627,7 +3633,85 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [godMode, setGodMode] = useState(false);
   const [canGodMode, setCanGodMode] = useState(false);
   const [godModeLoading, setGodModeLoading] = useState(false);
-  const [santaTestModeLoading, setSantaTestModeLoading] = useState(false);
+  // Santa cluster state — extracted to useSantaState (F3 / F4 Wave B
+  // precondition). Same names destructured here so consumer sites stay
+  // byte-identical. ~50 useState calls collapsed into one hook.
+  const {
+    santaTestModeLoading, setSantaTestModeLoading,
+    santaDetailContext, setSantaDetailContext,
+    santaReservationItems, setSantaReservationItems,
+    santaReservationItemsLoading, setSantaReservationItemsLoading,
+    santaSeason, setSantaSeason,
+    santaCampaigns, setSantaCampaigns,
+    santaCampaignsLoading, setSantaCampaignsLoading,
+    currentSantaCampaign, setCurrentSantaCampaign,
+    santaCreateLoading, setSantaCreateLoading,
+    santaCreateTitle, setSantaCreateTitle,
+    santaCreateDesc, setSantaCreateDesc,
+    santaCreateMinBudget, setSantaCreateMinBudget,
+    santaCreateMaxBudget, setSantaCreateMaxBudget,
+    santaCreateCurrency, setSantaCreateCurrency,
+    santaCreateType, setSantaCreateType,
+    santaJoinToken, setSantaJoinToken,
+    santaJoinPreview, setSantaJoinPreview,
+    santaJoinLoading, setSantaJoinLoading,
+    santaJoinDone, setSantaJoinDone,
+    showSantaWishlistPicker, setShowSantaWishlistPicker,
+    santaWishlistPickerLoading, setSantaWishlistPickerLoading,
+    santaWishlistPickerReturnId, setSantaWishlistPickerReturnId,
+    santaReceiverWishlist, setSantaReceiverWishlist,
+    santaReceiverWishlistLoading, setSantaReceiverWishlistLoading,
+    santaWishlistReservingId, setSantaWishlistReservingId,
+    santaSwitchModalOpen, setSantaSwitchModalOpen,
+    santaInboundStatus, setSantaInboundStatus,
+    santaInboundLoading, setSantaInboundLoading,
+    santaDrawLoading, setSantaDrawLoading,
+    santaDrawValidation, setSantaDrawValidation,
+    santaDrawValidationLoading, setSantaDrawValidationLoading,
+    santaReveal, setSantaReveal,
+    santaRevealLoading, setSantaRevealLoading,
+    santaHintRequest, setSantaHintRequest,
+    santaHintRequestLoading, setSantaHintRequestLoading,
+    santaHintInbound, setSantaHintInbound,
+    santaHintInboundLoading, setSantaHintInboundLoading,
+    santaHintPickerOpen, setSantaHintPickerOpen,
+    santaHintPickerItems, setSantaHintPickerItems,
+    santaHintPickerSelectedIds, setSantaHintPickerSelectedIds,
+    santaHintFulfillLoading, setSantaHintFulfillLoading,
+    santaChatMessages, setSantaChatMessages,
+    santaChatHasMore, setSantaChatHasMore,
+    santaChatLoading, setSantaChatLoading,
+    santaChatInput, setSantaChatInput,
+    santaChatSending, setSantaChatSending,
+    santaChatIsMuted, setSantaChatIsMuted,
+    santaChatSendNonceRef,
+    santaPolls, setSantaPolls,
+    santaPollsLoading, setSantaPollsLoading,
+    santaPollCreateOpen, setSantaPollCreateOpen,
+    santaPollCreateQuestion, setSantaPollCreateQuestion,
+    santaPollCreateOptions, setSantaPollCreateOptions,
+    santaPollCreateAnonymous, setSantaPollCreateAnonymous,
+    santaPollCreateSubmitting, setSantaPollCreateSubmitting,
+    santaOrganizerSummary, setSantaOrganizerSummary,
+    santaOrganizerLoading, setSantaOrganizerLoading,
+    santaExitRequestSheetOpen, setSantaExitRequestSheetOpen,
+    santaExitRequestReason, setSantaExitRequestReason,
+    santaExitRequestSubmitting, setSantaExitRequestSubmitting,
+    santaExclPairs, setSantaExclPairs,
+    santaExclGroups, setSantaExclGroups,
+    santaExclLoading, setSantaExclLoading,
+    santaExclAddPairOpen, setSantaExclAddPairOpen,
+    santaExclPairA, setSantaExclPairA,
+    santaExclPairB, setSantaExclPairB,
+    santaExclPairSaving, setSantaExclPairSaving,
+    santaExclGroupSheetOpen, setSantaExclGroupSheetOpen,
+    santaExclGroupLabel, setSantaExclGroupLabel,
+    santaExclGroupSaving, setSantaExclGroupSaving,
+    santaExclAddMemberGroupId, setSantaExclAddMemberGroupId,
+    santaExclAddMemberUserId, setSantaExclAddMemberUserId,
+    santaExclAddMemberSaving, setSantaExclAddMemberSaving,
+  } = useSantaState();
+
   const [showLocaleDebug, setShowLocaleDebug] = useState(false);
   const [godStats, setGodStats] = useState<GodStats | null>(null);
   const [godStatsLoading, setGodStatsLoading] = useState(false);
@@ -4100,16 +4184,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [resPurchasedConfirmItem, setResPurchasedConfirmItem] = useState<ReservationItem | null>(null);
   const [resPurchasedLoading, setResPurchasedLoading] = useState(false);
   const [fromReservations, setFromReservations] = useState(false);
-  const [santaDetailContext, setSantaDetailContext] = useState<{
-    source: 'reservation' | 'receiver-wishlist';
-    campaignId: string;
-    campaignTitle: string;
-    campaignStatus: string;
-    giftStatus: string;
-  } | null>(null);
   // Santa reservations (items reserved via Secret Santa assignment)
-  const [santaReservationItems, setSantaReservationItems] = useState<SantaReservationItem[]>([]);
-  const [santaReservationItemsLoading, setSantaReservationItemsLoading] = useState(false);
 
   // Secret reservations (premium feature — private notes on others' wishes, owner never notified)
   const [secretReservations, setSecretReservations] = useState<SecretReservationDTO[]>([]);
@@ -4435,159 +4510,29 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [draftsBulkLoading, setDraftsBulkLoading] = useState(false);
 
   // ── Secret Santa state ───────────────────────────────────────────────────
-  const [santaSeason, setSantaSeason] = useState<{ inSeason: boolean; canCreate: boolean; seasonStart: string | null; seasonEnd: string | null; testMode: boolean } | null>(null);
-  const [santaCampaigns, setSantaCampaigns] = useState<{ owned: SantaCampaignSummary[]; joined: SantaCampaignSummary[] }>({ owned: [], joined: [] });
-  const [santaCampaignsLoading, setSantaCampaignsLoading] = useState(false);
-  const [currentSantaCampaign, setCurrentSantaCampaign] = useState<SantaCampaignDetail | null>(null);
-  const [santaCreateLoading, setSantaCreateLoading] = useState(false);
-  // Create form
-  const [santaCreateTitle, setSantaCreateTitle] = useState('');
-  const [santaCreateDesc, setSantaCreateDesc] = useState('');
-  const [santaCreateMinBudget, setSantaCreateMinBudget] = useState('');
-  const [santaCreateMaxBudget, setSantaCreateMaxBudget] = useState('');
-  const [santaCreateCurrency, setSantaCreateCurrency] = useState<'RUB' | 'USD'>('RUB');
-  const [santaCreateType, setSantaCreateType] = useState<'CLASSIC' | 'MULTI_WAVE'>('CLASSIC');
+  // (currentSantaCampaign moved to useSantaState hook — line 3630+)
   // Research survey deep-link state — populated from srvy_<inviteId> startParam.
   const [surveyInviteId, setSurveyInviteId] = useState<string | null>(null);
   // Join (from deep link)
-  const [santaJoinToken, setSantaJoinToken] = useState<string | null>(null);
-  const [santaJoinPreview, setSantaJoinPreview] = useState<SantaJoinPreview | null>(null);
-  const [santaJoinLoading, setSantaJoinLoading] = useState(false);
-  const [santaJoinDone, setSantaJoinDone] = useState(false);
   // Link wishlist to campaign
-  const [showSantaWishlistPicker, setShowSantaWishlistPicker] = useState(false);
-  const [santaWishlistPickerLoading, setSantaWishlistPickerLoading] = useState(false);
   // P0: campaign id to return to after creating a new wishlist from Santa flow
-  const [santaWishlistPickerReturnId, setSantaWishlistPickerReturnId] = useState<string | null>(null);
   // Receiver's wishlist (giver view — role-aware, no receiver userId)
-  const [santaReceiverWishlist, setSantaReceiverWishlist] = useState<{
-    role: 'giver'; giftStatus: string; giftNote: string | null;
-    receiver: { displayName: string; avatarUrl: string | null };
-    wishlist: { title: string } | null;
-    items: { id: string; title: string; url: string | null; priceText: string | null; currency: string; priority: number; imageUrl: string | null; status: string; reservedByMe: boolean }[];
-    myReservations: { id: string; title: string }[];
-  } | null>(null);
-  const [santaReceiverWishlistLoading, setSantaReceiverWishlistLoading] = useState(false);
-  const [santaWishlistReservingId, setSantaWishlistReservingId] = useState<string | null>(null);
-  const [santaSwitchModalOpen, setSantaSwitchModalOpen] = useState(false);
   // Receiver inbound status (no giver identity) — Batch 3: uses semantic signal, not raw giftStatus
-  const [santaInboundStatus, setSantaInboundStatus] = useState<{
-    hasGiver: boolean;
-    signal: 'waiting' | 'in_progress' | 'ready' | 'received';
-    canConfirmReceived: boolean;
-    canReveal: boolean;
-    revealedAt: string | null;
-  } | null>(null);
-  const [santaInboundLoading, setSantaInboundLoading] = useState(false);
   // Draw state
-  const [santaDrawLoading, setSantaDrawLoading] = useState(false);
-  const [santaDrawValidation, setSantaDrawValidation] = useState<{
-    feasible: boolean; participantCount?: number;
-    reason?: string; problematicExclusions?: { userId1: string; name1: string; userId2: string; name2: string; groupLabel?: string | null }[];
-  } | null>(null);
-  const [santaDrawValidationLoading, setSantaDrawValidationLoading] = useState(false);
   // Reveal state — Batch 3: includes isFirstReveal, giftNote, revealedAt
-  const [santaReveal, setSantaReveal] = useState<{
-    revealed: boolean;
-    isFirstReveal?: boolean;
-    giver?: { displayName: string; avatarUrl: null; emoji: string; adjectiveKey: string; animalKey: string };
-    giftNote?: string | null;
-    revealedAt?: string;
-  } | null>(null);
-  const [santaRevealLoading, setSantaRevealLoading] = useState(false);
   // Hint state (Batch 2.5) — giver-side
-  const [santaHintRequest, setSantaHintRequest] = useState<{
-    id: string; status: string; requestedAt: string; expiresAt: string; fulfilledAt: string | null;
-    selectedItems: { id: string; title: string; priceText: string | null; url: string | null }[] | null;
-  } | null>(null);
-  const [santaHintRequestLoading, setSantaHintRequestLoading] = useState(false);
   // Hint state — receiver-side (inbound)
-  const [santaHintInbound, setSantaHintInbound] = useState<{
-    hasPendingHint: boolean; hint: { id: string; status: string; requestedAt: string; expiresAt: string } | null;
-  } | null>(null);
-  const [santaHintInboundLoading, setSantaHintInboundLoading] = useState(false);
-  const [santaHintPickerOpen, setSantaHintPickerOpen] = useState(false);
-  const [santaHintPickerItems, setSantaHintPickerItems] = useState<{ id: string; title: string; priceText: string | null }[]>([]);
-  const [santaHintPickerSelectedIds, setSantaHintPickerSelectedIds] = useState<string[]>([]);
-  const [santaHintFulfillLoading, setSantaHintFulfillLoading] = useState(false);
   // Chat state (Batch 4.1)
-  type ChatMessage = {
-    id: string;
-    messageType: 'USER' | 'SYSTEM';
-    body: string;
-    systemEvent: string | null;
-    payload: Record<string, string> | null;
-    sender: { displayName: string; avatarUrl: null; emoji: string | null; adjectiveKey: string | null; animalKey: string | null; isMe: boolean } | null;
-    createdAt: string;
-  };
-  const [santaChatMessages, setSantaChatMessages] = useState<ChatMessage[]>([]);
-  const [santaChatHasMore, setSantaChatHasMore] = useState(false);
-  const [santaChatLoading, setSantaChatLoading] = useState(false);
-  const [santaChatInput, setSantaChatInput] = useState('');
-  const [santaChatSending, setSantaChatSending] = useState(false);
-  const [santaChatIsMuted, setSantaChatIsMuted] = useState(false);
   // Per-message Idempotency-Key nonce for chat send. Minted on the first
   // attempt of a specific message; cleared on success so the next message
   // mints a fresh nonce. On transient failure (5xx, network) the nonce
   // stays so a retry hits the server's replay/in-progress branch instead
   // of double-posting.
-  const santaChatSendNonceRef = useRef<string>('');
   // Polls state (Batch 4.2)
-  type PollResult = { optionIndex: number; count: number; percentage: number; voters: { displayName: string; emoji: string | null }[] | null };
-  type Poll = {
-    id: string; question: string; options: string[]; isAnonymous: boolean;
-    createdAt: string; deadlineAt: string | null; closedAt: string | null;
-    isOpen: boolean; myVote: number | null; results: PollResult[];
-  };
-  const [santaPolls, setSantaPolls] = useState<Poll[]>([]);
-  const [santaPollsLoading, setSantaPollsLoading] = useState(false);
-  const [santaPollCreateOpen, setSantaPollCreateOpen] = useState(false);
-  const [santaPollCreateQuestion, setSantaPollCreateQuestion] = useState('');
-  const [santaPollCreateOptions, setSantaPollCreateOptions] = useState<string[]>(['', '']);
-  const [santaPollCreateAnonymous, setSantaPollCreateAnonymous] = useState(false);
-  const [santaPollCreateSubmitting, setSantaPollCreateSubmitting] = useState(false);
   // Batch 5.3: Organizer panel state
-  type OrganizerSummary = {
-    campaign: { status: string; currentRoundId: string | null; drawAt: string | null };
-    participants: Array<{
-      id: string; userId: string; status: string; role: string;
-      joinedAt: string; leftAt: string | null; displayName: string;
-      emoji: string | null; adjectiveKey: string | null; animalKey: string | null;
-      avatarUrl: null; hasLinkedWishlist: boolean;
-    }>;
-    giftProgress: {
-      pending: number; buying: number; selectedFromWishlist: number; selectedOutside: number;
-      declinedToSay: number; sent: number; received: number; missedDeadline: number; orphaned: number;
-    } | null;
-    pendingExitRequests: Array<{
-      id: string; participantId: string; userId: string; displayName: string;
-      emoji: string | null; adjectiveKey: string | null; animalKey: string | null;
-      avatarUrl: null; reason: string | null; createdAt: string;
-    }>;
-  };
-  const [santaOrganizerSummary, setSantaOrganizerSummary] = useState<OrganizerSummary | null>(null);
-  const [santaOrganizerLoading, setSantaOrganizerLoading] = useState(false);
   // Exit request state
-  const [santaExitRequestSheetOpen, setSantaExitRequestSheetOpen] = useState(false);
-  const [santaExitRequestReason, setSantaExitRequestReason] = useState('');
-  const [santaExitRequestSubmitting, setSantaExitRequestSubmitting] = useState(false);
 
   // Exclusions state (Batch 5.1)
-  type ExclusionPair = { id: string; userId1: string; name1: string; userId2: string; name2: string };
-  type ExclusionGroup = { id: string; label: string; activeCount: number; members: { userId: string; displayName: string; emoji: string | null; adjectiveKey: string | null; animalKey: string | null; avatarUrl: null; isStale: boolean }[] };
-  const [santaExclPairs, setSantaExclPairs] = useState<ExclusionPair[]>([]);
-  const [santaExclGroups, setSantaExclGroups] = useState<ExclusionGroup[]>([]);
-  const [santaExclLoading, setSantaExclLoading] = useState(false);
-  const [santaExclAddPairOpen, setSantaExclAddPairOpen] = useState(false);
-  const [santaExclPairA, setSantaExclPairA] = useState('');
-  const [santaExclPairB, setSantaExclPairB] = useState('');
-  const [santaExclPairSaving, setSantaExclPairSaving] = useState(false);
-  const [santaExclGroupSheetOpen, setSantaExclGroupSheetOpen] = useState(false);
-  const [santaExclGroupLabel, setSantaExclGroupLabel] = useState('');
-  const [santaExclGroupSaving, setSantaExclGroupSaving] = useState(false);
-  const [santaExclAddMemberGroupId, setSantaExclAddMemberGroupId] = useState<string | null>(null);
-  const [santaExclAddMemberUserId, setSantaExclAddMemberUserId] = useState('');
-  const [santaExclAddMemberSaving, setSantaExclAddMemberSaving] = useState(false);
 
   // ── Wishes tab: counts for filter-chip labels + grouping ────────────────
   // Per v2-home-all-tabs.html: filter chips show per-priority counts
