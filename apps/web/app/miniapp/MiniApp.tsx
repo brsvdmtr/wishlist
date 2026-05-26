@@ -213,7 +213,7 @@ const ReferralRoot = dynamic(
 // TELEGRAM TYPES
 // ═══════════════════════════════════════════════════════
 
-type TgUser = { id: number; first_name: string; last_name?: string; username?: string; language_code?: string };
+export type TgUser = { id: number; first_name: string; last_name?: string; username?: string; language_code?: string };
 
 // ═══════════════════════════════════════════════════════
 // DESIGN SYSTEM (matches prototype exactly)
@@ -388,13 +388,13 @@ function formatRetryAfter(seconds: number, locale: Locale): string {
 // DATA TYPES
 // ═══════════════════════════════════════════════════════
 
-type WishlistVisibility = 'link_only' | 'public_profile' | 'private';
-type AllowSubscriptions = 'all' | 'nobody';
-type CommentPolicy = 'all' | 'subscribers';
+export type WishlistVisibility = 'link_only' | 'public_profile' | 'private';
+export type AllowSubscriptions = 'all' | 'nobody';
+export type CommentPolicy = 'all' | 'subscribers';
 
-type DontGiftMode = 'global' | 'local' | 'hidden';
+export type DontGiftMode = 'global' | 'local' | 'hidden';
 
-type Wishlist = {
+export type Wishlist = {
   id: string;
   slug: string;
   title: string;
@@ -430,7 +430,7 @@ function getWritableTargets(
   );
 }
 
-type PlanInfo = {
+export type PlanInfo = {
   code: 'FREE' | 'PRO';
   wishlists: number;
   items: number;
@@ -451,8 +451,8 @@ function categoryLimitFor(planCode: PlanInfo['code']): number {
   return planCode === 'PRO' ? PRO_CATEGORY_LIMIT : FREE_CATEGORY_LIMIT;
 }
 
-type BillingPeriod = 'monthly' | 'yearly' | 'lifetime';
-type SubscriptionInfo = {
+export type BillingPeriod = 'monthly' | 'yearly' | 'lifetime';
+export type SubscriptionInfo = {
   id: string;
   status: 'ACTIVE' | 'CANCELLED' | 'EXPIRED';
   periodEnd: string;
@@ -481,7 +481,7 @@ type CreditsInfo = { hintCredits: number; importCredits: number; freeImportsUsed
 const HINT_QUOTA_FALLBACK = 3;
 
 // SKU descriptor from server
-type SkuInfo = { code: string; price: number; type: string; targetRequired: boolean };
+export type SkuInfo = { code: string; price: number; type: string; targetRequired: boolean };
 
 const DONT_GIFT_PRESETS = [
   'sweets', 'flowers', 'perfume', 'cosmetics', 'jewelry', 'clothes',
@@ -493,7 +493,7 @@ const DONT_GIFT_PRESET_EMOJIS: Record<string, string> = {
   gift_cards: '🎫', tech: '📱', candles: '🕯', food: '🍕',
 };
 
-type UpsellContext =
+export type UpsellContext =
   | 'comments' | 'url_import' | 'hints'
   | 'wishlist_limit' | 'item_limit' | 'participant_limit' | 'subscription_limit'
   | 'sort_recommended'
@@ -513,9 +513,9 @@ type UpsellContext =
   | 'santa_exclusion_groups'; // Secret Santa: named exclusion groups — 402 from POST /tg/santa/campaigns/:id/exclusions/groups
 
 // UpsellSheetState carries optional wishlistId for wishlist-scoped add-on offers
-type UpsellSheetState = { context: UpsellContext; wishlistId?: string } | null;
+export type UpsellSheetState = { context: UpsellContext; wishlistId?: string } | null;
 
-type WishlistCategory = {
+export type WishlistCategory = {
   id: string;
   name: string;
   sortOrder: number;
@@ -884,7 +884,7 @@ type GodStats = {
   generatedAt: string;
 };
 
-type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'changelog' | 'legal' | 'legal-doc' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-manual' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall' | 'gift-notes-onboarding' | 'search'
+export type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'changelog' | 'legal' | 'legal-doc' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-manual' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall' | 'gift-notes-onboarding' | 'search'
 | 'first-share-prompt'
 | 'group-gift-paywall' | 'group-gift-create' | 'group-gift-detail' | 'group-gift-join' | 'group-gift-chat'
 | 'curated-view'
@@ -896,7 +896,7 @@ type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-d
 | 'referral' | 'referral-history'
 | 'calendar'
 | 'research-survey';
-type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' | 'warning' };
+export type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' | 'warning' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
   const data = new TextEncoder().encode(`tg_actor:${telegramId}`);
