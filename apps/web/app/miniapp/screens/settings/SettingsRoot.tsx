@@ -42,6 +42,7 @@ import { UserAvatar } from '../../components/UserAvatar';
 import { resolveOwnerName } from '../../lib/wishlist-utils';
 import type { ComponentType, Dispatch, SetStateAction } from 'react';
 import type { PlanInfo, TgUser } from '../../MiniApp';
+import type { SettingsState } from '../../hooks/useSettingsState';
 import type {
   LegacyColorBag, PushToast, SetScreen, SetUpsellSheet,
   ShowUpsell, TgFetch, TrackEvent,
@@ -51,16 +52,18 @@ import type {
  * SettingsRootCtx — closure refs forwarded from MiniAppInner.
  *
  * The Settings screen reads many disparate pieces of state owned by sibling
- * features (profile, birthday, link mgmt, etc.). Rather than create a
- * settings-specific state hook that would just re-forward the same names,
- * we pass them straight through. Helpers now carry real signatures from
- * `_shared/closure-types`; state shapes that are inline-anonymous in
- * MiniApp.tsx (profileData / birthdaySettings / settingsData / etc.)
- * stay loose with `any` — pinning them would require extracting those
- * anonymous useState types into named exports, which is its own refactor.
+ * features (profile, birthday, link mgmt, etc.). The settings-cluster state
+ * itself (settingsData / settingsLoading / cardDisplayMode) is now sourced
+ * from `useSettingsState` (F7) — its shape is intersected in via
+ * `SettingsState`, so the setters carry their inferred
+ * `Dispatch<SetStateAction<T>>` signatures. Helpers carry real signatures
+ * from `_shared/closure-types`; state shapes that are inline-anonymous in
+ * MiniApp.tsx (profileData / birthdaySettings / etc.) stay loose with
+ * `any` — pinning them would require extracting those anonymous useState
+ * types into named exports, which is its own refactor.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-export type SettingsRootCtx = {
+export type SettingsRootCtx = SettingsState & {
   // module-level constants forwarded from MiniApp.tsx
   C: LegacyColorBag;
   font: string;
@@ -84,8 +87,6 @@ export type SettingsRootCtx = {
   // Anonymous inline-useState shapes in MiniApp.tsx — kept as `any`
   // pending a future extraction of these state cells into named types.
   profileData: any;
-  settingsData: any;
-  settingsLoading: boolean;
   godMode: boolean;
   showLocaleDebug: boolean;
   santaSeason: any;
@@ -93,8 +94,6 @@ export type SettingsRootCtx = {
   linkMgmtData: any;
   dontGiftData: any;
   planInfo: PlanInfo;
-  cardDisplayMode: string;
-  setCardDisplayMode: Dispatch<SetStateAction<string>>;
   birthdaySettings: any;
   birthdaySettingsLoading: boolean;
   setBirthdaySettings: Dispatch<SetStateAction<any>>;

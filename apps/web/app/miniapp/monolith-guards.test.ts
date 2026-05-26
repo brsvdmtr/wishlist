@@ -236,6 +236,13 @@ describe('MiniApp.tsx — F3 cluster-state hook drift guard', () => {
       hook: 'useGuestViewState',
       drift: ['guestWl', 'guestItems', 'guestBudgetMax', 'guestSort', 'guestFilterOpen', 'draftBudget'],
     },
+    // F7 — extracted from MiniApp.tsx after the matching Root file already
+    // existed. Hook returns the same inline names; MiniApp.tsx destructures
+    // once and forwards via the Root's ctx (intersected with `SettingsState`).
+    {
+      hook: 'useSettingsState',
+      drift: ['settingsData', 'settingsLoading', 'cardDisplayMode'],
+    },
   ] as const;
 
   for (const { hook, drift } of F3_HOOKS) {

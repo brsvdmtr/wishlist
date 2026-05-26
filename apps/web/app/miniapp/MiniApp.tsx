@@ -93,6 +93,7 @@ import { useGiftNotesState } from './hooks/useGiftNotesState';
 import { useGroupGiftState } from './hooks/useGroupGiftState';
 import { useGuestViewState } from './hooks/useGuestViewState';
 import { useSantaState } from './hooks/useSantaState';
+import { useSettingsState } from './hooks/useSettingsState';
 import { useShowcaseState } from './hooks/useShowcaseState';
 import type {
   ChatMessage, Poll, PollResult, OrganizerSummary,
@@ -100,6 +101,7 @@ import type {
 } from './hooks/useSantaState';
 import type { ShowcaseData } from './hooks/useShowcaseState';
 import type { GroupGiftData } from './hooks/useGroupGiftState';
+import type { SettingsData } from './hooks/useSettingsState';
 
 // ═══════════════════════════════════════════════════════
 // LAZY SCREENS (F1 — REFACTOR_MINIAPP_TSX_PLAN)
@@ -3462,7 +3464,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [planInfo, setPlanInfo] = useState<PlanInfo>({
     code: 'FREE', wishlists: 2, items: 20, subscriptions: 2, participants: 10, features: [],
   });
-  const [cardDisplayMode, setCardDisplayMode] = useState<string>('auto');
+  // Settings cluster state — extracted to useSettingsState (F7). The hook
+  // returns the SAME names that lived inline (cardDisplayMode lives up here
+  // among the owner-state block because my-wishlists card rendering reads
+  // it too; settingsData/settingsLoading are declared below near the other
+  // settings code). One source of truth: MiniApp.tsx + SettingsRoot both
+  // destructure via the same hook so they reference the same React cells.
+  const settingsState = useSettingsState();
+  const { cardDisplayMode, setCardDisplayMode } = settingsState;
   const [subscription, setSubscription] = useState<SubscriptionInfo>(null);
   const [proSource, setProSource] = useState<string | null>(null);
   const [promoPro, setPromoPro] = useState<{ id: string; expiresAt: string | null; campaignCode: string } | null>(null);
@@ -3932,22 +3941,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [showAvatarSheet, setShowAvatarSheet] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
 
-  // Settings state
-  type SettingsData = {
-    // Language — resolveEffectiveLocale model
-    languageMode: 'auto' | 'manual';
-    manualLanguage: Locale | null;
-    effectiveLanguage: Locale;
-    defaultCurrency: 'RUB' | 'USD';
-    notifications: { comments: boolean; reservations: boolean; subscriptions: boolean; marketing: boolean };
-    privacy: { profileVisibility: string; subscribePolicy: string; commentsEnabled: boolean; hintsEnabled: boolean };
-    appBehavior: { newWishlistPosition: string; cardDisplayMode?: string };
-    appearance?: { theme: 'dark' | 'black'; accent: 'violet' | 'blue' | 'pink' | 'green' };
-    isPro: boolean;
-    supportId?: string | null;
-  };
-  const [settingsData, setSettingsData] = useState<SettingsData | null>(null);
-  const [settingsLoading, setSettingsLoading] = useState(false);
+  // Settings state — the remaining settings cells (settingsData / loading)
+  // come from useSettingsState (called above near cardDisplayMode).
+  // SettingsData type now lives in `./hooks/useSettingsState.ts` and is
+  // re-imported at the top of this file so callers can still annotate.
+  const { settingsData, setSettingsData, settingsLoading, setSettingsLoading } = settingsState;
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
 
   // v2.1 — bridge ThemeProvider context to backend persistence.
@@ -11694,11 +11692,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     showcaseCoverInputRef,
   };
 
-  // F4 Wave D-1 — context bag forwarded to the lazy-loaded SettingsRoot.
+  // F4 Wave D-1 / F7 — context bag forwarded to the lazy-loaded SettingsRoot.
   // Settings is a CONSUMER of sibling-cluster state (planInfo, profile,
-  // birthday, link mgmt, theme, gift-notes access) — no dedicated state
-  // hook. Loose-typed; tightening is a follow-up.
+  // birthday, link mgmt, theme, gift-notes access) — but the small bit of
+  // state it OWNS (settingsData / settingsLoading / cardDisplayMode +
+  // setters) is sourced from `useSettingsState` (F7) and spread in via
+  // `...settingsState`, so SettingsRoot's `ctx: SettingsState & {...}`
+  // intersection picks up the precise inferred setter signatures.
   const settingsRootCtx = {
+    // settings-cluster state from useSettingsState (same names)
+    ...settingsState,
     // module-level constants we re-use inside settings JSX
     C, font, locale, CARD_REDESIGN_ENABLED, LATEST_RELEASE_ID,
     // helpers + setters from MiniAppInner closure
@@ -11706,10 +11709,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     tgFetch, setScreen, pushToast, showUpsell, setUpsellSheet, trackEvent,
     normalizeLocale,
     scrollContainerRef, tgUser, tgRef, tgLangCodeRef,
-    profileData, settingsData, settingsLoading,
+    profileData,
     godMode, showLocaleDebug, santaSeason, hasNewInSettings,
     linkMgmtData, dontGiftData, planInfo,
-    cardDisplayMode, setCardDisplayMode,
     birthdaySettings, birthdaySettingsLoading,
     setBirthdaySettings, setBirthdaySettingsLoading,
     setBirthdayMutedList,
