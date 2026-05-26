@@ -30,20 +30,10 @@ import React from 'react';
 import { Button, Card } from '@wishlist/ui';
 import { t, type Locale } from '@wishlist/shared';
 import type { ShowcaseState, ShowcaseData } from '../../hooks/useShowcaseState';
-
-/**
- * Concrete shape of the legacy `C` token bag forwarded from MiniApp.tsx.
- * Locked down (vs `Record<string, string>`) so `noUncheckedIndexedAccess`
- * doesn't infer `string | undefined` for every `C.accent` / `C.bg` read.
- */
-type LegacyColorBag = {
-  bg: string; surface: string; surfaceHover: string; card: string;
-  accent: string; accentSoft: string; accentGlow: string;
-  green: string; greenSoft: string; orange: string; orangeSoft: string;
-  red: string; redSoft: string;
-  text: string; textSec: string; textMuted: string;
-  border: string; borderLight: string;
-};
+import type {
+  LegacyColorBag, NavBack, PushToast, SetScreen,
+  ShowUpsell, TgFetch, TrackEvent,
+} from '../../_shared/closure-types';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export type ShowcaseRootCtx = ShowcaseState & {
@@ -52,20 +42,41 @@ export type ShowcaseRootCtx = ShowcaseState & {
   font: string;
   locale: Locale;
   DONT_GIFT_PRESET_EMOJIS: Record<string, string>;
-  // helpers + setters from MiniAppInner closure
-  tgFetch: any;
-  setScreen: any;
-  navBack: any;
-  pushToast: any;
-  trackEvent: any;
-  showUpsell: any;
-  // showcase-domain helpers (defined in MiniAppInner — useCallback)
-  saveShowcase: any;
-  uploadShowcaseCover: any;
-  removeShowcaseCover: any;
-  openDontGiftEdit: any;
-  buildTgDeepLink: any;
-  // misc shared state read by Showcase
+  // helpers from MiniAppInner closure — real signatures from
+  // `_shared/closure-types`.
+  tgFetch: TgFetch;
+  setScreen: SetScreen;
+  navBack: NavBack;
+  pushToast: PushToast;
+  trackEvent: TrackEvent;
+  showUpsell: ShowUpsell;
+  // showcase-domain helpers (defined in MiniAppInner — useCallback).
+  // Patch type mirrors the inline `Partial<{...}>` argument of the
+  // canonical `saveShowcase` definition in MiniApp.tsx.
+  saveShowcase: (
+    patch: Partial<{
+      enabled: boolean;
+      bio: string | null;
+      pinnedIds: string[];
+      preferences: string | null;
+      sizeClothing: string | null;
+      sizeShoes: string | null;
+      sizeRing: string | null;
+      sizeOther: string | null;
+      chest: string | null;
+      waist: string | null;
+      hips: string | null;
+      brands: string[];
+    }>,
+    opts?: { publish?: boolean; silent?: boolean },
+  ) => Promise<boolean>;
+  uploadShowcaseCover: (file: File) => Promise<void>;
+  removeShowcaseCover: () => Promise<void>;
+  openDontGiftEdit: () => Promise<void>;
+  buildTgDeepLink: (payload?: string) => string | null;
+  // misc shared state read by Showcase. profileData / dontGiftData stay
+  // loose because their owning useStates are inline anonymous shapes
+  // in MiniApp.tsx; promoting those is a deeper refactor.
   scrollContainerRef: { current: HTMLDivElement | null };
   dontGiftData: any;
   profileData: any;
