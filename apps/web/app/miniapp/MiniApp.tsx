@@ -56,6 +56,19 @@ import {
   resolveCardMode,
   resolveOwnerName,
 } from './lib/wishlist-utils';
+import {
+  GUEST_BUDGET_PRESETS,
+  HINT_QUOTA_FALLBACK,
+  PRO_PRICE_MONTHLY_STARS,
+  PRO_PRICE_YEARLY_STARS,
+  PRO_PRICE_LIFETIME_STARS,
+  CARD_REDESIGN_ENABLED,
+  ITEM_DETAIL_REDESIGN_ALL,
+  PROFILE_REDESIGN_IDS,
+  DONT_GIFT_PRESETS,
+  DONT_GIFT_PRESET_EMOJIS,
+  SERVICE_START_PARAMS,
+} from './lib/miniapp-constants';
 import { parsePaywallError, paywallContextFromError } from './lib/paywall';
 import { resolveReservePrefill, MAX_DISPLAY_NAME_LEN, type ReservePrefillSource } from './lib/reservePrefill';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
@@ -308,7 +321,7 @@ const font = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', s
 
 // EMOJIS / getEmoji / extractFirstEmoji extracted to ./lib/emoji — see Phase 5b.
 
-const GUEST_BUDGET_PRESETS = [3000, 5000, 10000, 25000] as const;
+// GUEST_BUDGET_PRESETS extracted to ./lib/miniapp-constants (F5).
 
 const getGuestBudgetPresets = (locale: Locale) => [
   { label: t('filter_all', locale), max: null },
@@ -328,17 +341,8 @@ export type GuestSort = 'default' | 'price_asc' | 'price_desc' | 'priority_desc'
 // PRIO_EMOJI / PRIO_COLOR / PRIO_BG / PRIO_GRADIENT / PRIO_GLOW / prioEmoji
 // extracted to ./lib/priority (F5).
 
-// Card redesign — rolled out to all users
-const CARD_REDESIGN_ENABLED = true;
-// PRO pricing — kept in sync with apps/api env defaults (PRO_PRICE_XTR, PRO_YEARLY_PRICE_XTR).
-// If ops bump the backend env vars, update these too.
-const PRO_PRICE_MONTHLY_STARS = 100;
-const PRO_PRICE_YEARLY_STARS = 800;
-const PRO_PRICE_LIFETIME_STARS = 2490;
-// Profile redesign canary — test before full rollout
-const PROFILE_REDESIGN_IDS = new Set(['8747175307']);
-// Item detail redesign — rolled out to all users
-const ITEM_DETAIL_REDESIGN_ALL = true;
+// CARD_REDESIGN_ENABLED / PRO_PRICE_* / PROFILE_REDESIGN_IDS /
+// ITEM_DETAIL_REDESIGN_ALL extracted to ./lib/miniapp-constants (F5).
 
 const getPriorities = (locale: Locale) => [
   { value: 1, emoji: PRIO_EMOJI[1], label: t('priority_low', locale),    sub: t('priority_low_sub', locale) },
@@ -431,24 +435,12 @@ type AddOnsInfo = {
   smartReservationsWishlists?: string[];
 };
 type CreditsInfo = { hintCredits: number; importCredits: number; freeImportsUsed?: number; freeImportsLimit?: number; freeHintsUsed?: number; freeHintsLimit?: number };
-// Pre-bootstrap fallback for credits.freeHintsLimit. The server always sends
-// the real, env-tunable limit (FREE_HINT_QUOTA_PER_MONTH, default 3) in the
-// entitlements payload; this constant only applies in the sub-second window
-// before the first bootstrap resolves. Keep it in sync with that server default.
-const HINT_QUOTA_FALLBACK = 3;
+// HINT_QUOTA_FALLBACK extracted to ./lib/miniapp-constants (F5).
 
 // SKU descriptor from server
 export type SkuInfo = { code: string; price: number; type: string; targetRequired: boolean };
 
-const DONT_GIFT_PRESETS = [
-  'sweets', 'flowers', 'perfume', 'cosmetics', 'jewelry', 'clothes',
-  'shoes', 'souvenirs', 'soft_toys', 'alcohol', 'gift_cards', 'tech', 'candles', 'food',
-] as const;
-const DONT_GIFT_PRESET_EMOJIS: Record<string, string> = {
-  sweets: '🍬', flowers: '💐', perfume: '🧴', cosmetics: '💄', jewelry: '💍',
-  clothes: '👔', shoes: '👟', souvenirs: '🏺', soft_toys: '🧸', alcohol: '🍷',
-  gift_cards: '🎫', tech: '📱', candles: '🕯', food: '🍕',
-};
+// DONT_GIFT_PRESETS / DONT_GIFT_PRESET_EMOJIS extracted to ./lib/miniapp-constants (F5).
 
 export type UpsellContext =
   | 'comments' | 'url_import' | 'hints'
@@ -3030,20 +3022,7 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
 // MAIN APP
 // ═══════════════════════════════════════════════════════
 
-// ─── Service startapp payloads ─────────────────────────────────────────────
-// These are internal commands passed via ?startapp= that should NOT be treated
-// as public share tokens or wishlist slugs. They route to authenticated flows.
-const SERVICE_START_PARAMS = new Set([
-  'create_wishlist',
-  'add_first_wish',
-  'add_more_wishes',
-  'add_first_wish_promo',
-  'add_more_wishes_promo',
-  'add_item',
-  'open_drafts',
-  'open_profile',
-  'upgrade_pro',
-]);
+// SERVICE_START_PARAMS extracted to ./lib/miniapp-constants (F5).
 
 class MiniAppErrorBoundary extends React.Component<
   { children: React.ReactNode },
