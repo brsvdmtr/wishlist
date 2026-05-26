@@ -92,6 +92,7 @@ import { LATEST_RELEASE_ID } from './screens/data/release-notes-latest';
 import { useGiftNotesState } from './hooks/useGiftNotesState';
 import { useGroupGiftState } from './hooks/useGroupGiftState';
 import { useGuestViewState } from './hooks/useGuestViewState';
+import { usePublicProfileState } from './hooks/usePublicProfileState';
 import { useSantaState } from './hooks/useSantaState';
 import { useSettingsState } from './hooks/useSettingsState';
 import { useShowcaseState } from './hooks/useShowcaseState';
@@ -3790,27 +3791,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // edit, only when birthdayFriendReminders === false AND optInPromptSeenAt === null.
   const [birthdayOptInOpen, setBirthdayOptInOpen] = useState(false);
 
-  // Public profile view state
-  const [publicProfileUsername, setPublicProfileUsername] = useState<string | null>(null);
-  const [publicProfileData, setPublicProfileData] = useState<{
-    profile: { displayName: string | null; username: string | null; bio: string | null; avatarUrl: string | null; avatarThumbUrl: string | null; isPublic: boolean };
-    wishlists: { id: string; slug: string; title: string; deadline: string | null; itemCount: number; reservedCount: number }[];
-    showcase: null | {
-      coverUrl: string | null;
-      bio: string | null;
-      pinned: { id: string; slug: string; title: string; itemCount: number; reservedCount: number }[];
-      preferences: string | null;
-      sizes: {
-        clothing: string | null; shoes: string | null; ring: string | null; other: string | null;
-        chest: string | null; waist: string | null; hips: string | null;
-      };
-      brands: string[];
-      antiGift: { presets: string[]; customItems: string[]; comment: string | null } | null;
-      updatedAt: string | null;
-    };
-  } | null>(null);
-  const [publicProfileLoading, setPublicProfileLoading] = useState(false);
-  const [publicProfileError, setPublicProfileError] = useState<string | null>(null);
+  // Public profile view state — extracted to usePublicProfileState (F7).
+  // Hook returns the SAME inline names; subscribe-CTA flags live just below
+  // alongside profileSubs (semantic neighbour) — both pulled from the same
+  // `publicProfileState` instance so React state stays unified.
+  const publicProfileState = usePublicProfileState();
+  const {
+    publicProfileUsername, setPublicProfileUsername,
+    publicProfileData, setPublicProfileData,
+    publicProfileLoading, setPublicProfileLoading,
+    publicProfileError, setPublicProfileError,
+  } = publicProfileState;
   // ── Referral program state ────────────────────────────────────────────────
   // Matches GET /tg/referral/me response shape (apps/api/src/index.ts).
   type ReferralMe = {
@@ -4275,9 +4266,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // Profile subscriptions — "follow another user's showcase" (separate from wishlist subs)
   const [profileSubs, setProfileSubs] = useState<SubscribedProfile[]>([]);
   const [profileSubsLoading, setProfileSubsLoading] = useState(false);
-  // Subscribe CTA state on the public-profile screen
-  const [publicProfileSubscribed, setPublicProfileSubscribed] = useState(false);
-  const [publicProfileSubInFlight, setPublicProfileSubInFlight] = useState(false);
+  // Subscribe CTA state on the public-profile screen — sourced from the
+  // same usePublicProfileState() instance declared above; keep them
+  // semantically grouped with profileSubs while still pointing at the
+  // hook's React cells.
+  const {
+    publicProfileSubscribed, setPublicProfileSubscribed,
+    publicProfileSubInFlight, setPublicProfileSubInFlight,
+  } = publicProfileState;
   // guestViewReturnToProfileUsername, guest{BudgetMax,CustomBudget,
   // PriorityFilter,Sort,FilterOpen} + draft{Budget,CustomBudget,
   // Priorities} now owned by useGuestViewState (F4 Wave E) — see
@@ -11599,20 +11595,20 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     openReferralScreen, referralRulesConfig, ReferralProfileTileFromConfig,
   };
 
-  // F4 Wave A++ — context bag forwarded to the lazy-loaded
-  // PublicProfileRoot. Public-profile is a CONSUMER of state owned by
-  // MiniAppInner (publicProfile* state, birthday context, profile data)
-  // plus shared helpers (subscribeToProfile / unsubscribeFromProfile /
-  // loadGuestWishlist / trackBirthdayAttributedEvent). Loose-typed for
-  // now; tightening is a follow-up.
+  // F4 Wave A++ / F7 — context bag forwarded to the lazy-loaded
+  // PublicProfileRoot. Public-profile owns 6 state cells now sourced from
+  // `usePublicProfileState` (F7) and spread in via `...publicProfileState`
+  // so PublicProfileRoot's `ctx: PublicProfileState & {...}` intersection
+  // picks up the precise inferred setter signatures. The rest are
+  // sibling-owned helpers / shared state (birthday context, profileData,
+  // subscribe helpers).
   const publicProfileRootCtx = {
+    // public-profile state from usePublicProfileState (same names)
+    ...publicProfileState,
     // module-level constants we re-use inside public-profile JSX
     C, font, locale, DONT_GIFT_PRESET_EMOJIS,
     // helpers + setters from MiniAppInner closure
     setScreen,
-    // public-profile state (forwarded — same names, no rename)
-    publicProfileData, publicProfileLoading, publicProfileError,
-    publicProfileUsername, publicProfileSubscribed, publicProfileSubInFlight,
     subscribeToProfile, unsubscribeFromProfile,
     // shared misc state read by this screen
     profileData, birthdayContext, setBirthdayContext,

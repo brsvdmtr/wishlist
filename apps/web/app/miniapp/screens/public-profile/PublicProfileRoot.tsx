@@ -31,9 +31,10 @@
 import React from 'react';
 import { Banner, Card, Chip } from '@wishlist/ui';
 import { t, type Locale } from '@wishlist/shared';
+import type { PublicProfileState } from '../../hooks/usePublicProfileState';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-export type PublicProfileRootCtx = {
+export type PublicProfileRootCtx = PublicProfileState & {
   // module-level constants forwarded from MiniApp.tsx
   C: Record<string, string>;
   font: string;
@@ -41,13 +42,6 @@ export type PublicProfileRootCtx = {
   DONT_GIFT_PRESET_EMOJIS: Record<string, string>;
   // helpers + setters from MiniAppInner closure
   setScreen: any;
-  // public-profile state (owned in MiniApp.tsx; forwarded as-is)
-  publicProfileData: any;
-  publicProfileLoading: boolean;
-  publicProfileError: string | null;
-  publicProfileUsername: string | null;
-  publicProfileSubscribed: boolean;
-  publicProfileSubInFlight: boolean;
   subscribeToProfile: (username: string) => Promise<void> | void;
   unsubscribeFromProfile: (username: string) => Promise<void> | void;
   // shared misc state read by this screen
