@@ -501,6 +501,265 @@ export type Item = {
 };
 
 export type GuestItem = Item & { reservedByDisplayName: string | null; reservedByActorHash: string | null };
+
+// ── Cluster-Root DTOs ─────────────────────────────────────────────────────
+// The types below mirror the shape of `useState<{...}>` cells in MiniAppInner.
+// They live at module scope (and are `export`-ed) so the lazy-loaded cluster
+// Root files (`ProfileRoot`, `SettingsRoot`, `ShowcaseRoot`, `GroupGiftRoot`,
+// `PublicProfileRoot`, `ReferralRoot`) can type their `ctx` bags without
+// resorting to `any`. Any change here MUST also be made on the matching
+// `useState<…>` initialiser inside `MiniAppInner` (search for the named
+// useState in `MiniApp.tsx`).
+
+/** Profile data — GET /tg/profile (and PATCH /tg/profile) response shape. */
+export type ProfileData = {
+  displayName: string | null;
+  username: string | null;
+  bio: string | null;
+  avatarUrl: string | null;
+  avatarThumbUrl: string | null;
+  avatarUpdatedAt: string | null;
+  avatarPublic: boolean;
+  birthday: string | null;
+  hideYear: boolean;
+  defaultCurrency: 'RUB' | 'USD';
+};
+
+/** Profile screen aggregate stats — GET /tg/profile/stats response shape. */
+export type ProfileStats = {
+  wishlists: number; wishlistsLimit: number;
+  totalWishes: number; wishesLimit: number;
+  reservedByMe: number; archived: number;
+};
+
+/** Settings cluster data — GET /tg/settings (and PATCH /tg/settings) shape. */
+export type SettingsData = {
+  // Language — resolveEffectiveLocale model
+  languageMode: 'auto' | 'manual';
+  manualLanguage: Locale | null;
+  effectiveLanguage: Locale;
+  defaultCurrency: 'RUB' | 'USD';
+  notifications: { comments: boolean; reservations: boolean; subscriptions: boolean; marketing: boolean };
+  privacy: { profileVisibility: string; subscribePolicy: string; commentsEnabled: boolean; hintsEnabled: boolean };
+  appBehavior: { newWishlistPosition: string; cardDisplayMode?: string };
+  appearance?: { theme: 'dark' | 'black'; accent: 'violet' | 'blue' | 'pink' | 'green' };
+  isPro: boolean;
+  supportId?: string | null;
+};
+
+/** Santa season metadata — GET /tg/santa/season response shape. */
+export type SantaSeason = {
+  inSeason: boolean; canCreate: boolean;
+  seasonStart: string | null; seasonEnd: string | null; testMode: boolean;
+};
+
+/** Don't-Gift list — GET /tg/dont-gift (and PATCH) shape (global scope). */
+export type DontGiftData = { presets: string[]; customItems: string[]; comment: string | null; visible: boolean };
+
+/** Link-management aggregate — GET /tg/link-mgmt response shape. */
+export type LinkMgmtSelection = {
+  id: string; shareToken: string; title: string;
+  viewCount: number; subscriberCount: number; itemCount: number;
+  expiresAt: string; createdAt: string;
+};
+export type LinkMgmtWishlist = {
+  id: string; slug: string; title: string; shareToken: string; viewCount: number;
+};
+export type LinkMgmtProfile = { username: string; profileVisibility: string };
+export type LinkMgmtData = {
+  selections: LinkMgmtSelection[];
+  wishlists: LinkMgmtWishlist[];
+  profile: LinkMgmtProfile | null;
+};
+
+/** Birthday-reminders settings — GET /tg/me/birthday-settings shape. */
+export type BirthdaySettings = {
+  isPro: boolean;
+  birthday: string | null;
+  hideYear: boolean;
+  profileVisibility: string;
+  optInPromptSeenAt: string | null;
+  friendReminders: {
+    enabled: boolean;
+    audience: string;
+    advancedWindowsEnabled: boolean;
+    primaryWishlist: { id: string; slug: string; title: string } | null;
+    primaryWishlistId: string | null;
+    customMessage: string | null;
+  };
+  ownerReminders: { enabled: boolean };
+  receiving: { enabled: boolean; mutedCount: number };
+};
+
+/** Single muted user row — GET /tg/me/birthday-muted shape. */
+export type BirthdayMutedUser = {
+  userId: string;
+  displayName: string | null;
+  username: string | null;
+  avatarThumbUrl: string | null;
+  mutedAt: string;
+};
+
+/** Birthday deep-link context — GET /tg/birthday-reminders/resolve shape. */
+export type BirthdayContext = {
+  deliveryId: string;
+  reminderKind: string;
+  targetType: string | null;
+  targetId: string | null;
+  targetUnavailable: boolean;
+  isOwner: boolean;
+  birthdayUser: {
+    userId: string;
+    displayName: string | null;
+    username: string | null;
+    avatarThumbUrl: string | null;
+    hideYear: boolean;
+    customMessage: string | null;
+  };
+  daysUntil: number | null;
+  bannerDismissed: boolean;
+};
+
+/** Public-profile aggregate — GET /tg/public/profile/:username shape. */
+export type PublicProfileData = {
+  profile: {
+    displayName: string | null;
+    username: string | null;
+    bio: string | null;
+    avatarUrl: string | null;
+    avatarThumbUrl: string | null;
+    isPublic: boolean;
+  };
+  wishlists: {
+    id: string; slug: string; title: string;
+    deadline: string | null; itemCount: number; reservedCount: number;
+  }[];
+  showcase: null | {
+    coverUrl: string | null;
+    bio: string | null;
+    pinned: { id: string; slug: string; title: string; itemCount: number; reservedCount: number }[];
+    preferences: string | null;
+    sizes: {
+      clothing: string | null; shoes: string | null; ring: string | null; other: string | null;
+      chest: string | null; waist: string | null; hips: string | null;
+    };
+    brands: string[];
+    antiGift: { presets: string[]; customItems: string[]; comment: string | null } | null;
+    updatedAt: string | null;
+  };
+};
+
+/** Retention dashboard — god-mode GET /tg/me/retention-stats shape. */
+export type RetentionStats = {
+  period: { days: number; from: string; to: string };
+  overview: {
+    sent: number; delivered: number; uniqueUsers: number;
+    returned24h: number; returned72h: number; returned7d: number;
+    targetCompleted7d: number;
+    returnRate72h: string; targetRate7d: string;
+    promoAssigned: number; promoDelivered: number; promoRedeemed: number;
+    activeGrants: number; expiredGrants: number;
+  };
+  wavePolicy: { S1: number; S2: number; S3: number; S4: number };
+  bySegment: Array<{
+    segment: string;
+    targetAction: string;
+    deepLink: string | null;
+    maxWaves: number;
+    promoPolicy: string;
+    sent: number; delivered: number;
+    returned72h: number; targetCompleted7d: number;
+    returnRate72h: string; targetRate7d: string;
+    promoAssigned: number; promoDelivered: number; promoRedeemed: number;
+    promoTargetCompleted: number; promoTargetRate: string;
+    nonPromoTargetCompleted: number; nonPromoTargetRate: string;
+  }>;
+  byTouch: Array<{
+    segment: string; touchNumber: number;
+    targetAction: string;
+    deepLink: string | null;
+    disabled: boolean;
+    sent: number; delivered: number;
+    returned72h: number; targetCompleted7d: number;
+    returnRate72h: string; targetRate7d: string;
+    promoDelivered: number; promoRedeemed: number;
+  }>;
+  debug: {
+    totalTouchesInPeriod: number;
+    excludedTestUsers: number;
+    testUserIds: string[];
+  };
+  generatedAt: string;
+};
+
+/** Referral entry-point gating config — GET /tg/referral/rules-config shape. */
+export type ReferralRulesConfig = {
+  enabled: boolean;
+  inRollout: boolean;
+  rolloutPercent: number;
+  reward: { daysPerRef: number; strategy: string };
+  qualification: { requireWishlist: boolean; requireItem: boolean; windowDays: number };
+  caps: { monthly: number; yearly: number };
+  ui: {
+    showInviteeNamesInUi: boolean;
+    entryPointProfile: boolean;
+    entryPointPaywall: boolean;
+    entryPointHomeBanner: boolean;
+  };
+  configVersion: string;
+};
+
+/** Referral self-state — GET /tg/referral/me shape. */
+export type ReferralMe = {
+  enabled: boolean;
+  programEnabled: boolean;
+  inRollout: boolean;
+  rolloutPercent: number;
+  code: string | null;
+  link: string | null;
+  shareText: string | null;
+  stats: {
+    totalAttributions: number;
+    successful: number;
+    pendingActivation: number;
+    qualified: number;
+    rewarded: number;
+    pendingReview: number;
+    rejected: number;
+  };
+  caps: {
+    monthlyUsed: number;
+    monthlyCap: number;
+    yearlyUsed: number;
+    yearlyCap: number;
+    atMonthlyCap: boolean;
+    atYearlyCap: boolean;
+  };
+  reward: { daysPerRef: number; strategy: string };
+  attributedByInviter: {
+    status: 'success' | 'not_credited' | 'pending';
+    attributedAt: string;
+    qualifiedAt: string | null;
+    rewardedAt: string | null;
+  } | null;
+  proExpiryAt: string | null;
+  configVersion: string;
+};
+
+/** Referral history row — GET /tg/referral/history (`items[i]`) shape. */
+export type ReferralHistoryItem = {
+  id: string;
+  status: 'ATTRIBUTED' | 'PENDING_ACTIVATION' | 'QUALIFIED' | 'REWARDED' | 'REJECTED' | 'FRAUD_REVIEW';
+  rejectReason: string | null;
+  attributedAt: string;
+  qualifiedAt: string | null;
+  rewardedAt: string | null;
+  rejectedAt: string | null;
+  invitedDisplayName: string | null;
+  progress: { firstBotStart: boolean; firstWishlist: boolean; firstItem: boolean };
+  reward: { id: string; days: number; grantedAt: string } | null;
+};
+
 type GlobalArchiveItem = Item & { wishlistTitle: string; wishlistId: string; wishlistIsArchived: boolean };
 type ArchiveMode = 'wishlist' | 'global';
 
@@ -709,7 +968,7 @@ export type SantaJoinPreview = {
   participantCount: number; ownerName: string | null; ownerAvatarUrl: string | null;
 };
 
-type GodStats = {
+export type GodStats = {
   overview: {
     totalUsers: number; newUsers24h: number; newUsers7d: number;
     activeUsers7d: number; activeUsers30d: number;
@@ -3641,7 +3900,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [godStatsError, setGodStatsError] = useState(false);
   const [godStatsRefreshedAt, setGodStatsRefreshedAt] = useState<Date | null>(null);
   const [godStatsDetailsOpen, setGodStatsDetailsOpen] = useState(false);
-  const [retentionStats, setRetentionStats] = useState<any>(null);
+  // `RetentionStats` is exported from the module-scope DTO block above.
+  const [retentionStats, setRetentionStats] = useState<RetentionStats | null>(null);
   const [retentionOpen, setRetentionOpen] = useState(false);
   const [retentionLoading, setRetentionLoading] = useState(false);
   const [retentionPeriod, setRetentionPeriod] = useState(30);
@@ -3676,7 +3936,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // (F4 Wave E) — destructured in MiniAppInner.
 
   // ── Don't Gift state ──
-  type DontGiftData = { presets: string[]; customItems: string[]; comment: string | null; visible: boolean };
+  // `DontGiftData` is exported from the module-scope DTO block above.
   const [dontGiftData, setDontGiftData] = useState<DontGiftData | null>(null);
   const [showDontGiftEdit, setShowDontGiftEdit] = useState(false);
   const [dontGiftSaving, setDontGiftSaving] = useState(false);
@@ -3711,12 +3971,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [curatedViewExpired, setCuratedViewExpired] = useState(false);
   const [curatedSubscribing, setCuratedSubscribing] = useState(false);
 
-  // Link management state
-  type LinkMgmtSelection = { id: string; shareToken: string; title: string; viewCount: number; subscriberCount: number; itemCount: number; expiresAt: string; createdAt: string };
-  type LinkMgmtWishlist = { id: string; slug: string; title: string; shareToken: string; viewCount: number };
-  type LinkMgmtProfile = { username: string; profileVisibility: string };
+  // Link management state — `LinkMgmtSelection` / `LinkMgmtWishlist` /
+  // `LinkMgmtProfile` / `LinkMgmtData` are exported from the module-scope
+  // DTO block above. `LinkMgmtDetailItem` is a local discriminated union;
+  // it never crosses the cluster-Root boundary so it stays in this scope.
   type LinkMgmtDetailItem = { type: 'selection' | 'wishlist' | 'profile'; data: LinkMgmtSelection | LinkMgmtWishlist | LinkMgmtProfile };
-  const [linkMgmtData, setLinkMgmtData] = useState<{ selections: LinkMgmtSelection[]; wishlists: LinkMgmtWishlist[]; profile: LinkMgmtProfile | null } | null>(null);
+  const [linkMgmtData, setLinkMgmtData] = useState<LinkMgmtData | null>(null);
   const [linkMgmtLoading, setLinkMgmtLoading] = useState(false);
   const [linkMgmtDetailItem, setLinkMgmtDetailItem] = useState<LinkMgmtDetailItem | null>(null);
   const [linkMgmtConfirmRevoke, setLinkMgmtConfirmRevoke] = useState(false);
@@ -3742,50 +4002,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   //   - attribution on subsequent analytics events (item_opened, reservation_*)
   //   - dismissal preference (banner dismissed → don't re-show this session)
   // Cleared on logout / re-deep-link / manual close.
-  const [birthdayContext, setBirthdayContext] = useState<{
-    deliveryId: string;
-    reminderKind: string;
-    targetType: string | null;
-    targetId: string | null;
-    targetUnavailable: boolean;
-    isOwner: boolean;
-    birthdayUser: {
-      userId: string;
-      displayName: string | null;
-      username: string | null;
-      avatarThumbUrl: string | null;
-      hideYear: boolean;
-      customMessage: string | null;
-    };
-    daysUntil: number | null;
-    bannerDismissed: boolean;
-  } | null>(null);
+  // `BirthdayContext` is exported from the module-scope DTO block above.
+  const [birthdayContext, setBirthdayContext] = useState<BirthdayContext | null>(null);
 
   // Birthday settings cache for the Settings screen. Lazy-loaded on first
   // navigation. Mirrors the GET /tg/me/birthday-settings response.
-  const [birthdaySettings, setBirthdaySettings] = useState<{
-    isPro: boolean;
-    birthday: string | null;
-    hideYear: boolean;
-    profileVisibility: string;
-    optInPromptSeenAt: string | null;
-    friendReminders: {
-      enabled: boolean;
-      audience: string;
-      advancedWindowsEnabled: boolean;
-      primaryWishlist: { id: string; slug: string; title: string } | null;
-      primaryWishlistId: string | null;
-      customMessage: string | null;
-    };
-    ownerReminders: { enabled: boolean };
-    receiving: { enabled: boolean; mutedCount: number };
-  } | null>(null);
+  // `BirthdaySettings` is exported from the module-scope DTO block above.
+  const [birthdaySettings, setBirthdaySettings] = useState<BirthdaySettings | null>(null);
   const [birthdaySettingsLoading, setBirthdaySettingsLoading] = useState(false);
 
   // Birthday muted-users list for the muted screen (lazy-loaded).
-  const [birthdayMutedList, setBirthdayMutedList] = useState<Array<{
-    userId: string; displayName: string | null; username: string | null; avatarThumbUrl: string | null; mutedAt: string;
-  }>>([]);
+  // `BirthdayMutedUser` is exported from the module-scope DTO block above.
+  const [birthdayMutedList, setBirthdayMutedList] = useState<BirthdayMutedUser[]>([]);
 
   // Birthday opt-in sheet state. Shown after first save of birthday in profile
   // edit, only when birthdayFriendReminders === false AND optInPromptSeenAt === null.
