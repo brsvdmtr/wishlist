@@ -186,6 +186,46 @@ describe('MiniApp.tsx — file shape sanity', () => {
   });
 });
 
+describe('MiniApp.tsx — F3 cluster-state hook drift guard', () => {
+  // F3 hooks extract per-cluster state out of inline `useState` declarations
+  // and into a named hook. An "innocent" PR that re-introduces an inline
+  // `useState` for one of these names would silently undo the F3 setup AND
+  // create two competing sources of truth for the same state.
+
+  const F3_HOOKS = [
+    {
+      hook: 'useGiftNotesState',
+      // Sample of names returned — if any of these appear in an inline
+      // `useState` again, the drift guard fires.
+      drift: ['gnAccess', 'gnOccasions', 'gnViewingOccasion'],
+    },
+  ] as const;
+
+  for (const { hook, drift } of F3_HOOKS) {
+    it(`${hook} is invoked exactly once in MiniApp.tsx`, () => {
+      // Match `= useHookName(` — the only legitimate call form (destructure
+      // assignment from a hook). Comments containing the hook name are excluded
+      // because they lack the `=` prefix.
+      const callRe = new RegExp(`=\\s*${hook}\\s*\\(`, 'g');
+      const count = (MINI_APP_SRC.match(callRe) ?? []).length;
+      expect(count, `${hook}() expected exactly 1 invocation, found ${count}`).toBe(1);
+    });
+
+    for (const name of drift) {
+      it(`${name} is NOT re-declared inline as useState after ${hook} extraction`, () => {
+        // Match patterns like `const [gnAccess, setGnAccess] = useState`.
+        const inlineDecl = new RegExp(
+          `const\\s*\\[\\s*${name}\\b[^\\]]*\\]\\s*=\\s*useState`,
+        );
+        expect(
+          MINI_APP_SRC,
+          `${name} was re-declared inline — ${hook} hook is now bypassed`,
+        ).not.toMatch(inlineDecl);
+      });
+    }
+  }
+});
+
 describe('MiniApp.tsx — Pro-upsell content guards (2026-05-22 monetization audit)', () => {
   // Source: docs/research/03-monetization-paywall-audit.md §8.7–8.8.
   // Extraction of getUpsellContent from the monolith is still deferred, so

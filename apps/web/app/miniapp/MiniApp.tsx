@@ -46,6 +46,9 @@ import { parseReservationReminderPayload, parseEventReminderPayload, parseSurvey
 // chunk; only the latest id is referenced from the main chunk (changelog "new!"
 // badge in settings). HAND-SYNC on release: see release-notes-latest.ts.
 import { LATEST_RELEASE_ID } from './screens/data/release-notes-latest';
+// F3 cluster-state hook (Gift Notes). Returns the same names that used to live
+// inline as 19 useState calls — destructured at the top of MiniAppInner.
+import { useGiftNotesState } from './hooks/useGiftNotesState';
 
 // ═══════════════════════════════════════════════════════
 // LAZY SCREENS (F1 — REFACTOR_MINIAPP_TSX_PLAN)
@@ -4552,32 +4555,37 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [descriptionText, setDescriptionText] = useState('');
   const descTextareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Gift Notes state
-  const [gnAccess, setGnAccess] = useState<{ unlocked: boolean; unlockType: string | null; priceXtr: number }>({ unlocked: false, unlockType: null, priceXtr: 19 });
+  // Gift Notes state — extracted to useGiftNotesState (F3 / F4 Wave C
+  // precondition). Same names destructured here so consumer sites stay
+  // byte-identical. Hook will be shared with the lazy GiftNotes screens
+  // once Wave C lands.
+  const {
+    gnAccess, setGnAccess,
+    gnOccasions, setGnOccasions,
+    gnViewingOccasion, setGnViewingOccasion,
+    gnLoading, setGnLoading,
+    gnSeenBadge, setGnSeenBadge,
+    showGnCreateOccasion, setShowGnCreateOccasion,
+    showGnAddIdea, setShowGnAddIdea,
+    gnFormTitle, setGnFormTitle,
+    gnFormDate, setGnFormDate,
+    gnFormType, setGnFormType,
+    gnFormRecurrence, setGnFormRecurrence,
+    gnFormPerson, setGnFormPerson,
+    gnIdeaText, setGnIdeaText,
+    gnIdeaLink, setGnIdeaLink,
+    gnShowActions, setGnShowActions,
+    gnShowEdit, setGnShowEdit,
+    gnEditTitle, setGnEditTitle,
+    gnEditPerson, setGnEditPerson,
+    gnEditNote, setGnEditNote,
+  } = useGiftNotesState();
+
+  // Group Gift access (lives next to gn for paywall-sheet symmetry but
+  // belongs to its own future hook — kept inline for now).
   const [ggAccess, setGgAccess] = useState<{ unlocked: boolean; priceXtr: number }>({ unlocked: false, priceXtr: 79 });
-  const [gnOccasions, setGnOccasions] = useState<any[]>([]);
-  const [gnViewingOccasion, setGnViewingOccasion] = useState<any>(null);
-  const [gnLoading, setGnLoading] = useState(false);
-  const [gnSeenBadge, setGnSeenBadge] = useState(() => {
-    try { return typeof window !== 'undefined' && window.localStorage.getItem('seen_event_calendar_v1') === '1'; } catch { return false; }
-  });
-  const [showGnCreateOccasion, setShowGnCreateOccasion] = useState(false);
-  const [showGnAddIdea, setShowGnAddIdea] = useState(false);
-  const [gnFormTitle, setGnFormTitle] = useState('');
-  const [gnFormDate, setGnFormDate] = useState('');
-  const [gnFormType, setGnFormType] = useState<'BIRTHDAY' | 'ANNIVERSARY' | 'HOLIDAY' | 'OTHER'>('BIRTHDAY');
-  const [gnFormRecurrence, setGnFormRecurrence] = useState<'NONE' | 'YEARLY' | 'MONTHLY'>('YEARLY');
-  const [gnFormPerson, setGnFormPerson] = useState('');
-  const [gnIdeaText, setGnIdeaText] = useState('');
-  const [gnIdeaLink, setGnIdeaLink] = useState('');
   // Loading screen staged text
   const [loadTextIdx, setLoadTextIdx] = useState(0);
-  // GN occasion detail state (must be top-level, not inside IIFE)
-  const [gnShowActions, setGnShowActions] = useState(false);
-  const [gnShowEdit, setGnShowEdit] = useState(false);
-  const [gnEditTitle, setGnEditTitle] = useState('');
-  const [gnEditPerson, setGnEditPerson] = useState('');
-  const [gnEditNote, setGnEditNote] = useState('');
 
   // Drafts (Неразобранное)
   const [draftsWishlistId, setDraftsWishlistId] = useState<string | null>(null);
