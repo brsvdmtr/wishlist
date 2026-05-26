@@ -247,6 +247,10 @@ describe('MiniApp.tsx — F3 cluster-state hook drift guard', () => {
       hook: 'usePublicProfileState',
       drift: ['publicProfileData', 'publicProfileLoading', 'publicProfileError', 'publicProfileSubscribed'],
     },
+    {
+      hook: 'useReferralState',
+      drift: ['referralMe', 'referralHistory', 'referralRulesConfig', 'referralShareSheet'],
+    },
   ] as const;
 
   for (const { hook, drift } of F3_HOOKS) {

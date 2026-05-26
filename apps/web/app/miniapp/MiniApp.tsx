@@ -93,6 +93,7 @@ import { useGiftNotesState } from './hooks/useGiftNotesState';
 import { useGroupGiftState } from './hooks/useGroupGiftState';
 import { useGuestViewState } from './hooks/useGuestViewState';
 import { usePublicProfileState } from './hooks/usePublicProfileState';
+import { useReferralState } from './hooks/useReferralState';
 import { useSantaState } from './hooks/useSantaState';
 import { useSettingsState } from './hooks/useSettingsState';
 import { useShowcaseState } from './hooks/useShowcaseState';
@@ -103,6 +104,9 @@ import type {
 import type { ShowcaseData } from './hooks/useShowcaseState';
 import type { GroupGiftData } from './hooks/useGroupGiftState';
 import type { SettingsData } from './hooks/useSettingsState';
+import type {
+  ReferralMe, ReferralHistoryItem, ReferralHistoryPage, ReferralRulesConfig,
+} from './hooks/useReferralState';
 
 // ═══════════════════════════════════════════════════════
 // LAZY SCREENS (F1 — REFACTOR_MINIAPP_TSX_PLAN)
@@ -3803,86 +3807,26 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     publicProfileError, setPublicProfileError,
   } = publicProfileState;
   // ── Referral program state ────────────────────────────────────────────────
-  // Matches GET /tg/referral/me response shape (apps/api/src/index.ts).
-  type ReferralMe = {
-    enabled: boolean;
-    programEnabled: boolean;
-    inRollout: boolean;
-    rolloutPercent: number;
-    code: string | null;
-    link: string | null;
-    shareText: string | null;
-    stats: {
-      totalAttributions: number;
-      successful: number;
-      pendingActivation: number;
-      qualified: number;
-      rewarded: number;
-      pendingReview: number;
-      rejected: number;
-    };
-    caps: {
-      monthlyUsed: number;
-      monthlyCap: number;
-      yearlyUsed: number;
-      yearlyCap: number;
-      atMonthlyCap: boolean;
-      atYearlyCap: boolean;
-    };
-    reward: { daysPerRef: number; strategy: string };
-    attributedByInviter: {
-      status: 'success' | 'not_credited' | 'pending';
-      attributedAt: string;
-      qualifiedAt: string | null;
-      rewardedAt: string | null;
-    } | null;
-    proExpiryAt: string | null;
-    configVersion: string;
-  };
-  // Matches GET /tg/referral/history response shape.
-  type ReferralHistoryItem = {
-    id: string;
-    status: 'ATTRIBUTED' | 'PENDING_ACTIVATION' | 'QUALIFIED' | 'REWARDED' | 'REJECTED' | 'FRAUD_REVIEW';
-    rejectReason: string | null;
-    attributedAt: string;
-    qualifiedAt: string | null;
-    rewardedAt: string | null;
-    rejectedAt: string | null;
-    invitedDisplayName: string | null;
-    progress: { firstBotStart: boolean; firstWishlist: boolean; firstItem: boolean };
-    reward: { id: string; days: number; grantedAt: string } | null;
-  };
-  type ReferralHistoryPage = { items: ReferralHistoryItem[]; nextBefore: string | null; limit: number };
-  // Minimal config subset from GET /tg/referral/rules-config. Loaded once at
-  // app init and used by entry-points (paywall alt CTA, home banner, post-share)
-  // to decide whether to render without hitting /me — that endpoint has wider
-  // response and side-effects (may allocate a code). rules-config is HTTP-cached
-  // for 60s so browsers reuse it across entry-point renders in the same session.
-  type ReferralRulesConfig = {
-    enabled: boolean;
-    inRollout: boolean;
-    rolloutPercent: number;
-    reward: { daysPerRef: number; strategy: string };
-    qualification: { requireWishlist: boolean; requireItem: boolean; windowDays: number };
-    caps: { monthly: number; yearly: number };
-    ui: {
-      showInviteeNamesInUi: boolean;
-      entryPointProfile: boolean;
-      entryPointPaywall: boolean;
-      entryPointHomeBanner: boolean;
-    };
-    configVersion: string;
-  };
-  const [referralRulesConfig, setReferralRulesConfig] = useState<ReferralRulesConfig | null>(null);
-  const [referralMe, setReferralMe] = useState<ReferralMe | null>(null);
-  const [referralMeLoading, setReferralMeLoading] = useState(false);
-  const [referralMeError, setReferralMeError] = useState<string | null>(null);
-  const [referralHistory, setReferralHistory] = useState<ReferralHistoryItem[]>([]);
-  const [referralHistoryCursor, setReferralHistoryCursor] = useState<string | null>(null);
-  const [referralHistoryLoading, setReferralHistoryLoading] = useState(false);
-  const [referralHistoryHasMore, setReferralHistoryHasMore] = useState(false);
-  const [referralShareSheet, setReferralShareSheet] = useState(false);
-  const [referralRulesOpen, setReferralRulesOpen] = useState(false);
+  // Extracted to useReferralState (F7). Hook returns the SAME inline names
+  // so consumer call sites (~30 references across MiniApp.tsx + ReferralRoot)
+  // stay byte-identical. DTO types (ReferralMe / ReferralHistoryItem /
+  // ReferralHistoryPage / ReferralRulesConfig) now live in
+  // `./hooks/useReferralState.ts` and are re-imported at the top of this
+  // file so callers (loadReferralMe / loadReferralHistory / etc.) can
+  // still annotate `res.json() as ReferralMe`.
+  const referralState = useReferralState();
+  const {
+    referralRulesConfig, setReferralRulesConfig,
+    referralMe, setReferralMe,
+    referralMeLoading, setReferralMeLoading,
+    referralMeError, setReferralMeError,
+    referralHistory, setReferralHistory,
+    referralHistoryCursor, setReferralHistoryCursor,
+    referralHistoryLoading, setReferralHistoryLoading,
+    referralHistoryHasMore, setReferralHistoryHasMore,
+    referralShareSheet, setReferralShareSheet,
+    referralRulesOpen, setReferralRulesOpen,
+  } = referralState;
   // Track which screen user came from so Back returns there (same pattern as
   // settingsOriginScreen). Entry points: 'profile' / 'my-wishlists' (banner) /
   // wherever paywall was shown. Defaults to 'profile' for direct opens.
@@ -11616,23 +11560,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     setGuestViewReturnToProfileUsername, loadGuestWishlist,
   };
 
-  // F4 Wave A++ — context bag forwarded to the lazy-loaded ReferralRoot.
-  // Referral is a CONSUMER of state owned by MiniAppInner (referralMe,
-  // referralHistory, share-sheet / rules-sheet flags, referralRulesConfig)
-  // plus loader helpers (loadReferralMe / loadReferralHistory /
-  // openReferralHistoryScreen). Loose-typed for now; tightening is a
-  // follow-up.
+  // F4 Wave A++ / F7 — context bag forwarded to the lazy-loaded ReferralRoot.
+  // Referral cluster state (9 cells) is now sourced from `useReferralState`
+  // (F7) and spread in via `...referralState` so ReferralRoot's
+  // `ctx: ReferralState & {...}` intersection picks up the precise inferred
+  // setter signatures + DTO types (ReferralMe / ReferralHistoryItem /
+  // ReferralRulesConfig). Loaders (loadReferralMe / loadReferralHistory)
+  // and openReferralHistoryScreen stay in MiniAppInner closure.
   const referralRootCtx = {
+    // referral cluster state from useReferralState (same names)
+    ...referralState,
     // module-level constants we re-use inside referral JSX
     C, font, locale,
     // helpers + setters from MiniAppInner closure
     pushToast, trackEvent,
-    // referral state (forwarded — same names, no rename)
-    referralMe, referralMeLoading, referralMeError, loadReferralMe,
-    referralHistory, referralHistoryLoading, referralHistoryHasMore, loadReferralHistory,
-    referralShareSheet, setReferralShareSheet,
-    referralRulesOpen, setReferralRulesOpen,
-    referralRulesConfig,
+    loadReferralMe, loadReferralHistory,
     openReferralHistoryScreen,
   };
 

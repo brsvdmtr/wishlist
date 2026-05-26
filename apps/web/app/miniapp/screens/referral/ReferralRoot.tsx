@@ -40,9 +40,10 @@
 import React from 'react';
 import { ListRow, SectionHeader, StatTile } from '@wishlist/ui';
 import { t, localeToBCP47, type Locale } from '@wishlist/shared';
+import type { ReferralState } from '../../hooks/useReferralState';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-export type ReferralRootCtx = {
+export type ReferralRootCtx = ReferralState & {
   // module-level constants forwarded from MiniApp.tsx
   C: Record<string, string>;
   font: string;
@@ -50,20 +51,9 @@ export type ReferralRootCtx = {
   // helpers + setters from MiniAppInner closure
   pushToast: any;
   trackEvent: any;
-  // referral state (owned in MiniApp.tsx; forwarded as-is)
-  referralMe: any;
-  referralMeLoading: boolean;
-  referralMeError: string | null;
+  // referral loaders (defined in MiniAppInner — useCallback)
   loadReferralMe: () => Promise<void> | void;
-  referralHistory: any[];
-  referralHistoryLoading: boolean;
-  referralHistoryHasMore: boolean;
   loadReferralHistory: (reset?: boolean) => Promise<void> | void;
-  referralShareSheet: boolean;
-  setReferralShareSheet: any;
-  referralRulesOpen: boolean;
-  setReferralRulesOpen: any;
-  referralRulesConfig: any;
   openReferralHistoryScreen: () => void;
 };
 /* eslint-enable @typescript-eslint/no-explicit-any */
