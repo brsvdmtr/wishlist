@@ -39,6 +39,7 @@ import {
 import { t, pluralize, localeToBCP47, type Locale } from '@wishlist/shared';
 import { ProBadge } from '../../components/ProBadge';
 import { UserAvatar } from '../../components/UserAvatar';
+import { resolveOwnerName } from '../../lib/wishlist-utils';
 import type { ComponentType, Dispatch, SetStateAction } from 'react';
 import type { PlanInfo, TgUser } from '../../MiniApp';
 import type {
@@ -74,11 +75,7 @@ export type SettingsRootCtx = {
   setUpsellSheet: SetUpsellSheet;
   trackEvent: TrackEvent;
   normalizeLocale: typeof import('@wishlist/shared').normalizeLocale;
-  resolveOwnerName: (
-    profile: { displayName?: string | null; username?: string | null } | null | undefined,
-    tgUser: { first_name?: string | null; username?: string | null } | null | undefined,
-    fallback?: string,
-  ) => string;
+  // resolveOwnerName imported directly inside this file (F5) — no longer a ctx field.
   // misc state read by Settings
   scrollContainerRef: { current: HTMLDivElement | null };
   tgUser: TgUser | null;
@@ -146,7 +143,7 @@ export function SettingsRoot(props: SettingsRootProps) {
   // ── Hot-path helpers + setters ───────────────────────────────────────
   const {
     tgFetch, setScreen, pushToast, showUpsell, setUpsellSheet, trackEvent,
-    normalizeLocale, resolveOwnerName,
+    normalizeLocale,
     scrollContainerRef, tgUser, tgRef, tgLangCodeRef,
     profileData, settingsData, settingsLoading,
     godMode, showLocaleDebug, santaSeason, hasNewInSettings,

@@ -46,6 +46,16 @@ import {
   PRIO_GLOW,
   prioEmoji,
 } from './lib/priority';
+import {
+  categoryLimitFor,
+  computeActorHash,
+  getSantaItemReservationState,
+  getWritableTargets,
+  guestRecommendedScore,
+  normalizeTitle,
+  resolveCardMode,
+  resolveOwnerName,
+} from './lib/wishlist-utils';
 import { parsePaywallError, paywallContextFromError } from './lib/paywall';
 import { resolveReservePrefill, MAX_DISPLAY_NAME_LEN, type ReservePrefillSource } from './lib/reservePrefill';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
@@ -313,19 +323,7 @@ const getPriceFilters = getGuestBudgetPresets;
 
 export type GuestSort = 'default' | 'price_asc' | 'price_desc' | 'priority_desc' | 'recommended';
 
-/** Score an item for recommended sort. Higher = better match. */
-function guestRecommendedScore(item: { priority: number; status: string; imageUrl?: string | null; url?: string | null; description?: string | null; price: number | null }, budgetMax: number | null): number {
-  let score = 0;
-  score += (item.priority - 1) * 100;           // priority: 0/100/200
-  if (item.status === 'available') score += 50;  // not reserved
-  if (item.imageUrl) score += 10;
-  if (item.url) score += 5;
-  if (item.description) score += 5;
-  if (budgetMax !== null && item.price !== null && item.price > 0 && item.price <= budgetMax) {
-    score += Math.round((item.price / budgetMax) * 15); // closer to budget ceiling = small bonus
-  }
-  return score;
-}
+// guestRecommendedScore extracted to ./lib/wishlist-utils (F5).
 
 // PRIO_EMOJI / PRIO_COLOR / PRIO_BG / PRIO_GRADIENT / PRIO_GLOW / prioEmoji
 // extracted to ./lib/priority (F5).
@@ -396,18 +394,7 @@ export type Wishlist = {
   smartResMaxExtensions?: number;
 };
 
-/** Filter wishlists to only valid writable targets for copy/move operations.
- *  Excludes: current wishlist, drafts, readOnly wishlists. */
-function getWritableTargets(
-  wishlists: Wishlist[],
-  opts: { currentWlId?: string | null; draftsWlId?: string | null },
-): Wishlist[] {
-  return wishlists.filter(wl =>
-    wl.id !== opts.draftsWlId &&
-    wl.id !== opts.currentWlId &&
-    !wl.readOnly
-  );
-}
+// getWritableTargets extracted to ./lib/wishlist-utils (F5).
 
 export type PlanInfo = {
   code: 'FREE' | 'PRO';
@@ -418,17 +405,8 @@ export type PlanInfo = {
   features: string[];
 };
 
-// Per-plan category quota (mirrors `categoriesPerWishlist` in
-// apps/api/src/services/entitlement.ts `PLANS`). Keep these in sync — the API
-// is the source of truth, but the FE needs the number to render the counter
-// and decide whether to open the create sheet or the upsell. If a future plan
-// (e.g. MAX) raises the limit, update both sides; the server returns 402 if
-// the FE-side check is stale.
-const FREE_CATEGORY_LIMIT = 1;
-const PRO_CATEGORY_LIMIT = 20;
-function categoryLimitFor(planCode: PlanInfo['code']): number {
-  return planCode === 'PRO' ? PRO_CATEGORY_LIMIT : FREE_CATEGORY_LIMIT;
-}
+// FREE_CATEGORY_LIMIT / PRO_CATEGORY_LIMIT / categoryLimitFor extracted to
+// ./lib/wishlist-utils (F5).
 
 export type BillingPeriod = 'monthly' | 'yearly' | 'lifetime';
 export type SubscriptionInfo = {
@@ -877,12 +855,7 @@ export type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wis
 | 'research-survey';
 export type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' | 'warning' };
 
-async function computeActorHash(telegramId: number): Promise<string> {
-  const data = new TextEncoder().encode(`tg_actor:${telegramId}`);
-  const buf = await crypto.subtle.digest('SHA-256', data);
-  const h = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
-}
+// computeActorHash extracted to ./lib/wishlist-utils (F5).
 
 // ═══════════════════════════════════════════════════════
 // BUTTON / INPUT STYLES
@@ -1023,26 +996,8 @@ function blurActiveField(): void {
   }
 }
 
-/** Decode HTML entities (e.g. &quot; → ") and strip stray whitespace.
- *  Runs client-side only (uses DOM textarea trick); returns original string on server. */
-function normalizeTitle(raw: string | null | undefined): string {
-  if (!raw) return '';
-  if (typeof window === 'undefined') return raw.replace(/\s+/g, ' ').trim();
-  const el = document.createElement('textarea');
-  el.innerHTML = raw;
-  // collapse runs of whitespace / stray newlines but preserve intentional spacing
-  return el.value.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
-}
-
-type SantaItemReservationState = 'available' | 'reserved-by-me' | 'reserved-by-other';
-function getSantaItemReservationState(
-  status: string,
-  reservedByActorHash: string | null,
-  myActorHash: string | null,
-): SantaItemReservationState {
-  if (status !== 'reserved') return 'available';
-  return (myActorHash && reservedByActorHash === myActorHash) ? 'reserved-by-me' : 'reserved-by-other';
-}
+// normalizeTitle / getSantaItemReservationState (+ SantaItemReservationState
+// type) extracted to ./lib/wishlist-utils (F5).
 
 /** Auto-size a textarea to its content height.
  *  IMPORTANT: must use height:'0px' (not 'auto') before reading scrollHeight.
@@ -1055,22 +1010,7 @@ function growTextarea(el: HTMLTextAreaElement) {
   el.style.height = el.scrollHeight + 'px';
 }
 
-/**
- * resolveOwnerName — canonical fallback chain for the wishlist owner's display name.
- * Priority: profile displayName → profile username → Telegram first_name → "Пользователь".
- * Single source of truth used on the Share screen, Guest view, and any context
- * that shows the owner's name — never reads tgUser.first_name directly.
- */
-function resolveOwnerName(
-  profile: { displayName?: string | null; username?: string | null } | null | undefined,
-  tgUser: { first_name?: string | null; username?: string | null } | null | undefined,
-  fallback = 'Пользователь',
-): string {
-  return profile?.displayName?.trim() ||
-    profile?.username?.trim() ||
-    tgUser?.first_name?.trim() ||
-    fallback;
-}
+// resolveOwnerName extracted to ./lib/wishlist-utils (F5).
 
 // UserAvatar / SantaHatOverlay / SantaAvatar / santaAliasHue / SnowflakeOverlay
 // extracted to ./components/{UserAvatar,SantaHatOverlay,SantaAvatar,
@@ -1595,11 +1535,7 @@ function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash, local
 // CARD REDESIGN — canary-only components
 // ═══════════════════════════════════════════════════════
 
-function resolveCardMode(itemCount: number, cardDisplayMode: string | undefined, isPro: boolean): 'compact' | 'showcase' {
-  if (isPro && cardDisplayMode === 'showcase') return 'showcase';
-  if (isPro && cardDisplayMode === 'compact') return 'compact';
-  return itemCount <= 5 ? 'showcase' : 'compact';
-}
+// resolveCardMode extracted to ./lib/wishlist-utils (F5).
 
 function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve, onUnreserve, myActorHash, secretByMe }: {
   item: Item | GuestItem;
@@ -11787,8 +11723,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     // module-level constants we re-use inside settings JSX
     C, font, locale, CARD_REDESIGN_ENABLED, LATEST_RELEASE_ID,
     // helpers + setters from MiniAppInner closure
+    // (resolveOwnerName imported directly inside SettingsRoot — F5)
     tgFetch, setScreen, pushToast, showUpsell, setUpsellSheet, trackEvent,
-    normalizeLocale, resolveOwnerName,
+    normalizeLocale,
     scrollContainerRef, tgUser, tgRef, tgLangCodeRef,
     profileData, settingsData, settingsLoading,
     godMode, showLocaleDebug, santaSeason, hasNewInSettings,
