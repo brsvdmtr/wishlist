@@ -126,6 +126,8 @@ describe('MiniApp.tsx — F1 lazy-screen regression guard (2026-05-25)', () => {
     { name: 'GiftNotesOnboardingContent', path: './screens/GiftNotesOnboardingContent' },
     // F4 Wave B — Secret Santa cluster (9 screens, ~3.16k LOC).
     { name: 'SantaRoot', path: './screens/santa/SantaRoot' },
+    // F4 Wave C — Gift Notes cluster (3 screens + 2 sheets, ~695 LOC).
+    { name: 'GiftNotesRoot', path: './screens/gift-notes/GiftNotesRoot' },
   ] as const;
 
   for (const { name, path } of LAZY_SCREENS) {
