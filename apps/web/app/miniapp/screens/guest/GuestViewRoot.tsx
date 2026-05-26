@@ -35,7 +35,12 @@
 //   refactor logic in this PR. Bundle savings only; cosmetic changes
 //   ride future on-touch PRs.
 // - `ctx` types intersect `GuestViewState` (setters keep
-//   `Dispatch<SetStateAction<T>>` signatures) with the loose helpers bag.
+//   `Dispatch<SetStateAction<T>>` signatures) with the typed helpers bag
+//   from `_shared/closure-types`. The remaining `any` slots are
+//   confined to forwarded React component types (4× `ComponentType<any>`
+//   for the Wish*Card primitives + CommentsThread + 1× `Dispatch<...
+//   any>>` for setPublicProfileData) — they'll resolve when those
+//   primitives extract to packages/ui.
 // - The 3 Wish*Card components and the CommentsThread component still
 //   live in MiniApp.tsx (they're reused by owner-side screens). They are
 //   forwarded via ctx as React component types — same pattern as

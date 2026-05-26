@@ -68,9 +68,10 @@ import type {
  * Intersection of the full `SantaState` (all setters keep their inferred
  * `Dispatch<SetStateAction<T>>` signatures, so `setSantaPolls(prev => ...)`
  * still type-checks) plus the helpers / primitives bag. Helpers carry
- * real signatures from `_shared/closure-types`; the few remaining `any`s
- * cover anonymous useState shapes in MiniApp.tsx that aren't worth
- * extracting just for the Root edge.
+ * real signatures from `_shared/closure-types`; 0 `any` slots remain in
+ * SantaRootCtx after the F4 tightening pass — every former any was
+ * resolved to a concrete DTO (`PlanInfo` / `Wishlist[]` / `Item | GuestItem`
+ * / `SantaPoll` etc.) lifted to module scope in MiniApp.tsx.
  */
 export type SantaRootCtx = SantaState & {
   // module-level constants

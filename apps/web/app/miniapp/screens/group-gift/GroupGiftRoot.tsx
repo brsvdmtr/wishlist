@@ -24,7 +24,10 @@
 //   refactor logic in this PR. Bundle savings only; cosmetic changes
 //   ride future on-touch PRs.
 // - `ctx` types intersect `GroupGiftState` (setters keep
-//   `Dispatch<SetStateAction<T>>` signatures) with the loose helpers bag.
+//   `Dispatch<SetStateAction<T>>` signatures) with the typed helpers bag
+//   from `_shared/closure-types` plus inline domain helpers
+//   (handleBuyAddon / buildTgDeepLink / loadGroupGift / etc.). 0 `any`
+//   slots remaining after the F4 tightening pass.
 
 'use client';
 

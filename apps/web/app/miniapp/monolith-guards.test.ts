@@ -206,7 +206,7 @@ describe('MiniApp.tsx — file shape sanity', () => {
     // it, revisit these regex guards and migrate to per-Root component
     // tests instead.
     const lines = MINI_APP_SRC.split('\n').length;
-    expect(lines).toBeGreaterThan(20_000); // current ~23 646
+    expect(lines).toBeGreaterThan(20_000); // current ~23 650
   });
 });
 

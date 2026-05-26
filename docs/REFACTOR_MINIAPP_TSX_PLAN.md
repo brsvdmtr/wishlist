@@ -847,8 +847,8 @@ Each track ran as its own sub-agent (worktree-pattern):
   Worktree: `agent-a9a1962638dcb1691`.
 - **F7 cluster hooks** (`ef7999d..5312e7a`, 4 commits) — extract
   useSettingsState (3 cells) + usePublicProfileState (6 cells) +
-  useReferralState (10 cells + 4 types) + useProfileState (13 cells +
-  2 refs + 2 types). 32 state cells (and 2 useRefs) out of MiniApp body into named
+  useReferralState (10 cells + 4 types) + useProfileState (11 cells +
+  2 refs + 2 types). 30 state cells (and 2 useRefs) out of MiniApp body into named
   hooks. Worktree: `agent-a789e288acdce13e1`.
 - **Tightening pass** (`e09f313..414547a`, 5 commits) — lift all
   inline anonymous `useState<{...}>` shapes to module-scope exports

@@ -4,7 +4,7 @@
 // AFTER the matching Root file (ProfileRoot.tsx, F4 Wave D-4) — the Root
 // already consumes these fields via the `profileRootCtx` bag.
 //
-// The cluster owns ~13 state cells split across 3 sub-clusters:
+// The cluster owns 11 state cells + 2 refs split across 3 sub-clusters:
 //
 //   1. Server-fetched profile (read by Profile screen + Settings +
 //      Public-profile + Group-gift + Showcase + etc.):
@@ -51,7 +51,7 @@ import { useRef, useState } from 'react';
 import type { ProfileData, ProfileStats } from '../MiniApp';
 
 /**
- * One hook for the Profile cluster state (~13 useState calls + 2 refs
+ * One hook for the Profile cluster state (11 useState calls + 2 refs
  * collapsed into one). Returns the inline names so MiniApp.tsx +
  * ProfileRoot can destructure without renaming any consumer call site.
  *

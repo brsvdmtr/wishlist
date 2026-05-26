@@ -11647,8 +11647,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // F4 Wave B — context bag forwarded to the lazy-loaded SantaRoot.
   // Every field is a closure reference (state, setter, helper, or
   // primitive) that the 9 santa screens used to read directly when
-  // they were inline. Loose-typed for now; tighter typing is a
-  // follow-up.
+  // they were inline. Type-check happens at the consumer edge —
+  // `SantaRoot` declares `SantaRootCtx = SantaState & {...}` with
+  // concrete signatures for every helper (0 `any` slots remaining).
   const santaRootCtx = {
     // module-level constants we re-use inside santa JSX
     C, font, locale,
@@ -11901,8 +11902,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // F4 Wave C — context bag forwarded to the lazy-loaded GiftNotesRoot.
   // Every field is a closure reference (state, setter, helper, or
   // primitive) that the 3 gift-notes screens + 2 sheets used to read
-  // directly when they were inline. Loose-typed for now; tighter typing
-  // is a follow-up.
+  // directly when they were inline. Type-check happens at the consumer
+  // edge — `GiftNotesRoot` declares `GiftNotesRootCtx = GiftNotesState
+  // & {...}` with concrete TgFetch / SetScreen / PushToast signatures.
   const giftNotesRootCtx = {
     // module-level constants we re-use inside gift-notes JSX
     C, font, locale,

@@ -29,10 +29,11 @@
 // - JSX is copied verbatim from MiniApp.tsx — DO NOT migrate styles or
 //   refactor logic in this PR. Bundle savings only; cosmetic changes
 //   ride future on-touch PRs.
-// - `ctx` types preserve `Dispatch<SetStateAction<T>>` for state setters
-//   (via `GiftNotesState` intersection) while loose-typing helpers
-//   (tgFetch / setScreen / pushToast) as `any` — same trade-off as
-//   SantaRoot. Tightening is a follow-up.
+// - `ctx` types intersect `GiftNotesState` (state setters keep their
+//   inferred `Dispatch<SetStateAction<T>>` signatures) with the typed
+//   helpers bag (TgFetch / SetScreen / PushToast from
+//   `_shared/closure-types`). The F4 tightening pass removed all `any`
+//   slots; see the GiftNotesRootCtx declaration below.
 
 'use client';
 

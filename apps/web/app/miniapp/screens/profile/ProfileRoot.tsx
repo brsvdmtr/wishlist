@@ -11,7 +11,7 @@
 // profile (profileData / profileStats / profileLoading), the edit-form
 // cluster (editingProfile + 4 form fields + bioTextareaRef +
 // editProfileSaving), and the avatar-upload cluster (avatarInputRef +
-// showAvatarSheet + avatarUploading). 13 useState cells + 2 useRefs are
+// showAvatarSheet + avatarUploading). 11 useState cells + 2 useRefs are
 // consolidated. The EditProfile + Avatar BottomSheets still live in
 // MiniApp.tsx (they're global modals not gated on `screen === 'profile'`),
 // but they read the same `profileState` instance via destructure — flipping
