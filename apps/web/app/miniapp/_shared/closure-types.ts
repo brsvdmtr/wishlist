@@ -1,9 +1,10 @@
-// Shared closure-helper types used across the lazy-loaded cluster Root
+// Shared closure-helper types used across all 9 lazy-loaded cluster Root
 // files (SantaRoot, GiftNotesRoot, SettingsRoot, ShowcaseRoot,
-// GroupGiftRoot, ProfileRoot). The Roots receive these helpers via a
-// loose `ctx` bag forwarded from `MiniAppInner` — pinning the types
-// here gives editors / type-checks real signatures without dragging
-// the entire MiniApp.tsx surface into each Root's type imports.
+// GroupGiftRoot, ProfileRoot, PublicProfileRoot, ReferralRoot,
+// GuestViewRoot). The Roots receive these helpers via a `ctx` bag
+// forwarded from `MiniAppInner` — pinning the types here gives editors /
+// type-checks real signatures without dragging the entire MiniApp.tsx
+// surface into each Root's type imports.
 //
 // Discipline:
 // - This is a type-only module. NO runtime exports. Every consumer

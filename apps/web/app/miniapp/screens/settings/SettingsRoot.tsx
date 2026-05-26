@@ -6,14 +6,13 @@
 // initial Mini App page bundle — settings code only downloads when a user
 // taps the gear icon (cold-ish path: not first-paint, but visited often).
 //
-// State source: settings touches state owned by MANY clusters
-// (profile, birthday-reminders, gift-notes access, link mgmt, planInfo,
-// theme, etc.). Rather than create a `useSettingsState` hook that wraps
-// `useState<{ cardDisplayMode }>` — too thin — we forward existing state
-// via `ctx`. The screen is a consumer, not an owner. (`cardDisplayMode`
-// is the only meaningful piece of state owned by Settings itself, and it
-// stays in MiniAppInner because it's also read by the appearance-aware
-// card rendering on `my-wishlists`.)
+// State strategy: F7 `useSettingsState` owns the cluster — settingsData /
+// settingsLoading / cardDisplayMode. `cardDisplayMode` stays in the same
+// hook even though it's also read by my-wishlists card rendering — the
+// hook instance is the single source of truth, MiniApp.tsx destructures
+// it once. Sibling-owned reads (profileData, birthdaySettings,
+// linkMgmtData, planInfo, dontGiftData, santaSeason) flow through the
+// `ctx` bag from MiniAppInner.
 //
 // Implementation discipline:
 // - JSX is copied verbatim from MiniApp.tsx — DO NOT migrate styles or

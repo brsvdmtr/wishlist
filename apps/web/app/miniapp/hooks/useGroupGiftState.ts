@@ -10,8 +10,10 @@
 // This unlocks the F4 Wave D-3 extraction: the lazy GroupGiftRoot
 // screens import the same hook indirectly (via the ctx bag).
 //
-// State surface kept loose-typed (`any[]` for messages) where the
-// original was loose; tightening is a separate concern.
+// State surface is tightly typed — `groupGiftData: GroupGiftData | null`,
+// `groupGiftMessages: GroupGiftMessage[]`, and the rest carry concrete
+// shapes lifted from the inline useState forms. The F4 follow-up tightening
+// pass cleaned up the remaining `any` slots.
 
 'use client';
 

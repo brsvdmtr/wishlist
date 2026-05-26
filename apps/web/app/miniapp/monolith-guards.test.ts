@@ -199,11 +199,14 @@ describe('MiniApp.tsx — F1 lazy-screen regression guard (2026-05-25)', () => {
 });
 
 describe('MiniApp.tsx — file shape sanity', () => {
-  it('is the expected monolith size (~33k LOC, well above the extraction threshold)', () => {
+  it('is the expected monolith size (~24k LOC, post-F4/F5/F7/Wave E extraction)', () => {
     // When this drops below 5 000 LOC an extraction wave landed and the
     // lint-style guards above can be replaced by proper component tests.
+    // The 20 000 floor is the kill-switch — when MiniApp.tsx drops below
+    // it, revisit these regex guards and migrate to per-Root component
+    // tests instead.
     const lines = MINI_APP_SRC.split('\n').length;
-    expect(lines).toBeGreaterThan(20_000); // current ~33 246
+    expect(lines).toBeGreaterThan(20_000); // current ~23 646
   });
 });
 

@@ -11,10 +11,10 @@
 // imports the same hook indirectly (via the ctx bag) so the JSX inside
 // the chunk can keep referring to `guestWl`, `guestItems`, etc. by name.
 //
-// State surface kept loose-typed where the original was loose (e.g.
-// `guestWl` is the literal type the inline `useState<{ ... }>(null)`
-// declared); tightening any of these to a DTO from MiniApp.tsx is a
-// separate concern.
+// State surface is tightly typed — `guestWl: GuestWishlist | null`,
+// `guestItems: GuestItem[]`, `guestCategories: WishlistCategory[]`, etc.
+// All DTOs imported from MiniApp.tsx or declared locally (GuestWishlist,
+// GuestDontGift) when hook-scoped. Zero `any` slots remain.
 //
 // Owned vs read:
 // - OWNED here: guestWl, guestItems, guestCategories, guestCollapsedCats,

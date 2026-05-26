@@ -106,8 +106,10 @@ import type { ShowcaseData } from './hooks/useShowcaseState';
 import type { GroupGiftData } from './hooks/useGroupGiftState';
 // SettingsData / ReferralMe / ReferralHistoryItem / ReferralRulesConfig /
 // ProfileData / ProfileStats are defined at module scope below (lifted from
-// inline useState shapes in F4 typing). Hook files re-declare matching
-// shapes for their internal returns — TypeScript composes them structurally.
+// inline useState shapes in F4 typing). Hook files import these from
+// MiniApp.tsx — single source of truth. ReferralHistoryPage stays
+// hook-private: the only consumer is the history-list reducer inside the
+// hook and it never crosses the cluster-Root boundary.
 import type { ReferralHistoryPage } from './hooks/useReferralState';
 
 // ═══════════════════════════════════════════════════════
@@ -192,10 +194,12 @@ const GiftNotesRoot = dynamic(
 
 // F4 Wave D-1 — Settings screen (~746 LOC of JSX). Reachable via the gear
 // icon (cold-ish: not first-paint, but visited often once per session).
-// Settings is a CONSUMER of state owned by sibling clusters (profile,
-// birthday, link mgmt, planInfo, theme, gift-notes access) so it has no
-// dedicated state hook — the closure refs are forwarded straight through
-// the `settingsRootCtx` bag.
+// State is owned by `useSettingsState` (F7) — cardDisplayMode +
+// settingsData + settingsLoading. Sibling-owned reads (profileData,
+// birthdaySettings, linkMgmtData, planInfo, dontGiftData, santaSeason)
+// flow through ctx; the same `settingsState` instance is read inside
+// MiniApp.tsx for the language/visibility/comments-default sheets that
+// live outside the cluster.
 const SettingsRoot = dynamic(
   () => import('./screens/settings/SettingsRoot').then(m => ({ default: m.SettingsRoot })),
   { ssr: false, loading: () => <Skeleton variant="settings" /> },
@@ -4037,10 +4041,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // Extracted to useReferralState (F7). Hook returns the SAME inline names
   // so consumer call sites (~30 references across MiniApp.tsx + ReferralRoot)
   // stay byte-identical. DTO types (ReferralMe / ReferralHistoryItem /
-  // ReferralHistoryPage / ReferralRulesConfig) now live in
-  // `./hooks/useReferralState.ts` and are re-imported at the top of this
-  // file so callers (loadReferralMe / loadReferralHistory / etc.) can
-  // still annotate `res.json() as ReferralMe`.
+  // ReferralRulesConfig) live in this file's module-scope DTO block above
+  // and are imported by the hook for its internal annotations.
+  // `ReferralHistoryPage` is hook-private (history-list reducer is the
+  // only consumer, never crosses the cluster-Root boundary) and is the
+  // one type still imported back from `./hooks/useReferralState`.
   const referralState = useReferralState();
   const {
     referralRulesConfig, setReferralRulesConfig,

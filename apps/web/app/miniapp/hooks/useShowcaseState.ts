@@ -8,8 +8,9 @@
 // This unlocks the F4 Wave D-2 extraction: the lazy ShowcaseRoot screen
 // can import the same hook directly instead of receiving 17 props each.
 //
-// State surface kept loose-typed (`any`) where the original was loose;
-// tightening to proper DTO types is a separate concern.
+// State surface is tightly typed — `showcaseData: ShowcaseData | null`,
+// `showcaseAvailableWishlists: ShowcaseAvailableWishlist[]`, etc. The F4
+// follow-up tightening pass cleaned up the remaining `any` slots.
 
 'use client';
 

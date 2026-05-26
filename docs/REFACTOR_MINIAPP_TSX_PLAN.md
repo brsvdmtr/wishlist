@@ -685,6 +685,9 @@ as the smallest possible template PR.
 All four waves shipped + Wave A++ follow-up + ctx-typing tightening pass.
 Final main chunk: **522 KB brotli → 414 KB brotli (−108 KB, −20.7%)**;
 **−468 KB raw (−20.7%)**. MiniApp.tsx: 34,257 LOC → ~24,200 LOC (−29%).
+*(The bonus-round entry at the bottom — F5/F6/F7/Wave E @ `046069b` —
+drops a further ~600 LOC, putting MiniApp.tsx at ~23,650 LOC. The F4
+numbers here are frozen as the F4-close snapshot.)*
 
 **Lessons.** Sub-agents in worktree isolation (Agent tool with
 `isolation: "worktree"`) were the unlock for Waves B/C/D/A++ and the
