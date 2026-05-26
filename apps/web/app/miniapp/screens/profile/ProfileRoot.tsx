@@ -43,15 +43,19 @@ import { SantaHatOverlay } from '../../components/SantaHatOverlay';
 import { ProBadge } from '../../components/ProBadge';
 import type { ComponentType, Dispatch, SetStateAction } from 'react';
 import type {
-  HomeTab, PlanInfo, Screen, SkuInfo, SubscriptionInfo, TgUser, Wishlist,
+  GodStats, HomeTab, PlanInfo, ProfileData, ProfileStats,
+  ReferralProfileTileFromConfigProps, ReferralRulesConfig,
+  RetentionStats, SantaSeason, Screen, SkuInfo, SubscriptionInfo,
+  TgUser, Wishlist,
 } from '../../MiniApp';
 import type { ProfileState } from '../../hooks/useProfileState';
+import type { GnAccess } from '../../hooks/useGiftNotesState';
+import type { ShowcaseData } from '../../hooks/useShowcaseState';
 import type {
   LegacyColorBag, PushToast, SetScreen, SetUpsellSheet,
   ShowUpsell, TgFetch, TrackEvent,
 } from '../../_shared/closure-types';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 export type ProfileRootCtx = ProfileState & {
   // module-level constants forwarded from MiniApp.tsx
   C: LegacyColorBag;
@@ -66,6 +70,7 @@ export type ProfileRootCtx = ProfileState & {
   trackEvent: TrackEvent;
   // module-level helpers used by KpiRow/CollapsibleBlock locale formatting
   localeToBCP47: typeof localeToBCP47;
+  // profileData / profileStats / profileLoading provided by ProfileState intersection.
   // Shared sibling-cluster state forwarded as-is.
   tgUser: TgUser | null;
   planInfo: PlanInfo;
@@ -73,7 +78,7 @@ export type ProfileRootCtx = ProfileState & {
   proSource: string | null;
   promoPro: { id: string; expiresAt: string | null; campaignCode: string } | null;
   wishlists: Wishlist[];
-  santaSeason: any;
+  santaSeason: SantaSeason | null;
   // NOTE: `isPro`, `isProExpired`, `isLifetime` are NOT in ctx — they're
   // derived inline inside the Profile JSX IIFE (and would otherwise
   // shadow the inline `const isPro = ...` declarations).
@@ -82,18 +87,18 @@ export type ProfileRootCtx = ProfileState & {
   godModeLoading: boolean;
   setGodMode: Dispatch<SetStateAction<boolean>>;
   setGodModeLoading: Dispatch<SetStateAction<boolean>>;
-  godStats: any;
+  godStats: GodStats | null;
   godStatsLoading: boolean;
   godStatsError: boolean;
   godStatsRefreshedAt: Date | null;
   godStatsDetailsOpen: boolean;
   setGodStatsDetailsOpen: Dispatch<SetStateAction<boolean>>;
   loadGodStats: (scope?: string, periodOverride?: string) => Promise<void>;
-  retentionStats: any;
+  retentionStats: RetentionStats | null;
   retentionLoading: boolean;
   retentionOpen: boolean;
   retentionPeriod: number;
-  setRetentionStats: Dispatch<SetStateAction<any>>;
+  setRetentionStats: Dispatch<SetStateAction<RetentionStats | null>>;
   setRetentionLoading: Dispatch<SetStateAction<boolean>>;
   setRetentionOpen: Dispatch<SetStateAction<boolean>>;
   setRetentionPeriod: Dispatch<SetStateAction<number>>;
@@ -121,6 +126,7 @@ export type ProfileRootCtx = ProfileState & {
   addonLoadingSku: string | null;
   checkoutLoading: boolean;
   setWishlistPickerSku: Dispatch<SetStateAction<string | null>>;
+  // setProfileData provided by ProfileState intersection.
   showLocaleDebug: boolean;
   setShowLocaleDebug: Dispatch<SetStateAction<boolean>>;
   loadWishlists: () => Promise<void>;
@@ -129,8 +135,8 @@ export type ProfileRootCtx = ProfileState & {
   loadSettings: () => Promise<void>;
   loadShowcase: () => Promise<void>;
   loadSantaSeason: () => Promise<void>;
-  showcaseData: any;
-  gnAccess: any;
+  showcaseData: ShowcaseData | null;
+  gnAccess: GnAccess;
   canGodMode: boolean;
   availableSkus: SkuInfo[];
   cappedAddonCodes: string[];
@@ -139,10 +145,9 @@ export type ProfileRootCtx = ProfileState & {
     icon: string; title: string; subtitle: string; isNew?: boolean; resSection?: boolean;
   }>;
   openReferralScreen: (entryPoint?: string) => void;
-  referralRulesConfig: any;
-  ReferralProfileTileFromConfig: ComponentType<any>;
+  referralRulesConfig: ReferralRulesConfig | null;
+  ReferralProfileTileFromConfig: ComponentType<ReferralProfileTileFromConfigProps>;
 };
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 export interface ProfileRootProps {
   /** Active screen name; passed for symmetry with sibling Root components. */
@@ -635,7 +640,7 @@ export function ProfileRoot(props: ProfileRootProps) {
                       border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.145)`,
                     }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-                        {getProBenefits(locale).map((b: any, i: number, arr: any[]) => {
+                        {getProBenefits(locale).map((b, i, arr) => {
                           const firstRes = b.resSection && (i === 0 || !arr[i - 1]?.resSection);
                           return (
                             <Fragment key={i}>
@@ -1069,7 +1074,7 @@ export function ProfileRoot(props: ProfileRootProps) {
                             idempotency: { action: 'me.profile.hide-year' },
                           });
                           if (res.ok) {
-                            setProfileData((prev: any) => prev ? { ...prev, hideYear: !prev.hideYear } : prev);
+                            setProfileData(prev => prev ? { ...prev, hideYear: !prev.hideYear } : prev);
                           }
                         } catch { /* silent */ }
                       }}
@@ -1096,7 +1101,7 @@ export function ProfileRoot(props: ProfileRootProps) {
                     <button
                       onClick={async () => {
                         const next = !profileData.avatarPublic;
-                        setProfileData((prev: any) => prev ? { ...prev, avatarPublic: next } : prev);
+                        setProfileData(prev => prev ? { ...prev, avatarPublic: next } : prev);
                         try {
                           await tgFetch('/tg/me/profile', {
                             method: 'PATCH',
@@ -1105,7 +1110,7 @@ export function ProfileRoot(props: ProfileRootProps) {
                           });
                         } catch {
                           // Revert on error
-                          setProfileData((prev: any) => prev ? { ...prev, avatarPublic: !next } : prev);
+                          setProfileData(prev => prev ? { ...prev, avatarPublic: !next } : prev);
                         }
                       }}
                       style={{
@@ -1547,7 +1552,7 @@ export function ProfileRoot(props: ProfileRootProps) {
                                             <span style={{ fontSize: 8, color: C.textMuted, width: 28, textAlign: 'right' }}>Вишл.</span>
                                             <span style={{ fontSize: 8, color: C.textMuted, width: 26, textAlign: 'right' }}>Жел.</span>
                                           </div>
-                                          {acq.sources.map((s: any) => (
+                                          {acq.sources.map(s => (
                                             <div key={s.key} style={{ display: 'flex', padding: '2px 0' }}>
                                               <span style={{ fontSize: 10, color: C.textSec, flex: 1 }}>{s.label}</span>
                                               <span style={{ fontSize: 10, fontWeight: 600, color: C.text, width: 30, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.newUsers}</span>
@@ -1635,8 +1640,8 @@ export function ProfileRoot(props: ProfileRootProps) {
                               <SectionTitle icon="🌍" label="Сегменты" color="#AF52DE" />
                               {godStats.marketBuckets && godStats.marketBuckets.length > 0 ? (() => {
                                 const buckets = godStats.marketBuckets!;
-                                const bucketTotal = buckets.reduce((s: number, b: any) => s + b.total, 0);
-                                const maxBucket = Math.max(...buckets.map((b: any) => b.total), 1);
+                                const bucketTotal = buckets.reduce((s, b) => s + b.total, 0);
+                                const maxBucket = Math.max(...buckets.map(b => b.total), 1);
                                 const bucketColors: Record<string, string> = {
                                   ru: '#5B8DEF', en: '#34C759', ar: '#30D5C8', hi: '#FFB340',
                                   'zh-CN': '#FF6B6B', es: '#AF52DE', other_known: '#8E8E93', unknown: '#444',
@@ -1644,7 +1649,7 @@ export function ProfileRoot(props: ProfileRootProps) {
                                 return (
                                   <>
                                     <SectionCard>
-                                      {buckets.map((b: any) => {
+                                      {buckets.map(b => {
                                         const share = bucketTotal > 0 ? (b.total / bucketTotal * 100) : 0;
                                         return (
                                           <div key={b.bucket} style={{ marginBottom: 3 }}>
@@ -1696,7 +1701,7 @@ export function ProfileRoot(props: ProfileRootProps) {
                                             <span style={{ fontSize: 8, color: C.textMuted, width: 24, textAlign: 'right' }}>Онб.</span>
                                             <span style={{ fontSize: 8, color: C.textMuted, width: 20, textAlign: 'right' }}>Имп.</span>
                                           </div>
-                                          {godStats.bucketFunnel!.map((b: any) => (
+                                          {godStats.bucketFunnel!.map(b => (
                                             <div key={b.bucket} style={{ display: 'flex', padding: '2px 0', gap: 2, alignItems: 'center' }}>
                                               <span style={{ fontSize: 9, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.label}</span>
                                               <span style={{ fontSize: 9, fontWeight: 600, color: C.text, width: 26, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.newUsers}</span>
@@ -1708,7 +1713,7 @@ export function ProfileRoot(props: ProfileRootProps) {
                                           ))}
                                           {/* Quick conversion summary for markets with n>=5 */}
                                           <div style={{ marginTop: 4, fontSize: 9, color: C.textMuted, lineHeight: 1.6, display: 'flex', flexWrap: 'wrap', gap: '0 8px' }}>
-                                            {godStats.bucketFunnel!.filter((b: any) => b.newUsers >= 5).map((b: any) => {
+                                            {godStats.bucketFunnel!.filter(b => b.newUsers >= 5).map(b => {
                                               const conv = b.newUsers > 0 ? b.firstWishlist / b.newUsers : 0;
                                               return (
                                                 <span key={b.bucket}>
@@ -1839,7 +1844,7 @@ export function ProfileRoot(props: ProfileRootProps) {
                                     {r.topInviters.length > 0 && (
                                       <SectionCard style={{ marginTop: 4 }}>
                                         <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 4 }}>Топ-инвайтеры · по наградам</div>
-                                        {r.topInviters.map((ti: any, idx: number) => (
+                                        {r.topInviters.map((ti, idx) => (
                                           <div key={ti.userId} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0', fontSize: 10 }}>
                                             <span style={{ width: 14, color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>{idx + 1}.</span>
                                             <span style={{ flex: 1, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1901,7 +1906,7 @@ export function ProfileRoot(props: ProfileRootProps) {
                                         </div>
                                       </SectionCard>
                                       {/* Segments */}
-                                      {(rv.bySegment as any[]).filter((s: any) => s.sent > 0).map((s: any) => (
+                                      {rv.bySegment.filter(s => s.sent > 0).map(s => (
                                         <SectionCard key={s.segment} style={{ marginBottom: 4 }}>
                                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
                                             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--wb-success, #4ADE80)' }}>{segNames[s.segment] || s.segment}</span>
@@ -1929,10 +1934,10 @@ export function ProfileRoot(props: ProfileRootProps) {
                                         </SectionCard>
                                       ))}
                                       {/* By-touch waves — debug-level detail, already inside collapsed Retention */}
-                                      {(rv.byTouch as any[]).length > 0 && (
+                                      {rv.byTouch.length > 0 && (
                                         <div style={{ padding: '4px 8px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: `1px dashed ${C.border}`, marginBottom: 4, marginTop: 4 }}>
                                           <div style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>По волнам</div>
-                                          {(rv.byTouch as any[]).map((t: any) => (
+                                          {rv.byTouch.map(t => (
                                             <div key={`${t.segment}-${t.touchNumber}`} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', ...(t.disabled ? { opacity: 0.4 } : {}) }}>
                                               <span style={{ fontSize: 10, color: C.textSec }}>{t.segment} · В{t.touchNumber}{t.disabled ? ' 🚫' : ''}</span>
                                               <span style={{ fontSize: 10, color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>

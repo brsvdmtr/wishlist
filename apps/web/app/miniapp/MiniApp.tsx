@@ -1300,12 +1300,14 @@ function growTextarea(el: HTMLTextAreaElement) {
  * disabled) or when `ui.entryPointProfile` is false in admin config.
  * Impression fires once per profile-screen mount for funnel data.
  */
-function ReferralProfileTileFromConfig({ config, locale, onOpen, trackEvent }: {
-  config: { enabled: boolean; inRollout: boolean; reward: { daysPerRef: number }; ui: { entryPointProfile: boolean } } | null;
+export type ReferralProfileTileFromConfigProps = {
+  /** Server config. `null` while loading or when the program is OFF. */
+  config: ReferralRulesConfig | null;
   locale: Locale;
   onOpen: () => void;
   trackEvent: (event: string, props?: Record<string, unknown>) => void;
-}) {
+};
+function ReferralProfileTileFromConfig({ config, locale, onOpen, trackEvent }: ReferralProfileTileFromConfigProps) {
   const impressionFiredRef = useRef(false);
   const shouldRender = !!config && config.enabled && config.inRollout && config.ui.entryPointProfile;
   useEffect(() => {
