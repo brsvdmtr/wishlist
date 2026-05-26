@@ -28,10 +28,11 @@
 //   ride future on-touch PRs.
 // - `ctx` is typed as `Record<string, any>` for now; a tighter SantaRootCtx
 //   type is deferred to a follow-up.
-// - `renderSantaAlias` (the locale-aware alias formatter) is still
-//   defined in MiniApp.tsx and passed via `ctx` rather than imported,
-//   to keep the diff minimal and avoid touching the shared corpus
-//   constants (SANTA_ADJ / SANTA_ANIMAL).
+// - `renderSantaAlias` (the locale-aware alias formatter) is now
+//   imported directly from `lib/santa-alias` (F5) — it used to flow
+//   through `ctx`. Importing means the SANTA_ADJ / SANTA_ANIMAL
+//   corpus (4 KB of locale strings) lives in this lazy chunk
+//   instead of the main chunk.
 
 'use client';
 
@@ -44,6 +45,7 @@ import { SantaAvatar } from '../../components/SantaAvatar';
 import { SnowflakeOverlay } from '../../components/SnowflakeOverlay';
 import { t, type Locale } from '@wishlist/shared';
 import { parsePaywallError, paywallContextFromError } from '../../lib/paywall';
+import { renderSantaAlias } from '../../lib/santa-alias';
 import type { Dispatch, SetStateAction } from 'react';
 import type {
   SantaCampaignDetail, SantaCampaignSummary, GuestItem,
@@ -80,7 +82,6 @@ export type SantaRootCtx = SantaState & {
   navBack: NavBack;
   pushToast: PushToast;
   showUpsell: ShowUpsell;
-  renderSantaAlias: (adjectiveKey: string, animalKey: string, locale: string) => string;
   setViewingItem: Dispatch<SetStateAction<(Item | GuestItem) | null>>;
   myActorHashRef: { current: string };
   botUsername: string;
@@ -112,9 +113,10 @@ export function SantaRoot(props: SantaRootProps) {
   const { C, font, locale } = ctx;
 
   // ── Local helpers forwarded from MiniAppInner closure ────────────────
+  // `renderSantaAlias` is imported above (./../../lib/santa-alias) — no
+  // longer a ctx field, so the corpus stays out of the main chunk.
   const {
     tgFetch, setScreen, navBack, pushToast, showUpsell,
-    renderSantaAlias,
     setViewingItem, myActorHashRef, botUsername,
     planInfo, wishlists,
   } = ctx;
