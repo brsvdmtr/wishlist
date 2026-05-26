@@ -31,6 +31,13 @@ import { SnowflakeOverlay } from './components/SnowflakeOverlay';
 // remove from this file to drop the dead import + keep tree-shake honest.
 import { UserAvatar } from './components/UserAvatar';
 import { getEmoji, extractFirstEmoji, EMOJIS } from './lib/emoji';
+import {
+  fmtPrice,
+  formatSmartResTimer,
+  parsePriceFromDisplay,
+  formatPriceForDisplay,
+  formatRetryAfter,
+} from './lib/format-price';
 import { parsePaywallError, paywallContextFromError } from './lib/paywall';
 import { resolveReservePrefill, MAX_DISPLAY_NAME_LEN, type ReservePrefillSource } from './lib/reservePrefill';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
@@ -353,49 +360,12 @@ const getPriorities = (locale: Locale) => [
 // removes the duplication.
 
 const prioEmoji = (p: number) => PRIO_EMOJI[p] ?? '🙂';
-const fmtPrice = (p: number | null, locale: Locale = 'ru', currency: 'RUB' | 'USD' = 'RUB') => {
-  if (!p) return null;
-  const formatted = p.toLocaleString(localeToBCP47(locale));
-  return currency === 'USD' ? `${formatted} $` : `${formatted} ₽`;
-};
 
-/** Format smart reservation remaining time as "Xd Xh" or "Xh Xm" or "Xm" */
-const formatSmartResTimer = (ms: number): string => {
-  if (ms <= 0) return '0m';
-  const totalMin = Math.floor(ms / 60000);
-  const d = Math.floor(totalMin / 1440);
-  const h = Math.floor((totalMin % 1440) / 60);
-  const m = totalMin % 60;
-  if (d > 0) return h > 0 ? `${d}d ${h}h` : `${d}d`;
-  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
-  return `${m}m`;
-};
-
-/** Strip everything except digits from a user-facing price string. Returns raw digit string. */
-const parsePriceFromDisplay = (value: string): string => value.replace(/\D/g, '');
-
-/** Format a raw number/string as a thousands-separated display value (space as separator). */
-const formatPriceForDisplay = (value: number | string | null | undefined): string => {
-  if (value === null || value === undefined || value === '') return '';
-  const digits = String(value).replace(/\D/g, '');
-  if (!digits) return '';
-  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-};
-
-function formatRetryAfter(seconds: number, locale: Locale): string {
-  if (seconds <= 0) return t('retry_now', locale);
-  let hours = Math.floor(seconds / 3600);
-  let minutes = Math.ceil((seconds % 3600) / 60);
-  if (minutes >= 60) { hours += 1; minutes = 0; }
-  if (hours === 0) return t('retry_minutes', locale, { minutes });
-  if (hours < 24) {
-    return minutes > 0
-      ? t('retry_hours', locale, { hours, minutes })
-      : t('retry_hours_only', locale, { hours });
-  }
-  const d = new Date(Date.now() + seconds * 1000);
-  return t('retry_tomorrow', locale, { time: d.toLocaleTimeString(localeToBCP47(locale), { hour: '2-digit', minute: '2-digit' }) });
-}
+// Pure price/time formatters extracted to ./lib/format-price (F5).
+// Re-exports remain absent — call sites import from MiniApp.tsx via the
+// local names below; tree-shaking carries the cost as long as the file
+// imports the helpers. Listed in the top-level import bundle so the
+// monolith doesn't keep duplicate copies.
 
 // ═══════════════════════════════════════════════════════
 // DATA TYPES
