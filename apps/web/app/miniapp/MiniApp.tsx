@@ -53,6 +53,7 @@ import { LATEST_RELEASE_ID } from './screens/data/release-notes-latest';
 // call sites stay byte-identical.
 import { useGiftNotesState } from './hooks/useGiftNotesState';
 import { useGroupGiftState } from './hooks/useGroupGiftState';
+import { useGuestViewState } from './hooks/useGuestViewState';
 import { useSantaState } from './hooks/useSantaState';
 import { useShowcaseState } from './hooks/useShowcaseState';
 import type {
@@ -209,6 +210,18 @@ const ReferralRoot = dynamic(
   { ssr: false, loading: () => <Skeleton variant="list" /> },
 );
 
+// F4 Wave E — Guest View cluster (guest-view + guest-item-detail +
+// filter sheet, ~1.15k LOC of JSX). DEEP-LINK-ONLY cold path: the
+// only way into either screen is opening someone else's wishlist /
+// item link, which is a fresh start-param resolve on bootstrap. Owner
+// users never load this chunk in normal flow. State lives in
+// MiniAppInner via `useGuestViewState`; the chunk receives those refs
+// through a `ctx` prop bag — same pattern as Group Gift / Showcase.
+const GuestViewRoot = dynamic(
+  () => import('./screens/guest/GuestViewRoot').then(m => ({ default: m.GuestViewRoot })),
+  { ssr: false, loading: () => <Skeleton variant="list" /> },
+);
+
 // ═══════════════════════════════════════════════════════
 // TELEGRAM TYPES
 // ═══════════════════════════════════════════════════════
@@ -283,7 +296,7 @@ const getGuestBudgetPresets = (locale: Locale) => [
 // Keep for any legacy callsites
 const getPriceFilters = getGuestBudgetPresets;
 
-type GuestSort = 'default' | 'price_asc' | 'price_desc' | 'priority_desc' | 'recommended';
+export type GuestSort = 'default' | 'price_asc' | 'price_desc' | 'priority_desc' | 'recommended';
 
 /** Score an item for recommended sort. Higher = better match. */
 function guestRecommendedScore(item: { priority: number; status: string; imageUrl?: string | null; url?: string | null; description?: string | null; price: number | null }, budgetMax: number | null): number {
@@ -589,7 +602,7 @@ type ReservationMeta = {
   isExpired: boolean;
 };
 
-type ReservationItem = Item & {
+export type ReservationItem = Item & {
   ownerName: string;
   ownerAvatarUrl: string | null;
   ownerId: string;
@@ -655,7 +668,7 @@ type AllItem = Item & {
   wishlistSlug: string;
 };
 
-type CommentDTO = {
+export type CommentDTO = {
   id: string;
   type: 'USER' | 'SYSTEM';
   authorActorHash: string | null;
@@ -3843,9 +3856,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [showCatPicker, setShowCatPicker] = useState<{ itemIds: string[] } | null>(null);
   const [catOnboardingHint, setCatOnboardingHint] = useState(false);
   const [showCatMenu, setShowCatMenu] = useState<WishlistCategory | null>(null);
-  // Guest categories (from public view)
-  const [guestCategories, setGuestCategories] = useState<WishlistCategory[]>([]);
-  const [guestCollapsedCats, setGuestCollapsedCats] = useState<Set<string>>(new Set());
+  // guestCategories / guestCollapsedCats now owned by useGuestViewState
+  // (F4 Wave E) — destructured in MiniAppInner.
 
   // ── Don't Gift state ──
   type DontGiftData = { presets: string[]; customItems: string[]; comment: string | null; visible: boolean };
@@ -3857,8 +3869,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [dgComment, setDgComment] = useState('');
   const [dgVisible, setDgVisible] = useState(true);
   const [dgNewItem, setDgNewItem] = useState('');
-  const [guestDontGift, setGuestDontGift] = useState<{ presets: string[]; customItems: string[]; comment: string | null } | null>(null);
-  const [guestDontGiftExpanded, setGuestDontGiftExpanded] = useState(false);
+  // guestDontGift / guestDontGiftExpanded now owned by useGuestViewState
+  // (F4 Wave E) — destructured in MiniAppInner.
   // Per-wishlist dont-gift state
   const [wlDontGiftMode, setWlDontGiftMode] = useState<DontGiftMode>('global');
   const [wlDgPresets, setWlDgPresets] = useState<string[]>([]);
@@ -4177,6 +4189,32 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     ggMessagesEndRef,
     ggAccess, setGgAccess,
   } = useGroupGiftState();
+
+  // F3 + F4 Wave E — Guest View cluster state (~18 cells across the
+  // public wishlist view, item detail, and filter sheet). Hook owns the
+  // raw cells; loaders + reservation handlers + sibling ctx bags still
+  // call the setters by their original names, so this destructure is
+  // a pure rename-free replacement of the inline useStates.
+  const {
+    guestWl, setGuestWl,
+    guestItems, setGuestItems,
+    guestCategories, setGuestCategories,
+    guestCollapsedCats, setGuestCollapsedCats,
+    guestDontGift, setGuestDontGift,
+    guestDontGiftExpanded, setGuestDontGiftExpanded,
+    guestSubId, setGuestSubId,
+    guestUnreadEntityIds, setGuestUnreadEntityIds,
+    guestUnreadItemCounts, setGuestUnreadItemCounts,
+    guestViewReturnToProfileUsername, setGuestViewReturnToProfileUsername,
+    guestBudgetMax, setGuestBudgetMax,
+    guestCustomBudget, setGuestCustomBudget,
+    guestPriorityFilter, setGuestPriorityFilter,
+    guestSort, setGuestSort,
+    guestFilterOpen, setGuestFilterOpen,
+    draftBudget, setDraftBudget,
+    draftCustomBudget, setDraftCustomBudget,
+    draftPriorities, setDraftPriorities,
+  } = useGuestViewState();
   const [readySharePromptData, setReadySharePromptData] = useState<{ wishlistId: string; wishlistTitle: string; itemsCount: number } | null>(null);
   // faqOpenId / changelogOpenId state moved into the lazy FAQScreen /
   // ChangelogScreen components (F4 Wave A) — they own their own accordion
@@ -4309,9 +4347,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // Keyboard open detection — used to hide fixed CTAs so they don't float above the keyboard
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 
-  // Guest state
-  const [guestWl, setGuestWl] = useState<{ id: string; slug: string; title: string; description: string | null; deadline: string | null; ownerName: string | null; ownerAvatarUrl: string | null; ownerUsername: string | null; smartReservationsEnabled?: boolean; smartResTtlHours?: number } | null>(null);
-  const [guestItems, setGuestItems] = useState<GuestItem[]>([]);
+  // guestWl / guestItems now owned by useGuestViewState (F4 Wave E) —
+  // destructured in MiniAppInner.
 
   // Item detail view (for both owner and guest)
   const [viewingItem, setViewingItem] = useState<(Item | GuestItem) | null>(null);
@@ -4426,14 +4463,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [subscriptionsLoading, setSubscriptionsLoading] = useState(false);
   // Lightweight unread summary for badge (loaded on boot, doesn't need full subscriptions)
   const [subUnreadCount, setSubUnreadCount] = useState(0);
-  // Guest subscription state
-  const [guestSubId, setGuestSubId] = useState<string | null>(null);
+  // Guest subscription state — guestSubId moved to useGuestViewState
+  // (F4 Wave E). isSubscribed/subscribing/subscriberCount stay here
+  // because handleSubscribe / handleUnsubscribe (useCallback) mutate
+  // them and other top-level effects read them.
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [subscriberCount, setSubscriberCount] = useState(0);
   const [subscribing, setSubscribing] = useState(false);
-  // Items with unreads (for highlight in guest-view opened from subscriptions)
-  const [guestUnreadEntityIds, setGuestUnreadEntityIds] = useState<string[]>([]);
-  const [guestUnreadItemCounts, setGuestUnreadItemCounts] = useState<Record<string, number>>({});
+  // guestUnreadEntityIds / guestUnreadItemCounts now owned by
+  // useGuestViewState (F4 Wave E) — destructured in MiniAppInner.
   // Curated selection subscriptions (lite-wishlists saved by user)
   const [curatedSubs, setCuratedSubs] = useState<{ id: string; shareToken: string; title: string; itemCount: number; ownerName: string | null; expiresAt: string }[]>([]);
   // Profile subscriptions — "follow another user's showcase" (separate from wishlist subs)
@@ -4442,20 +4480,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // Subscribe CTA state on the public-profile screen
   const [publicProfileSubscribed, setPublicProfileSubscribed] = useState(false);
   const [publicProfileSubInFlight, setPublicProfileSubInFlight] = useState(false);
-  // Remember return-to-profile target when opening a wishlist from a public profile,
-  // so BackButton from guest-view returns to that profile instead of my-wishlists.
-  const [guestViewReturnToProfileUsername, setGuestViewReturnToProfileUsername] = useState<string | null>(null);
-
-  // Guest filter & sort state
-  const [guestBudgetMax, setGuestBudgetMax] = useState<number | null>(null);
-  const [guestCustomBudget, setGuestCustomBudget] = useState('');
-  const [guestPriorityFilter, setGuestPriorityFilter] = useState<number[]>([1, 2, 3]);
-  const [guestSort, setGuestSort] = useState<GuestSort>('default');
-  const [guestFilterOpen, setGuestFilterOpen] = useState(false);
-  // Local (sheet-draft) states — applied only on "Apply"
-  const [draftBudget, setDraftBudget] = useState<number | null>(null);
-  const [draftCustomBudget, setDraftCustomBudget] = useState('');
-  const [draftPriorities, setDraftPriorities] = useState<number[]>([1, 2, 3]);
+  // guestViewReturnToProfileUsername, guest{BudgetMax,CustomBudget,
+  // PriorityFilter,Sort,FilterOpen} + draft{Budget,CustomBudget,
+  // Priorities} now owned by useGuestViewState (F4 Wave E) — see
+  // MiniAppInner destructure above.
 
   // Wishlist reorder state
   const [reorderMode, setReorderMode] = useState(false);
@@ -11923,6 +11951,75 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     gnEditNote, setGnEditNote,
   };
 
+  // F4 Wave E — context bag forwarded to the lazy-loaded GuestViewRoot.
+  // The 18 hook-owned guest fields plus computed memos
+  // (guestMainList / guestNoPriceBlock / guestFiltersActive /
+  // guestFilterBadge / guestHasUserCategories / guestDefaultCategory) and
+  // top-level shared state read by both screens (santa context,
+  // reservations, comments, group-gift creation, secret reservations,
+  // birthday banner, profile setters) are all forwarded together.
+  // Card primitives + CommentsThread are passed as components so the
+  // chunk doesn't need its own copies.
+  const guestViewRootCtx = {
+    // module-level constants
+    C, font, locale,
+    DONT_GIFT_PRESET_EMOJIS, CARD_REDESIGN_ENABLED,
+    PRIO_BG, PRIO_COLOR, btnBase,
+    prioEmoji, fmtPrice, fmtDeadline, normalizeTitle,
+    getGuestBudgetPresets, getPriorities, getSantaItemReservationState,
+    resolveCardMode,
+    // helpers + setters
+    tgFetch, setScreen, pushToast, trackEvent, showUpsell, setUpsellSheet,
+    // card / comments primitives reused from MiniApp.tsx
+    WishCardGuest, WishCardCompact, WishCardShowcase, CommentsThread,
+    // guest-view hook state (forwarded — same names, no rename)
+    guestWl, setGuestWl,
+    guestItems, setGuestItems,
+    guestCategories, setGuestCategories,
+    guestCollapsedCats, setGuestCollapsedCats,
+    guestDontGift, setGuestDontGift,
+    guestDontGiftExpanded, setGuestDontGiftExpanded,
+    guestSubId, setGuestSubId,
+    guestUnreadEntityIds, setGuestUnreadEntityIds,
+    guestUnreadItemCounts, setGuestUnreadItemCounts,
+    guestViewReturnToProfileUsername, setGuestViewReturnToProfileUsername,
+    guestBudgetMax, setGuestBudgetMax,
+    guestCustomBudget, setGuestCustomBudget,
+    guestPriorityFilter, setGuestPriorityFilter,
+    guestSort, setGuestSort,
+    guestFilterOpen, setGuestFilterOpen,
+    draftBudget, setDraftBudget,
+    draftCustomBudget, setDraftCustomBudget,
+    draftPriorities, setDraftPriorities,
+    // guest computed memos (owned by MiniAppInner useMemo)
+    guestMainList, guestNoPriceBlock,
+    guestFiltersActive, guestFilterBadge,
+    guestHasUserCategories, guestDefaultCategory,
+    // top-level shared state
+    viewingItem, setViewingItem, setItemPhotoOpen,
+    homeReturnTab, fromReservations, setFromReservations,
+    myActorHashRef, planInfo, tgUser,
+    isSubscribed, subscribing, handleSubscribe, handleUnsubscribe,
+    birthdayContext, setBirthdayContext, trackBirthdayAttributedEvent,
+    setPublicProfileUsername, setPublicProfileSubscribed, setPublicProfileError,
+    setPublicProfileData, loadProfileSubscribeStatus, loadPublicProfile,
+    reservations, reservationPro,
+    secretReservations, secretAccess,
+    santaReservationItems, santaWishlistReservingId,
+    santaDetailContext, setSantaDetailContext, setPendingUnreserveAction,
+    setResPurchasedConfirmItem, setResNoteText, setResNoteSheetItem, setResReminderSheetItem,
+    handleResReminderRemove, handleSantaReceiverReserve, handleSantaReceiverUnreserve,
+    handleUnreserveSantaItem, handleUnreserve,
+    openSantaCampaignFromDetail, openReserveSheet, startSecretReservationFlow,
+    commentRole, comments, commentText, setCommentText, commentSending,
+    handleDeleteComment, handleSendComment,
+    replyingTo, setReplyingTo, replyEntryRef,
+    highlightCommentId, commentNodeRefs,
+    ggAccess, setGroupGiftData,
+    setGroupGiftCreateItemId, setGroupGiftCreateItem,
+    setGgTargetAmt, setGgDeadline, setGgNote, setGgMyAmount, setGgCreating,
+  };
+
   return (
     <div ref={scrollContainerRef} dir={isRTL(locale) ? 'rtl' : 'ltr'} style={{
       position: isDesktop ? 'absolute' as const : 'fixed' as const, inset: 0,
@@ -16308,1516 +16405,31 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       })()}
 
       {/* ══════════════════════════════════════════════
-          GUEST — ITEM DETAIL (view only)
+          GUEST CLUSTER — F4 Wave E (REFACTOR_MINIAPP_TSX_PLAN)
+          ──────────────────────────────────────────────
+          Both guest-view + guest-item-detail (~1.15k LOC of JSX) plus
+          the GUEST FILTER bottom sheet extracted to a single lazy-loaded
+          module: ./screens/guest/GuestViewRoot.tsx. State (owned by
+          useGuestViewState + sibling clusters: santa, group-gift,
+          comments, reservations, secret reservations, birthday context,
+          profile setters) stays here; the chunk receives those refs
+          through the `guestViewRootCtx` bag built above.
+
+          Deep-link-only path — owner users never download this chunk.
+          The lazy Skeleton fallback covers the brief network round-trip
+          on a cold deep-link open.
+
+          Note: the GUEST FILTER BottomSheet is rendered INSIDE the
+          cluster (gated by `screen === 'guest-view'` via the same
+          `guestFilterOpen` cell), which means leaving guest-view also
+          unmounts the sheet — the previous behaviour where the sheet
+          stayed mounted globally was incidental and the `guestFilterOpen`
+          default is false anyway.
           ══════════════════════════════════════════════ */}
-      {screen === 'guest-item-detail' && viewingItem && (
-        <div style={{ padding: '0 0 140px', minHeight: 'calc(100vh + 1px)' }}>
-          {/* Hero image */}
-          <div style={{ padding: '16px 16px 0' }}>
-            {viewingItem.imageUrl ? (
-              <img
-                src={viewingItem.imageUrl}
-                alt=""
-                decoding="async"
-                onClick={() => setItemPhotoOpen(true)}
-                style={{ width: '100%', height: 230, objectFit: 'cover', borderRadius: 20, display: 'block', background: C.surface, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
-              />
-            ) : (
-              <div style={{ width: '100%', height: 180, borderRadius: 20, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 56 }}>
-                {getEmoji(viewingItem.title)}
-              </div>
-            )}
-          </div>
-
-          {/* Content */}
-          <div style={{ padding: '20px 20px 0' }}>
-            {/* Santa context block */}
-            {santaDetailContext && (
-              <div style={{
-                background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.08)', border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.2)',
-                borderRadius: 12, padding: '10px 14px', marginBottom: 16,
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
-              }}>
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    🎅 Тайный Санта
-                  </div>
-                  <div style={{ fontSize: 13, color: C.text }}>{santaDetailContext.campaignTitle}</div>
-                  <div style={{ fontSize: 11, color: C.textMuted }}>
-                    {t(`santa_gift_status_${santaDetailContext.giftStatus.toLowerCase()}` as never, locale) || santaDetailContext.giftStatus}
-                  </div>
-                </div>
-                <button
-                  onClick={() => void openSantaCampaignFromDetail(santaDetailContext)}
-                  style={{ fontSize: 12, color: C.accent, background: C.accentSoft, border: 'none',
-                    borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontFamily: font }}
-                >
-                  Открыть кампанию
-                </button>
-              </div>
-            )}
-            {/* Title (left) + Meta-block: price + priority centered on same axis (right) */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
-              <h1 style={{
-                flex: 1, minWidth: 0,
-                fontSize: 22, fontWeight: 700, fontFamily: font, color: C.text,
-                margin: 0, lineHeight: 1.25,
-                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
-                overflow: 'hidden', textOverflow: 'ellipsis',
-              }}>{normalizeTitle(viewingItem.title)}</h1>
-              <div style={{
-                flexShrink: 0,
-                display: 'flex', flexDirection: 'column', alignItems: 'center',
-                gap: 7,
-                width: 'max-content', maxWidth: '46%',
-              }}>
-                {viewingItem.price != null && (
-                  <div style={{
-                    fontSize: 17, fontWeight: 700, color: C.accent,
-                    whiteSpace: 'nowrap', lineHeight: 1, paddingTop: 3,
-                    fontVariantNumeric: 'tabular-nums', textAlign: 'center',
-                  }}>
-                    {fmtPrice(viewingItem.price, locale, viewingItem.currency ?? 'RUB')}
-                  </div>
-                )}
-                <div style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                  padding: '4px 10px', borderRadius: 100,
-                  background: PRIO_BG[viewingItem.priority] ?? PRIO_BG[1],
-                  fontSize: 12, fontWeight: 600,
-                  color: PRIO_COLOR[viewingItem.priority] ?? PRIO_COLOR[1],
-                  whiteSpace: 'nowrap',
-                }}>
-                  {prioEmoji(viewingItem.priority)}{' '}
-                  {getPriorities(locale).find((p) => p.value === viewingItem!.priority)?.label}
-                </div>
-              </div>
-            </div>
-
-            {/* URL */}
-            {viewingItem.url && (
-              <div style={{ marginTop: 0, maxWidth: '100%' }}>
-                <a href={viewingItem.url} target="_blank" rel="noreferrer" style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13,
-                  color: C.accent, background: C.accentSoft, padding: '8px 14px',
-                  borderRadius: 12, textDecoration: 'none',
-                  maxWidth: '100%', overflow: 'hidden',
-                }}>
-                  <span style={{ flexShrink: 0 }}>🔗</span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {viewingItem.url.replace(/^https?:\/\//, '')}
-                  </span>
-                </a>
-              </div>
-            )}
-
-            {/* Description — read-only for guests */}
-            {viewingItem.description && (
-              <div style={{ marginTop: 24 }}>
-                <div style={{ fontSize: 17, fontWeight: 600, color: C.text, fontFamily: font, marginBottom: 10 }}>
-                  {t('description_title', locale)}
-                </div>
-                <div style={{ fontSize: 15, color: C.textSec, lineHeight: 1.65 }}>
-                  {viewingItem.description}
-                </div>
-              </div>
-            )}
-
-            {/* Action zone */}
-            <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {santaDetailContext ? (() => {
-                const rState = getSantaItemReservationState(
-                  viewingItem.status,
-                  (viewingItem as GuestItem).reservedByActorHash ?? null,
-                  myActorHashRef.current,
-                );
-                if (santaDetailContext.source === 'reservation') {
-                  return (
-                    <>
-                      <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>
-                        {t('reserved_by_me', locale)}
-                      </span>
-                      <button
-                        onClick={() => {
-                          const si = santaReservationItems.find(i => i.id === viewingItem.id);
-                          if (si) setPendingUnreserveAction(() => () => handleUnreserveSantaItem(si, () => {
-                            setSantaDetailContext(null);
-                            setViewingItem(null);
-                            setFromReservations(false);
-                            setScreen('my-reservations');
-                          }));
-                        }}
-                        style={{
-                          ...btnBase, width: '100%', background: C.redSoft, color: C.red,
-                          border: '1px solid rgba(251, 113, 133, 0.3)', borderRadius: 14,
-                          padding: '12px 16px', fontSize: 14, fontWeight: 500,
-                        }}
-                      >
-                        {t('cancel_reservation', locale)}
-                      </button>
-                    </>
-                  );
-                } else {
-                  const isReserving = santaWishlistReservingId === viewingItem.id;
-                  const isReadOnly = !['OPEN', 'LOCKED', 'ACTIVE'].includes(santaDetailContext.campaignStatus);
-                  return (
-                    <>
-                      {rState === 'reserved-by-me' && (
-                        <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>
-                          {t('reserved_by_me', locale)}
-                        </span>
-                      )}
-                      {rState === 'reserved-by-other' && (
-                        <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.orangeSoft, color: C.orange, fontSize: 14, fontWeight: 600 }}>
-                          {t('already_reserved', locale)}
-                        </span>
-                      )}
-                      {(rState === 'available' || rState === 'reserved-by-me') && !isReadOnly && (
-                        <Button
-                          variant="primary"
-                          size="lg"
-                          loading={isReserving}
-                          disabled={isReserving}
-                          onClick={() => rState === 'reserved-by-me'
-                            ? void handleSantaReceiverUnreserve(viewingItem.id)
-                            : void handleSantaReceiverReserve(viewingItem.id)}
-                        >
-                          {rState === 'reserved-by-me' ? t('cancel_reservation', locale) : t('reserve_btn', locale)}
-                        </Button>
-                      )}
-                    </>
-                  );
-                }
-              })() : (
-                <>
-                  {viewingItem.status === 'available' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
-                      <Button
-                        variant="primary"
-                        size="lg"
-                        onClick={() => openReserveSheet(viewingItem as GuestItem)}
-                      >
-                        {t('reserve_btn', locale)}
-                      </Button>
-                      {/* 🔒 Secret reservation CTA — directly under the primary "Reserve" for a cleaner stack */}
-                      {(() => {
-                        const existing = secretReservations.find((r) => r.itemId === viewingItem.id);
-                        const label = existing ? t('sr_cta_open_secret', locale) : t('sr_cta_reserve_secretly', locale);
-                        return (
-                          <button
-                            onClick={() => startSecretReservationFlow(viewingItem)}
-                            style={{
-                              width: '100%', padding: '14px 24px', borderRadius: 16,
-                              border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.22)',
-                              background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.12)', color: 'var(--wb-accent-strong, #B4A6FF)',
-                              fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
-                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                            }}
-                          >
-                            {label}
-                            {!existing && !secretAccess.unlocked && planInfo.code === 'FREE' && (
-                              <ProBadge style={{ marginLeft: 4, padding: '2px 7px', height: 'auto', minHeight: 0 }} />
-                            )}
-                          </button>
-                        );
-                      })()}
-                      <Button
-                        variant="secondary"
-                        size="md"
-                        style={{ borderRadius: 16 }}
-                        onClick={() => {
-                          trackEvent('group_gift_cta_clicked', { itemId: viewingItem.id });
-                          // Check entitlement first
-                          void (async () => {
-                            try {
-                              const r = await tgFetch('/tg/items/' + viewingItem.id + '/group-gift', { method: 'GET' });
-                              if (r.ok) {
-                                const d = await r.json() as { hasGroupGift: boolean; groupGift?: GroupGiftData };
-                                if (d.hasGroupGift && d.groupGift?.id) {
-                                  setGroupGiftData(d.groupGift as GroupGiftData);
-                                  setScreen('group-gift-detail');
-                                  return;
-                                }
-                              }
-                            } catch { /* ignore */ }
-                            // No existing group gift — check entitlement
-                            if (ggAccess.unlocked) {
-                              setGroupGiftCreateItemId(viewingItem.id);
-                              setGroupGiftCreateItem({
-                                title: viewingItem.title,
-                                imageUrl: viewingItem.imageUrl ?? null,
-                                price: viewingItem.price ?? null,
-                                currency: (viewingItem as GuestItem).currency ?? 'RUB',
-                              });
-                              setGgTargetAmt(viewingItem.price ? String(viewingItem.price) : '');
-                              setGgDeadline(''); setGgNote(''); setGgMyAmount(''); setGgCreating(false);
-                              setScreen('group-gift-create');
-                            } else {
-                              setScreen('group-gift-paywall');
-                            }
-                          })();
-                        }}
-                      >
-                        {'👥 ' + t('gg_cta', locale)}
-                      </Button>
-                      <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', lineHeight: 1.4, padding: '0 8px' }}>
-                        {t('gg_cta_hint', locale)}
-                      </div>
-                    </div>
-                  )}
-                  {viewingItem.status === 'reserved' && !!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current && (
-                    <>
-                      <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>
-                        {t('reserved_by_me', locale)}
-                      </span>
-                      {/* Unreserve button only when NOT from reservations tab (Pro sections handle it) */}
-                      {homeReturnTab !== 'reservations' && (
-                        <button onClick={() => setPendingUnreserveAction(() => () => handleUnreserve(viewingItem as GuestItem))}
-                          style={{
-                            ...btnBase, width: '100%', background: C.redSoft, color: C.red,
-                            border: `1px solid rgba(251, 113, 133, 0.3)`, borderRadius: 14,
-                            padding: '12px 16px', fontSize: 14, fontWeight: 500,
-                          }}>
-                          {t('cancel_reservation', locale)}
-                        </button>
-                      )}
-                    </>
-                  )}
-                  {viewingItem.status === 'reserved' && !(!!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current) && (
-                    <>
-                      <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.orangeSoft, color: C.orange, fontSize: 14, fontWeight: 600 }}>
-                        {t('already_reserved', locale)}
-                      </span>
-                      {/* 🔒 Secret reservation still available even when publicly reserved by someone else */}
-                      {(() => {
-                        const existing = secretReservations.find((r) => r.itemId === viewingItem.id);
-                        const label = existing ? t('sr_cta_open_secret', locale) : t('sr_cta_save_secret_still', locale);
-                        return (
-                          <button
-                            onClick={() => startSecretReservationFlow(viewingItem)}
-                            style={{
-                              width: '100%', padding: '14px 24px', borderRadius: 16,
-                              border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.22)',
-                              background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.12)', color: 'var(--wb-accent-strong, #B4A6FF)',
-                              fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
-                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                            }}
-                          >
-                            {label}
-                            {!existing && !secretAccess.unlocked && planInfo.code === 'FREE' && (
-                              <ProBadge style={{ marginLeft: 4, padding: '2px 7px', height: 'auto', minHeight: 0 }} />
-                            )}
-                          </button>
-                        );
-                      })()}
-                      <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', lineHeight: 1.4, padding: '0 8px' }}>
-                        {t('sr_cta_save_secret_hint', locale)}
-                      </div>
-                    </>
-                  )}
-                  {viewingItem.status === 'purchased' && (
-                    <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>
-                      {t('status_gifted', locale)}
-                    </span>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* ── Reservation Pro: detail management ── */}
-            {viewingItem.status === 'reserved' && !!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current && homeReturnTab === 'reservations' && (() => {
-              const resItem = reservations.find(r => r.id === viewingItem.id);
-              if (!resItem) return null;
-              const sectionLabel: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 };
-
-              if (reservationPro) {
-                const reminderDate = resItem.meta?.reminderAt ? new Date(resItem.meta.reminderAt) : null;
-                const daysUntilReminder = reminderDate ? Math.max(0, Math.ceil((reminderDate.getTime() - Date.now()) / 86400000)) : null;
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                    {/* Separator */}
-                    <div style={{ borderTop: `1px solid ${C.border}`, margin: '20px 0 16px' }} />
-
-                    {/* Status section */}
-                    <div style={sectionLabel}>{t('res_detail_status_label', locale)}</div>
-                    <Card
-                      variant="current"
-                      padding="sm"
-                      onClick={() => setResPurchasedConfirmItem(resItem)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 10,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <span style={{ fontSize: 20 }}>✓</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: C.accent }}>{t('res_mark_purchased', locale)}</div>
-                        <div style={{ fontSize: 12, color: C.textSec }}>{t('res_detail_purchased_subtitle', locale)}</div>
-                      </div>
-                      {/* iOS-style toggle */}
-                      <div style={{
-                        width: 44, height: 26, borderRadius: 13, cursor: 'pointer', position: 'relative',
-                        background: resItem.meta?.purchased ? C.accent : C.surface,
-                        transition: 'background 0.2s',
-                      }}>
-                        <div style={{
-                          width: 22, height: 22, borderRadius: 11, background: '#fff',
-                          position: 'absolute', top: 2,
-                          left: resItem.meta?.purchased ? 20 : 2,
-                          transition: 'left 0.2s',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-                        }} />
-                      </div>
-                    </Card>
-
-                    {/* Note section */}
-                    <div style={{ ...sectionLabel, marginTop: 18 }}>{t('res_detail_note_label', locale)}</div>
-                    <div style={{
-                      background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12,
-                    }}>
-                      <div style={{ fontSize: 14, color: resItem.meta?.note ? C.text : C.textMuted, lineHeight: 1.5, marginBottom: 6 }}>
-                        {resItem.meta?.note || t('res_detail_note_empty', locale)}
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <span
-                          onClick={() => { setResNoteText(resItem.meta?.note ?? ''); setResNoteSheetItem(resItem); }}
-                          style={{ fontSize: 12, color: C.accent, cursor: 'pointer' }}
-                        >
-                          {t('res_detail_note_edit', locale)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Reminder section */}
-                    <div style={{ ...sectionLabel, marginTop: 22 }}>{t('res_detail_reminder_label', locale)}</div>
-                    {reminderDate ? (
-                      <div style={{
-                        display: 'flex', alignItems: 'center', gap: 12,
-                        padding: '14px 16px', borderRadius: 14,
-                        background: C.orangeSoft, border: '1px solid rgba(251,191,36,0.2)',
-                      }}>
-                        <span style={{ fontSize: 20 }}>🔔</span>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: C.orange }}>
-                            {reminderDate.toLocaleDateString(localeToBCP47(locale), { day: 'numeric', month: 'long' })}
-                            {t('datetime_separator_at', locale)}
-                            {reminderDate.toLocaleTimeString(localeToBCP47(locale), { hour: '2-digit', minute: '2-digit' }).replace(/^0/, '')}
-                          </div>
-                          <div style={{ fontSize: 12, color: C.textSec, marginTop: 2 }}>
-                            {daysUntilReminder !== null && daysUntilReminder > 0
-                              ? t('res_detail_reminder_in_days', locale, { n: daysUntilReminder })
-                              : t('gn_today', locale)}
-                          </div>
-                        </div>
-                        <span
-                          onClick={(e) => { e.stopPropagation(); handleResReminderRemove(resItem.id); }}
-                          style={{ fontSize: 18, color: C.textSec, cursor: 'pointer', padding: '8px 10px', lineHeight: 1 }}
-                        >
-                          ✕
-                        </span>
-                      </div>
-                    ) : (
-                      <div
-                        onClick={() => setResReminderSheetItem(resItem)}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 12,
-                          padding: '14px 16px', borderRadius: 14, cursor: 'pointer',
-                          background: C.card, border: `1px solid ${C.border}`,
-                        }}
-                      >
-                        <span style={{ fontSize: 20 }}>🔔</span>
-                        <div style={{ flex: 1, fontSize: 14, color: C.textSec }}>{t('res_reminder_btn', locale)}</div>
-                        <span style={{ fontSize: 14, color: C.textMuted }}>›</span>
-                      </div>
-                    )}
-
-                  </div>
-                );
-              } else {
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                    {/* Separator */}
-                    <div style={{ borderTop: `1px solid ${C.border}`, margin: '20px 0 16px' }} />
-
-                    {/* Locked items */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 0 16px' }}>
-                      {[
-                        { icon: '📝', label: t('res_detail_note_label', locale) },
-                        { icon: '✓', label: t('res_mark_purchased', locale) },
-                        { icon: '🔔', label: t('res_detail_reminder_label', locale) },
-                      ].map((item, i) => (
-                        <div
-                          key={i}
-                          onClick={() => setUpsellSheet({ context: 'reservation_pro' })}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 10,
-                            padding: 12, borderRadius: 12, cursor: 'pointer',
-                            border: `1px dashed ${C.borderLight}`, opacity: 0.6,
-                            background: 'rgba(255,255,255,0.02)',
-                          }}
-                        >
-                          <span style={{ fontSize: 18 }}>{item.icon}</span>
-                          <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.textSec }}>{item.label}</div>
-                          <ProBadge />
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Inline upsell */}
-                    <div
-                      onClick={() => setUpsellSheet({ context: 'reservation_pro' })}
-                      style={{
-                        margin: '0 0 16px', padding: '12px 16px', borderRadius: 12, cursor: 'pointer', textAlign: 'center',
-                        background: `linear-gradient(135deg, ${C.accentSoft} 0%, rgba(212,168,83,0.06) 100%)`,
-                        border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.15)`,
-                      }}
-                    >
-                      <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{t('res_pro_upsell_detail_title', locale)}</div>
-                      <div style={{ fontSize: 12, color: C.textSec, marginTop: 2 }}>{t('res_pro_upsell_detail_desc', locale)}</div>
-                      <div style={{
-                        display: 'inline-block', marginTop: 8, fontSize: 12, padding: '8px 16px',
-                        borderRadius: 10, background: C.accent, color: '#fff', fontWeight: 700, cursor: 'pointer',
-                      }}>
-                        ⭐ Pro
-                      </div>
-                    </div>
-
-                  </div>
-                );
-              }
-            })()}
-
-            {/* Comments — collapsible accordion */}
-            <CommentsThread
-              key={`res-${viewingItem.id}`}
-              commentRole={commentRole}
-              comments={comments}
-              commentText={commentText}
-              setCommentText={setCommentText}
-              commentSending={commentSending}
-              myActorHash={myActorHashRef.current}
-              onDeleteComment={handleDeleteComment}
-              onSendComment={handleSendComment}
-              isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'}
-              locale={locale}
-              replyingTo={replyingTo}
-              onStartReply={(c) => {
-                setReplyingTo(c);
-                trackEvent('comment_reply_ui_tapped', { source: 'bubble', itemId: viewingItem.id, commentId: c.id });
-              }}
-              onCancelReply={() => {
-                if (replyingTo) trackEvent('comment_reply_cancelled', { itemId: viewingItem.id, commentId: replyingTo.id, reason: 'user_cancel' });
-                setReplyingTo(null);
-              }}
-              expandInitially={replyEntryRef.current?.itemId === viewingItem.id && !replyEntryRef.current?.consumed}
-              highlightCommentId={highlightCommentId}
-              commentNodeRefs={commentNodeRefs}
-            />
-
-            {/* Hint for third parties — hidden on guest-item-detail (gg_cta_hint already provides guidance) */}
-
-            {/* Unreserve button — at the very bottom, below comments */}
-            {viewingItem.status === 'reserved' && !!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current && homeReturnTab === 'reservations' && (
-              <button
-                onClick={() => setPendingUnreserveAction(() => () => handleUnreserve(viewingItem as GuestItem))}
-                style={{
-                  ...btnBase, width: '100%', background: C.redSoft, color: C.red,
-                  border: 'none', borderRadius: 14, marginTop: 16,
-                  padding: '15px 18px', fontSize: 15, fontWeight: 700,
-                }}
-              >
-                {t('cancel_reservation', locale)}
-              </button>
-            )}
-          </div>
-        </div>
+      {(screen === 'guest-view' || screen === 'guest-item-detail') && (
+        <GuestViewRoot screen={screen} ctx={guestViewRootCtx} />
       )}
 
-      {/* ══════════════════════════════════════════════
-          CURATED SELECTION — IN-APP VIEW
-          ══════════════════════════════════════════════ */}
-      {screen === 'curated-view' && (
-        <div style={{ padding: '16px 20px 120px' }}>
-          {curatedViewExpired ? (
-            <div style={{ textAlign: 'center', paddingTop: 80 }}>
-              <div style={{
-                width: 80, height: 80, borderRadius: 22,
-                background: 'var(--wb-danger-soft)',
-                border: '1px solid rgba(251,113,133,0.28)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 40, margin: '0 auto 20px',
-                WebkitBackdropFilter: 'blur(14px)' as never,
-                backdropFilter: 'blur(14px)' as never,
-              }}>🚫</div>
-              <h2 style={{
-                fontSize: 22, fontWeight: 700,
-                color: 'var(--wb-text)', fontFamily: font,
-                margin: '0 0 10px', letterSpacing: '-0.025em',
-              }}>
-                {t('link_invalid_title', locale)}
-              </h2>
-              <p style={{
-                fontSize: 14.5, color: 'var(--wb-text-secondary)',
-                lineHeight: 1.5, maxWidth: 300, margin: '0 auto',
-                whiteSpace: 'pre-line', letterSpacing: '-0.005em',
-              }}>
-                {t('link_invalid_body', locale)}
-              </p>
-              <div style={{ maxWidth: 280, margin: '28px auto 0' }}>
-                <Button
-                  variant="primary-gradient"
-                  fullWidth
-                  onClick={() => { setScreen('my-wishlists'); setCuratedViewExpired(false); }}
-                >
-                  {wishlists.length > 0 ? t('link_invalid_cta_home', locale) : t('link_invalid_cta_create', locale)}
-                </Button>
-              </div>
-            </div>
-          ) : curatedViewData ? (() => {
-            const sel = curatedViewData;
-            const expiryDate = new Date(sel.expiresAt).toLocaleDateString(localeToBCP47(locale), { day: 'numeric', month: 'long', year: 'numeric' });
-            return (
-              <>
-                <Chip tone="accent" size="md" style={{ marginBottom: 12 }}>
-                  📋 {t('curated_public_badge', locale)}
-                </Chip>
-                <h1 style={{ fontSize: 26, fontWeight: 700, fontFamily: font, color: 'var(--wb-text)', letterSpacing: '-0.035em', lineHeight: 1.05, margin: '0 0 8px' }}>
-                  {sel.title}
-                </h1>
-                {sel.ownerName && (
-                  <div style={{
-                    fontSize: 14, color: 'var(--wb-text-secondary)',
-                    marginBottom: 4, letterSpacing: '-0.005em',
-                  }}>
-                    {t('curated_subtitle_by_owner', locale)} <b style={{ fontWeight: 650, color: 'var(--wb-text)' }}>{sel.ownerName}</b>
-                  </div>
-                )}
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
-                  <span style={{
-                    fontSize: 14, color: 'var(--wb-text-secondary)',
-                    letterSpacing: '-0.005em', fontFeatureSettings: '"tnum"',
-                  }}>
-                    {sel.items.length} {pluralize(sel.items.length, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}
-                  </span>
-                  <Chip tone="warning" size="md">
-                    {t('curated_public_valid_until', locale, { date: expiryDate })}
-                  </Chip>
-                </div>
-
-                {/* Subscribe/Unsubscribe button — only for non-owners */}
-                {!sel.isOwner && (
-                  <div style={{ marginBottom: 16 }}>
-                    <Button
-                      variant={sel.isSubscribed ? 'surface' : 'primary-gradient'}
-                      fullWidth
-                      loading={curatedSubscribing}
-                      onClick={toggleCuratedSubscription}
-                    >
-                      {sel.isSubscribed ? t('curated_unsubscribe_btn', locale) : t('curated_subscribe_btn', locale)}
-                    </Button>
-                  </div>
-                )}
-
-                {/* v2.1 item cards — glass + tokens */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {sel.items.map(item => (
-                    <div key={item.id} style={{
-                      background: 'var(--wb-card)',
-                      border: '1px solid var(--wb-border)',
-                      borderRadius: 18, overflow: 'hidden',
-                      WebkitBackdropFilter: 'blur(14px)' as never,
-                      backdropFilter: 'blur(14px)' as never,
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 14 }}>
-                        {item.imageUrl ? (
-                          <img src={item.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: 54, height: 54, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
-                        ) : (
-                          <div style={{
-                            width: 54, height: 54, borderRadius: 14, flexShrink: 0,
-                            background: 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 26, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
-                          }}>🎁</div>
-                        )}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{
-                            fontSize: 15, fontWeight: 600,
-                            color: 'var(--wb-text)', letterSpacing: '-0.015em',
-                            lineHeight: 1.3,
-                          }}>{item.title}</div>
-                          {item.priceText && (
-                            <div style={{
-                              fontSize: 13.5, fontWeight: 650, marginTop: 4,
-                              color: 'var(--wb-text-secondary)',
-                              fontFeatureSettings: '"tnum"',
-                            }}>
-                              {item.priceText} {item.currency === 'RUB' ? '₽' : item.currency === 'USD' ? '$' : item.currency === 'EUR' ? '€' : item.currency}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      {(item.description || item.url) && (
-                        <div style={{ padding: '0 14px 14px', borderTop: '1px solid var(--wb-hairline)' }}>
-                          {item.description && (
-                            <p style={{
-                              fontSize: 13.5, color: 'var(--wb-text-secondary)',
-                              lineHeight: 1.5, margin: '12px 0 0',
-                              letterSpacing: '-0.003em',
-                            }}>{item.description}</p>
-                          )}
-                          {item.url && (
-                            <a href={item.url} target="_blank" rel="noopener noreferrer" style={{
-                              display: 'inline-flex', alignItems: 'center', gap: 6,
-                              marginTop: 12, padding: '8px 14px', borderRadius: 12,
-                              background: 'var(--wb-accent-soft)',
-                              border: '1px solid var(--wb-accent-soft-strong)',
-                              color: 'var(--wb-accent-strong)',
-                              fontSize: 13, fontWeight: 650, textDecoration: 'none',
-                              letterSpacing: '-0.005em',
-                            }}>
-                              {t('open_link', locale)} ↗
-                            </a>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Info note */}
-                <div style={{
-                  marginTop: 16, borderRadius: 14, padding: '12px 16px',
-                  fontSize: 13, fontWeight: 500,
-                  background: 'var(--wb-accent-soft)',
-                  border: '1px solid var(--wb-accent-soft-strong)',
-                  color: 'var(--wb-accent-strong)',
-                  lineHeight: 1.5, letterSpacing: '-0.005em',
-                  WebkitBackdropFilter: 'blur(14px)' as never,
-                  backdropFilter: 'blur(14px)' as never,
-                }}>
-                  ℹ️ {t('curated_public_info', locale)}
-                </div>
-                {!sel.isOwner && !sel.isSubscribed && (
-                  <Banner tone="warning" icon="💡" style={{ marginTop: 10 }}>
-                    {t('curated_ttl_subscribe_hint', locale)}
-                  </Banner>
-                )}
-              </>
-            );
-          })() : null}
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════════
-          LINK MANAGEMENT
-          ══════════════════════════════════════════════ */}
-      {screen === 'link-management' && (
-        <div style={{ padding: '16px 20px 120px' }}>
-          {linkMgmtLoading && !linkMgmtData ? (
-            <div style={{ textAlign: 'center', paddingTop: 60, color: C.textSec, fontSize: 15 }}>...</div>
-          ) : linkMgmtData && (linkMgmtData.selections.length + linkMgmtData.wishlists.length + (linkMgmtData.profile ? 1 : 0)) === 0 ? (
-            /* Empty state */
-            <div style={{ textAlign: 'center', paddingTop: 60 }}>
-              <div style={{ width: 80, height: 80, borderRadius: 24, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, margin: '0 auto 20px' }}>🔗</div>
-              <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, fontFamily: font, margin: '0 0 10px' }}>
-                {t('links_empty_title', locale)}
-              </h2>
-              <p style={{ fontSize: 14, color: C.textSec, lineHeight: 1.5, maxWidth: 300, margin: '0 auto' }}>
-                {t('links_empty_body', locale)}
-              </p>
-              <p style={{ fontSize: 13, color: C.textMuted, marginTop: 12, lineHeight: 1.4 }}>
-                {t('links_empty_hint', locale)}
-              </p>
-            </div>
-          ) : linkMgmtData ? (() => {
-            const selections = linkMgmtData.selections;
-            const wishlists = linkMgmtData.wishlists;
-            const profile = linkMgmtData.profile;
-            const hasTemporary = selections.length > 0;
-            const hasPermanent = wishlists.length > 0 || !!profile;
-
-            const daysLeft = (expiresAt: string) => {
-              const diff = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000);
-              return diff;
-            };
-            const statusText = (days: number) => {
-              if (days <= 0) return { text: t('link_status_expires_today', locale), color: C.red };
-              if (days === 1) return { text: t('link_status_expires_tomorrow', locale), color: C.red };
-              if (days <= 7) return { text: t('link_status_days_left', locale, { days: String(days) }), color: 'var(--wb-warning, #FBBF24)' };
-              return { text: t('link_status_days_left', locale, { days: String(days) }), color: C.textMuted };
-            };
-
-            return (
-              <>
-                {hasTemporary && (
-                  <>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, margin: '4px 0 10px' }}>
-                      {t('links_section_temporary', locale)}
-                    </div>
-                    {selections.map(sel => {
-                      const days = daysLeft(sel.expiresAt);
-                      const st = statusText(days);
-                      return (
-                        <div key={sel.id} onClick={() => setLinkMgmtDetailItem({ type: 'selection', data: sel })} style={{
-                          background: 'var(--wb-card-strong, #2F2F38)', borderRadius: 16, padding: 16, border: `1px solid ${C.border}`,
-                          marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
-                        }}>
-                          <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(96,165,250,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>📋</div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 15, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 6 }}>
-                              {sel.title}
-                              {days <= 1 && <span style={{ fontSize: 14 }}>⚠️</span>}
-                            </div>
-                            <div style={{ fontSize: 13, color: C.textMuted, marginTop: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
-                              {t('link_type_lite', locale)}
-                              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--wb-warning, #FBBF24)', background: 'rgba(251,191,36,0.1)', padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: 0.3 }}>
-                                {t('link_badge_temporary', locale)}
-                              </span>
-                            </div>
-                          </div>
-                          <div style={{ flexShrink: 0, textAlign: 'right' }}>
-                            <span style={{ fontSize: 12, fontWeight: 600, color: st.color, whiteSpace: 'nowrap' }}>{st.text}</span>
-                          </div>
-                          <span style={{ fontSize: 16, color: C.textMuted, fontWeight: 300, flexShrink: 0 }}>›</span>
-                        </div>
-                      );
-                    })}
-                  </>
-                )}
-
-                {hasPermanent && (
-                  <>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, margin: `${hasTemporary ? 24 : 4}px 0 10px` }}>
-                      {t('links_section_permanent', locale)}
-                    </div>
-                    {wishlists.map(wl => (
-                      <div key={wl.id} onClick={() => setLinkMgmtDetailItem({ type: 'wishlist', data: wl })} style={{
-                        background: 'var(--wb-card-strong, #2F2F38)', borderRadius: 16, padding: 16, border: `1px solid ${C.border}`,
-                        marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
-                      }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 12, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>🎁</div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 15, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{wl.title}</div>
-                          <div style={{ fontSize: 13, color: C.textMuted, marginTop: 3 }}>{t('link_type_wishlist', locale)}</div>
-                        </div>
-                        <div style={{ flexShrink: 0, textAlign: 'right' }}>
-                          <span style={{ fontSize: 12, color: C.textMuted, whiteSpace: 'nowrap' }}>{t('link_status_no_expiry', locale)}</span>
-                        </div>
-                        <span style={{ fontSize: 16, color: C.textMuted, fontWeight: 300, flexShrink: 0 }}>›</span>
-                      </div>
-                    ))}
-                    {profile && (
-                      <div onClick={() => setLinkMgmtDetailItem({ type: 'profile', data: profile })} style={{
-                        background: 'var(--wb-card-strong, #2F2F38)', borderRadius: 16, padding: 16, border: `1px solid ${C.border}`,
-                        marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
-                      }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(74, 222, 128, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>👤</div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 15, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.username}</div>
-                          <div style={{ fontSize: 13, color: C.textMuted, marginTop: 3 }}>{t('link_type_profile', locale)}</div>
-                        </div>
-                        <div style={{ flexShrink: 0, textAlign: 'right' }}>
-                          <span style={{ fontSize: 12, color: C.textMuted, whiteSpace: 'nowrap' }}>{t('link_status_no_expiry', locale)}</span>
-                        </div>
-                        <span style={{ fontSize: 16, color: C.textMuted, fontWeight: 300, flexShrink: 0 }}>›</span>
-                      </div>
-                    )}
-                  </>
-                )}
-              </>
-            );
-          })() : null}
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════════
-          OWNER — SHARE
-          ══════════════════════════════════════════════ */}
-      {screen === 'share' && currentWl && (<>
-        <ShareScreen
-          wishlist={currentWl}
-          itemCount={items.length}
-          tgUser={tgUser}
-          ownerName={resolveOwnerName(profileData, tgUser)}
-          ownerAvatarUrl={profileData?.avatarUrl ?? null}
-          onCopied={() => {
-            pushToast(t('share_copied', locale), 'success');
-            trackEvent('wishlist.shared', { method: 'copy_link', wishlistId: currentWl.id, surface: 'share_screen' });
-          }}
-          onShared={() => {
-            trackEvent('wishlist.shared', { method: 'telegram_share', wishlistId: currentWl.id, surface: 'share_screen' });
-            setScreen('wishlist-detail');
-          }}
-          locale={locale}
-          buildTgDeepLink={buildTgDeepLink}
-          isPro={planInfo.code === 'PRO'}
-          tgFetch={tgFetch}
-        />
-        {/* v2.1 Curated selection nudge — glass card with accent-soft thumb */}
-        <div style={{ padding: '0 20px', marginTop: -100 }}>
-          <div
-            onClick={() => {
-              setScreen('wishlist-detail');
-              setTimeout(() => enterCuratedSelectionMode(), 100);
-            }}
-            className="wb-card-pressed"
-            style={{
-              display: 'flex', alignItems: 'center', gap: 14,
-              padding: '14px 16px',
-              background: 'var(--wb-card)',
-              border: '1px solid var(--wb-border)',
-              borderRadius: 18, cursor: 'pointer',
-              WebkitBackdropFilter: 'blur(14px)' as never,
-              backdropFilter: 'blur(14px)' as never,
-            }}
-          >
-            <div style={{
-              width: 42, height: 42, borderRadius: 13,
-              background: 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
-              color: 'var(--wb-accent-strong)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
-              flexShrink: 0,
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
-            }}>📋</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--wb-text)', letterSpacing: '-0.012em' }}>{t('curated_nudge_title', locale)}</div>
-              <div style={{ fontSize: 12.5, color: 'var(--wb-text-secondary)', marginTop: 2, letterSpacing: '-0.003em' }}>{t('curated_nudge_subtitle', locale)}</div>
-            </div>
-            <span style={{ color: 'var(--wb-text-muted)', fontSize: 18 }}>›</span>
-          </div>
-        </div>
-      </>)}
-
-      {/* ══════════════════════════════════════════════
-          GUEST VIEW
-          ══════════════════════════════════════════════ */}
-      {screen === 'guest-view' && guestWl && (
-        <div style={{ padding: '16px 20px 120px' }}>
-          {/* ── Birthday context banner — shown when arriving from a friend
-              birthday reminder. Offers wishlist-scoped CTAs.
-              Banner is dismissible per-session (not persisted). */}
-          {birthdayContext && !birthdayContext.isOwner && !birthdayContext.bannerDismissed && (() => {
-            const ctx = birthdayContext;
-            const days = ctx.daysUntil ?? 0;
-            const isToday = days === 0 || ctx.reminderKind === 'friend_today';
-            const name = ctx.birthdayUser.displayName || ctx.birthdayUser.username || 'WishBoard';
-            const dayWord = pluralize(
-              days,
-              t('br_days_word_one', locale),
-              t('br_days_word_few', locale),
-              t('br_days_word_many', locale),
-              locale,
-            );
-            // Fire banner_seen once per delivery; don't refire on re-renders.
-            // Local one-shot via dataset on the wrapper div.
-            return (
-              <div
-                style={{ marginBottom: 14 }}
-                ref={(el) => {
-                  if (el && !el.dataset.seen) {
-                    el.dataset.seen = '1';
-                    trackBirthdayAttributedEvent('birthday.banner_seen', { kind: ctx.reminderKind, target: 'wishlist' });
-                  }
-                }}
-              >
-                <Banner
-                  tone={isToday ? 'warning' : 'info'}
-                  icon={<span>{isToday ? '🎉' : '🎂'}</span>}
-                  title={isToday
-                    ? t('br_banner_friend_today_title', locale)
-                    : t('br_banner_friend_title', locale, { name })}
-                  onClose={() => {
-                    setBirthdayContext((prev) => prev ? { ...prev, bannerDismissed: true } : prev);
-                    trackBirthdayAttributedEvent('birthday.banner_dismissed', { kind: ctx.reminderKind });
-                  }}
-                >
-                  {isToday
-                    ? t('br_banner_friend_today_desc', locale, { name })
-                    : (ctx.targetUnavailable
-                        ? `${t('br_banner_target_unavailable_title', locale)}. ${t('br_banner_target_unavailable_desc', locale)}`
-                        : `${t('br_banner_friend_desc', locale)}${days > 0 ? ` · ${days} ${dayWord}` : ''}`)}
-                </Banner>
-              </div>
-            );
-          })()}
-
-          {/* ── v2.1 HeroCard — wishlist hero with emoji + meta + 3-stat row ──
-              Replaces the legacy owner-Card.current. Owner identity carried
-              in subtitle text + click-through; subscribe action moves below.
-              Source: docs/design-system/mockups/approved/v2.1-refresh-all-screens.html
-              (WishlistDetailScreen → .wb-hero) */}
-          {(() => {
-            const ownerClickable = !!guestWl.ownerUsername;
-            const openOwnerProfile = () => {
-              const uname = guestWl.ownerUsername;
-              if (!uname) return;
-              setPublicProfileUsername(uname);
-              setPublicProfileSubscribed(false);
-              setPublicProfileError(null);
-              setPublicProfileData(null);
-              void loadProfileSubscribeStatus(uname);
-              void loadPublicProfile(uname);
-              setScreen('public-profile');
-              window.scrollTo(0, 0);
-              trackEvent('profile_open_from_guest_view', { username: uname });
-            };
-            const totalCount = guestMainList.length + guestNoPriceBlock.length;
-            const allGuestItems = [...guestMainList, ...guestNoPriceBlock];
-            const reservedCount = allGuestItems.filter(it => it.status === 'reserved' || it.status === 'purchased').length;
-            const subParts: string[] = [];
-            if (guestWl.ownerName) subParts.push(guestWl.ownerName);
-            if (guestWl.deadline) {
-              const d = fmtDeadline(guestWl.deadline);
-              if (d) subParts.push(d);
-            }
-            return (
-              <div style={{ marginBottom: 14 }}>
-                <HeroCard tone="accent">
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                    <div style={{ fontSize: 44, lineHeight: 1, filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.2))', flexShrink: 0 }}>
-                      {getEmoji(guestWl.title) ?? '🎁'}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div
-                        onClick={ownerClickable ? openOwnerProfile : undefined}
-                        style={{
-                          fontSize: 26, fontWeight: 700, color: '#fff',
-                          letterSpacing: '-0.035em', lineHeight: 1.05,
-                          cursor: ownerClickable ? 'pointer' : 'default',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {guestWl.title}
-                      </div>
-                      {subParts.length > 0 && (
-                        <div
-                          onClick={ownerClickable ? openOwnerProfile : undefined}
-                          style={{
-                            fontSize: 13, opacity: 0.85, marginTop: 4,
-                            letterSpacing: '-0.005em',
-                            cursor: ownerClickable ? 'pointer' : 'default',
-                          }}
-                        >
-                          {subParts.join(' · ')}
-                          {ownerClickable && guestWl.ownerName ? ' ›' : ''}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Stat row — total + reserved. Participants/avatar stack
-                      deferred until backend exposes per-wishlist contributors. */}
-                  {totalCount > 0 && (
-                    <div style={{ display: 'flex', gap: 18, marginTop: 18 }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.03em', fontFeatureSettings: '"tnum"' }}>
-                          {totalCount}
-                        </div>
-                        <div style={{ fontSize: 11, opacity: 0.75, marginTop: 2 }}>
-                          {pluralize(totalCount, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}
-                        </div>
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.03em', fontFeatureSettings: '"tnum"' }}>
-                          {reservedCount}
-                        </div>
-                        <div style={{ fontSize: 11, opacity: 0.75, marginTop: 2 }}>
-                          забронировано
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </HeroCard>
-
-                {/* Subscribe row — moved out of hero for v2.1 cleaner composition */}
-                {tgUser && (
-                  <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
-                    <button
-                      key={isSubscribed ? 'subscribed' : 'not-subscribed'}
-                      onClick={() => {
-                        if (isSubscribed) void handleUnsubscribe(guestWl.id);
-                        else void handleSubscribe(guestWl.id);
-                      }}
-                      disabled={subscribing}
-                      style={{
-                        padding: '10px 16px', borderRadius: 100, border: '1px solid',
-                        borderColor: isSubscribed ? 'var(--wb-border)' : 'var(--wb-accent-soft-strong)',
-                        cursor: 'pointer', fontFamily: font, fontSize: 13, fontWeight: 650,
-                        background: isSubscribed ? 'var(--wb-card)' : 'var(--wb-accent-soft)',
-                        color: isSubscribed ? 'var(--wb-text-secondary)' : 'var(--wb-accent-strong)',
-                        WebkitBackdropFilter: 'blur(14px)' as never,
-                        backdropFilter: 'blur(14px)' as never,
-                        opacity: subscribing ? 0.7 : 1,
-                        transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-                      }}
-                    >
-                      {isSubscribed ? `✓ ${t('sub_subscribed_btn', locale)}` : `+ ${t('sub_subscribe_btn', locale)}`}
-                    </button>
-                  </div>
-                )}
-
-                {guestWl.description && (
-                  <div style={{ fontSize: 13, color: 'var(--wb-text-secondary)', marginTop: 10, padding: '0 4px', lineHeight: 1.4 }}>
-                    {guestWl.description}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-
-          {/* ── Don't Gift block (guest view) ─────────────────────────── */}
-          {guestDontGift && (guestDontGift.presets.length > 0 || guestDontGift.customItems.length > 0 || guestDontGift.comment) && (
-            <>
-              <div
-                onClick={() => {
-                  if (!guestDontGiftExpanded) trackEvent('dont_gift_guest_expanded');
-                  setGuestDontGiftExpanded(!guestDontGiftExpanded);
-                }}
-                style={{
-                  background: C.card, borderRadius: 16, padding: '14px 18px',
-                  marginBottom: 4, cursor: 'pointer',
-                  border: `1px solid rgba(251, 113, 133, 0.12)`,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 16 }}>🚫</span>
-                    <span style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font }}>
-                      {t('dont_gift_guest_title', locale)}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {!guestDontGiftExpanded && (
-                      <span style={{ fontSize: 12, color: C.textMuted }}>
-                        {guestDontGift.presets.length + guestDontGift.customItems.length + (guestDontGift.comment ? 1 : 0)}
-                      </span>
-                    )}
-                    <span style={{
-                      fontSize: 12, color: C.textMuted, transition: 'transform 0.2s',
-                      transform: guestDontGiftExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
-                      display: 'inline-block',
-                    }}>▼</span>
-                  </div>
-                </div>
-                {guestDontGiftExpanded && (
-                  <div style={{ marginTop: 12 }}>
-                    {guestDontGift.presets.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                        {guestDontGift.presets.map(p => (
-                          <span key={p} style={{
-                            padding: '5px 12px', borderRadius: 20, fontSize: 13, fontWeight: 500,
-                            background: C.redSoft, color: C.red, fontFamily: font,
-                          }}>
-                            {DONT_GIFT_PRESET_EMOJIS[p] ?? ''} {t(('dont_gift_preset_' + p) as any, locale)}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {guestDontGift.customItems.length > 0 && (
-                      <div style={{ marginBottom: 8 }}>
-                        {guestDontGift.customItems.map((item, i) => (
-                          <div key={i} style={{ fontSize: 13, color: C.textSec, padding: '3px 0', lineHeight: 1.4 }}>
-                            • {item}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {guestDontGift.comment && (
-                      <div style={{
-                        fontSize: 13, color: C.textMuted, lineHeight: 1.5,
-                        paddingTop: 8, borderTop: `1px solid ${C.border}`,
-                      }}>
-                        {guestDontGift.comment}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              {/* Separator */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '8px 0 14px' }}>
-                <div style={{ flex: 1, height: 1, background: C.borderLight }} />
-                <span style={{ fontSize: 13, color: C.textMuted, fontWeight: 600, whiteSpace: 'nowrap', fontFamily: font }}>
-                  🎁 {t('dont_gift_guest_separator', locale)}
-                </span>
-                <div style={{ flex: 1, height: 1, background: C.borderLight }} />
-              </div>
-            </>
-          )}
-
-          {/* ── Filter & Sort bar ─────────────────────────────────────── */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14, overflowX: 'auto', paddingBottom: 2 }}>
-            {/* Filter button */}
-            <button
-              onClick={() => {
-                setDraftBudget(guestBudgetMax);
-                setDraftCustomBudget(guestCustomBudget);
-                setDraftPriorities([...guestPriorityFilter]);
-                setGuestFilterOpen(true);
-              }}
-              style={{
-                flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
-                padding: '7px 13px', borderRadius: 20, border: 'none', cursor: 'pointer',
-                fontFamily: font, fontSize: 13, fontWeight: 600, transition: 'all 0.18s',
-                background: guestFiltersActive ? C.accent : C.surface,
-                color: guestFiltersActive ? '#fff' : C.text,
-              }}
-            >
-              <span style={{ fontSize: 14 }}>⚙</span>
-              {t('filter_label', locale)}
-              {guestFilterBadge > 0 && (
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  minWidth: 18, height: 18, borderRadius: 9, fontSize: 11, fontWeight: 700,
-                  background: 'rgba(255,255,255,0.3)', color: '#fff', padding: '0 4px',
-                }}>{guestFilterBadge}</span>
-              )}
-            </button>
-
-            {/* Sort chips */}
-            {(
-              [
-                { key: 'default',        label: t('sort_default',       locale) },
-                { key: 'price_asc',      label: t('sort_price_asc',     locale) },
-                { key: 'price_desc',     label: t('sort_price_desc',    locale) },
-                { key: 'priority_desc',  label: t('sort_priority_desc', locale) },
-                { key: 'recommended',    label: t('sort_recommended',   locale), pro: true },
-              ] as { key: GuestSort; label: string; pro?: boolean }[]
-            ).map(({ key, label, pro }) => {
-              const isActive = guestSort === key;
-              return (
-                <button
-                  key={key}
-                  onClick={() => {
-                    if (pro && planInfo.code !== 'PRO') {
-                      showUpsell('sort_recommended');
-                      return;
-                    }
-                    setGuestSort(key);
-                  }}
-                  style={{
-                    flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4,
-                    padding: '7px 13px', borderRadius: 20, border: 'none', cursor: 'pointer',
-                    fontFamily: font, fontSize: 13, fontWeight: isActive ? 700 : 500,
-                    transition: 'all 0.18s',
-                    background: isActive ? C.accent : C.surface,
-                    color: isActive ? '#fff' : C.text,
-                  }}
-                >
-                  {label}
-                  {pro && planInfo.code !== 'PRO' && <ProBadge style={{ marginLeft: 2 }} />}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* ── Main list ─────────────────────────────────────────────────── */}
-          {guestMainList.length === 0 && !guestNoPriceBlock.length ? (
-            <div style={{ textAlign: 'center', padding: '48px 24px' }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 6 }}>
-                {t('guest_filter_empty', locale)}
-              </div>
-              {guestFiltersActive && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  fullWidth={false}
-                  style={{ padding: '10px 20px', fontSize: 14, minHeight: 0, marginTop: 12 }}
-                  onClick={() => { setGuestBudgetMax(null); setGuestCustomBudget(''); setGuestPriorityFilter([1, 2, 3]); }}
-                >
-                  {t('guest_filter_reset', locale)}
-                </Button>
-              )}
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {(() => {
-                // Shared guest card renderer
-                const renderGuestCard = (item: GuestItem, i: number, totalItems: number) => {
-                  const itemUnreadCount = guestUnreadItemCounts[item.id] ?? 0;
-                  const hasSecret = secretReservations.some((r) => r.itemId === item.id);
-                  const useNewCards = CARD_REDESIGN_ENABLED;
-                  if (useNewCards) {
-                    const cardMode = resolveCardMode(totalItems, undefined, false);
-                    const stagger = cardMode === 'compact' ? 0.04 : 0.08;
-                    const gap = cardMode === 'compact' ? 8 : 14;
-                    const Card = cardMode === 'showcase' ? WishCardShowcase : WishCardCompact;
-                    return (
-                      <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * stagger}s both`, marginBottom: gap, position: 'relative', ...(itemUnreadCount > 0 ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
-                        <Card
-                          item={item}
-                          isGuest
-                          onTap={(it: GuestItem) => { setViewingItem(it); setScreen('guest-item-detail'); }}
-                          onReserve={(w: GuestItem) => openReserveSheet(w)}
-                          onUnreserve={handleUnreserve}
-                          myActorHash={myActorHashRef.current}
-                          locale={locale}
-                          secretByMe={hasSecret}
-                        />
-                        <CounterBadge count={itemUnreadCount} tone="warning" style={{ zIndex: 10, minWidth: 22, height: 22 }} />
-                      </div>
-                    );
-                  }
-                  return (
-                    <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both`, position: 'relative', ...(itemUnreadCount > 0 ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
-                      <WishCardGuest
-                        item={item}
-                        onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }}
-                        onReserve={(w) => openReserveSheet(w)}
-                        onUnreserve={handleUnreserve}
-                        myActorHash={myActorHashRef.current}
-                        locale={locale}
-                        secretByMe={hasSecret}
-                      />
-                      {itemUnreadCount > 0 && (
-                        <CounterBadge count={itemUnreadCount} tone="warning" style={{ top: 6, right: 6, zIndex: 10, minWidth: 22, height: 22 }} />
-                      )}
-                    </div>
-                  );
-                };
-
-                // If guest wishlist has user-created categories, render grouped
-                if (guestHasUserCategories) {
-                  const sortedCats = [...guestCategories].sort((a, b) => a.sortOrder - b.sortOrder);
-                  let gIdx = 0;
-                  const allItems = [...guestMainList, ...guestNoPriceBlock];
-                  return sortedCats.map(cat => {
-                    const catItems = guestMainList.filter(it => {
-                      const cid = it.categoryId ?? guestDefaultCategory?.id ?? '';
-                      return cid === cat.id;
-                    });
-                    if (cat.isDefault && catItems.length === 0) return null;
-                    const isCollapsed = guestCollapsedCats.has(cat.id);
-                    return (
-                      <div key={cat.id} style={{ marginBottom: 8 }}>
-                        <div
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 8,
-                            padding: '6px 2px 4px', cursor: 'pointer', userSelect: 'none',
-                          }}
-                          onClick={() => setGuestCollapsedCats(prev => {
-                            const next = new Set(prev);
-                            if (next.has(cat.id)) next.delete(cat.id); else next.add(cat.id);
-                            return next;
-                          })}
-                        >
-                          <span style={{
-                            fontSize: 12, color: C.textMuted, transition: 'transform 0.2s',
-                            transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
-                            display: 'inline-block',
-                          }}>▼</span>
-                          <span style={{
-                            fontSize: 14, fontWeight: 700, color: C.text, fontFamily: font,
-                            flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          }}>
-                            {cat.isDefault ? t('cat_uncategorized', locale) : cat.name}
-                          </span>
-                          <span style={{ fontSize: 12, color: C.textMuted, fontWeight: 600, flexShrink: 0 }}>
-                            {catItems.length}
-                          </span>
-                        </div>
-                        {!isCollapsed && catItems.map(item => {
-                          const idx = gIdx++;
-                          return renderGuestCard(item, idx, allItems.length);
-                        })}
-                        {isCollapsed && (gIdx += catItems.length, null)}
-                      </div>
-                    );
-                  });
-                }
-
-                // Flat list (no user categories)
-                return guestMainList.map((item, i) => renderGuestCard(item, i, [...guestMainList, ...guestNoPriceBlock].length));
-              })()}
-
-              {/* ── No-price high-priority block ───────────────────────────── */}
-              {guestNoPriceBlock.length > 0 && (
-                <div style={{ marginTop: 16 }}>
-                  <div style={{
-                    fontSize: 12, fontWeight: 600, color: C.textMuted,
-                    marginBottom: 10, paddingLeft: 2,
-                    display: 'flex', alignItems: 'center', gap: 6,
-                  }}>
-                    <span>😍</span>
-                    {t('guest_no_price_title', locale)}
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {guestNoPriceBlock.map((item, i) => {
-                      const itemUnreadCount = guestUnreadItemCounts[item.id] ?? 0;
-                      const useNewCards = CARD_REDESIGN_ENABLED;
-                      if (useNewCards) {
-                        const Card = WishCardCompact;
-                        return (
-                          <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.04}s both`, marginBottom: 8, position: 'relative', ...(itemUnreadCount > 0 ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
-                            <Card
-                              item={item}
-                              isGuest
-                              onTap={(it: GuestItem) => { setViewingItem(it); setScreen('guest-item-detail'); }}
-                              onReserve={(w: GuestItem) => openReserveSheet(w)}
-                              onUnreserve={handleUnreserve}
-                              myActorHash={myActorHashRef.current}
-                              locale={locale}
-                            />
-                            {itemUnreadCount > 0 && (
-                              <CounterBadge count={itemUnreadCount} tone="warning" style={{ zIndex: 10, minWidth: 22, height: 22 }} />
-                            )}
-                          </div>
-                        );
-                      }
-                      return (
-                        <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both`, position: 'relative', ...(itemUnreadCount > 0 ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
-                          <WishCardGuest
-                            item={item}
-                            onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }}
-                            onReserve={(w) => openReserveSheet(w)}
-                            onUnreserve={handleUnreserve}
-                            myActorHash={myActorHashRef.current}
-                            locale={locale}
-                          />
-                          {itemUnreadCount > 0 && (
-                            <CounterBadge count={itemUnreadCount} tone="warning" style={{ zIndex: 10, minWidth: 22, height: 22 }} />
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════════
-          GUEST FILTER BOTTOM SHEET
-          ══════════════════════════════════════════════ */}
-      <BottomSheet
-        isOpen={guestFilterOpen}
-        onClose={() => setGuestFilterOpen(false)}
-        title={t('filter_label', locale)}
-      >
-        <div style={{ padding: '0 0 16px' }}>
-          {/* Budget section */}
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              {t('filter_budget_label', locale)}
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-              {getGuestBudgetPresets(locale).map((preset) => {
-                const isActive = draftBudget === preset.max && (preset.max !== null || draftCustomBudget === '');
-                return (
-                  <button
-                    key={preset.max ?? 'all'}
-                    onClick={() => { setDraftBudget(preset.max); setDraftCustomBudget(''); }}
-                    style={{
-                      padding: '7px 14px', borderRadius: 20, border: 'none', cursor: 'pointer',
-                      fontFamily: font, fontSize: 13, fontWeight: 600, transition: 'all 0.18s',
-                      background: isActive ? C.accent : C.surface,
-                      color: isActive ? '#fff' : C.text,
-                    }}
-                  >{preset.label}</button>
-                );
-              })}
-            </div>
-            {/* Custom budget input */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input
-                type="number"
-                min={1}
-                step={1}
-                placeholder={t('filter_custom_placeholder', locale)}
-                value={draftCustomBudget}
-                onChange={(e) => {
-                  const raw = e.target.value.replace(/[^0-9]/g, '');
-                  setDraftCustomBudget(raw);
-                  const num = parseInt(raw, 10);
-                  if (!isNaN(num) && num > 0) {
-                    setDraftBudget(num);
-                  } else if (raw === '') {
-                    setDraftBudget(null);
-                  }
-                }}
-                style={{
-                  flex: 1, padding: '10px 14px', borderRadius: 12,
-                  border: `1.5px solid ${draftCustomBudget ? C.accent : C.border}`,
-                  background: C.surface, color: C.text,
-                  fontFamily: font, fontSize: 14, outline: 'none',
-                  MozAppearance: 'textfield',
-                } as React.CSSProperties}
-              />
-              {draftCustomBudget && (
-                <button
-                  onClick={() => { setDraftCustomBudget(''); setDraftBudget(null); }}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMuted, fontSize: 20, padding: '0 4px', lineHeight: 1 }}
-                >×</button>
-              )}
-            </div>
-          </div>
-
-          {/* Priority section */}
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              {t('filter_priority_label', locale)}
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {getPriorities(locale).map((p) => {
-                const isActive = draftPriorities.includes(p.value);
-                return (
-                  <button
-                    key={p.value}
-                    onClick={() => {
-                      setDraftPriorities((prev) => {
-                        if (isActive) {
-                          // Don't deselect if it's the last one
-                          if (prev.length === 1) return prev;
-                          return prev.filter((v) => v !== p.value);
-                        }
-                        return [...prev, p.value].sort();
-                      });
-                    }}
-                    style={{
-                      flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
-                      gap: 4, padding: '10px 8px', borderRadius: 12,
-                      border: `2px solid ${isActive ? PRIO_COLOR[p.value] : C.border}`,
-                      cursor: 'pointer', fontFamily: font, transition: 'all 0.18s',
-                      background: isActive ? PRIO_BG[p.value] : C.surface,
-                    }}
-                  >
-                    <span style={{ fontSize: 20 }}>{p.emoji}</span>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: isActive ? PRIO_COLOR[p.value] : C.textMuted }}>{p.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div style={{ display: 'flex', gap: 10 }}>
-            <Button
-              variant="secondary"
-              style={{ flex: 1, padding: '13px', fontSize: 14 }}
-              onClick={() => {
-                setDraftBudget(null); setDraftCustomBudget(''); setDraftPriorities([1, 2, 3]);
-              }}
-            >
-              {t('filter_reset', locale)}
-            </Button>
-            <Button
-              variant="primary"
-              style={{ flex: 2, padding: '13px', fontSize: 14 }}
-              onClick={() => {
-                setGuestBudgetMax(draftBudget);
-                setGuestCustomBudget(draftCustomBudget);
-                setGuestPriorityFilter(draftPriorities);
-                setGuestFilterOpen(false);
-              }}
-            >
-              {t('filter_apply', locale)}
-            </Button>
-          </div>
-        </div>
-      </BottomSheet>
 
       {/* ══════════════════════════════════════════════
           GLOBAL SEARCH

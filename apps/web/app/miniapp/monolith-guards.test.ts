@@ -140,6 +140,9 @@ describe('MiniApp.tsx — F1 lazy-screen regression guard (2026-05-25)', () => {
     { name: 'PublicProfileRoot', path: './screens/public-profile/PublicProfileRoot' },
     // F4 Wave A++ — Referral cluster (referral + referral-history, ~568 LOC).
     { name: 'ReferralRoot', path: './screens/referral/ReferralRoot' },
+    // F4 Wave E — Guest View cluster (guest-view + guest-item-detail
+    // + filter sheet, ~1.15k LOC). Deep-link-only cold path.
+    { name: 'GuestViewRoot', path: './screens/guest/GuestViewRoot' },
   ] as const;
 
   for (const { name, path } of LAZY_SCREENS) {
@@ -228,6 +231,10 @@ describe('MiniApp.tsx — F3 cluster-state hook drift guard', () => {
     {
       hook: 'useGroupGiftState',
       drift: ['groupGiftData', 'groupGiftMessages', 'ggTargetAmt', 'ggChatMsg', 'ggAccess'],
+    },
+    {
+      hook: 'useGuestViewState',
+      drift: ['guestWl', 'guestItems', 'guestBudgetMax', 'guestSort', 'guestFilterOpen', 'draftBudget'],
     },
   ] as const;
 
