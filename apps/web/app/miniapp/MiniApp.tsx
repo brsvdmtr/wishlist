@@ -648,7 +648,7 @@ type SecretReservationDTO = {
   ownerUsername: string | null;
 };
 
-type HomeTab = 'wishlists' | 'wishes' | 'reservations';
+export type HomeTab = 'wishlists' | 'wishes' | 'reservations';
 
 type AllItem = Item & {
   wishlistTitle: string;

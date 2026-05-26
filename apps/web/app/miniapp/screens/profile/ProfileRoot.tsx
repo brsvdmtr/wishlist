@@ -41,18 +41,14 @@ import { Button, Chip } from '@wishlist/ui';
 import { t, localeToBCP47, type Locale } from '@wishlist/shared';
 import { SantaHatOverlay } from '../../components/SantaHatOverlay';
 import { ProBadge } from '../../components/ProBadge';
-
-/**
- * Concrete shape of the legacy `C` token bag forwarded from MiniApp.tsx.
- */
-type LegacyColorBag = {
-  bg: string; surface: string; surfaceHover: string; card: string;
-  accent: string; accentSoft: string; accentGlow: string;
-  green: string; greenSoft: string; orange: string; orangeSoft: string;
-  red: string; redSoft: string;
-  text: string; textSec: string; textMuted: string;
-  border: string; borderLight: string;
-};
+import type { ComponentType, Dispatch, SetStateAction } from 'react';
+import type {
+  HomeTab, PlanInfo, Screen, SkuInfo, SubscriptionInfo, TgUser, Wishlist,
+} from '../../MiniApp';
+import type {
+  LegacyColorBag, PushToast, SetScreen, SetUpsellSheet,
+  ShowUpsell, TgFetch, TrackEvent,
+} from '../../_shared/closure-types';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export type ProfileRootCtx = {
@@ -60,25 +56,27 @@ export type ProfileRootCtx = {
   C: LegacyColorBag;
   font: string;
   locale: Locale;
-  // hot-path helpers
-  tgFetch: any;
-  setScreen: any;
-  pushToast: any;
-  showUpsell: any;
-  setUpsellSheet: any;
-  trackEvent: any;
+  // hot-path helpers — real signatures from `_shared/closure-types`.
+  tgFetch: TgFetch;
+  setScreen: SetScreen;
+  pushToast: PushToast;
+  showUpsell: ShowUpsell;
+  setUpsellSheet: SetUpsellSheet;
+  trackEvent: TrackEvent;
   // module-level helpers used by KpiRow/CollapsibleBlock locale formatting
   localeToBCP47: typeof localeToBCP47;
-  // misc shared state
+  // Shared DTOs from MiniApp.tsx. profileData / profileStats stay loose
+  // because their owning useStates are inline anonymous shapes; pinning
+  // them would require extracting those into named types.
   profileData: any;
   profileStats: any;
   profileLoading: boolean;
-  tgUser: any;
-  planInfo: any;
-  subscription: any;
-  proSource: any;
-  promoPro: any;
-  wishlists: any[];
+  tgUser: TgUser | null;
+  planInfo: PlanInfo;
+  subscription: SubscriptionInfo;
+  proSource: string | null;
+  promoPro: { id: string; expiresAt: string | null; campaignCode: string } | null;
+  wishlists: Wishlist[];
   santaSeason: any;
   // NOTE: `isPro`, `isProExpired`, `isLifetime` are NOT in ctx — they're
   // derived inline inside the Profile JSX IIFE (and would otherwise
@@ -86,83 +84,78 @@ export type ProfileRootCtx = {
   // god-mode + analytics (read by Profile dev panel)
   godMode: boolean;
   godModeLoading: boolean;
-  setGodMode: any;
-  setGodModeLoading: any;
+  setGodMode: Dispatch<SetStateAction<boolean>>;
+  setGodModeLoading: Dispatch<SetStateAction<boolean>>;
   godStats: any;
   godStatsLoading: boolean;
   godStatsError: boolean;
   godStatsRefreshedAt: Date | null;
   godStatsDetailsOpen: boolean;
-  setGodStatsDetailsOpen: any;
-  loadGodStats: any;
+  setGodStatsDetailsOpen: Dispatch<SetStateAction<boolean>>;
+  loadGodStats: (scope?: string, periodOverride?: string) => Promise<void>;
   retentionStats: any;
   retentionLoading: boolean;
   retentionOpen: boolean;
   retentionPeriod: number;
-  setRetentionStats: any;
-  setRetentionLoading: any;
-  setRetentionOpen: any;
-  setRetentionPeriod: any;
+  setRetentionStats: Dispatch<SetStateAction<any>>;
+  setRetentionLoading: Dispatch<SetStateAction<boolean>>;
+  setRetentionOpen: Dispatch<SetStateAction<boolean>>;
+  setRetentionPeriod: Dispatch<SetStateAction<number>>;
   acqPeriod: '24h' | '7d' | '30d';
-  setAcqPeriod: any;
+  setAcqPeriod: Dispatch<SetStateAction<'24h' | '7d' | '30d'>>;
   activationTab: 'funnel' | 'onboarding' | 'acq';
-  setActivationTab: any;
+  setActivationTab: Dispatch<SetStateAction<'funnel' | 'onboarding' | 'acq'>>;
   // edit/avatar state (sheets live in MiniApp.tsx; profile screen
   // just flips the open flags + seeds the form fields)
-  setEditingProfile: any;
-  setEditProfileName: any;
-  setEditProfileUsername: any;
-  setEditProfileBio: any;
-  setEditProfileBirthday: any;
-  setShowAvatarSheet: any;
+  setEditingProfile: Dispatch<SetStateAction<boolean>>;
+  setEditProfileName: Dispatch<SetStateAction<string>>;
+  setEditProfileUsername: Dispatch<SetStateAction<string>>;
+  setEditProfileBio: Dispatch<SetStateAction<string>>;
+  setEditProfileBirthday: Dispatch<SetStateAction<string>>;
+  setShowAvatarSheet: Dispatch<SetStateAction<boolean>>;
   avatarUploading: boolean;
   // subscription cancel/reactivate flow
   cancelSubLoading: boolean;
-  setShowCancelSub: any;
+  setShowCancelSub: Dispatch<SetStateAction<boolean>>;
   // santa test-mode (god-mode)
   santaTestModeLoading: boolean;
-  setSantaTestModeLoading: any;
+  setSantaTestModeLoading: Dispatch<SetStateAction<boolean>>;
   // misc handlers Profile calls
-  setShowDeleteAccount: any;
-  setSettingsOriginScreen: any;
-  setHomeTab: any;
-  // additional refs/helpers Profile reads (collected during type-check)
-  tgRef: any;
+  setShowDeleteAccount: Dispatch<SetStateAction<boolean>>;
+  setSettingsOriginScreen: Dispatch<SetStateAction<Screen>>;
+  setHomeTab: Dispatch<SetStateAction<HomeTab>>;
+  // additional refs/helpers Profile reads
+  tgRef: { current: Window['Telegram'] };
   hasNewInSettings: boolean;
-  buildTgDeepLink: any;
-  handleBuyAddon: any;
-  handleReactivateSub: any;
+  buildTgDeepLink: (payload?: string) => string | null;
+  handleBuyAddon: (skuCode: string, targetId?: string) => Promise<void>;
+  handleReactivateSub: () => Promise<void>;
   addonCheckoutLoading: boolean;
-  addonLoadingSku: any;
+  addonLoadingSku: string | null;
   checkoutLoading: boolean;
-  setWishlistPickerSku: any;
-  setProfileData: any;
+  setWishlistPickerSku: Dispatch<SetStateAction<string | null>>;
+  setProfileData: Dispatch<SetStateAction<any>>;
   showLocaleDebug: boolean;
-  setShowLocaleDebug: any;
-  loadWishlists: any;
-  loadAllItems: any;
-  loadGlobalArchive: any;
-  loadSettings: any;
-  loadShowcase: any;
-  loadSantaSeason: any;
+  setShowLocaleDebug: Dispatch<SetStateAction<boolean>>;
+  loadWishlists: () => Promise<void>;
+  loadAllItems: () => Promise<void>;
+  loadGlobalArchive: () => Promise<void>;
+  loadSettings: () => Promise<void>;
+  loadShowcase: () => Promise<void>;
+  loadSantaSeason: () => Promise<void>;
   showcaseData: any;
   gnAccess: any;
   canGodMode: boolean;
-  availableSkus: any[];
-  cappedAddonCodes: any;
-  getAddonOffers: any;
-  getProBenefits: any;
-  openReferralScreen: any;
+  availableSkus: SkuInfo[];
+  cappedAddonCodes: string[];
+  getAddonOffers: (locale: Locale) => Record<string, { title: string; tag: string }>;
+  getProBenefits: (locale: Locale) => Array<{
+    icon: string; title: string; subtitle: string; isNew?: boolean; resSection?: boolean;
+  }>;
+  openReferralScreen: (entryPoint?: string) => void;
   referralRulesConfig: any;
-  ReferralProfileTileFromConfig: any;
+  ReferralProfileTileFromConfig: ComponentType<any>;
 };
-
-/**
- * SkuInfo — local mirror of the type defined in MiniApp.tsx (line ~460).
- * Profile JSX casts via `(s): s is SkuInfo => s !== undefined` so the
- * type needs to be in scope here. Kept narrow to avoid drift.
- */
-type SkuInfo = { code: string; price: number; type: string; targetRequired: boolean };
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 export interface ProfileRootProps {
