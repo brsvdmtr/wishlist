@@ -31,28 +31,44 @@
 import React from 'react';
 import { Banner, Card, Chip } from '@wishlist/ui';
 import { t, type Locale } from '@wishlist/shared';
+import type { Dispatch, SetStateAction } from 'react';
+import type { BirthdayContext, ProfileData } from '../../MiniApp';
 import type { PublicProfileState } from '../../hooks/usePublicProfileState';
+import type {
+  LegacyColorBag, SetScreen,
+} from '../../_shared/closure-types';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 export type PublicProfileRootCtx = PublicProfileState & {
   // module-level constants forwarded from MiniApp.tsx
-  C: Record<string, string>;
+  C: LegacyColorBag;
   font: string;
   locale: Locale;
   DONT_GIFT_PRESET_EMOJIS: Record<string, string>;
-  // helpers + setters from MiniAppInner closure
-  setScreen: any;
+  // helpers + setters from MiniAppInner closure — real signatures from
+  // `_shared/closure-types`.
+  setScreen: SetScreen;
+  // public-profile state (publicProfileData / publicProfileLoading / error /
+  // username + subscribe-CTA cells) provided by PublicProfileState intersection.
   subscribeToProfile: (username: string) => Promise<void> | void;
   unsubscribeFromProfile: (username: string) => Promise<void> | void;
-  // shared misc state read by this screen
-  profileData: any;
-  birthdayContext: any;
-  setBirthdayContext: any;
+  // shared misc state read by this screen — DTOs lifted from MiniApp.tsx.
+  profileData: ProfileData | null;
+  birthdayContext: BirthdayContext | null;
+  setBirthdayContext: Dispatch<SetStateAction<BirthdayContext | null>>;
   trackBirthdayAttributedEvent: (event: string, props?: Record<string, unknown>) => void;
-  setGuestViewReturnToProfileUsername: any;
-  loadGuestWishlist: (slug: string) => Promise<any>;
+  // Stash the public-profile username so guest-view back-nav returns
+  // here. The owning useState is `useState<string | null>(null)` —
+  // mirrored exactly here.
+  setGuestViewReturnToProfileUsername: Dispatch<SetStateAction<string | null>>;
+  /**
+   * Side-effect: loads the public guest view of `slug`, sets guestWl /
+   * guestItems / guestCategories / guestDontGift in MiniAppInner.
+   * Throws on 404 / network error so callers can swallow with `.catch`.
+   * The resolved array of mapped items is currently not read at any
+   * call site (only the side-effect + screen transition matter).
+   */
+  loadGuestWishlist: (slug: string) => Promise<unknown[]>;
 };
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 export interface PublicProfileRootProps {
   /** Active screen name; passed for symmetry with sibling Root components. */
@@ -155,7 +171,7 @@ export function PublicProfileRoot(props: PublicProfileRootProps) {
                     ? t('br_banner_friend_today_title', locale)
                     : t('br_banner_friend_title', locale, { name })}
                   onClose={() => {
-                    setBirthdayContext((prev: any) => prev ? { ...prev, bannerDismissed: true } : prev);
+                    setBirthdayContext(prev => prev ? { ...prev, bannerDismissed: true } : prev);
                     trackBirthdayAttributedEvent('birthday.banner_dismissed', { kind: bctx.reminderKind });
                   }}
                 >

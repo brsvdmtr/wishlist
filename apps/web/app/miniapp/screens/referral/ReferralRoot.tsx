@@ -41,22 +41,25 @@ import React from 'react';
 import { ListRow, SectionHeader, StatTile } from '@wishlist/ui';
 import { t, localeToBCP47, type Locale } from '@wishlist/shared';
 import type { ReferralState } from '../../hooks/useReferralState';
+import type {
+  LegacyColorBag, PushToast, TrackEvent,
+} from '../../_shared/closure-types';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 export type ReferralRootCtx = ReferralState & {
   // module-level constants forwarded from MiniApp.tsx
-  C: Record<string, string>;
+  C: LegacyColorBag;
   font: string;
   locale: Locale;
-  // helpers + setters from MiniAppInner closure
-  pushToast: any;
-  trackEvent: any;
-  // referral loaders (defined in MiniAppInner — useCallback)
+  // helpers + setters from MiniAppInner closure — real signatures from
+  // `_shared/closure-types`.
+  pushToast: PushToast;
+  trackEvent: TrackEvent;
+  // referral state (referralMe / referralHistory / referralRulesConfig /
+  // share + rules sheets + loaders) provided by ReferralState intersection.
   loadReferralMe: () => Promise<void> | void;
   loadReferralHistory: (reset?: boolean) => Promise<void> | void;
   openReferralHistoryScreen: () => void;
 };
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 export interface ReferralRootProps {
   /** Active screen name; controls which of the 2 sub-blocks renders. */
@@ -538,7 +541,7 @@ export function ReferralRoot(props: ReferralRootProps) {
         return (
           <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
             {headerJsx}
-            {referralHistory.map((r: any) => {
+            {referralHistory.map(r => {
               const isRewarded = r.status === 'REWARDED';
               const isRejected = r.status === 'REJECTED' || r.status === 'FRAUD_REVIEW';
               const isPending = r.status === 'PENDING_ACTIVATION' || r.status === 'ATTRIBUTED' || r.status === 'QUALIFIED';
