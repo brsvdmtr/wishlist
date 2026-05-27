@@ -12,6 +12,7 @@ const NOW = 1_700_000_000_000;
 const COOLDOWN_MS = E11_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
 
 const ALLOW: E11GateInput = {
+  wishlistsLoaded: true,
   wishlistCount: 0,
   experimentVariant: 'treatment',
   sessionFlag: false,
@@ -23,6 +24,15 @@ const ALLOW: E11GateInput = {
 describe('shouldShowE11Cta', () => {
   it('shows for a guest with zero wishlists in treatment, never seen before', () => {
     expect(shouldShowE11Cta(ALLOW)).toEqual({ show: true });
+  });
+
+  // Critical: a transient /tg/wishlists 5xx must NOT make a real owner look
+  // like a fresh guest. Stay conservative until at least one successful load.
+  it('skips when wishlists have not loaded yet — protects against transient API failure', () => {
+    expect(shouldShowE11Cta({ ...ALLOW, wishlistsLoaded: false })).toEqual({
+      show: false,
+      reason: 'wishlists_not_loaded',
+    });
   });
 
   it('skips when user already owns at least one wishlist (owner-as-guest)', () => {
@@ -71,20 +81,18 @@ describe('shouldShowE11Cta', () => {
     });
   });
 
-  // The gate order matters: secret-reservation is the very first check so
-  // a secret-reserve never produces a g_owner_cta event even for users who
-  // would otherwise be in treatment. This keeps the funnel numbers clean.
-  it('returns the first matching reason — secret_reservation wins over everything', () => {
+  // The gate order matters: session_shown is the very first check so that
+  // even god-mode and active treatment can never re-fire within one app-open.
+  it('session_shown wins over everything — even godModeForce + treatment', () => {
     expect(
       shouldShowE11Cta({
         ...ALLOW,
-        isSecretReservation: true,
-        wishlistCount: 5,
-        experimentVariant: 'control',
         sessionFlag: true,
-        lastSeenAt: NOW,
+        wishlistCount: 0,
+        experimentVariant: 'treatment',
+        godModeForce: true,
       }),
-    ).toEqual({ show: false, reason: 'secret_reservation' });
+    ).toEqual({ show: false, reason: 'session_shown' });
   });
 
   it('returns owner_as_guest before any later gate', () => {
@@ -93,36 +101,33 @@ describe('shouldShowE11Cta', () => {
         ...ALLOW,
         wishlistCount: 3,
         experimentVariant: 'control',
-        sessionFlag: true,
         lastSeenAt: NOW,
       }),
     ).toEqual({ show: false, reason: 'owner_as_guest' });
   });
 
   // God-mode force-show — operator testing bypass
-  it('godModeForce bypasses owner_as_guest + not_in_treatment + cooldown', () => {
+  it('godModeForce bypasses owner_as_guest + not_in_treatment + cooldown + secret-reservation', () => {
     expect(
       shouldShowE11Cta({
         ...ALLOW,
         wishlistCount: 5,
         experimentVariant: 'control',
         lastSeenAt: NOW,
+        isSecretReservation: true,
         godModeForce: true,
       }),
     ).toEqual({ show: true });
   });
 
-  it('godModeForce does NOT bypass sessionFlag — one-shot per session even for operators', () => {
-    // sessionFlag=true short-circuits the force-show; remaining gates apply
-    // normally. Here owner_as_guest is the first failing gate.
+  it('godModeForce also bypasses wishlists_not_loaded gate — operators can test pre-load', () => {
     expect(
       shouldShowE11Cta({
         ...ALLOW,
-        wishlistCount: 5,
-        sessionFlag: true,
+        wishlistsLoaded: false,
         godModeForce: true,
       }),
-    ).toEqual({ show: false, reason: 'owner_as_guest' });
+    ).toEqual({ show: true });
   });
 });
 

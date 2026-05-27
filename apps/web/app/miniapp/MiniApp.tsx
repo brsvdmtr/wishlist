@@ -3748,6 +3748,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
   // Owner state
   const [wishlists, setWishlists] = useState<Wishlist[]>([]);
+  // True only after the first successful /tg/wishlists response in this
+  // session. Critical for E11 gating — a transient 5xx leaves `wishlists` at
+  // `[]`, which without this flag would make a real owner look like a fresh
+  // guest and incorrectly trigger the account-claim Sheet. Flipped to true
+  // exactly once per session inside `loadWishlists` on the OK path.
+  const [wishlistsLoaded, setWishlistsLoaded] = useState(false);
   const [planLimits, setPlanLimits] = useState({ wishlists: 2, items: 20 });
   const [planInfo, setPlanInfo] = useState<PlanInfo>({
     code: 'FREE', wishlists: 2, items: 20, subscriptions: 2, participants: 10, features: [],
@@ -4516,13 +4522,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
   // E11 — Post-reservation account-claim CTA (guest → owner conversion). Sheet
   // shows after a successful regular reserve when the user has zero own
-  // wishlists. State holds the item we just reserved (carried for analytics);
-  // session ref blocks re-show within one Mini App open; closed-by-click ref
-  // suppresses the Sheet's onClose dismiss event when a button handler is the
-  // one that closed the sheet (otherwise we double-count dismissals).
+  // wishlists. State holds the item we just reserved (carried for analytics).
+  // Session ref blocks re-show within one Mini App open.
+  //
+  // No "closed-by-click" guard is needed: `Sheet` (packages/ui/src/Sheet.tsx)
+  // calls `onClose` ONLY from backdrop tap or swipe-dismiss — not from
+  // `setPostReservationCtaItem(null)` unmounts. So a button-handler's
+  // explicit `dismissed` (method: 'tap_later') and the Sheet's gesture
+  // `dismissed` (method: 'swipe_or_backdrop') are mutually exclusive paths.
   const [postReservationCtaItem, setPostReservationCtaItem] = useState<GuestItem | null>(null);
   const e11SessionShownRef = useRef(false);
-  const e11ClosedByClickRef = useRef(false);
 
   // Comments
   const [comments, setComments] = useState<CommentDTO[]>([]);
@@ -5224,6 +5233,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       skus?: SkuInfo[];
     };
     setWishlists(json.wishlists);
+    setWishlistsLoaded(true);
     setPlanInfo(json.plan);
     setSubscription(json.subscription);
     if ((json as any).giftNotes) setGnAccess((json as any).giftNotes);
@@ -10528,6 +10538,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       // segment (zero own wishlists), A/B treatment, per-session de-dup,
       // 30-day localStorage cooldown, regular-reserve only.
       const e11Decision = shouldShowE11Cta({
+        wishlistsLoaded,
         wishlistCount: wishlists.length,
         experimentVariant: e11Variant,
         sessionFlag: e11SessionShownRef.current,
@@ -10538,16 +10549,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       });
       if (e11Decision.show) {
         e11SessionShownRef.current = true;
-        writeE11LastSeenAt(Date.now());
         setPostReservationCtaItem(updatedItem);
-        // `godModeForce` prop lets analysts filter operator test impressions
-        // out of the experiment funnel (`WHERE NOT (props->>'godModeForce' = 'true')`).
+        // Fire telemetry BEFORE writing the cooldown — if a future trackEvent
+        // refactor ever throws, we'd rather lose the cooldown write (sheet
+        // shows again next session) than the funnel impression.
+        // `godModeForce` lets analysts filter operator test impressions out
+        // of the funnel (`WHERE NOT (props->>'godModeForce' = 'true')`).
         trackEvent('guest_owner_cta.shown', {
           itemId: reservingItem.id,
           experimentKey: E11_EXPERIMENT_KEY,
           variant: e11Variant,
           godModeForce: godMode,
         });
+        writeE11LastSeenAt(Date.now());
       } else {
         pushToast(t('reserve_success', locale), 'success');
       }
@@ -10557,43 +10571,47 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     }
   };
 
+  // All three handlers carry `variant` and `godModeForce` so analysts can
+  // filter operator impressions across the entire funnel
+  // (`WHERE NOT (props->>'godModeForce' = 'true')`) and segment by treatment
+  // bucket on every event, not just `shown`.
   const handleE11Claim = useCallback(() => {
-    e11ClosedByClickRef.current = true;
     trackEvent('guest_owner_cta.clicked', {
       itemId: postReservationCtaItem?.id,
       destination: 'onboarding-entry',
       experimentKey: E11_EXPERIMENT_KEY,
+      variant: e11Variant,
+      godModeForce: godMode,
     });
     setPostReservationCtaItem(null);
     void startOnboarding(E11_ONBOARDING_ENTRY_POINT);
-  }, [postReservationCtaItem, trackEvent, startOnboarding]);
+  }, [postReservationCtaItem, e11Variant, godMode, trackEvent, startOnboarding]);
 
   const handleE11DismissTap = useCallback(() => {
-    e11ClosedByClickRef.current = true;
     trackEvent('guest_owner_cta.dismissed', {
       itemId: postReservationCtaItem?.id,
       method: 'tap_later',
       experimentKey: E11_EXPERIMENT_KEY,
+      variant: e11Variant,
+      godModeForce: godMode,
     });
     setPostReservationCtaItem(null);
-  }, [postReservationCtaItem, trackEvent]);
+  }, [postReservationCtaItem, e11Variant, godMode, trackEvent]);
 
-  // Sheet `onClose` fires for swipe-down + backdrop tap + every setState(null)
-  // path. The ref guards against double-counting: when a button handler closed
-  // the sheet, it already tracked the event and flipped the ref true, so this
-  // dismiss handler just resets it. Otherwise the close is user-driven gesture.
+  // Sheet `onClose` fires from backdrop tap and from swipe-dismiss. It does
+  // NOT fire when we call `setPostReservationCtaItem(null)` directly from a
+  // button handler (Sheet just unmounts on the next render), so the two
+  // dismissal paths are mutually exclusive — no double-fire guard needed.
   const handleE11Dismiss = useCallback(() => {
-    if (e11ClosedByClickRef.current) {
-      e11ClosedByClickRef.current = false;
-      return;
-    }
     trackEvent('guest_owner_cta.dismissed', {
       itemId: postReservationCtaItem?.id,
       method: 'swipe_or_backdrop',
       experimentKey: E11_EXPERIMENT_KEY,
+      variant: e11Variant,
+      godModeForce: godMode,
     });
     setPostReservationCtaItem(null);
-  }, [postReservationCtaItem, trackEvent]);
+  }, [postReservationCtaItem, e11Variant, godMode, trackEvent]);
 
   const handleUnreserve = async (item: GuestItem) => {
     setLoading(true);

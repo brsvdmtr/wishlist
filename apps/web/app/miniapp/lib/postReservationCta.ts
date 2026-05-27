@@ -31,6 +31,7 @@ export const E11_ONBOARDING_ENTRY_POINT = 'post_reservation_claim';
 const COOLDOWN_MS = E11_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
 
 export type E11SkipReason =
+  | 'wishlists_not_loaded'
   | 'secret_reservation'
   | 'owner_as_guest'
   | 'not_in_treatment'
@@ -42,6 +43,14 @@ export type E11Decision =
   | { show: false; reason: E11SkipReason };
 
 export interface E11GateInput {
+  /**
+   * True only when `loadWishlists` resolved successfully at least once in
+   * this session. Without this gate, a transient `/tg/wishlists` 5xx /
+   * network blip leaves `wishlists` at `[]` — and we'd show E11 to an
+   * actual owner (the segment we're explicitly supposed to skip). Defaults
+   * to false so the gate stays conservative until proven loaded.
+   */
+  wishlistsLoaded: boolean;
   /** Number of own wishlists the user currently has. `0` = pure guest. */
   wishlistCount: number;
   /** Server-resolved variant via `useExperiment(E11_EXPERIMENT_KEY)`. */
@@ -60,6 +69,7 @@ export interface E11GateInput {
    * (which usually has own wishlists, failing `owner_as_guest`). Downstream
    * analytics must filter on `godModeForce: true` prop to keep the
    * experiment funnel clean. Default false in production code paths.
+   * NOTE: still respects `sessionFlag` (one-shot per app-open).
    */
   godModeForce?: boolean;
 }
@@ -73,14 +83,19 @@ export interface E11GateInput {
  * funnel numbers look off).
  */
 export function shouldShowE11Cta(input: E11GateInput): E11Decision {
-  // God-mode force-show bypasses every gate. Still respects session flag
-  // so a single tap of "Позже" closes the loop within one app-open even
-  // for operators (otherwise it would re-open after every reservation).
-  if (input.godModeForce && !input.sessionFlag) return { show: true };
+  // session_shown wins over godModeForce — even operators get one shot per
+  // app-open, otherwise the sheet would re-open after every reservation.
+  if (input.sessionFlag) return { show: false, reason: 'session_shown' };
+  // God-mode force-show bypasses the remaining gates (segmentation +
+  // experiment + cooldown). Secret-reservation is also bypassed — operators
+  // testing E11 might be running through a secret-reserve flow.
+  if (input.godModeForce) return { show: true };
+  // wishlists not yet loaded — staying conservative so a transient 5xx
+  // on /tg/wishlists doesn't make a real owner look like a fresh guest.
+  if (!input.wishlistsLoaded) return { show: false, reason: 'wishlists_not_loaded' };
   if (input.isSecretReservation) return { show: false, reason: 'secret_reservation' };
   if (input.wishlistCount > 0) return { show: false, reason: 'owner_as_guest' };
   if (input.experimentVariant !== 'treatment') return { show: false, reason: 'not_in_treatment' };
-  if (input.sessionFlag) return { show: false, reason: 'session_shown' };
   if (input.lastSeenAt !== null && input.now - input.lastSeenAt < COOLDOWN_MS) {
     return { show: false, reason: 'cooldown' };
   }
