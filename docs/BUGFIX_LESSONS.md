@@ -5,6 +5,153 @@ New entries go at the top.
 
 ---
 
+## 2026-05-27 — E11 `useExperiment` race: 401 before initData ready → user silently pinned to control
+
+### Симптом
+
+E11 deploy выкатили (`b5ff648`), env vars в контейнере (`EXP_E11_POST_RESERVE_CTA_ENABLED=true`,
+`ROLLOUT=50`). Пользователь зашёл, сделал reservation — sheet не показался.
+Решил «ну видимо в control попал». Проверил `ExperimentAssignment` — **0 строк**.
+Запрос на эндпоинт делался (3 GET'а в access-log за период тестирования),
+но все возвращали **401 Unauthorized**.
+
+`docker logs wishlist-prod-api-1`:
+```
+GET /tg/experiments/e11-post-reserve-cta  → 401  (нет X-TG-INIT-DATA в headers)
+GET /tg/experiments/e11-post-reserve-cta  → 401
+GET /tg/experiments/e11-post-reserve-cta  → 401
+POST /tg/telemetry  → 200  ("x-tg-init-data": "[REDACTED]" — есть!)
+```
+
+То есть telemetry POST через тот же `tgFetch` приходит **с** initData header'ом,
+а GET на experiments — **без**.
+
+### Root cause
+
+Race условие в порядке React effects:
+
+1. Main MiniApp component монтируется.
+2. `useExperiment(tgFetch, 'e11-post-reserve-cta')` объявлен высоко в источнике
+   (после `tgFetch` declaration, до tg-context-detected effect).
+3. Effect внутри `useExperiment` запускается → вызывает
+   `tgFetch('/tg/experiments/...', { method: 'GET' })`.
+4. `tgFetch` читает `initDataRef.current` и добавляет header только если оно
+   не пустое:
+   ```ts
+   ...(initDataRef.current ? { 'X-TG-INIT-DATA': initDataRef.current } : {}),
+   ```
+5. **`initDataRef.current` всё ещё `''` в этот момент** — оно ставится в другом
+   `useEffect`, который декларирован ниже по источнику и поэтому стреляет
+   позже в reconciliation:
+   ```ts
+   // line ~7873
+   initDataRef.current = tg.initData;  // ← happens AFTER useExperiment's effect
+   ```
+6. Server отвечает 401.
+7. `experiments.ts` ловит `!res.ok` → `variantCache.set(key, 'control')` →
+   юзер залочен в control на всю сессию. Следующий mount читает из cache,
+   не делает re-fetch.
+8. Telemetry POST стреляет позже (после первого user-action), к этому моменту
+   `initDataRef.current` уже populated → header приходит → 200.
+
+`tgFetch` не делает retry на 401, и `useExperiment` cache'ировал control —
+double-broken.
+
+### Lesson
+
+1. **Порядок React effects = порядок их декларации в источнике.** Hook,
+   декларированный высоко в компоненте, стреляет в `useEffect` фазе раньше,
+   чем hook ниже — даже если оба `useEffect` без dependencies. Если поздний
+   effect устанавливает ref/state, от которого зависит ранний — у тебя
+   race.
+
+2. **Refs, читаемые из автоматических http-headers, должны быть «ready-flagged».**
+   `initDataRef.current` без сопровождающего `tgReady: boolean` state создаёт
+   беззвучный auth-bypass для любого hook'а, который дёрнет `tgFetch` до того,
+   как ref заполнится. Boolean-state forces re-renders когда auth готов;
+   ref-only — нет.
+
+3. **Cache на негативный ответ = sticky failure.** `experiments.ts` кэшировал
+   `control` ИЛИ на success, ИЛИ на `!res.ok`. Это значит, что один transient
+   401 (network glitch, race, server-side temp issue) пинит юзера в control
+   на всю session — а следующий mount даже не пытается re-fetch. Negative
+   cache допустим только когда ты можешь различить «истинно не в treatment»
+   и «не смогли получить ответ».
+
+4. **Telemetry hits ≠ experiments hits в проде.** Я проверил, что
+   POST `/tg/telemetry` приходит (видел event'ы в DB). Но GET
+   `/tg/experiments/:key` не имел отдельной проверки. После деплоя надо
+   **explicitly** проверить, что **именно тот endpoint, на который завязана
+   фича**, отвечает 200 — а не предполагать, что раз другие запросы из той
+   же сессии работают, то и этот тоже.
+
+5. **`ExperimentAssignment` table = ground truth для дебага вариантов.**
+   Если после deploy'я никаких assignment'ов нет — endpoint не вызывался
+   ИЛИ возвращал error. Это первое место куда смотреть, не «может я
+   просто в control попал».
+
+### Rule
+
+- **Любой hook, делающий authenticated GET на mount, должен быть gated на
+  ready-flag** для auth context. Pattern:
+  ```ts
+  const { variant } = useExperiment(tgFetch, KEY, { ready: tgReady });
+  ```
+  где `tgReady` — это `useState(false)` → `setTgReady(true)` в том же
+  effect, где ref'а с initData ставится.
+
+- **`useExperiment` (и аналогичные hook'и) не должны кэшировать `control` на
+  `!res.ok`.** Cache write идёт только на successful resolution. Transient
+  failures = `isReady: true` (UI moves past loading) НО без cache, чтобы
+  следующий mount мог retry.
+
+- **Post-deploy verification для experiment-gated features**:
+  ```sql
+  SELECT COUNT(*), variant FROM "ExperimentAssignment"
+  WHERE "experimentKey" = '<your-key>'
+    AND "createdAt" >= '<deploy-ts>'
+  GROUP BY 2;
+  ```
+  Если 0 строк через >5 минут после первого Mini App open — endpoint не
+  вызывался или 401. Проверь `docker logs api | grep /tg/experiments`.
+
+- **Никогда не использовать ref-only signaling для auth state.** Если
+  что-то зависит от того, что ref заполнен — оно должно зависеть от
+  state-flag, который форсит re-render.
+
+### Better code
+
+`apps/web/app/miniapp/lib/experiments.ts`:
+- `useExperiment` теперь принимает `{ ready?: boolean }` (default true для
+  back-compat). Когда false — effect skip'ает fetch и держит SSR-safe
+  default. Когда flip'ает true — effect re-runs и стреляет авторизованный
+  GET.
+- Negative-cache убран: cache write идёт только на successful path
+  (`if (res.ok)`). Transient 401/5xx/network = `isReady: true` без cache
+  → следующий mount retry'ит.
+
+`apps/web/app/miniapp/MiniApp.tsx`:
+- Новый `tgReady: boolean` state. `setTgReady(true)` происходит в том же
+  effect, что и `initDataRef.current = tg.initData`.
+- `useExperiment(tgFetch, E11_EXPERIMENT_KEY, { ready: tgReady })`.
+
+3 новых unit-теста в `experiments.test.ts`:
+- `ready: false` → fetch не вызывается, state остаётся default.
+- `ready` flip false→true → fetch вызывается ровно 1 раз.
+- non-OK ответ → НЕ кэшируется; следующий mount делает re-fetch и резолвится.
+
+### Follow-up
+
+- Старые потенциальные жертвы той же race-в-будущем (любой другой
+  `useExperiment` или auth-headered GET на mount) — таких сейчас нет
+  (`grep useExperiment` показал только E11 caller). Pattern teaching:
+  ВСЕ будущие hook'и должны принимать ready-flag.
+- Long-term: refactor'ить `tgFetch` чтобы при отсутствии initData он либо
+  ждал короткий timeout, либо явно reject'ил с CodedError'ом, чтобы caller
+  мог сразу различить «auth race» vs «server 401». Сейчас оба = `res.ok===false`.
+
+---
+
 ## 2026-05-27 — Spec drift: untracked документ старше 48 ч теряет валидность line numbers + advise to non-existent code
 
 ### Симптом

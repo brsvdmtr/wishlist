@@ -42,7 +42,29 @@ function toVariant(value: unknown): ExperimentVariant {
   return value === 'treatment' ? 'treatment' : 'control';
 }
 
-export function useExperiment(tgFetch: TgFetch, key: string): ExperimentState {
+export interface UseExperimentOptions {
+  /**
+   * Gate the fetch until upstream auth context (Telegram initData) is in
+   * place. When `false`, the hook returns the SSR-safe control default and
+   * skips the network call. Flipping `true` re-runs the effect and fires
+   * the request — at which point the X-TG-INIT-DATA header is populated.
+   *
+   * The race this closes: `useExperiment` is declared at the top of the
+   * component, but `initDataRef.current` is assigned inside an effect that
+   * runs later in source order. Without this gate the first fetch goes
+   * out unauthenticated, the server returns 401, and the user is silently
+   * pinned to control for the entire session. Default `true` keeps every
+   * existing caller working.
+   */
+  ready?: boolean;
+}
+
+export function useExperiment(
+  tgFetch: TgFetch,
+  key: string,
+  opts?: UseExperimentOptions,
+): ExperimentState {
+  const ready = opts?.ready ?? true;
   const [state, setState] = useState<ExperimentState>(() => {
     const cached = variantCache.get(key);
     return cached ? { variant: cached, isReady: true } : { variant: 'control', isReady: false };
@@ -55,6 +77,14 @@ export function useExperiment(tgFetch: TgFetch, key: string): ExperimentState {
       return;
     }
 
+    // Gate: caller hasn't signalled readiness yet (typically initData
+    // not loaded). Stay at the SSR-safe default; the effect re-fires
+    // when `ready` flips true.
+    if (!ready) {
+      setState({ variant: 'control', isReady: false });
+      return;
+    }
+
     let cancelled = false;
     setState({ variant: 'control', isReady: false });
 
@@ -64,16 +94,22 @@ export function useExperiment(tgFetch: TgFetch, key: string): ExperimentState {
           method: 'GET',
           timeoutMs: 5000,
         });
-        const variant: ExperimentVariant = res.ok
-          ? toVariant(((await res.json()) as { variant?: unknown }).variant)
-          : 'control';
-        if (!cancelled) {
-          variantCache.set(key, variant);
-          setState({ variant, isReady: true });
+        if (res.ok) {
+          const variant = toVariant(((await res.json()) as { variant?: unknown }).variant);
+          if (!cancelled) {
+            // Only the successful resolution is cached. A transient !ok
+            // (401 from an auth race, 5xx from a flaky upstream) must NOT
+            // pin the user to control for the rest of the session — a
+            // later mount or remount has to be free to retry.
+            variantCache.set(key, variant);
+            setState({ variant, isReady: true });
+          }
+        } else if (!cancelled) {
+          setState({ variant: 'control', isReady: true });
         }
       } catch {
-        // Network / timeout / parse failure -> fall back to control, the safe
-        // current-behaviour default. Not cached: a later mount may succeed.
+        // Network / timeout / parse failure -> fall back to control, the
+        // safe current-behaviour default. Not cached: later mounts retry.
         if (!cancelled) setState({ variant: 'control', isReady: true });
       }
     })();
@@ -81,7 +117,7 @@ export function useExperiment(tgFetch: TgFetch, key: string): ExperimentState {
     return () => {
       cancelled = true;
     };
-  }, [tgFetch, key]);
+  }, [tgFetch, key, ready]);
 
   return state;
 }

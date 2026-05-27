@@ -74,4 +74,53 @@ describe('useExperiment', () => {
     await waitFor(() => expect(result.current.isReady).toBe(true));
     expect(result.current.variant).toBe('control');
   });
+
+  // ── ready gate (regression test for the 2026-05-27 401-race fix) ─────────
+  it('skips the fetch entirely when ready=false', async () => {
+    const tgFetch = vi.fn(async () => okResponse({ variant: 'treatment' }));
+    const { result } = renderHook(() =>
+      useExperiment(tgFetch, 'exp-gated', { ready: false }),
+    );
+
+    // Give any racing effect a chance to fire.
+    await new Promise((r) => setTimeout(r, 30));
+
+    expect(tgFetch).not.toHaveBeenCalled();
+    expect(result.current.isReady).toBe(false);
+    expect(result.current.variant).toBe('control');
+  });
+
+  it('fires the fetch once ready flips true', async () => {
+    const tgFetch = vi.fn(async () => okResponse({ variant: 'treatment' }));
+    const { result, rerender } = renderHook(
+      ({ ready }: { ready: boolean }) => useExperiment(tgFetch, 'exp-flip', { ready }),
+      { initialProps: { ready: false } },
+    );
+
+    expect(tgFetch).not.toHaveBeenCalled();
+
+    rerender({ ready: true });
+
+    await waitFor(() => expect(result.current.isReady).toBe(true));
+    expect(tgFetch).toHaveBeenCalledTimes(1);
+    expect(result.current.variant).toBe('treatment');
+  });
+
+  // ── cache hygiene: a transient failure must NOT pin the user to control
+  it('does not cache a non-OK response — a re-mount retries', async () => {
+    const tgFetch = vi.fn()
+      // First call: 401 (e.g. initData race)
+      .mockResolvedValueOnce({ ok: false, json: async () => ({}) } as Response)
+      // Second call: succeeds with treatment
+      .mockResolvedValueOnce(okResponse({ variant: 'treatment' }));
+
+    const first = renderHook(() => useExperiment(tgFetch, 'exp-no-cache-on-fail'));
+    await waitFor(() => expect(first.result.current.isReady).toBe(true));
+    expect(first.result.current.variant).toBe('control');
+    first.unmount();
+
+    const second = renderHook(() => useExperiment(tgFetch, 'exp-no-cache-on-fail'));
+    await waitFor(() => expect(second.result.current.variant).toBe('treatment'));
+    expect(tgFetch).toHaveBeenCalledTimes(2);
+  });
 });

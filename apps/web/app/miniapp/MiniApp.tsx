@@ -3704,6 +3704,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
   const tgRef = useRef<Window['Telegram']>( undefined);
   const initDataRef = useRef<string>('');
+  // Flips true once Telegram WebApp initData has been written into initDataRef
+  // (inside the tg-context-detected effect). Hooks like useExperiment that
+  // depend on the X-TG-INIT-DATA auth header gate their fetch on this — without
+  // it the first call races, goes out unauthenticated, returns 401, and the
+  // user is silently pinned to control for the session.
+  const [tgReady, setTgReady] = useState(false);
   const urlStartParamRef = useRef<string>(''); // captured for "Open in Telegram" fallback
   const myActorHashRef = useRef<string>(''); // SHA-256 hash of tg_actor:{telegramId}
   // Telegram language_code captured at init — used by resolveEffectiveLocale
@@ -5159,7 +5165,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // assigns a sticky bucket per User.id (5% global holdout, 50% rollout when
   // enabled). Returns `control` until the server answers, on any error, or
   // when EXP_E11_POST_RESERVE_CTA_ENABLED is unset — all safe defaults.
-  const { variant: e11Variant } = useExperiment(tgFetch, E11_EXPERIMENT_KEY);
+  //
+  // `ready: tgReady` is critical — without it the hook fires before
+  // initDataRef.current is populated, the GET goes out without the
+  // X-TG-INIT-DATA header, the server 401s, and the user is pinned to
+  // control for the rest of the session (see commit log on this fix).
+  const { variant: e11Variant } = useExperiment(tgFetch, E11_EXPERIMENT_KEY, { ready: tgReady });
 
   // --- Santa season loader (used on init + after god/testMode toggles)
   const loadSantaSeason = useCallback(async () => {
@@ -7871,6 +7882,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       try {
         tgRef.current = window.Telegram;
         initDataRef.current = tg.initData;
+        // Signal that auth context is in place so gated hooks (useExperiment
+        // for E11, etc.) can now fire their authenticated GETs.
+        setTgReady(true);
         tg.ready();
         tg.expand();
         try { tg.setHeaderColor(C.bg); } catch { /* some versions don't support */ }
