@@ -10534,12 +10534,20 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         lastSeenAt: readE11LastSeenAt(),
         isSecretReservation: false,
         now: Date.now(),
+        godModeForce: godMode,
       });
       if (e11Decision.show) {
         e11SessionShownRef.current = true;
         writeE11LastSeenAt(Date.now());
         setPostReservationCtaItem(updatedItem);
-        trackEvent('guest_owner_cta.shown', { itemId: reservingItem.id, experimentKey: E11_EXPERIMENT_KEY, variant: e11Variant });
+        // `godModeForce` prop lets analysts filter operator test impressions
+        // out of the experiment funnel (`WHERE NOT (props->>'godModeForce' = 'true')`).
+        trackEvent('guest_owner_cta.shown', {
+          itemId: reservingItem.id,
+          experimentKey: E11_EXPERIMENT_KEY,
+          variant: e11Variant,
+          godModeForce: godMode,
+        });
       } else {
         pushToast(t('reserve_success', locale), 'success');
       }

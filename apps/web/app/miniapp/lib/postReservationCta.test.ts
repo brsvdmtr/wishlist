@@ -98,6 +98,32 @@ describe('shouldShowE11Cta', () => {
       }),
     ).toEqual({ show: false, reason: 'owner_as_guest' });
   });
+
+  // God-mode force-show — operator testing bypass
+  it('godModeForce bypasses owner_as_guest + not_in_treatment + cooldown', () => {
+    expect(
+      shouldShowE11Cta({
+        ...ALLOW,
+        wishlistCount: 5,
+        experimentVariant: 'control',
+        lastSeenAt: NOW,
+        godModeForce: true,
+      }),
+    ).toEqual({ show: true });
+  });
+
+  it('godModeForce does NOT bypass sessionFlag — one-shot per session even for operators', () => {
+    // sessionFlag=true short-circuits the force-show; remaining gates apply
+    // normally. Here owner_as_guest is the first failing gate.
+    expect(
+      shouldShowE11Cta({
+        ...ALLOW,
+        wishlistCount: 5,
+        sessionFlag: true,
+        godModeForce: true,
+      }),
+    ).toEqual({ show: false, reason: 'owner_as_guest' });
+  });
 });
 
 describe('readLastSeenAt / writeLastSeenAt', () => {

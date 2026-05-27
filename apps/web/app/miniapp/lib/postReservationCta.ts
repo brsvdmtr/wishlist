@@ -54,6 +54,14 @@ export interface E11GateInput {
   isSecretReservation: boolean;
   /** Current time, injected for testability. */
   now: number;
+  /**
+   * God-mode test bypass — when true, ALL gates are skipped and `show: true`
+   * is returned. Lets operators verify the sheet on their own account
+   * (which usually has own wishlists, failing `owner_as_guest`). Downstream
+   * analytics must filter on `godModeForce: true` prop to keep the
+   * experiment funnel clean. Default false in production code paths.
+   */
+  godModeForce?: boolean;
 }
 
 /**
@@ -65,6 +73,10 @@ export interface E11GateInput {
  * funnel numbers look off).
  */
 export function shouldShowE11Cta(input: E11GateInput): E11Decision {
+  // God-mode force-show bypasses every gate. Still respects session flag
+  // so a single tap of "Позже" closes the loop within one app-open even
+  // for operators (otherwise it would re-open after every reservation).
+  if (input.godModeForce && !input.sessionFlag) return { show: true };
   if (input.isSecretReservation) return { show: false, reason: 'secret_reservation' };
   if (input.wishlistCount > 0) return { show: false, reason: 'owner_as_guest' };
   if (input.experimentVariant !== 'treatment') return { show: false, reason: 'not_in_treatment' };
