@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>E11 · Post-reservation account-claim CTA — guest → owner conversion</title>
+<style>
+  /* ───── v2.1 tokens (mirror of packages/ui-tokens) ───── */
+  :root {
+    --wb-bg:              #0F0F12;
+    --wb-bg-elev:         #15151A;
+    --wb-surface:         rgba(255,255,255,0.035);
+    --wb-card:            rgba(255,255,255,0.045);
+    --wb-card-strong:     rgba(255,255,255,0.07);
+    --wb-accent:          #8B7BFF;
+    --wb-accent-strong:   #B4A6FF;
+    --wb-accent-light:    #C8BDFF;
+    --wb-accent-deep:     #5B48E5;
+    --wb-accent-soft:     rgba(139,123,255,0.14);
+    --wb-accent-soft-strong: rgba(139,123,255,0.30);
+    --wb-accent-glow:     rgba(139,123,255,0.45);
+    --wb-accent-glow-soft:rgba(139,123,255,0.25);
+    --wb-success:         #4ADE80;
+    --wb-success-soft:    rgba(74,222,128,0.14);
+    --wb-text:            #FFFFFF;
+    --wb-text-secondary:  #C7CAD1;
+    --wb-text-muted:      #8F94A3;
+    --wb-border:          rgba(255,255,255,0.06);
+    --wb-border-light:    rgba(255,255,255,0.10);
+    --wb-grad-mesh:
+      radial-gradient(ellipse 80% 60% at 12% 0%, rgba(139,123,255,0.22), transparent 55%),
+      radial-gradient(ellipse 60% 50% at 100% 20%, rgba(255,120,180,0.10), transparent 55%),
+      radial-gradient(ellipse 100% 70% at 50% 110%, rgba(139,123,255,0.10), transparent 65%);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #07070A; color: var(--wb-text); font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif; }
+  body { padding: 32px 24px 80px; }
+  h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 8px; }
+  h2 { font-size: 18px; font-weight: 650; letter-spacing: -0.01em; margin: 32px 0 12px; color: var(--wb-text); }
+  .lede { font-size: 14px; color: var(--wb-text-secondary); max-width: 720px; line-height: 1.55; margin: 0 0 8px; }
+  .meta { font-size: 12px; color: var(--wb-text-muted); margin-bottom: 32px; }
+  .meta b { color: var(--wb-text-secondary); font-weight: 600; }
+
+  /* ───── Phone frame ───── */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 28px; max-width: 1400px; margin: 0 auto 32px; }
+  .frame { background: var(--wb-bg); border-radius: 36px; padding: 0; border: 1px solid var(--wb-border); position: relative; overflow: hidden; min-height: 720px; display: flex; flex-direction: column; }
+  .frame::before { content: ''; position: absolute; inset: 0; background: var(--wb-grad-mesh); pointer-events: none; opacity: 0.8; }
+  .frame > * { position: relative; z-index: 1; }
+  .frame-label { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--wb-text-muted); font-weight: 500; letter-spacing: 0.02em; z-index: 5; background: rgba(0,0,0,0.55); padding: 4px 10px; border-radius: 999px; }
+  .caption { margin-top: 12px; padding: 12px 14px; background: rgba(255,255,255,0.02); border: 1px solid var(--wb-border); border-radius: 14px; font-size: 12px; color: var(--wb-text-secondary); line-height: 1.5; }
+  .caption .tag { display: inline-block; padding: 2px 8px; background: var(--wb-accent-soft); color: var(--wb-accent-strong); border-radius: 6px; font-size: 10px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; margin-right: 6px; margin-bottom: 4px; }
+  .caption .tag.success { background: var(--wb-success-soft); color: var(--wb-success); }
+  .caption .tag.muted { background: rgba(255,255,255,0.05); color: var(--wb-text-muted); }
+  .caption .tag.danger { background: rgba(251,113,133,0.14); color: #FB7185; }
+  .caption code { font-family: 'SF Mono', Menlo, monospace; font-size: 11px; padding: 1px 5px; background: rgba(255,255,255,0.05); border-radius: 4px; color: var(--wb-text); }
+
+  /* ───── Backdrop + guest-item-detail behind sheet ───── */
+  .behind { position: absolute; inset: 0; padding: 56px 16px 0; opacity: 0.55; filter: saturate(0.85); }
+  .topbar { display: flex; align-items: center; gap: 10px; padding: 0 4px 12px; }
+  .topbar .back { width: 36px; height: 36px; border-radius: 10px; background: var(--wb-card); display: grid; place-items: center; color: var(--wb-text-secondary); font-size: 18px; }
+  .topbar .crumb { font-size: 13px; color: var(--wb-text-muted); }
+  .item-hero { background: var(--wb-card); border: 1px solid var(--wb-border); border-radius: 18px; padding: 16px; margin-bottom: 12px; }
+  .item-hero .row { display: flex; gap: 12px; align-items: center; }
+  .item-hero .thumb { width: 60px; height: 60px; border-radius: 12px; background: var(--wb-accent-soft); display: grid; place-items: center; font-size: 30px; }
+  .item-hero .title { font-size: 15px; font-weight: 650; color: var(--wb-text); line-height: 1.3; }
+  .item-hero .price { font-size: 14px; font-weight: 700; color: var(--wb-accent); margin-top: 4px; }
+  .item-hero .chip-row { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 650; }
+  .chip.success { background: var(--wb-success-soft); color: var(--wb-success); }
+  .chip.surface { background: var(--wb-card); color: var(--wb-text-muted); border: 1px solid var(--wb-border); }
+
+  /* ───── Dim overlay ───── */
+  .scrim { position: absolute; inset: 0; background: rgba(7,7,10,0.5); z-index: 2; }
+
+  /* ───── Bottom sheet ───── */
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; background: var(--wb-bg-elev); border-radius: 24px 24px 0 0; padding: 18px 20px 22px; backdrop-filter: blur(16px); border: 1px solid var(--wb-border); border-bottom: none; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 -12px 40px rgba(0,0,0,0.55); }
+  .sheet-handle { width: 36px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.18); margin: -4px auto 4px; }
+  .sheet-celebration { display: flex; align-items: center; justify-content: center; height: 60px; margin-top: 4px; }
+  .sheet-celebration .gift { font-size: 44px; line-height: 1; filter: drop-shadow(0 4px 18px var(--wb-accent-glow)); }
+  .sheet-title { font-size: 19px; font-weight: 700; color: var(--wb-text); letter-spacing: -0.01em; text-align: center; line-height: 1.25; padding: 0 4px; }
+  .sheet-subtitle { font-size: 14px; color: var(--wb-text-secondary); line-height: 1.5; text-align: center; padding: 0 8px; margin: -4px 0 4px; }
+  .sheet-hint { display: flex; gap: 8px; padding: 10px 12px; background: var(--wb-accent-soft); border: 1px solid var(--wb-accent-soft-strong); border-radius: 12px; font-size: 12px; color: var(--wb-text-secondary); line-height: 1.4; }
+  .sheet-hint .icon { color: var(--wb-accent-strong); flex-shrink: 0; font-size: 14px; }
+  .sheet-hint b { color: var(--wb-text); font-weight: 650; }
+
+  .btn-stack { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+  .btn { padding: 13px 18px; border-radius: 14px; font-size: 15px; font-weight: 650; cursor: pointer; border: none; font-family: inherit; transition: all 0.15s; }
+  .btn-primary { background: var(--wb-accent); color: white; box-shadow: 0 6px 18px var(--wb-accent-glow-soft); }
+  .btn-primary:hover { background: var(--wb-accent-strong); }
+  .btn-ghost { background: transparent; color: var(--wb-text-secondary); }
+  .btn-ghost:hover { background: rgba(255,255,255,0.03); }
+
+  /* ───── Toast (for "Позже" exit) ───── */
+  .toast { position: absolute; left: 16px; right: 16px; bottom: 24px; z-index: 4; background: var(--wb-bg-elev); border: 1px solid var(--wb-border-light); border-radius: 14px; padding: 12px 14px; display: flex; align-items: center; gap: 10px; box-shadow: 0 12px 32px rgba(0,0,0,0.45); }
+  .toast .check { width: 26px; height: 26px; border-radius: 50%; background: var(--wb-success-soft); color: var(--wb-success); display: grid; place-items: center; font-size: 14px; flex-shrink: 0; }
+  .toast .text { font-size: 13.5px; color: var(--wb-text); font-weight: 600; }
+
+  /* ───── Edge-case frame (owner-as-guest, no sheet) ───── */
+  .frame.no-sheet .scrim { display: none; }
+  .frame.no-sheet .sheet { display: none; }
+  .frame.no-sheet .behind { opacity: 1; filter: none; padding-top: 56px; }
+  .frame.no-sheet .toast { left: 16px; right: 16px; bottom: 24px; }
+
+  /* ───── Spec block ───── */
+  .spec { background: var(--wb-bg-elev); border-radius: 16px; padding: 22px 26px; border: 1px solid var(--wb-border); margin: 0 auto 16px; max-width: 1100px; }
+  .spec h3 { font-size: 14px; font-weight: 650; margin: 0 0 12px; color: var(--wb-text); text-transform: uppercase; letter-spacing: 0.04em; }
+  .spec table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .spec th { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--wb-border-light); color: var(--wb-text-muted); font-weight: 650; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .spec td { padding: 9px 10px; border-bottom: 1px solid var(--wb-border); color: var(--wb-text-secondary); vertical-align: top; line-height: 1.5; }
+  .spec td:first-child { color: var(--wb-text); font-weight: 600; width: 28%; }
+  .spec td code { font-family: 'SF Mono', Menlo, monospace; font-size: 11.5px; padding: 1px 6px; background: rgba(139,123,255,0.12); border-radius: 4px; color: var(--wb-accent-strong); }
+  .spec ul { margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.7; color: var(--wb-text-secondary); }
+  .spec ul li code { font-family: 'SF Mono', Menlo, monospace; font-size: 11.5px; padding: 1px 5px; background: rgba(139,123,255,0.12); border-radius: 4px; color: var(--wb-accent-strong); }
+  .spec .invariant { background: rgba(74,222,128,0.07); border-left: 3px solid var(--wb-success); padding: 12px 16px; border-radius: 6px; margin-top: 14px; font-size: 13px; color: var(--wb-text-secondary); line-height: 1.55; }
+  .spec .invariant b { color: var(--wb-success); }
+  .spec .warn { background: rgba(251,191,36,0.08); border-left: 3px solid #FBBF24; padding: 12px 16px; border-radius: 6px; margin-top: 12px; font-size: 13px; color: var(--wb-text-secondary); line-height: 1.55; }
+  .spec .warn b { color: #FBBF24; }
+</style>
+</head>
+<body>
+
+<h1>E11 · Post-reservation account-claim CTA</h1>
+<p class="lede">Сразу после успешной резервации показываем гостю Sheet с предложением создать свой вишлист. Это самый горячий момент — пользователь только что почувствовал ценность продукта (выбрал подарок, owner не узнал что именно). Гипотеза: G→O D7 +20…30%.</p>
+<p class="meta">Status: <b>DRAFT</b> · Frame: <b>proposed/</b> · Source: <code>docs/research/06-experiment-backlog.md § E11</code> · Тригер-точка в коде: <code>MiniApp.tsx:10480</code> (после <code>pushToast(reserve_success)</code>)</p>
+
+<h2>Три состояния</h2>
+<div class="grid">
+
+  <!-- Frame 1: sheet shown -->
+  <div>
+    <div class="frame">
+      <span class="frame-label">1. SHEET ПОКАЗАН (guest, 0 own wishlists)</span>
+      <div class="behind">
+        <div class="topbar">
+          <div class="back">←</div>
+          <div class="crumb">Вишлист Маши · ДР 12 июня</div>
+        </div>
+        <div class="item-hero">
+          <div class="row">
+            <div class="thumb">🎧</div>
+            <div>
+              <div class="title">Sony WH-1000XM5</div>
+              <div class="price">34 990 ₽</div>
+            </div>
+          </div>
+          <div class="chip-row">
+            <span class="chip success">✓ Ты зарезервировал</span>
+            <span class="chip surface">Сюрприз-режим</span>
+          </div>
+        </div>
+      </div>
+      <div class="scrim"></div>
+      <div class="sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-celebration"><span class="gift">🎁</span></div>
+        <div class="sheet-title">Готово, подарок скрыт от&nbsp;владельца</div>
+        <div class="sheet-subtitle">Хочешь сделать свой вишлист, чтобы тебе тоже дарили без угадайки?</div>
+        <div class="sheet-hint">
+          <span class="icon">✦</span>
+          <div>Минимум — <b>добавить пару желаний и&nbsp;поделиться ссылкой</b> с&nbsp;друзьями. На это уходит ~1 минута.</div>
+        </div>
+        <div class="btn-stack">
+          <button class="btn btn-primary">Создать мой вишлист</button>
+          <button class="btn btn-ghost">Позже</button>
+        </div>
+      </div>
+    </div>
+    <div class="caption">
+      <span class="tag success">Trigger</span>
+      <span class="tag">guest_owner_cta.shown</span>
+      Открывается через <code>setTimeout(…, 350ms)</code> после успешного <code>POST /tg/items/:id/reserve</code> — даём пользователю секунду «выдохнуть» и увидеть, что резервация прошла (chip <i>«Ты зарезервировал»</i> уже на месте). <b>Toast <code>reserve_success</code> подавляется</b>: sheet сам — celebration-моментум.
+    </div>
+  </div>
+
+  <!-- Frame 2: dismissed -->
+  <div>
+    <div class="frame no-sheet">
+      <span class="frame-label">2. «ПОЗЖЕ» — sheet закрыт, toast вернулся</span>
+      <div class="behind">
+        <div class="topbar">
+          <div class="back">←</div>
+          <div class="crumb">Вишлист Маши · ДР 12 июня</div>
+        </div>
+        <div class="item-hero">
+          <div class="row">
+            <div class="thumb">🎧</div>
+            <div>
+              <div class="title">Sony WH-1000XM5</div>
+              <div class="price">34 990 ₽</div>
+            </div>
+          </div>
+          <div class="chip-row">
+            <span class="chip success">✓ Ты зарезервировал</span>
+            <span class="chip surface">Сюрприз-режим</span>
+          </div>
+        </div>
+      </div>
+      <div class="toast">
+        <div class="check">✓</div>
+        <div class="text">Зарезервировано. Owner не увидит, что именно.</div>
+      </div>
+    </div>
+    <div class="caption">
+      <span class="tag">guest_owner_cta.dismissed</span>
+      <span class="tag muted">no-spam-rule</span>
+      Один тап по «Позже» или swipe-down — sheet закрывается, событие летит, в <code>localStorage</code> ставится флаг <code>e11_cta_seen_at</code>. На последующих резервациях в этой сессии и для этого юзера sheet не повторяется (см. § cooldown в спеке).
+    </div>
+  </div>
+
+  <!-- Frame 3: edge case -->
+  <div>
+    <div class="frame no-sheet">
+      <span class="frame-label">3. EDGE: owner-as-guest — sheet НЕ показываем</span>
+      <div class="behind">
+        <div class="topbar">
+          <div class="back">←</div>
+          <div class="crumb">Вишлист Маши · ДР 12 июня</div>
+        </div>
+        <div class="item-hero">
+          <div class="row">
+            <div class="thumb">🎧</div>
+            <div>
+              <div class="title">Sony WH-1000XM5</div>
+              <div class="price">34 990 ₽</div>
+            </div>
+          </div>
+          <div class="chip-row">
+            <span class="chip success">✓ Ты зарезервировал</span>
+            <span class="chip surface">Сюрприз-режим</span>
+          </div>
+        </div>
+      </div>
+      <div class="toast">
+        <div class="check">✓</div>
+        <div class="text">Зарезервировано. Owner не увидит, что именно.</div>
+      </div>
+    </div>
+    <div class="caption">
+      <span class="tag danger">Skip</span>
+      <span class="tag muted">wishlists.length &gt; 0</span>
+      Если у юзера уже есть свой вишлист (он не «гость» в product-sense, а &ldquo;owner-as-guest&rdquo;) — sheet НЕ показываем, событие <code>guest_owner_cta.shown</code> не летит. Только обычный success-toast. Тот же случай — если в сессии уже был <code>guest_owner_cta.shown</code> / <code>clicked</code> / <code>dismissed</code> ранее.
+    </div>
+  </div>
+
+</div>
+
+<h2>Правила показа</h2>
+<div class="spec">
+  <h3>Условия — ВСЕ должны быть true</h3>
+  <table>
+    <tr>
+      <td>Успешная резервация</td>
+      <td><code>handleReserve</code> вернул 2xx; <code>setGuestItems</code> обновлён. Не показываем после 402/409/network-error.</td>
+    </tr>
+    <tr>
+      <td>Не owner-as-guest</td>
+      <td><code>wishlists.length === 0</code> в момент показа. Юзер ещё не зарегистрировался как owner. Это и есть G→O segment.</td>
+    </tr>
+    <tr>
+      <td>Не показывали в этой сессии</td>
+      <td>Memory-flag <code>e11ShownThisSession: boolean</code> в state. Один раз за mount.</td>
+    </tr>
+    <tr>
+      <td>Не показывали этому юзеру за 30 дней</td>
+      <td><code>localStorage['wb_e11_cta_seen_at']</code> ISO-date. Если &lt; 30 дней назад — skip. (защита от пользователей, которые удалили sheet, но снова зашли через share-link)</td>
+    </tr>
+    <tr>
+      <td>Эксперимент в treatment-bucket</td>
+      <td><code>useExperiment(tgFetch, 'e11-post-reserve-cta')</code> вернул <code>'treatment'</code>. Control видит только toast. 50/50 split.</td>
+    </tr>
+    <tr>
+      <td>Не secret-reservation</td>
+      <td>Sheet НЕ показываем после <code>secret-reserve</code> (отдельный flow, отдельный paywall context). Только regular reserve.</td>
+    </tr>
+  </table>
+  <div class="invariant"><b>Invariant.</b> Если sheet показан, обычный <code>pushToast(reserve_success)</code> НЕ вызывается — иначе у юзера двойное подтверждение успеха. Sheet сам и есть success-confirmation (chip <i>«Ты зарезервировал»</i> на item-card + title <i>«Готово, подарок скрыт от владельца»</i>).</div>
+  <div class="warn"><b>Cooldown vs. сегментация.</b> 30-дневный localStorage-cooldown — это <i>защита</i>, не сегментация эксперимента. Bucket assign делается через server-side <code>useExperiment</code> — sticky per User.id. Если юзер заёрзал в treatment, но dismissed sheet — он остаётся в treatment forever (учитывается в primary metric).</div>
+</div>
+
+<h2>Аналитика</h2>
+<div class="spec">
+  <h3>Новые события (PII-tier: product-event)</h3>
+  <table>
+    <tr>
+      <td><code>guest_owner_cta.shown</code></td>
+      <td>Sheet смонтирован и анимация открытия завершилась. Props: <code>itemId</code> (для join с reservation), <code>variant: 'treatment'</code>, <code>experimentKey: 'e11-post-reserve-cta'</code>.</td>
+    </tr>
+    <tr>
+      <td><code>guest_owner_cta.clicked</code></td>
+      <td>Тап «Создать мой вишлист». Props те же + <code>destination: 'onboarding-entry'</code>. Сразу после — <code>startOnboarding('post_reservation_claim')</code>.</td>
+    </tr>
+    <tr>
+      <td><code>guest_owner_cta.dismissed</code></td>
+      <td>Тап «Позже», swipe-down или back-button. Props: <code>method: 'tap_later' | 'swipe' | 'back_button'</code>.</td>
+    </tr>
+  </table>
+  <h3 style="margin-top: 22px;">Связь с существующими событиями</h3>
+  <ul>
+    <li><code>reservation.succeeded</code> — fires до sheet (это его trigger). Sheet — downstream.</li>
+    <li><code>onboarding_create_wishlist_success</code> — when user finishes the flow. Props <code>source: 'post_reservation_claim'</code> (новое значение в enum).</li>
+    <li><code>guest.converted_to_user</code> — fires server-side из <code>POST /tg/wishlists</code> когда у юзера ставится <code>firstAcquisitionSource ∈ SHARED_CONTENT_ACQUISITION_SOURCES</code>. <b>Этот path уже wired</b> (см. <code>guest-conversion-spec.md</code>) и сработает автоматически, если юзер пришёл по share-link.</li>
+  </ul>
+  <div class="invariant"><b>Funnel.</b> <code>reservation.succeeded</code> → <code>guest_owner_cta.shown</code> → (<code>clicked</code> или <code>dismissed</code>) → <code>onboarding_create_wishlist_success</code> (если clicked) → <code>guest.converted_to_user</code>. Считаем conversion: <code>clicked / shown</code> и <code>created / shown</code>.</div>
+</div>
+
+<h2>Поведение «Создать мой вишлист»</h2>
+<div class="spec">
+  <h3>Что происходит после тапа</h3>
+  <ul>
+    <li>Fires <code>guest_owner_cta.clicked</code>.</li>
+    <li>Закрываем sheet (анимация ~200ms).</li>
+    <li>Вызываем <code>startOnboarding('post_reservation_claim')</code>. Это новый <code>entryPoint</code> в существующем onboarding-flow (там сейчас <code>'first_open' | 'manual_cta' | 'organic_returning_underactivated'</code>).</li>
+    <li>Onboarding ведёт по своей логике (см. <code>onboarding-entry</code> screen). После успеха — fires <code>onboarding_create_wishlist_success</code> с <code>source: 'post_reservation_claim'</code>.</li>
+    <li><b>Reservation сохраняется:</b> юзер физически уже зарезервировал item. Когда вернётся в guest-view маши, item всё ещё будет <i>«Ты зарезервировал»</i>.</li>
+  </ul>
+  <div class="warn"><b>Не делаем deeplink-возврат на guest-item-detail после wishlist creation.</b> После onboarding юзер останется в своём новом &ldquo;my-wishlists&rdquo; screen — он только что создал свой первый wishlist, главная activation цель достигнута. Возврат к чужому wishlist на этом этапе размывает «вы теперь owner» moment. Если потом захочет — вернётся через share-link.</div>
+</div>
+
+<h2>Самопроверка (per task spec)</h2>
+<div class="spec">
+  <table>
+    <tr><td>1. Guest после reservation видит CTA</td><td>Frame 1 — sheet шаблон. Trigger подтверждён в § «Условия».</td></tr>
+    <tr><td>2. Owner своего wishlist не видит CTA</td><td>Frame 3 — owner-as-guest skip. Gate: <code>wishlists.length === 0</code>.</td></tr>
+    <tr><td>3. CTA click ведёт в create wishlist flow</td><td>§ «Поведение» — <code>startOnboarding('post_reservation_claim')</code>.</td></tr>
+    <tr><td>4. Dismiss работает и не спамит</td><td>Frame 2 — sheet закрыт, localStorage flag + session flag, 30-day cooldown.</td></tr>
+    <tr><td>5. guest→owner conversion считается по events</td><td>§ «Аналитика» § Funnel — <code>shown</code>→<code>clicked</code>→<code>onboarding_create_wishlist_success</code>→<code>guest.converted_to_user</code>.</td></tr>
+  </table>
+</div>
+
+<h2>Открытые вопросы (требуют решения до имплементации)</h2>
+<div class="spec">
+  <ul>
+    <li><b>Опрос: «Позже» — насколько надолго?</b> Текущее предложение — 30 дней в localStorage. Альтернативы: 7 дней, навсегда (один раз в жизни юзера), per-wishlist (т.е. показываем снова если резервирует item в другом вишлисте). <i>Default в мокапе — 30 дней</i>; легко поменять перед мерджем.</li>
+    <li><b>Должен ли быть эксперимент-флажок?</b> Спека § 4 говорит <code>useExperiment('e11-post-reserve-cta')</code>. Это позволит измерить G→O lift против control = только toast. Альтернатива — выкатывать 100% без A/B (быстрее, но без guardrail на reservation rate). <i>Default в мокапе — A/B treatment 50%</i>.</li>
+    <li><b>Текст CTA — A/B варианты копи?</b> § E11.10 «Mitigation: A/B на копи и timing». Сейчас один вариант. Можем добавить ротацию (2-3 копи) после baseline-read. <i>Default — один вариант, опт-ин ротации после первой недели в проде</i>.</li>
+    <li><b>Что если user dismissed, но в той же сессии резервирует item в ДРУГОМ вишлисте?</b> Sheet не покажется (session flag блокирует). Это OK: одно касание = достаточно, спам — anti-conversion. Через 30+ дней — посмотрим, если retention позволит.</li>
+  </ul>
+</div>
+
+<h2>Файлы / точки правки</h2>
+<div class="spec">
+  <table>
+    <tr><td><code>MiniApp.tsx:10480</code></td><td>В <code>handleReserve</code> — после <code>pushToast(reserve_success)</code>: вместо toast вызвать <code>maybeShowPostReservationCta(reservingItem)</code>. Helper решает по флагам, показывать ли sheet или вернуться к toast-path.</td></tr>
+    <tr><td><code>MiniApp.tsx</code> new state</td><td><code>postReservationCta: { item: GuestItem | null }</code> + render BottomSheet когда <code>!== null</code>.</td></tr>
+    <tr><td><code>lib/postReservationCta.ts</code> <i>new</i></td><td>Pure-logic helper: <code>shouldShowE11Cta({ wishlistCount, sessionFlag, lastSeenAt, variant }): boolean</code>. Easy to unit-test.</td></tr>
+    <tr><td><code>lib/postReservationCta.test.ts</code> <i>new</i></td><td>Unit tests для всех 6 gating conditions.</td></tr>
+    <tr><td><code>lib/experiments.ts</code></td><td>Никаких правок — это generic hook.</td></tr>
+    <tr><td><code>shared/src/product-events.ts</code> (или где declared)</td><td>3 new events в product-events enum: <code>guest_owner_cta.shown/clicked/dismissed</code>.</td></tr>
+    <tr><td><code>routes/experiments.routes.ts</code></td><td>Add <code>'e11-post-reserve-cta'</code> в список activeExperiments + 50/50 split.</td></tr>
+    <tr><td><code>i18n</code> (RU/EN/ES)</td><td>3 строки: title, subtitle, primary, secondary. Все Russian-first по project context.</td></tr>
+  </table>
+</div>
+
+</body>
+</html>

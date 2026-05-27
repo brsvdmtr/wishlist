@@ -71,6 +71,14 @@ import {
 } from './lib/miniapp-constants';
 import { parsePaywallError, paywallContextFromError } from './lib/paywall';
 import { fireAttributionBeacon } from './lib/attribution';
+import { useExperiment } from './lib/experiments';
+import {
+  shouldShowE11Cta,
+  readLastSeenAt as readE11LastSeenAt,
+  writeLastSeenAt as writeE11LastSeenAt,
+  E11_EXPERIMENT_KEY,
+  E11_ONBOARDING_ENTRY_POINT,
+} from './lib/postReservationCta';
 import { resolveReservePrefill, MAX_DISPLAY_NAME_LEN, type ReservePrefillSource } from './lib/reservePrefill';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
 import { initSentry, captureException } from './sentry';
@@ -4500,6 +4508,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // on the "Reset to prefilled" click so the event re-arms.
   const guestNameEditedFiredRef = useRef(false);
 
+  // E11 — Post-reservation account-claim CTA (guest → owner conversion). Sheet
+  // shows after a successful regular reserve when the user has zero own
+  // wishlists. State holds the item we just reserved (carried for analytics);
+  // session ref blocks re-show within one Mini App open; closed-by-click ref
+  // suppresses the Sheet's onClose dismiss event when a button handler is the
+  // one that closed the sheet (otherwise we double-count dismissals).
+  const [postReservationCtaItem, setPostReservationCtaItem] = useState<GuestItem | null>(null);
+  const e11SessionShownRef = useRef(false);
+  const e11ClosedByClickRef = useRef(false);
+
   // Comments
   const [comments, setComments] = useState<CommentDTO[]>([]);
   const [commentText, setCommentText] = useState('');
@@ -5136,6 +5154,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       // Silent fail — telemetry is non-critical
     });
   }, [tgFetch]);
+
+  // E11 — A/B variant for the post-reservation account-claim Sheet. Server
+  // assigns a sticky bucket per User.id (5% global holdout, 50% rollout when
+  // enabled). Returns `control` until the server answers, on any error, or
+  // when EXP_E11_POST_RESERVE_CTA_ENABLED is unset — all safe defaults.
+  const { variant: e11Variant } = useExperiment(tgFetch, E11_EXPERIMENT_KEY);
 
   // --- Santa season loader (used on init + after god/testMode toggles)
   const loadSantaSeason = useCallback(async () => {
@@ -10477,12 +10501,70 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           ? guestNamePrefill.source
           : `${guestNamePrefill.source}_edited`;
       trackBirthdayAttributedEvent('item_reserved', { itemId: reservingItem.id, displayNameSource });
-      pushToast(t('reserve_success', locale), 'success');
+      // E11 — decide between toast and post-reservation account-claim Sheet.
+      // Sheet replaces the toast (it IS the success confirmation — title reads
+      // "Готово, подарок скрыт от владельца 🎁"). Gating in shouldShowE11Cta:
+      // segment (zero own wishlists), A/B treatment, per-session de-dup,
+      // 30-day localStorage cooldown, regular-reserve only.
+      const e11Decision = shouldShowE11Cta({
+        wishlistCount: wishlists.length,
+        experimentVariant: e11Variant,
+        sessionFlag: e11SessionShownRef.current,
+        lastSeenAt: readE11LastSeenAt(),
+        isSecretReservation: false,
+        now: Date.now(),
+      });
+      if (e11Decision.show) {
+        e11SessionShownRef.current = true;
+        writeE11LastSeenAt(Date.now());
+        setPostReservationCtaItem(updatedItem);
+        trackEvent('guest_owner_cta.shown', { itemId: reservingItem.id, experimentKey: E11_EXPERIMENT_KEY, variant: e11Variant });
+      } else {
+        pushToast(t('reserve_success', locale), 'success');
+      }
       closeReserveSheet();
     } finally {
       setLoading(false);
     }
   };
+
+  const handleE11Claim = useCallback(() => {
+    e11ClosedByClickRef.current = true;
+    trackEvent('guest_owner_cta.clicked', {
+      itemId: postReservationCtaItem?.id,
+      destination: 'onboarding-entry',
+      experimentKey: E11_EXPERIMENT_KEY,
+    });
+    setPostReservationCtaItem(null);
+    void startOnboarding(E11_ONBOARDING_ENTRY_POINT);
+  }, [postReservationCtaItem, trackEvent, startOnboarding]);
+
+  const handleE11DismissTap = useCallback(() => {
+    e11ClosedByClickRef.current = true;
+    trackEvent('guest_owner_cta.dismissed', {
+      itemId: postReservationCtaItem?.id,
+      method: 'tap_later',
+      experimentKey: E11_EXPERIMENT_KEY,
+    });
+    setPostReservationCtaItem(null);
+  }, [postReservationCtaItem, trackEvent]);
+
+  // Sheet `onClose` fires for swipe-down + backdrop tap + every setState(null)
+  // path. The ref guards against double-counting: when a button handler closed
+  // the sheet, it already tracked the event and flipped the ref true, so this
+  // dismiss handler just resets it. Otherwise the close is user-driven gesture.
+  const handleE11Dismiss = useCallback(() => {
+    if (e11ClosedByClickRef.current) {
+      e11ClosedByClickRef.current = false;
+      return;
+    }
+    trackEvent('guest_owner_cta.dismissed', {
+      itemId: postReservationCtaItem?.id,
+      method: 'swipe_or_backdrop',
+      experimentKey: E11_EXPERIMENT_KEY,
+    });
+    setPostReservationCtaItem(null);
+  }, [postReservationCtaItem, trackEvent]);
 
   const handleUnreserve = async (item: GuestItem) => {
     setLoading(true);
@@ -19743,6 +19825,27 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {t('unreserve_confirm_btn', locale)}
             </Button>
           </div>
+        </div>
+      </BottomSheet>
+
+      {/* ── E11 — Post-reservation account-claim CTA (guest → owner) ── */}
+      {/* Mockup: docs/design-system/mockups/approved/e11-post-reservation-cta.html */}
+      <BottomSheet
+        isOpen={!!postReservationCtaItem}
+        onClose={handleE11Dismiss}
+        title={t('e11_cta_title', locale)}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <p style={{ fontSize: 14, color: C.textSec, margin: 0, lineHeight: 1.5, textAlign: 'center' }}>
+            {t('e11_cta_subtitle', locale)}
+          </p>
+          <Banner tone="info" icon="✦">{t('e11_cta_hint', locale)}</Banner>
+          <Button variant="primary" onClick={handleE11Claim}>
+            {t('e11_cta_primary', locale)}
+          </Button>
+          <Button variant="ghost" onClick={handleE11DismissTap}>
+            {t('e11_cta_ghost', locale)}
+          </Button>
         </div>
       </BottomSheet>
 

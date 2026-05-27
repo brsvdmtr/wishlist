@@ -32,6 +32,43 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-05-27 — E11 post-reservation account-claim CTA Sheet approved
+
+**Type:** approval
+
+**Decision.** The post-reservation account-claim CTA mockup
+([`e11-post-reservation-cta.html`](./mockups/approved/e11-post-reservation-cta.html))
+moves `proposed/` → `approved/`. Implementation composes existing
+canonical primitives only — `Sheet` (with title), `Banner` (`tone="info"`,
+✦ icon), `Button` (`primary` + `ghost`) — and reads tokens via the local
+`C.*` CSS-var map in `MiniApp.tsx`. No new primitive, no new token; the
+sheet is a layout composition that any future "post-success conversion CTA"
+can clone.
+
+**Context / why.** E11 is the highest-ROI guest-to-owner conversion
+experiment in the backlog (ICE 576, see
+[`06-experiment-backlog.md § E11`](../research/06-experiment-backlog.md)).
+The mockup was drafted, reviewed and explicitly approved on 2026-05-27.
+Implementation gated behind A/B `e11-post-reserve-cta` (env-driven,
+sticky bucket, 5% global holdout) so the rollout is reversible from
+`/opt/wishlist/.env` without a code deploy.
+
+**Supersedes.** Nothing — this is a new surface.
+
+**Impact.**
+- Component registry: no new rows. All primitives already canonical.
+- Migration work: none. New code path only; existing reservation flow
+  (toast on success) remains the control path.
+- Breaking changes for consumers: none.
+- New i18n keys (×6 locales): `e11_cta_title`, `e11_cta_subtitle`,
+  `e11_cta_hint`, `e11_cta_primary`, `e11_cta_ghost`.
+- New PRODUCT_EVENTS (client-allowed): `guest_owner_cta.shown`,
+  `guest_owner_cta.clicked`, `guest_owner_cta.dismissed`.
+
+**Approved by.** Dmitry.
+
+---
+
 ## 2026-05-25 — Skeleton primitive extracted to `packages/ui`
 
 **Type:** status-change

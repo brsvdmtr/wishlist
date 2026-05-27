@@ -83,7 +83,8 @@ type EntryPoint =
   | 'auto_after_first_wishlist'
   | 'organic_returning_underactivated'
   | 'forced_rollout_test'
-  | 'manual_cta';
+  | 'manual_cta'
+  | 'post_reservation_claim';
 type CompletionReason =
   | 'demo_converted'
   | 'real_item_created'

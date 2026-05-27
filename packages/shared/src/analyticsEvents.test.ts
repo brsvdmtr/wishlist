@@ -212,6 +212,33 @@ describe('PRODUCT_EVENTS — fixture snapshot', () => {
           ],
         },
         {
+          "action": "clicked",
+          "domain": "guest_owner_cta",
+          "name": "guest_owner_cta.clicked",
+          "pii": "none",
+          "sources": [
+            "client",
+          ],
+        },
+        {
+          "action": "dismissed",
+          "domain": "guest_owner_cta",
+          "name": "guest_owner_cta.dismissed",
+          "pii": "none",
+          "sources": [
+            "client",
+          ],
+        },
+        {
+          "action": "shown",
+          "domain": "guest_owner_cta",
+          "name": "guest_owner_cta.shown",
+          "pii": "none",
+          "sources": [
+            "client",
+          ],
+        },
+        {
           "action": "converted_to_user",
           "domain": "guest",
           "name": "guest.converted_to_user",

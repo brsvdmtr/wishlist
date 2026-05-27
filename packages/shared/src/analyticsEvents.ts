@@ -561,6 +561,34 @@ export const PRODUCT_EVENTS = [
     sources: ['client'],
     pii: 'none',
   },
+  // ── Guest → Owner conversion funnel (E11 post-reservation account-claim CTA) ──
+  {
+    name: 'guest_owner_cta.shown',
+    domain: 'guest_owner_cta',
+    action: 'shown',
+    description:
+      'Post-reservation account-claim Sheet rendered to a guest with zero own wishlists (E11 — see docs/research/06-experiment-backlog.md). Top of the G→O conversion funnel. Fires at most once per session per user and respects a 30-day cooldown.',
+    sources: ['client'],
+    pii: 'none',
+  },
+  {
+    name: 'guest_owner_cta.clicked',
+    domain: 'guest_owner_cta',
+    action: 'clicked',
+    description:
+      'Guest tapped the primary "Create my wishlist" CTA on the E11 Sheet. Intent signal — actual wishlist creation arrives later as wishlist.created with source=post_reservation_claim; final conversion is the server-emitted guest.converted_to_user.',
+    sources: ['client'],
+    pii: 'none',
+  },
+  {
+    name: 'guest_owner_cta.dismissed',
+    domain: 'guest_owner_cta',
+    action: 'dismissed',
+    description:
+      'Guest closed the E11 Sheet without converting — via "Позже" tap, swipe-down, or backdrop tap (carried in the `method` prop). Funnel drop-off signal.',
+    sources: ['client'],
+    pii: 'none',
+  },
   // ── Experiments (A/B infrastructure — server-assigned sticky buckets) ──
   {
     name: 'experiment.assigned',

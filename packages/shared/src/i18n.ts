@@ -959,6 +959,13 @@ const ru: Dict = {
   unreserve_confirm_body: 'Ты уверен, что хочешь снять бронь с этого желания? Другие гости смогут его забронировать.',
   unreserve_confirm_btn: 'Да, снять бронь',
 
+  // ── E11 — Post-reservation account-claim CTA (guest → owner) ──────────────
+  e11_cta_title: 'Готово, подарок скрыт от владельца 🎁',
+  e11_cta_subtitle: 'Хочешь сделать свой вишлист, чтобы тебе тоже дарили без угадайки?',
+  e11_cta_hint: 'Добавь пару желаний и поделись ссылкой — это ~1 минута.',
+  e11_cta_primary: 'Создать мой вишлист',
+  e11_cta_ghost: 'Позже',
+
   // ── Comments ──────────────────────────────────────────────────────────────
   comments_title: 'Комментарии',
   comments_subtitle: 'Личный чат между автором и тем, кто забронировал',
@@ -4005,6 +4012,13 @@ const en: Dict = {
   unreserve_confirm_body: 'Are you sure you want to cancel your reservation for this wish? Other guests will be able to reserve it.',
   unreserve_confirm_btn: 'Yes, cancel reservation',
 
+  // ── E11 — Post-reservation account-claim CTA (guest → owner) ──────────────
+  e11_cta_title: 'Done — the gift stays hidden from the owner 🎁',
+  e11_cta_subtitle: 'Want a wishlist of your own so friends can stop guessing for you too?',
+  e11_cta_hint: 'Add a couple of wishes and share the link — about 1 minute.',
+  e11_cta_primary: 'Create my wishlist',
+  e11_cta_ghost: 'Later',
+
   // ── Comments ──────────────────────────────────────────────────────────────
   comments_title: 'Comments',
   comments_subtitle: 'Private chat between the author and the person who reserved',
@@ -6874,6 +6888,13 @@ const zhCN: Dict = {
   unreserve_confirm_title: '取消预订？',
   unreserve_confirm_body: '确定要取消这个心愿的预订吗？其他访客可以预订它。',
   unreserve_confirm_btn: '是，取消预订',
+
+  // ── E11 — Post-reservation account-claim CTA (guest → owner) ──────────────
+  e11_cta_title: '搞定，礼物对主人是保密的 🎁',
+  e11_cta_subtitle: '要不要也建一个自己的心愿单，让朋友们不用再猜？',
+  e11_cta_hint: '添加几个心愿并分享链接，约 1 分钟即可。',
+  e11_cta_primary: '创建我的心愿单',
+  e11_cta_ghost: '稍后',
 
   // ── Comments ──────────────────────────────────────────────────────────────
   comments_title: '评论',
@@ -9773,6 +9794,13 @@ const hi: Dict = {
   unreserve_confirm_body: 'क्या आप वाकई इस इच्छा की बुकिंग रद्द करना चाहते हैं?',
   unreserve_confirm_btn: 'हाँ, रद्द करें',
 
+  // ── E11 — Post-reservation account-claim CTA (guest → owner) ──────────────
+  e11_cta_title: 'हो गया, उपहार मालिक से छिपा है 🎁',
+  e11_cta_subtitle: 'क्या आप अपनी विशलिस्ट बनाना चाहेंगे ताकि दोस्त आपके लिए भी अंदाज़ा न लगाएँ?',
+  e11_cta_hint: 'बस कुछ इच्छाएँ जोड़ें और लिंक साझा करें — लगभग 1 मिनट।',
+  e11_cta_primary: 'मेरी विशलिस्ट बनाएँ',
+  e11_cta_ghost: 'बाद में',
+
   // ── Comments ──────────────────────────────────────────────────────────────
   comments_title: 'टिप्पणियाँ',
   comments_subtitle: 'मालिक और बुकिंग करने वाले के बीच निजी चैट',
@@ -12667,6 +12695,13 @@ const es: Dict = {
   unreserve_confirm_title: '¿Cancelar reserva?',
   unreserve_confirm_body: '¿Estás seguro de que quieres cancelar la reserva de este deseo? Otros invitados podrán reservarlo.',
   unreserve_confirm_btn: 'Sí, cancelar reserva',
+
+  // ── E11 — Post-reservation account-claim CTA (guest → owner) ──────────────
+  e11_cta_title: 'Listo, el regalo queda oculto para el dueño 🎁',
+  e11_cta_subtitle: '¿Quieres una lista propia para que tus amigos también dejen de adivinar?',
+  e11_cta_hint: 'Añade un par de deseos y comparte el enlace — alrededor de 1 minuto.',
+  e11_cta_primary: 'Crear mi lista',
+  e11_cta_ghost: 'Más tarde',
 
   // ── Comments ──────────────────────────────────────────────────────────────
   comments_title: 'Comentarios',
@@ -15563,6 +15598,13 @@ const ar: Dict = {
   unreserve_confirm_title: 'إلغاء الحجز؟',
   unreserve_confirm_body: 'هل أنت متأكد أنك تريد إلغاء حجز هذه الأمنية؟ يمكن للضيوف الآخرين حجزها.',
   unreserve_confirm_btn: 'نعم، إلغاء الحجز',
+
+  // ── E11 — Post-reservation account-claim CTA (guest → owner) ──────────────
+  e11_cta_title: 'تم، الهدية مخفية عن صاحب القائمة 🎁',
+  e11_cta_subtitle: 'هل تودّ إنشاء قائمتك الخاصة حتى لا يخمّن أصدقاؤك ما تحب أيضًا؟',
+  e11_cta_hint: 'أضِف بضع رغبات وشارك الرابط — حوالي دقيقة واحدة.',
+  e11_cta_primary: 'إنشاء قائمتي',
+  e11_cta_ghost: 'لاحقًا',
 
   // ── Comments ──────────────────────────────────────────────────────────────
   comments_title: 'التعليقات',
