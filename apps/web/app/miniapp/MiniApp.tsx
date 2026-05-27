@@ -5609,7 +5609,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       setOnboardingCreatedWl(json.wishlist);
       // Refresh wishlists so home screen shows the new one immediately
       await loadWishlists();
-      trackEvent('onboarding_create_wishlist_success', { wishlist_id: json.wishlist.id, items_moved: json.movedCount });
+      // Forward entryPoint so downstream funnel queries can attribute
+      // conversions to the originating entry — esp. E11 ('post_reservation_claim').
+      // Without this, attribution requires a per-user OnboardingState join.
+      trackEvent('onboarding_create_wishlist_success', {
+        wishlist_id: json.wishlist.id,
+        items_moved: json.movedCount,
+        entry_point: onboardingState.entryPoint ?? null,
+      });
       setScreen('onboarding-share');
     } catch {
       pushToast(t('error_generic', locale), 'error');

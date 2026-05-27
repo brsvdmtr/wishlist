@@ -269,6 +269,10 @@
 
 ### E11 — Account-claim CTA сразу после резерва
 
+> **Status: SHIPPED 2026-05-27** — commits [`0268fe2`](https://github.com/brsvdmtr/wishlist/commit/0268fe2), [`561afc4`](https://github.com/brsvdmtr/wishlist/commit/561afc4). A/B `e11-post-reserve-cta` (50/50, env-driven, 5% global holdout). Events `guest_owner_cta.shown|clicked|dismissed`. Mockup: [`mockups/approved/e11-post-reservation-cta.html`](../design-system/mockups/approved/e11-post-reservation-cta.html). Helper: [`apps/web/app/miniapp/lib/postReservationCta.ts`](../../apps/web/app/miniapp/lib/postReservationCta.ts). Kill switch: `EXP_E11_POST_RESERVE_CTA_ENABLED=false` in `/opt/wishlist/.env` + `docker compose up -d api`.
+>
+> **Naming note vs. spec below:** events ship as `guest_owner_cta.*` (not `g2o.claim_cta_*` as written in row 5); `wishlist.created` did NOT get a `source: 'g2o_claim'` prop — instead `onboarding_create_wishlist_success` carries `entry_point: 'post_reservation_claim'`, joinable to the `OnboardingState` row for full attribution.
+
 1. **Название.** Post-reservation account-claim CTA.
 2. **Гипотеза.** Когда гость резервирует item, он уже Telegram-пользователь и уже взаимодействовал с ботом. Если сразу после успешного резерва (Flow 7) показать banner «Создать свой вишлист — друзья смогут сделать тебе подарок» — guest-to-owner conversion D7 вырастет на 25 %.
 3. **Сегмент.** Гости с 0 own wishlists, успешно сделавшие первое резервирование. Bucket 50/50.
