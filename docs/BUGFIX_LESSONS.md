@@ -5,6 +5,131 @@ New entries go at the top.
 
 ---
 
+## 2026-05-27 — "опять долгие загрузки": НАСТОЯЩИЙ root cause — stale-HTML 404 на удалённые chunks
+
+### Симптом
+
+Тот же пользователь: `опять долгие загрузки миниаппа`. Сначала прошла
+длинная цепочка диагностики (см. запись ниже) — но финальный фикс
+оказался про другое.
+
+### Root cause
+
+Next.js standalone build **удаляет старые chunks** при каждом rebuild'е
+контейнера. Сегодня деплоев было **три**:
+
+1. `a9a1c5a` — meta description tweak (попытка force rehash, не сработала)
+2. `eaf5898` — `id="telegram-webapp-sdk"` Script prop
+3. `f8f3cde` — docs only
+
+После каждого `docker compose build web` файловая система контейнера
+получает свежий `.next/static/chunks/`, старые файлы исчезают:
+
+```
+docker exec wishlist-prod-web-1 ls .next/static/chunks/app/miniapp/
+  layout-a8418b884d92b00f.js   (stable across builds — shared next/script boilerplate)
+  page-0af2134211eec317.js     (текущий)
+  # 0f51 / 727a / older NOT here
+```
+
+Telegram WebView (несмотря на `Cache-Control: private, no-cache,
+no-store, max-age=0, must-revalidate` на HTML) **держит кэшированный
+HTML** через сессии. Cached HTML ссылается на старые chunk URL'ы. После
+deploy:
+
+```
+GET https://wishlistik.ru/_next/static/chunks/app/miniapp/page-727a926b56d8f149.js
+  → origin: 404
+  → CF cache: HIT age=77825s   (вчерашний кэш всё ещё живой)
+
+GET https://wishlistik.ru/_next/static/chunks/app/miniapp/page-0f51cd54f855c894.js
+  → origin: 404
+  → CF cache: 404               (CF не успел закэшировать этот mini-window)
+```
+
+Кому повезло — CF держит вчерашний chunk → app работает (но это
+бомба замедленного действия, через 24ч age превысит TTL и chunks
+протухнут).
+Кому не повезло — 404 → ChunkLoadError → React не монтируется → пустой
+BootSplash навсегда.
+
+**`MiniAppErrorBoundary` это render-time error boundary** — она НЕ ловит
+script/link load failures (они fire'ят `error` на самом элементе, не
+bubble'ят через React дерево).
+
+### Lesson
+
+1. **Каждый deploy инвалидирует chunks** — Next.js standalone не
+   сохраняет старые. Для пользователей с cached HTML это значит
+   404 на ассеты, которые HTML просит.
+2. **`Cache-Control: no-store` на HTML не гарантия** — мобильные
+   WebView (Telegram, Instagram, FB) часто игнорируют и держат HTML
+   в памяти/сторадже WebView ради perceived perf.
+3. **React Error Boundary НЕ ловит chunk load fails.** Те — DOM-level
+   `error` event на `<script>`/`<link>`, не bubbling.
+   `window.addEventListener('error', fn, true)` с capture=true —
+   единственный надёжный способ.
+4. **Multiple deploys per hour amplify the problem** — каждый rebuild
+   создаёт новый "временной слой" chunk-хэшей. Пользователи между
+   deploy'ями оказываются в "невозможном" состоянии: их HTML ссылается
+   на chunks из эпохи, которую полностью удалили из контейнера и не
+   успели затянуть в CF cache.
+5. **CF cache HIT может быть PRO** в этом сценарии: keeps yesterday's
+   chunks alive at edge for stale HTML users while we deploy. Без
+   CF deploy был бы ещё более disruptive. Но age TTL — мина под
+   следующее утро.
+
+### Rule
+
+- **Минимум deploys на код-changes per day.** Если уже задеплоил —
+  следующий должен быть либо критический фикс, либо подождать день.
+- **При жалобе на загрузку Mini App после недавнего deploy'я**:
+  - Проверить `docker exec ... ls .next/static/chunks/` на отсутствующие
+    chunks
+  - Проверить через `curl https://.../old-chunk-url.js` — origin 404
+    но CF возможно HIT
+  - Это **stale-HTML 404 syndrome**, не network/cache issue
+- **Любая глобальная boot-критичная зависимость (chunk, font, CSS)**
+  должна иметь client-side error recovery: либо retry, либо reload,
+  либо graceful degradation. Happy-path-only мысль "ну будет 200,
+  оно всегда 200" — недопустима для production.
+- **При deploy на staging/prod где есть mobile WebView**: stress-test
+  stale-HTML scenario — fetch HTML, deploy, потом запросить старые
+  chunks. Если все 200 от CF и 404 от origin — посчитать TTL до того
+  как CF их вытеснит.
+
+### Better code
+
+- `apps/web/app/layout.tsx` — добавлен window-level capturing listener
+  `error` event'а через `<Script id="wb-stale-chunk-reload"
+  strategy="beforeInteractive">`. Ловит script/link 404 из
+  `/_next/static/` → один `location.reload()` (guard'нут
+  sessionStorage от loop'а). `load` event сбрасывает guard для
+  следующего deploy'я.
+
+### Follow-up
+
+- **[приоритет] Volume mount для chunks**: `wishlist_web_chunks:/app/apps/web/.next/static/chunks` 
+  в docker-compose.prod.yml + deploy step "rsync new chunks INTO 
+  volume (additive)" чтобы старые chunks выживали rebuild'ы. + 
+  cron-prune chunks старше N дней. Это устраняет root cause а не 
+  лечит симптом.
+- **Generated build ID** в Next.js (`generateBuildId` в next.config) 
+  — стабильный per-source-commit ID; не помогает с chunk hash'ами, 
+  но даёт способ детектить "old HTML" client-side через 
+  `__NEXT_DATA__.buildId` mismatch.
+- **CF Cache Reserve** (paid) — persistent backing store для cache; 
+  снижает риск что CF вытеснит вчерашние chunks из edge.
+
+### Related
+
+- См. предыдущую запись 2026-05-27 ниже — длинная цепочка 
+  ошибочных гипотез (битый brotli, slow path сеть, CF settings) 
+  которые отвлекали от настоящего root cause. Урок про **проверять 
+  origin filesystem перед обвинением CDN cache**.
+
+---
+
 ## 2026-05-27 — Mini App виснет на грузилке: транзиентный slow path между клиентом и CF edge (НЕ битая запись cache)
 
 ### Симптом
