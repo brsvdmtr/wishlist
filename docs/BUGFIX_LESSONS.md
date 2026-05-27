@@ -5,6 +5,101 @@ New entries go at the top.
 
 ---
 
+## 2026-05-27 — Mini App виснет на грузилке из-за битой brotli-записи одного JS-чанка в CF edge cache
+
+### Симптом
+
+Пользователь ("опять долгие загрузки миниаппа") видит **пустой тёмный
+экран** с грузилкой 🤖 Telegram'а в Mini App. HTML загружается, но
+JS-бандл вешает рендер. Симптом периодический («опять») — у части
+заходов всё ок, у части висит десятки секунд.
+
+Метрики:
+- API origin отвечает за 0-2 мс (responseTime в pino-логах в норме)
+- CPU/память сервера в норме (load 0.00, 33% idle)
+- Внешний `curl https://wishlistik.ru/_next/static/chunks/app/miniapp/layout-a8418b884d92b00f.js -H 'accept-encoding: br'` показал TTFB:
+  `0.32s / 24.8s / 0.30s` — каждый второй-третий запрос подвисает
+- Без brotli (`accept-encoding:` не задан) — стабильно 0.28-0.32с
+- Другие чанки (`page-*.js` 403KB, `main-app-*.js`, `polyfills-*.js`)
+  стабильно 0.3-0.5с даже с brotli
+- `cf-cache-status: HIT`, `age: 73140` — запись в CF edge cache 20+ часов
+
+Только один URL (layout chunk) и только brotli-вариант — патологически
+медленный. Mini App ждёт его перед mount'ом → пользователь видит пустую
+грузилку.
+
+### Root cause
+
+Битая запись brotli-варианта `/_next/static/chunks/app/miniapp/layout-a8418b884d92b00f.js`
+в Cloudflare edge cache. Запись отдаётся как `HIT` (т.е. кэш формально
+живой), но фактическая отдача данных тянется 6-25 секунд вместо
+ожидаемых ~100мс. Без brotli — нормально, значит локальный edge node
+накосячил при компрессии или storage этого variant'а.
+
+CF Worker (maintenance-worker) к `_next/*` не привязан (см. wrangler.toml
+комментарии и роуты — статика обходит worker), так что проблема ниже
+worker'а — на уровне CF cache.
+
+Origin healthy throughout: тот же файл с `127.0.0.1:3000` отдаётся за 1.5мс.
+
+### Lesson
+
+1. **Не каждый "медленный Mini App" = медленный backend.** Когда API логи
+   пустые/быстрые, а пользователь видит зависание — следующий слой это
+   CF edge / связность / статические ассеты. Origin-only health-check
+   этого класса бага не словит.
+2. **CF edge cache может иметь "битую" запись с `HIT` статусом.** Не
+   доверять состоянию кэша по статусу — измерять TTFB на конкретные
+   URL по нескольким попыткам. Variants `Vary: Accept-Encoding` имеют
+   независимые судьбы.
+3. **Single tiny-chunk bottleneck = total app freeze.** Маленький
+   chunk (1.9KB!) грузит всё приложение, потому что Next.js загружает
+   layout перед children. Размер чанка не предсказывает критичность.
+4. **Контент-хэш у Next.js привязан к скомпилированному выводу, не
+   исходнику.** Простой комментарий в .tsx не пересчитает хеш — нужно
+   менять то, что доезжает до runtime'а (метаданные, текстовый литерал,
+   импорт).
+
+### Rule
+
+- **При жалобе "Mini App виснет / долго грузится"** первым делом
+  проверять TTFB критических статических ассетов через `curl ... -H
+  'accept-encoding: br'` (несколько повторов). Если разброс >10× —
+  смотреть CF, не origin.
+- **Когда CF API token доступен**, делать точечный purge URL: 
+  `curl -X POST 'https://api.cloudflare.com/client/v4/zones/$ZONE_ID/purge_cache' \
+    -H 'Authorization: Bearer $TOKEN' \
+    -d '{"files":["https://wishlistik.ru/<path>"]}'`.
+- **Когда token недоступен**, форсировать rehash через семантическое
+  изменение содержимого файла, дающего критичный chunk (description,
+  literal, import). Чистый комментарий не работает — minify его
+  выбрасывает.
+- **Не вводить инфра-зависимости** в boot-критичный путь Mini App'а
+  без understanding: одна сломанная запись в CDN кладёт онбординг.
+
+### Better code
+
+- `apps/web/app/miniapp/layout.tsx` — изменён `metadata.description`
+  с `'Твой персональный вишлист'` на `'Твой персональный вишлист —
+  список желаний в Telegram'`. Семантически осмысленно (точнее
+  описывает приложение для SEO/og-карточек) и форсит новый
+  content-hash chunk'а.
+- **Follow-up TODO** (отдельный PR/задача): добавить CF_API_TOKEN в
+  `/opt/wishlist/.env` и `scripts/cf-purge.sh "<url>"` хелпер.
+  Текущий workflow "коммит + push + ждать deploy" слишком медленный
+  для CDN-инцидентов.
+- **Investigate**: Cloudflare Polish / Auto-Minify / Brotli настройки
+  для `wishlistik.ru` — почему именно этот файл словил битую запись?
+  Возможно стоит выключить Auto-Minify для JS (Next уже минифицирует).
+
+### Related
+
+- См. `feedback_api_html_substitution.md` (2026-05-25) — другой класс
+  CF-related bug'ов: подмена API ответа HTML'ом. Похожий принцип:
+  слой между клиентом и origin может тихо ломать поверхность.
+
+---
+
 ## 2026-05-25 — Maintenance UI ломалось из-за HTML-подмены API ответа (двойной regression)
 
 ### Симптом

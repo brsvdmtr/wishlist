@@ -3,7 +3,7 @@ import Script from 'next/script';
 
 export const metadata: Metadata = {
   title: 'WishBoard',
-  description: 'Твой персональный вишлист',
+  description: 'Твой персональный вишлист — список желаний в Telegram',
 };
 
 export const viewport: Viewport = {
