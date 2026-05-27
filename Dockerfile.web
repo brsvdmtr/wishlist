@@ -47,9 +47,20 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
 
+# Stash baked chunks for the entrypoint to merge into a mounted volume
+# (or back into the now-empty chunks/ dir when no volume is mounted).
+# See ops/web-entrypoint.sh and docs/BUGFIX_LESSONS.md (2026-05-27 —
+# stale-HTML 404 syndrome).
+RUN mv apps/web/.next/static/chunks apps/web/.next/static/chunks-baked && \
+    mkdir -p apps/web/.next/static/chunks && \
+    chown -R nextjs:nodejs apps/web/.next/static/chunks apps/web/.next/static/chunks-baked
+
+COPY --chmod=0755 ops/web-entrypoint.sh /usr/local/bin/web-entrypoint.sh
+
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
+ENTRYPOINT ["/usr/local/bin/web-entrypoint.sh"]
 CMD ["node", "apps/web/server.js"]

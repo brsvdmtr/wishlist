@@ -17,6 +17,19 @@ name: Deploy to Vultr
 on:
   push:
     branches: [main]
+    # Docs-only commits don't need a deploy. The on-server changed-service
+    # detection (see `Detect changed services` step below) is the inner
+    # defense — it skips the rebuild for docs paths too — but it still
+    # spins up the runner and runs the full test suite. Skipping at the
+    # workflow level saves CI minutes and avoids needless container
+    # recreations for label-only updates.
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - 'README.md'
+      - 'PRODUCTION_READY.md'
   workflow_dispatch:
 
 concurrency:
@@ -46,6 +59,29 @@ jobs:
           script: |
             set -euo pipefail
             cd /opt/wishlist
+            echo "=== Verify persistent dirs ==="
+            # /opt/wishlist/web-chunks must exist with uid 1001 ownership
+            # so the web container's entrypoint can rsync image-baked
+            # chunks into it (see docker-compose.prod.yml web.volumes,
+            # ops/web-entrypoint.sh, docs/BUGFIX_LESSONS.md 2026-05-27).
+            # First-time host setup is a manual one-liner per CLAUDE.md
+            # (run once: sudo mkdir -p /opt/wishlist/web-chunks &&
+            #            sudo chown -R 1001:1001 /opt/wishlist/web-chunks).
+            # The deploy script doesn't `sudo` because we can't assume
+            # the SSH user has passwordless sudo. If the dir is missing,
+            # fail fast with a clear message rather than letting docker
+            # silently create a root-owned mount the container can't
+            # write to.
+            if [ ! -d /opt/wishlist/web-chunks ]; then
+              echo "ERROR: /opt/wishlist/web-chunks does not exist."
+              echo "Run on host (one-time): sudo mkdir -p /opt/wishlist/web-chunks && sudo chown -R 1001:1001 /opt/wishlist/web-chunks"
+              exit 1
+            fi
+            OWNER=$(stat -c '%u' /opt/wishlist/web-chunks 2>/dev/null || stat -f '%u' /opt/wishlist/web-chunks 2>/dev/null || echo "?")
+            if [ "$OWNER" != "1001" ]; then
+              echo "WARNING: /opt/wishlist/web-chunks is owned by uid=$OWNER, expected 1001 — container may fail to write chunks."
+              echo "Fix on host: sudo chown -R 1001:1001 /opt/wishlist/web-chunks"
+            fi
             echo "=== Pull latest ==="
             git fetch origin main
 
@@ -126,10 +162,11 @@ jobs:
             #   apps/bot/**, packages/db/**, packages/shared/**, pnpm-lock.yaml,
             #   Dockerfile.bot   → bot
             #   apps/web/**, packages/shared/**, packages/ui/**, packages/ui-tokens/**,
-            #   pnpm-lock.yaml, Dockerfile.web → web
+            #   pnpm-lock.yaml, Dockerfile.web, ops/web-entrypoint.sh → web
             #     (ui + ui-tokens are transpilePackages in next.config.mjs —
             #      Next compiles their TS source at build time, so changes must
-            #      trigger a web rebuild even though they're separate packages.)
+            #      trigger a web rebuild even though they're separate packages.
+            #      ops/web-entrypoint.sh is COPYed by Dockerfile.web.)
             #   docker-compose.prod.yml → all three (compose spec itself changed)
             #   .github/**              → none (CI-only change)
             # A marker SHA that isn't an ancestor of NEW_SHA is also untrust-
@@ -162,7 +199,7 @@ jobs:
               if echo "$CHANGED" | grep -qE '^(apps/bot/|packages/(db|shared)/|pnpm-lock\.yaml$|Dockerfile\.bot$)'; then
                 SERVICES="$SERVICES bot"
               fi
-              if echo "$CHANGED" | grep -qE '^(apps/web/|packages/(shared|ui|ui-tokens)/|pnpm-lock\.yaml$|Dockerfile\.web$)'; then
+              if echo "$CHANGED" | grep -qE '^(apps/web/|packages/(shared|ui|ui-tokens)/|pnpm-lock\.yaml$|Dockerfile\.web$|ops/web-entrypoint\.sh$)'; then
                 SERVICES="$SERVICES web"
               fi
             fi

@@ -67,6 +67,34 @@ API and bot log to stdout (for `docker logs`) **and** to a rotated JSON file on 
   ```
 - **Disable** (per-service): set `LOG_FILE_PATH_API=` or `LOG_FILE_PATH_BOT=` in `/opt/wishlist/.env` (empty value falls through to stdout-only).
 
+### Persistent web chunks (survives container recreation)
+
+Next.js standalone removes old static chunks on every rebuild. Combined
+with Telegram WebView caching HTML across sessions (despite
+`Cache-Control: no-store`), a deploy that changes chunk hashes leaves
+users with stale HTML pointing at chunk URLs the new image no longer
+has → 404 → ChunkLoadError → Mini App hangs on splash.
+
+We mount `/opt/wishlist/web-chunks` on top of
+`/app/apps/web/.next/static/chunks` inside the web container. The
+entrypoint (`ops/web-entrypoint.sh`) copies image-baked chunks into
+this dir **additively** (`cp -n` = no-clobber). Old chunks from prior
+deploys stay on disk so cached HTML's chunk URLs keep resolving.
+
+- **Host dir (owned by uid 1001):** `/opt/wishlist/web-chunks/`
+- **First-time host setup (run once per host):**
+  ```bash
+  ssh vultr 'sudo mkdir -p /opt/wishlist/web-chunks && sudo chown -R 1001:1001 /opt/wishlist/web-chunks'
+  ```
+- **Periodic prune (operator-driven, no automatic cron yet):**
+  ```bash
+  ssh vultr '/opt/wishlist/ops/prune-web-chunks.sh 90'
+  ```
+  Deletes chunks older than 90 days. Default retention is generous —
+  cached HTML in mobile WebViews almost never survives that long.
+- **Disk usage**: ~3 MB per code-only deploy that touches `apps/web/`;
+  docs-only deploys don't rebuild web. ~100 MB after several months.
+
 ---
 
 ## Security layer — MANDATORY for new state-changing routes

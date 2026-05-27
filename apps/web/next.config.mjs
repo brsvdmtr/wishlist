@@ -9,10 +9,14 @@ const nextConfig = {
   output: 'standalone',
   // Source-in-place workspace packages; Next transpiles their TS/TSX directly.
   transpilePackages: ['@wishlist/ui', '@wishlist/ui-tokens'],
-  env: {
-    // Injected at build time — used as a cache-bust marker and debug indicator
-    NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
-  },
+  // Removed `env.NEXT_PUBLIC_BUILD_TIME: new Date().toISOString()` — it
+  // forced webpack to emit a fresh chunk hash on every rebuild even when
+  // source was identical. That amplified the stale-HTML 404 problem
+  // (cached HTML referencing chunks that no longer exist on origin).
+  // The two consumers (MiniApp.tsx, SettingsRoot.tsx debug rows) now
+  // read NEXT_PUBLIC_APP_RELEASE directly — it's the deployed short SHA,
+  // already inlined via the Dockerfile build arg, and more informative
+  // than a build timestamp anyway. See docs/BUGFIX_LESSONS.md (2026-05-27).
   outputFileTracingRoot: path.join(__dirname, '../../'),
   eslint: {
     // We lint from the repo root (pnpm lint). Avoid failing builds due to

@@ -143,6 +143,21 @@ services:
         condition: service_started
     ports:
       - "127.0.0.1:3000:3000"
+    volumes:
+      # Persistent storage for /_next/static/chunks/ so chunks from prior
+      # deploys survive container recreation. Mounted on top of the image
+      # path; the entrypoint (ops/web-entrypoint.sh) copies image-baked
+      # chunks into this dir on container start (cp -n preserves older
+      # chunks). Without this, every deploy invalidates chunks and any
+      # Telegram WebView holding cached HTML hits 404 on chunk URLs.
+      # See docs/BUGFIX_LESSONS.md (2026-05-27 — stale-HTML 404).
+      #
+      # First-time host setup (run once per host):
+      #   sudo mkdir -p /opt/wishlist/web-chunks
+      #   sudo chown -R 1001:1001 /opt/wishlist/web-chunks
+      # Periodic prune (operator-driven, see ops/prune-web-chunks.sh):
+      #   find /opt/wishlist/web-chunks -type f -mtime +90 -delete
+      - /opt/wishlist/web-chunks:/app/apps/web/.next/static/chunks
     networks:
       - wishlist-network
     logging: *default-logging

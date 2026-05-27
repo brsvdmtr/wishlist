@@ -16832,7 +16832,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 const normalized = normalizeLocale(rawLang);
                 const fallbackUsed = !rawLang || (normalized === 'en' && !rawLang?.startsWith('en'));
                 const rows: [string, string][] = [
-                  ['build', process.env.NEXT_PUBLIC_BUILD_TIME ?? 'unknown'],
+                  ['release', process.env.NEXT_PUBLIC_APP_RELEASE ?? 'unknown'],
                   ['tg.language_code', rawLang ?? '(undefined)'],
                   ['normalized', normalized],
                   ['languageMode', settingsData.languageMode],
