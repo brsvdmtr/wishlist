@@ -102,6 +102,12 @@ services:
       # MSK pilot-send failure — env didn't propagate, script aborted exit 3).
       RESEARCH_SURVEY_SEND_ENABLED: ${RESEARCH_SURVEY_SEND_ENABLED:-false}
       RESEARCH_SURVEY_ACTIVE_SLUG: ${RESEARCH_SURVEY_ACTIVE_SLUG:-}
+      # A/B experiment knobs read by apps/api/src/services/experiments.service.ts
+      # via readExperimentConfig(key) → process.env[`EXP_${name}_ENABLED|ROLLOUT`].
+      # WITHOUT explicit lines here the .env values never reach the container
+      # (same gotcha as RESEARCH_SURVEY_* above). One pair per active experiment.
+      EXP_E11_POST_RESERVE_CTA_ENABLED: ${EXP_E11_POST_RESERVE_CTA_ENABLED:-false}
+      EXP_E11_POST_RESERVE_CTA_ROLLOUT: ${EXP_E11_POST_RESERVE_CTA_ROLLOUT:-0}
     volumes:
       - wishlist_uploads:/data/uploads
       - ./logs/api:/app/logs
