@@ -44,31 +44,25 @@ COPIED=0
 SKIPPED=0
 FAILED=0
 
-# Subshell so the `cd` doesn't leak. The find walks paths relative to
-# BAKED_DIR so we can mirror them under CHUNKS_DIR directly.
-cd "$BAKED_DIR"
-find . -type f | while IFS= read -r REL; do
-  DST="$CHUNKS_DIR/${REL#./}"
+# Walk every file in BAKED_DIR. Critical: do NOT `cd` here — would
+# change cwd before `exec "$@"` and break the CMD (`node apps/web/server.js`
+# is RELATIVE to the image's WORKDIR `/app`). Use full paths in find and
+# strip the prefix for the destination mirror.
+find "$BAKED_DIR" -type f | while IFS= read -r FULL; do
+  REL="${FULL#"$BAKED_DIR"/}"
+  DST="$CHUNKS_DIR/$REL"
   if [ -e "$DST" ]; then
-    SKIPPED=$((SKIPPED + 1))
-  else
-    DST_DIR=$(dirname "$DST")
-    mkdir -p "$DST_DIR" 2>/dev/null || true
-    if cp "$REL" "$DST" 2>/dev/null; then
-      COPIED=$((COPIED + 1))
-    else
-      FAILED=$((FAILED + 1))
-      echo "$LOG_PREFIX cp failed: $REL -> $DST" >&2
-    fi
+    continue
+  fi
+  DST_DIR=$(dirname "$DST")
+  mkdir -p "$DST_DIR" 2>/dev/null || true
+  if ! cp "$FULL" "$DST" 2>/dev/null; then
+    echo "$LOG_PREFIX cp failed: $FULL -> $DST" >&2
   fi
 done
 
-# Counter values inside `while | ` subshell don't leak in POSIX sh;
-# we re-derive a summary after the loop by counting files.
 TOTAL=$(find "$BAKED_DIR" -type f | wc -l | tr -d ' ')
 PRESENT=$(find "$CHUNKS_DIR" -type f | wc -l | tr -d ' ')
 echo "$LOG_PREFIX baked=$TOTAL chunks_dir_now=$PRESENT" >&2
-
-cd /
 
 exec "$@"
