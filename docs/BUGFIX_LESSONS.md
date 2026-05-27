@@ -5,92 +5,134 @@ New entries go at the top.
 
 ---
 
-## 2026-05-27 — Mini App виснет на грузилке из-за битой brotli-записи одного JS-чанка в CF edge cache
+## 2026-05-27 — Mini App виснет на грузилке: транзиентный slow path между клиентом и CF edge (НЕ битая запись cache)
 
 ### Симптом
 
 Пользователь ("опять долгие загрузки миниаппа") видит **пустой тёмный
-экран** с грузилкой 🤖 Telegram'а в Mini App. HTML загружается, но
-JS-бандл вешает рендер. Симптом периодический («опять») — у части
-заходов всё ок, у части висит десятки секунд.
+экран** с грузилкой 🤖 Telegram'а в Mini App. Симптом периодический
+("опять") — у части заходов всё ок, у части висит десятки секунд.
 
 Метрики:
-- API origin отвечает за 0-2 мс (responseTime в pino-логах в норме)
-- CPU/память сервера в норме (load 0.00, 33% idle)
-- Внешний `curl https://wishlistik.ru/_next/static/chunks/app/miniapp/layout-a8418b884d92b00f.js -H 'accept-encoding: br'` показал TTFB:
-  `0.32s / 24.8s / 0.30s` — каждый второй-третий запрос подвисает
-- Без brotli (`accept-encoding:` не задан) — стабильно 0.28-0.32с
-- Другие чанки (`page-*.js` 403KB, `main-app-*.js`, `polyfills-*.js`)
-  стабильно 0.3-0.5с даже с brotli
-- `cf-cache-status: HIT`, `age: 73140` — запись в CF edge cache 20+ часов
+- API origin: 0-2 мс (responseTime в pino-логах в норме)
+- CPU/память сервера: load 0.00, 33% idle, всё спокойно
+- `curl` к `layout-*.js` brotli из дома: разброс 0.3с — 24.8с между запросами
+- Тот же URL **из сервера** (50 запросов): 21-101мс, **0 slow**
+- HTML страница `/miniapp` стабильно 280-485мс TTFB
+- На **одном HTTP/2 connection** все запросы быстрые (94-310мс),
+  slow path — только при установке нового TCP+TLS
 
-Только один URL (layout chunk) и только brotli-вариант — патологически
-медленный. Mini App ждёт его перед mount'ом → пользователь видит пустую
-грузилку.
+### Root cause — что НЕ оказалось, и что оказалось
 
-### Root cause
+**Первоначальная гипотеза (неверная):** битая brotli-запись в CF edge
+cache. Спецификой `cf-cache-status: HIT, age: 73140` казалось что edge
+node "застрял" с broken variant'ом.
 
-Битая запись brotli-варианта `/_next/static/chunks/app/miniapp/layout-a8418b884d92b00f.js`
-в Cloudflare edge cache. Запись отдаётся как `HIT` (т.е. кэш формально
-живой), но фактическая отдача данных тянется 6-25 секунд вместо
-ожидаемых ~100мс. Без brotli — нормально, значит локальный edge node
-накосячил при компрессии или storage этого variant'а.
+**Проверка отвергла**: после CF API purge slow path вернулся через
+несколько минут на свежий cache. И вылезал не только на `layout-*.js`,
+но и на `polyfills-*.js` (112KB), `3324-*.js` (173KB). Размер не
+коррелирует, brotli не коррелирует, конкретный POP не коррелирует
+(AMS/CPH/WAW/OSL/RIX все показывали slow при разных запросах).
 
-CF Worker (maintenance-worker) к `_next/*` не привязан (см. wrangler.toml
-комментарии и роуты — статика обходит worker), так что проблема ниже
-worker'а — на уровне CF cache.
+**Настоящий root cause:** транзиентный slow path в установке TCP+TLS
+connection между клиентом (мой Mac в Польше, очевидно похожая ситуация
+у пользователя в RU) и Cloudflare edge POP. ~3-15% cold connection'ов
+получают latency 5-25 секунд вместо нормальных 200-500мс. Из сервера
+(прямой backbone path до CF) — 0% slow на 50 попытках. Из браузера на
+одном HTTP/2 connection — все subsequent запросы быстрые.
 
-Origin healthy throughout: тот же файл с `127.0.0.1:3000` отдаётся за 1.5мс.
+**В реальном браузере** все chunks Mini App'а грузятся по одному
+multiplexed HTTP/2 connection после HTML. Slow handshake происходит
+один раз — на HTML. Если HTML словил slow path → пустой экран
+надолго. Если повезло → быстрая загрузка.
+
+Это **сетевая проблема CF edge ↔ клиент**, не наша инфраструктура.
+Origin healthy, CF settings clean, code healthy.
 
 ### Lesson
 
-1. **Не каждый "медленный Mini App" = медленный backend.** Когда API логи
-   пустые/быстрые, а пользователь видит зависание — следующий слой это
-   CF edge / связность / статические ассеты. Origin-only health-check
-   этого класса бага не словит.
-2. **CF edge cache может иметь "битую" запись с `HIT` статусом.** Не
-   доверять состоянию кэша по статусу — измерять TTFB на конкретные
-   URL по нескольким попыткам. Variants `Vary: Accept-Encoding` имеют
-   независимые судьбы.
-3. **Single tiny-chunk bottleneck = total app freeze.** Маленький
-   chunk (1.9KB!) грузит всё приложение, потому что Next.js загружает
-   layout перед children. Размер чанка не предсказывает критичность.
-4. **Контент-хэш у Next.js привязан к скомпилированному выводу, не
-   исходнику.** Простой комментарий в .tsx не пересчитает хеш — нужно
-   менять то, что доезжает до runtime'а (метаданные, текстовый литерал,
-   импорт).
+1. **Не каждый "медленный Mini App" = медленный backend.** Когда API
+   логи пустые/быстрые, а пользователь видит зависание — следующий
+   слой это CF edge / связность / cold-connection handshake.
+   Origin-only health-check этого класса бага не словит.
+2. **TTFB через `curl` ≠ TTFB через браузер.** `curl` без keep-alive
+   делает cold connection каждый раз, поэтому ловит handshake-latency
+   на каждом запросе. Браузер — один connection на 100+ ассетов.
+   Реалистичный тест: `curl --parallel --parallel-max 1 -o A -o B -o C`
+   или просто браузер DevTools Network.
+3. **CDN slow path может быть network-side**, не cache-side. Проверять
+   и: (a) с разных vantage points (мой Mac, сервер, RU-host),
+   (b) с keep-alive vs cold, (c) на разных URL/encodings/POPs.
+4. **`cf-cache-status: HIT` не гарантирует быструю отдачу.** HIT =
+   "найдено в кэше"; latency сегмента edge→client может быть любой.
+5. **Контент-хэш Next.js привязан к compiled output, не source.**
+   Изменения в `metadata` / `viewport` / комментариях НЕ меняют hash
+   client-chunk'а — Next.js извлекает их при build и в bundle они не
+   доходят. Менять надо JSX или импорты.
+6. **`layout-*.js` chunk это shared `next/script` boilerplate**, не
+   код моего `MiniAppLayout`. Содержимое стабильно от деплоя к
+   деплою если не меняется `next` сам. Поэтому правки в
+   `apps/web/app/miniapp/layout.tsx` рехешат `page-*.js` (через
+   dependency graph), но `layout-*.js` остаётся прежним.
+7. **Tiered Cache на CF может УХУДШИТЬ ситуацию** для зон где
+   нативная edge-cache топология уже работает — переключает
+   запросы на более разнообразные POPs (часть из которых slow).
+   Эмпирически проверял: 1/30 slow → 8/30 после enable.
 
 ### Rule
 
-- **При жалобе "Mini App виснет / долго грузится"** первым делом
-  проверять TTFB критических статических ассетов через `curl ... -H
-  'accept-encoding: br'` (несколько повторов). Если разброс >10× —
-  смотреть CF, не origin.
-- **Когда CF API token доступен**, делать точечный purge URL: 
-  `curl -X POST 'https://api.cloudflare.com/client/v4/zones/$ZONE_ID/purge_cache' \
-    -H 'Authorization: Bearer $TOKEN' \
-    -d '{"files":["https://wishlistik.ru/<path>"]}'`.
-- **Когда token недоступен**, форсировать rehash через семантическое
-  изменение содержимого файла, дающего критичный chunk (description,
-  literal, import). Чистый комментарий не работает — minify его
-  выбрасывает.
-- **Не вводить инфра-зависимости** в boot-критичный путь Mini App'а
-  без understanding: одна сломанная запись в CDN кладёт онбординг.
+- **При жалобе "Mini App виснет / долго грузится"** диагностический
+  чеклист:
+  1. `docker ps`, `docker logs --since 10m`, `top`, `df -h` на проде
+  2. `curl http://localhost:3001/health` и `localhost:3000/miniapp` 
+     с сервера — origin sanity
+  3. `curl -w '%{time_starttransfer}'` на `/miniapp` и chunks из
+     ВНЕШНЕЙ точки, 20+ повторов — поймать P95/P99 от клиента
+  4. `jq '.req.url' /opt/wishlist/logs/api/api.log.YYYY-MM-DD` —
+     посмотреть распределение трафика, упал ли real-user volume
+  5. С keep-alive (`curl --parallel`) — отделить handshake от data
+- **Не ставить диагноз "битый CDN cache" на основе одного measurement.**
+  Сначала исключить network-side variability через сервер-side
+  замеры.
+- **CF Tiered Cache** включать только после A/B замера — может
+  ухудшить.
+- **CF API permissions** для оперативной работы должны включать:
+  `Zone Read`, `Cache Purge`, `Zone Settings: Read+Edit`. Без них
+  диагностика и mitigation сильно медленнее.
 
 ### Better code
 
-- `apps/web/app/miniapp/layout.tsx` — изменён `metadata.description`
-  с `'Твой персональный вишлист'` на `'Твой персональный вишлист —
-  список желаний в Telegram'`. Семантически осмысленно (точнее
-  описывает приложение для SEO/og-карточек) и форсит новый
-  content-hash chunk'а.
-- **Follow-up TODO** (отдельный PR/задача): добавить CF_API_TOKEN в
-  `/opt/wishlist/.env` и `scripts/cf-purge.sh "<url>"` хелпер.
-  Текущий workflow "коммит + push + ждать deploy" слишком медленный
-  для CDN-инцидентов.
-- **Investigate**: Cloudflare Polish / Auto-Minify / Brotli настройки
-  для `wishlistik.ru` — почему именно этот файл словил битую запись?
-  Возможно стоит выключить Auto-Minify для JS (Next уже минифицирует).
+- `apps/web/app/miniapp/layout.tsx` — добавлен `id="telegram-webapp-sdk"`
+  к `<Script>` (стандартная практика, ничего не ломает). Цель была
+  форсировать rehash chunk'а — НЕ сработала, см. lesson #6.
+- `apps/web/app/miniapp/layout.tsx` — `metadata.description` точнее
+  описывает приложение для SEO. Не влияет на client chunk hash.
+- **CF zone settings**: `early_hints: on` (включил, оставил —
+  даёт браузеру 103 Early Hints перед HTML 200 → preload подсказки
+  доезжают раньше); `tiered_cache: off` (пробовал on, стало хуже,
+  откатил).
+- **CF cache purge** одного URL сработал точечно — TTFB на нём стал
+  стабильнее на час, но потом slow path вернулся; это network
+  pattern, а не cache poisoning.
+
+### Follow-ups (не закрыты этим инцидентом)
+
+- **Reduce critical chunk count** в bundle. Cold connection slow path
+  ловится только на handshake; уменьшать критический параллельный
+  fan-out не помогает (всё на одном HTTP/2). Но **уменьшить общий
+  bundle size** — реально, через webpack `splitChunks.minSize` bump
+  и `next dynamic import` для не-критичных секций. Меньше байт =
+  быстрее даже при slow path.
+- **Resource hints в HTML** — `<link rel="preconnect">` к origin
+  уже не нужен (тот же origin); но `<link rel="modulepreload">`
+  для критичных chunk'ов может ускорить старт.
+- **Скрипт `scripts/cf-purge.sh "<url>"`** — wrapper над API token
+  в `~/.config/cloudflare/credentials`. Полезно для быстрых
+  incident response.
+- **Multi-CDN или RU-friendly CDN** (Yandex Cloud / VK CDN) для
+  статики — длинный проект, но окончательно решает RU↔CF проблему.
+- **Cloudflare support ticket** с примерами cf-ray для slow request'ов
+  — пусть смотрят backbone маршрутизацию.
 
 ### Related
 
