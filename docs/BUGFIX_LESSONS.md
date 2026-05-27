@@ -5,6 +5,73 @@ New entries go at the top.
 
 ---
 
+## 2026-05-27 — Spec drift: untracked документ старше 48 ч теряет валидность line numbers + advise to non-existent code
+
+### Симптом
+
+Спека `docs/research/guest-conversion-spec.md` создана 2026-05-25, лежала
+untracked. Через 2 дня я начал implementation по ней. Перед началом
+сделал code-audit — нашёл, что:
+
+1. **Все line numbers ~−1200 устарели** — после `git log` показал
+   F4 wave extractions (Profile, Showcase, GroupGift, Santa, GiftNotes,
+   Guest, Referral кластеры вынесены в отдельные модули, MiniApp.tsx
+   ужался ~30k → 23.6k LOC).
+2. **Спека рекомендовала добавить beacon в `ref_<CODE>` branch
+   MiniApp.tsx — но такого branch'а нет.** `ref_*` обрабатывается только
+   ботом (`/start ref_<CODE>`); бот не передаёт payload в Mini App.
+3. **Спека говорила про `share_<TOKEN>` prefix — его тоже не существует.**
+   Share token = весь `startParam`, обрабатывается catch-all `else if`.
+4. **Спека пропустила `profile_<username>` branch и birthday deep link** —
+   оба ведут на shared-content view, но не упоминались.
+
+Если бы implement'нул по спеке вслепую, добавил бы код в ветку, которая
+никогда не вызывается, и пропустил `profile_` (15-30% share-traffic
+по эстимату).
+
+### Root cause
+
+Spec — это **снимок состояния кода в момент написания**. Активная
+кодовая база за 2 дня может пройти крупный refactor (в этом случае —
+F4 cluster extractions). Архитектурные предположения спеки (какие
+branch'и существуют, что обрабатывает Mini App vs бот) могут быть
+неверны даже если код не двигался — спека была написана по аудит-документу
+`02-analytics-audit.md`, который тоже мог содержать неточности.
+
+### Lesson
+
+Untracked spec > 48 ч в активной кодовой базе = **обязательный
+code-audit-pass перед pickup**:
+1. Grep всех упомянутых файлов/функций/строк, sanity-check совпадения.
+2. Прочитать bootstrap / orchestration ветку ВСЮ (не только описанную
+   часть) — спека могла пропустить branches.
+3. Verify, что упомянутые архитектурные элементы (branch'и, helper'ы,
+   endpoint'ы) реально существуют в коде — не только в имени.
+4. Если spec написан по другому doc'у (аудит/research) — этот upstream-doc
+   тоже мог устареть.
+
+### Rule
+
+**Before implementing from an untracked spec older than 2 days:**
+- Run `git log --since='<spec-date>'` for every referenced file.
+- For every referenced line number, read the file at that line and verify
+  the described code is there (not drifted).
+- For every "branch X / endpoint Y / helper Z" claim, grep the codebase
+  and confirm existence.
+- Update the spec in-place with corrected line numbers + flag
+  architecturally-wrong sections BEFORE writing implementation code.
+
+### Better code (process)
+
+В этой работе спека обновлена in-place перед implementation
+(commit … 2026-05-27): добавлен § 10 review log с таблицей расхождений,
+переписаны §§ 1-3 с актуальными line numbers, добавлены пропущенные
+branches, перенесён `ref_` fix с Mini App на bot-side, добавлен § 6.2
+с decision rationale по birthday. Implementation потом прошёл чисто по
+обновлённой спеке.
+
+---
+
 ## 2026-05-27 — "опять долгие загрузки": НАСТОЯЩИЙ root cause — stale-HTML 404 на удалённые chunks
 
 ### Симптом

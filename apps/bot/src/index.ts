@@ -15,6 +15,7 @@ import { prisma, resolveReferralCode, tryCreateAttribution, markFirstBotStart, l
 import { t, pluralize, detectLocale, resolveEffectiveLocale, resolveLocaleWithSource, profileToLanguageSettings, resolveMarketBucket, localeToBCP47, HINT_LOOKUP_WINDOW_MS, type Locale } from '@wishlist/shared';
 import logger from './logger';
 import { emitPaymentAnalytics } from './analytics';
+import { writeReferralAcquisitionSource } from './referral-attribution';
 import { chargeDeliveredHint } from './hint-charge';
 import {
   applyProMonthlyPayment,
@@ -805,6 +806,11 @@ if (!token) {
               props: { flag: 'enabled', value: false, context: 'bot.start', refCode },
             },
           }).catch(() => {});
+          // Record acquisition source even when program is OFF — analytics
+          // signal stays useful for cohort analysis regardless of rewards.
+          if (user?.id) {
+            await writeReferralAcquisitionSource(prisma, user.id, refCode);
+          }
           return ctx.reply(
             t('bot_referral_welcome', locale),
             Markup.inlineKeyboard([
@@ -874,6 +880,10 @@ if (!token) {
         await markFirstBotStart(prisma, invitee.id).catch((err) => {
           logger.warn({ err, userId: invitee.id }, '[referral] markFirstBotStart failed');
         });
+
+        // First-touch acquisition source. Parallel signal to referredByUserId
+        // (set by tryCreateAttribution above) — feeds evaluateGuestConversion.
+        await writeReferralAcquisitionSource(prisma, invitee.id, refCode);
 
         // ── Notify inviter (if config says so) ────────────────────────────────
         if (attrResult.kind === 'attributed') {

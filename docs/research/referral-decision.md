@@ -208,7 +208,7 @@ WHERE id='default';
 | § 7.3 — daily scheduler `invitee_retained_d7/d30` | ✅ Done | Новый `apps/api/src/schedulers/referral-retention.ts`, регистрация в `apps/api/src/index.ts`, 5 тестов |
 | § 7.4 — emit `referral.fraud_signal_*` в processReward | ✅ Done | Direct `prisma.analyticsEvent.create` в `packages/db/src/referral.ts`, 4 теста |
 | § 7.5 — судьба `entryPointPostShare` | ✅ Done (removed) | Удалено из `/rules-config` response + Mini App type. DB column + admin PATCH сохранены для backward-compat |
-| § 7.6 — `guest.converted_to_user` foundation | ⏸ Out of scope | P0 gap из `02-analytics-audit.md`, отдельная работа. НЕ блокирует следующий launch event если будет в plane перед ним |
+| § 7.6 — `guest.converted_to_user` foundation | ✅ Done 2026-05-27 | Audit-doc был неправ — emit уже wired в `wishlists.routes.ts:855`. Real gap: 315/315 prod UserProfile.firstAcquisitionSource=NULL, потому что attribution beacon в Mini App стрелял только для `src_*` start-payload. Fix: helper `lib/attribution.ts` + 4 entry path в bootstrap (`__item_`, `profile_`, `cs_`, catch-all share) + bot-side `writeReferralAcquisitionSource` для `?start=ref_<CODE>` (works даже при program OFF). См. [`guest-conversion-spec.md`](./guest-conversion-spec.md) |
 | § 7.7 — bot defense-in-depth | ✅ Done | `loadReferralConfig` + early-return в `apps/bot/src/index.ts:777` перед `tryCreateAttribution`. Emits `referral.feature_flag_evaluated` |
 | § 7.8 — обновить research docs | ✅ Done | См. § 9, plus `BUGFIX_LESSONS.md` 2026-05-25 entry |
 
@@ -217,6 +217,7 @@ WHERE id='default';
 - Удаление 54 уже-сгенерированных `referralCode` — безвредно остаются.
 
 **Pre-requisite для следующего launch event** (когда будем включать обратно):
-1. `guest.converted_to_user` foundation (отдельная работа)
+1. ~~`guest.converted_to_user` foundation~~ — ✅ shipped 2026-05-27
 2. Подтвердить, что admin-ops.yml `bump-rollout` не откатит флип (он PATCH'ит только `rolloutPercent`, не `enabled` — безопасно)
 3. Run `docs/research/referral-decision.md` через одного человека для sanity check метрик ROI
+4. Через 7 дней после deploy запустить self-check SQL из [`guest-conversion-spec.md § 5`](./guest-conversion-spec.md#5-self-check-после-мерджа) — подтвердить attribution rate ≥ 20% и emit rate > 0

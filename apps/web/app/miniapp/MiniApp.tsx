@@ -70,6 +70,7 @@ import {
   SERVICE_START_PARAMS,
 } from './lib/miniapp-constants';
 import { parsePaywallError, paywallContextFromError } from './lib/paywall';
+import { fireAttributionBeacon } from './lib/attribution';
 import { resolveReservePrefill, MAX_DISPLAY_NAME_LEN, type ReservePrefillSource } from './lib/reservePrefill';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
 import { initSentry, captureException } from './sentry';
@@ -8275,6 +8276,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const sepIdx = startParam.indexOf('__item_');
         const slug = startParam.slice(0, sepIdx);
         const targetItemId = startParam.slice(sepIdx + 7);
+        fireAttributionBeacon(tgFetch, 'share_link', slug);
         loadGuestWishlist(slug)
           .then((items) => {
             trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
@@ -8372,6 +8374,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         // Public profile deep link: profile_{username}
         const username = startParam.slice('profile_'.length);
         if (username) {
+          fireAttributionBeacon(tgFetch, 'public_profile', username);
           setPublicProfileUsername(username);
           setPublicProfileSubscribed(false);
           void loadPublicProfile(username);
@@ -8455,6 +8458,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       } else if (startParam && startParam.startsWith('cs_')) {
         // Deep link: show curated selection in-app (authenticated — includes isSubscribed)
         const csToken = startParam.slice(3);
+        fireAttributionBeacon(tgFetch, 'curated_selection', csToken);
         Promise.all([
           tgFetch(`/tg/selections/by-token/${encodeURIComponent(csToken)}`),
           loadWishlists().catch(() => {}),
@@ -8483,6 +8487,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         // Owner wishlists are needed so that "back" from guest-view shows
         // the user's own data instead of an empty "Пока пусто" screen.
         trackEvent('miniapp_start_payload_resolved', { payload: startParam, type: 'public_share' });
+        fireAttributionBeacon(tgFetch, 'share_link', startParam);
         loadGuestWishlist(startParam)
           .then(() => {
             trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
