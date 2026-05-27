@@ -4822,6 +4822,27 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     });
   }, [screen, viewingItem?.id, trackBirthdayAttributedEvent]);
 
+  // Anti-churn cancel-sheet impression. Fires once per false→true transition
+  // of showCancelSub — backdrop/drag dismiss → re-open counts as a new view.
+  // Distinct from `pro_cancel.keep_clicked` (explicit Keep tap) and
+  // `pro_cancel.confirmed` (cancel acknowledged by backend).
+  //
+  // Uses a ref to detect the transition structurally, so the
+  // "fires once per open" invariant survives any future refactor that adds
+  // a dependency to `trackEvent`'s useCallback (which would otherwise
+  // re-run this effect while the sheet is still open and re-fire the event).
+  // Mirrors the existing `lastItemOpenedKeyRef` dedup pattern above.
+  const cancelSheetTrackedRef = useRef(false);
+  useEffect(() => {
+    if (!showCancelSub) {
+      cancelSheetTrackedRef.current = false;
+      return;
+    }
+    if (cancelSheetTrackedRef.current) return;
+    cancelSheetTrackedRef.current = true;
+    trackEvent('pro_cancel.sheet_viewed');
+  }, [showCancelSub, trackEvent]);
+
   // Trigger ref shared between `showUpsell` (sets 'auto' for server-driven 402
   // opens) and the `paywall.viewed` effect below (consumes + resets). Direct
   // `setUpsellSheet(...)` callers don't touch this ref and the effect emits
@@ -6928,6 +6949,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         );
         pushToast(t('cancel_success', locale, { date: cancelledPeriodEnd }), 'success');
         trackEvent('subscription_cancelled');
+        trackEvent('pro_cancel.confirmed');
       } else if (res.status === 409) {
         // Backend defends lifetime even if a stale client tries to cancel.
         const errBody = await res.json().catch(() => ({}));
@@ -21386,7 +21408,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               )}
 
               {/* CTAs — Keep Pro first, then Cancel (reversed from before) */}
-              <Button variant="primary-gradient" onClick={() => setShowCancelSub(false)}>
+              <Button
+                variant="primary-gradient"
+                onClick={() => {
+                  trackEvent('pro_cancel.keep_clicked');
+                  setShowCancelSub(false);
+                }}
+              >
                 {t('cancel_keep', locale)}
               </Button>
               <Button

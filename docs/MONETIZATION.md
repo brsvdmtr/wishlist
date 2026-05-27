@@ -284,7 +284,7 @@ When user taps "Отменить продление", a bottom sheet appears lis
 | **`ProUpsellSheet`** | `MiniApp.tsx` | Context-aware upsell; comparison table uses `getProBenefits()` |
 | **Settings → FREE plan card** | `MiniApp.tsx` | Shows 8 PRO benefits with title+subtitle via `getProBenefits()` |
 | **Settings → PRO plan card** | `MiniApp.tsx` | Shows limits (wishlists/items/participants) + feature rows (comments, url_import, hints, subscriptions, privacy) |
-| **Cancel flow** | `MiniApp.tsx` | Lists 8 features: wishlists, items, participants, comments, url, hints, subs, privacy |
+| **Cancel flow** | `MiniApp.tsx` | Lists 9 features: wishlists, items, participants, comments, url, hints, subs, privacy, calendar |
 | **Wishlist creation** | `MiniApp.tsx` | Shows counter "X из Y"; upsell on 402 |
 | **Item add** | `MiniApp.tsx` | Shows counter; upsell on 402 |
 | **Comments** | `MiniApp.tsx` | Locked behind PRO badge + upsell |

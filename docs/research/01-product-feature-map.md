@@ -164,7 +164,7 @@
 | # | Flow | Описание |
 |---|---|---|
 | F44 | Pro purchase (monthly / yearly / lifetime) | Telegram Stars invoice → bot `successful_payment` → `Subscription` upsert |
-| F45 | Cancel renewal | soft-cancel (`cancelAtPeriodEnd=true`) + anti-churn sheet с 8 фичами |
+| F45 | Cancel renewal | soft-cancel (`cancelAtPeriodEnd=true`) + anti-churn sheet с 9 фичами (wishlists, items, participants, comments, url, hints, subs, privacy, calendar) |
 | F46 | Reactivate | clear `cancelAtPeriodEnd` |
 | F47 | Lifetime override protection | если после lifetime прилетает `pro_monthly` — пишется `payment_success_post_lifetime`, lifetime row не перетирается |
 | F48 | Add-on checkout (14 SKU) | invoice + sync · permanent / consumable / cosmetic типы |

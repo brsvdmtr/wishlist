@@ -526,7 +526,7 @@ The onboarding catalog is locale-aware. Two market segments determine which temp
 1. User opens **Settings**.
 2. User finds the **PRO card** showing their current subscription status and renewal date.
 3. User taps **"Cancel renewal"**.
-4. An **anti-churn sheet** appears listing **8 features** the user will lose upon cancellation.
+4. An **anti-churn sheet** appears listing **9 features** the user will lose upon cancellation (wishlists, items, participants, comments, URL import, hints, subscriptions, advanced privacy, calendar).
 5. User must explicitly tap **"Cancel subscription"** (a secondary confirmation button within the sheet) to proceed.
 6. App sends `POST /tg/billing/subscription/cancel`.
 7. Server sets `cancelAtPeriodEnd = true` on the subscription record.

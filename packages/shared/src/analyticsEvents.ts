@@ -502,6 +502,65 @@ export const PRODUCT_EVENTS = [
     sources: ['client'],
     pii: 'none',
   },
+  // ── PRO cancel anti-churn sheet (client-side funnel) ──
+  // Three events form the cancel-flow funnel: sheet impression → explicit
+  // "Keep PRO" tap → confirmed cancel. Distinct from the legacy
+  // `subscription_cancelled` (prefix-allowed, fires alongside `confirmed`)
+  // and the server-authoritative `subscription.cancelled` (server-only,
+  // emitted by the API after `cancelAtPeriodEnd` is written).
+  //
+  // Domain choice (`pro_cancel.*` not `subscription.cancel_*`): keeps the
+  // server-authoritative `subscription.*` lifecycle namespace clean of
+  // client UI funnel events — the new typed taxonomy was created precisely
+  // to avoid that mixing. A `subscription_*` prefix would also be silently
+  // auto-accepted by the legacy ANALYTICS_EVENT_PREFIXES, defeating the
+  // explicit-allowlist goal.
+  //
+  // Backdrop / drag-dismiss is intentionally NOT tracked here.
+  // Anti-churn measurement derives the dismissed cohort as
+  // `sheet_viewed - keep_clicked - confirmed`. Adding a separate
+  // `pro_cancel.dismissed` would require the BottomSheet primitive to
+  // distinguish user-driven close from programmatic / session-end close
+  // (otherwise it conflates "actively walked away" with "tab backgrounded"),
+  // and that distinction is not present today. If the dismissed cohort
+  // becomes load-bearing, add the source-tagged event THEN — don't
+  // pre-emit garbage data.
+  //
+  // Caveat: the derived "dismissed" cohort also absorbs cancel-tap +
+  // backend-failure paths (409 lifetime-guard from a stale client, network
+  // error) — handleCancelSub's `finally` closes the sheet without firing
+  // keep_clicked OR confirmed in those branches. Acceptable today because
+  // cancel-failure rate is empirically negligible (lifetime users don't
+  // see the button; network failures are rare). If failure rate exceeds
+  // ~1% of sheet opens, introduce `pro_cancel.failed` rather than try to
+  // bisect the dismissed bucket post-hoc.
+  {
+    name: 'pro_cancel.sheet_viewed',
+    domain: 'pro_cancel',
+    action: 'sheet_viewed',
+    description:
+      'Anti-churn cancel sheet rendered to a paid PRO user who tapped "Cancel renewal" in Settings. Top of the cancel funnel. Fires once per open transition.',
+    sources: ['client'],
+    pii: 'none',
+  },
+  {
+    name: 'pro_cancel.keep_clicked',
+    domain: 'pro_cancel',
+    action: 'keep_clicked',
+    description:
+      'User explicitly tapped "Keep PRO" on the anti-churn sheet. Funnel save signal — distinct from passive backdrop / drag dismiss (which is not tracked).',
+    sources: ['client'],
+    pii: 'none',
+  },
+  {
+    name: 'pro_cancel.confirmed',
+    domain: 'pro_cancel',
+    action: 'confirmed',
+    description:
+      'User tapped "Cancel renewal" on the anti-churn sheet and the backend acknowledged with cancelAtPeriodEnd=true. Mirrors the legacy `subscription_cancelled` client event for the new pro_cancel.* funnel; the server-authoritative `subscription.cancelled` remains the source of truth for revenue dashboards.',
+    sources: ['client'],
+    pii: 'none',
+  },
   // ── Experiments (A/B infrastructure — server-assigned sticky buckets) ──
   {
     name: 'experiment.assigned',

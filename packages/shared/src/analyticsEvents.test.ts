@@ -146,6 +146,18 @@ describe('helper functions — happy + edge cases', () => {
     expect(isClientTelemetryAllowedEvent('unknown_xyz')).toBe(false);
   });
 
+  // Pins the contract for the `pro_cancel.*` anti-churn funnel. The `pro_cancel.`
+  // prefix is NOT in ANALYTICS_EVENT_PREFIXES (apps/api/src/routes/telemetry.routes.ts),
+  // so these events reach AnalyticsEvent ONLY via `isClientTelemetryAllowedEvent`.
+  // If a future PR tightens the allowlist or drops these from PRODUCT_EVENTS,
+  // /tg/telemetry will silently start dropping the entire cancel funnel — this
+  // test forces a visible failure first.
+  it('pro_cancel.* funnel events are client-telemetry allowed', () => {
+    expect(isClientTelemetryAllowedEvent('pro_cancel.sheet_viewed')).toBe(true);
+    expect(isClientTelemetryAllowedEvent('pro_cancel.keep_clicked')).toBe(true);
+    expect(isClientTelemetryAllowedEvent('pro_cancel.confirmed')).toBe(true);
+  });
+
   it('isServerProductEvent: true if `server` is among sources (incl. multi-source)', () => {
     expect(isServerProductEvent('payment.completed')).toBe(true);
     expect(isServerProductEvent('paywall.viewed')).toBe(false);
@@ -266,6 +278,33 @@ describe('PRODUCT_EVENTS — fixture snapshot', () => {
           "action": "viewed",
           "domain": "paywall",
           "name": "paywall.viewed",
+          "pii": "none",
+          "sources": [
+            "client",
+          ],
+        },
+        {
+          "action": "confirmed",
+          "domain": "pro_cancel",
+          "name": "pro_cancel.confirmed",
+          "pii": "none",
+          "sources": [
+            "client",
+          ],
+        },
+        {
+          "action": "keep_clicked",
+          "domain": "pro_cancel",
+          "name": "pro_cancel.keep_clicked",
+          "pii": "none",
+          "sources": [
+            "client",
+          ],
+        },
+        {
+          "action": "sheet_viewed",
+          "domain": "pro_cancel",
+          "name": "pro_cancel.sheet_viewed",
           "pii": "none",
           "sources": [
             "client",
