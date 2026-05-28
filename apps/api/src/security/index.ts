@@ -48,3 +48,5 @@ export {
   IDEMPOTENCY_BILLING_TTL_MINUTES,
   IDEMPOTENCY_DEFAULT_TTL_MINUTES,
 } from './types';
+
+export { CRITICAL_IDEMPOTENCY_ROUTES } from './idempotencyRoutes';

@@ -26,6 +26,7 @@ import {
   recordIpEvent,
   startIdempotencyCleanupJob,
   IDEMPOTENCY_BILLING_TTL_MINUTES,
+  CRITICAL_IDEMPOTENCY_ROUTES,
 } from './security';
 import { parseUrl } from './url-parser.js';
 import { getOrCreateProfile } from './profile.js';
@@ -541,7 +542,11 @@ protectTgRoute('POST',   '/research/surveys/:surveyId/complete', createRateLimit
 protectTgRoute('POST',   '/research/surveys/:surveyId/dismiss',  createRateLimiter('research.write'), idem('POST /tg/research/surveys/:surveyId/dismiss',  { category: 'research.write' }));
 
 // ── Wishlists ────────────────────────────────────────────────────────────────
-protectTgRoute('POST',   '/wishlists',                       createRateLimiter('wishlist.create'), idem('POST /tg/wishlists', { category: 'wishlist.create' }));
+// POST /tg/wishlists: idempotency options live in `security/idempotencyRoutes.ts`
+// so the integration test in `test/integration/idempotency-critical-routes.test.ts`
+// shares one source of truth with the production wiring — wiring drift becomes
+// a TypeScript error, not a silent test pass.
+protectTgRoute('POST',   '/wishlists',                       createRateLimiter('wishlist.create'), createIdempotencyMiddleware(CRITICAL_IDEMPOTENCY_ROUTES.wishlistCreate));
 protectTgRoute('PATCH',  '/wishlists/:id',                   idem('PATCH /tg/wishlists/:id', { category: 'wishlist.update' }));
 protectTgRoute('DELETE', '/wishlists/:id',                   idem('DELETE /tg/wishlists/:id', { category: 'wishlist.delete' }));
 protectTgRoute('POST',   '/wishlists/:id/archive',           idem('POST /tg/wishlists/:id/archive', { category: 'wishlist.state' }));
@@ -569,7 +574,9 @@ protectTgRoute('POST',   '/wishlists/:id/items/reorder',               idem('POS
 protectTgRoute('PUT',    '/wishlists/:id/dont-gift',                   idem('PUT /tg/wishlists/:id/dont-gift', { category: 'wishlist.update' }));
 
 // ── Items (single) ───────────────────────────────────────────────────────────
-protectTgRoute('POST',   '/wishlists/:id/items',             createRateLimiter('item.create'), idem('POST /tg/wishlists/:id/items', { category: 'item.create' }));
+// POST /tg/wishlists/:id/items: shares CRITICAL_IDEMPOTENCY_ROUTES with the
+// integration test — see comment on POST /tg/wishlists above.
+protectTgRoute('POST',   '/wishlists/:id/items',             createRateLimiter('item.create'), createIdempotencyMiddleware(CRITICAL_IDEMPOTENCY_ROUTES.itemCreate));
 protectTgRoute('PATCH',  '/items/:id',                       idem('PATCH /tg/items/:id', { category: 'item.update' }));
 protectTgRoute('DELETE', '/items/:id',                       idem('DELETE /tg/items/:id', { category: 'item.delete' }));
 protectTgRoute('POST',   '/items/:id/complete',              idem('POST /tg/items/:id/complete', { category: 'item.state' }));
@@ -637,11 +644,11 @@ protectTgRoute('DELETE', '/profiles/:username/subscribe',        idem('DELETE /t
 // stays unlimited so a user who paid but didn't see PRO activate can keep
 // refreshing without hitting 429. Idempotency on /sync replays the same
 // answer for the same key, so retries are cheap and safe.
-protectTgRoute('POST',   '/billing/pro/checkout',                createRateLimiter('payment'), billingIdem('POST /tg/billing/pro/checkout'));
+protectTgRoute('POST',   '/billing/pro/checkout',                createRateLimiter('payment'), createIdempotencyMiddleware(CRITICAL_IDEMPOTENCY_ROUTES.billingProCheckout));
 protectTgRoute('POST',   '/billing/pro/sync',                    billingIdem('POST /tg/billing/pro/sync'));
 protectTgRoute('POST',   '/billing/subscription/cancel',         billingIdem('POST /tg/billing/subscription/cancel'));
 protectTgRoute('POST',   '/billing/subscription/reactivate',     billingIdem('POST /tg/billing/subscription/reactivate'));
-protectTgRoute('POST',   '/billing/addon/checkout',              createRateLimiter('payment'), billingIdem('POST /tg/billing/addon/checkout'));
+protectTgRoute('POST',   '/billing/addon/checkout',              createRateLimiter('payment'), createIdempotencyMiddleware(CRITICAL_IDEMPOTENCY_ROUTES.billingAddonCheckout));
 protectTgRoute('POST',   '/billing/addon/sync',                  billingIdem('POST /tg/billing/addon/sync'));
 protectTgRoute('POST',   '/billing/gift-notes/checkout',         createRateLimiter('payment'), billingIdem('POST /tg/billing/gift-notes/checkout'));
 protectTgRoute('POST',   '/billing/gift-notes/sync',             billingIdem('POST /tg/billing/gift-notes/sync'));
