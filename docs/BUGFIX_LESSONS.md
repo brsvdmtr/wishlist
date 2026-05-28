@@ -5,6 +5,98 @@ New entries go at the top.
 
 ---
 
+## 2026-05-28 — Referral analytics: `screen_load_failed` and `history_load_failed` fire without a `reason` prop — untriageable
+
+### Symptom
+
+Prod telemetry shows 3 `referral.screen_load_failed` events between
+2026-05-25 and 2026-05-27 — but the `props` column is empty (`reason`
+is `NULL`). With no reason, we can't tell which of these are
+expected (401 because initData wasn't ready on a stale Mini App reload)
+vs. a real bug (5xx upstream, network outage, parse failure on a
+schema change). On launch day we'd be staring at the same empty column
+and unable to triage.
+
+The emit site at `apps/web/app/miniapp/MiniApp.tsx:5870` (and
+`:5893` for the history variant) caught the error and emitted with
+only `context: 'me'` — no HTTP status, no error class, no reason
+bucket. The `!res.ok` branch threw `new Error(\`HTTP ${res.status}\`)`,
+so the status was technically present in the thrown message but never
+extracted before emit.
+
+### Lesson
+
+- **An analytics event that exists only to flag failures is a
+  promise to also explain them.** "Something failed" without a class
+  tag is no different from no event at all — the dashboard count is
+  meaningless because expected and unexpected failures mix freely.
+- **Catch blocks lose context unless you preserve it before the
+  throw.** The cleanest pattern for fetch-style flows: capture
+  `httpStatus = res.status` on a successful response (even when
+  `!res.ok`), then read it in the catch. `undefined` httpStatus
+  means the request never got far enough to receive one (network
+  throw / parse throw) — a distinct reason class.
+- **Reason taxonomy should be coarse and stable.** Five buckets
+  (`unauthorized`, `forbidden`, `server_error`, `client_error`,
+  `fetch_error`) cover every observable failure mode of an
+  authenticated Mini App fetch and don't require maintenance when
+  status codes shuffle around. Tag with `httpStatus` as a separate
+  prop for the cases where the dashboard wants to drill down.
+- **Pure helper + thin call site beats inline ternary.** The reason
+  inference lives in `lib/referralFailReason.ts` with 8 unit tests;
+  MiniApp.tsx just calls `inferReferralLoadFailReason(httpStatus)`.
+  Future endpoints (e.g. `referral.stats_load_failed`, if we add one)
+  reuse the helper instead of copy-pasting the ternary.
+
+### Rule
+
+- **Every `*_failed` / `*_error` analytics event must include a
+  `reason` prop from a documented taxonomy.** A taxonomy of "we
+  don't know yet" is fine — pick a single placeholder like
+  `'unknown'` and grow the taxonomy as new failure modes show up.
+  But empty / missing `reason` is not acceptable for a launch event.
+- **Fetch-style helpers that emit failure events must capture
+  `httpStatus` outside the try block.** Pattern:
+  ```ts
+  let httpStatus: number | undefined;
+  try { const res = await fetch(...); httpStatus = res.status; /* ... */ }
+  catch { trackEvent('x_failed', { reason: infer(httpStatus), httpStatus }); }
+  ```
+
+### Better code
+
+- [`apps/web/app/miniapp/lib/referralFailReason.ts`](../apps/web/app/miniapp/lib/referralFailReason.ts) —
+  new pure helper exporting `inferReferralLoadFailReason(status?: number)
+  → ReferralLoadFailReason`. Five-bucket taxonomy, no allocations
+  beyond the return value.
+- [`apps/web/app/miniapp/lib/referralFailReason.test.ts`](../apps/web/app/miniapp/lib/referralFailReason.test.ts) —
+  8 unit tests covering each bucket plus a defensive 2xx fallback.
+- [`apps/web/app/miniapp/MiniApp.tsx`](../apps/web/app/miniapp/MiniApp.tsx) —
+  `loadReferralMe` and `loadReferralHistory` now capture
+  `httpStatus` and emit `props: { context, reason, httpStatus? }`.
+  Both event names are already in the telemetry allowlist
+  ([`apps/api/src/routes/telemetry.routes.ts:75, 78`](../apps/api/src/routes/telemetry.routes.ts))
+  and accept arbitrary props.
+
+### What's NOT in this fix
+
+- **A `program_disabled` reason bucket** — would imply
+  `referral.screen_load_failed` fires when the program is off, but
+  the `/tg/referral/me` route returns 200 OK with `enabled: false`
+  in that case (not a failure — placeholder UI renders). If we ever
+  want a `screen_load_blocked_by_flag` event for visibility into
+  cached-HTML edge cases, that's a separate signal.
+- **Reason tagging for the other client-side referral events**
+  (`config_fetch_failed`, `code_generation_failed`, etc.). They're
+  rarer and lower-leverage; touch on demand if we see them spike.
+- **A server-side `parse_error` reason** distinct from generic
+  `fetch_error`. The current helper folds JSON-parse-after-200 into
+  `fetch_error` because both manifest the same way to the user
+  (loading spinner → blank). If we ever see a parse-error spike,
+  the dedup is worth doing then; not before.
+
+---
+
 ## 2026-05-28 — Referral analytics: `first_*_created` events are not invitee-only — add `hasAttribution` prop
 
 ### Symptom

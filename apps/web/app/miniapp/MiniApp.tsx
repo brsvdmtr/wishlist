@@ -72,6 +72,7 @@ import {
 import { parsePaywallError, paywallContextFromError } from './lib/paywall';
 import { fireAttributionBeacon } from './lib/attribution';
 import { useExperiment } from './lib/experiments';
+import { inferReferralLoadFailReason } from './lib/referralFailReason';
 import {
   shouldShowE11Cta,
   readLastSeenAt as readE11LastSeenAt,
@@ -81,6 +82,7 @@ import {
 } from './lib/postReservationCta';
 import { resolveReservePrefill, MAX_DISPLAY_NAME_LEN, type ReservePrefillSource } from './lib/reservePrefill';
 import { safeUserUrl } from './lib/isSafeUrl';
+import { proxyImageUrl } from './lib/proxyImage';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
 import { initSentry, captureException } from './sentry';
 import {
@@ -5860,14 +5862,24 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const loadReferralMe = useCallback(async () => {
     setReferralMeLoading(true);
     setReferralMeError(null);
+    // Capture the HTTP status (if any) so the catch can tag the failure
+    // reason. fetch-throw / parse-throw leaves httpStatus undefined →
+    // inferReferralLoadFailReason maps to 'fetch_error'.
+    let httpStatus: number | undefined;
     try {
       const res = await tgFetch('/tg/referral/me');
+      httpStatus = res.status;
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json() as ReferralMe;
       setReferralMe(data);
     } catch (e) {
       setReferralMeError(e instanceof Error ? e.message : 'load_failed');
-      trackEvent('referral.screen_load_failed', { context: 'me' });
+      const isHttpError = httpStatus !== undefined && httpStatus >= 400;
+      trackEvent('referral.screen_load_failed', {
+        context: 'me',
+        reason: inferReferralLoadFailReason(isHttpError ? httpStatus : undefined),
+        ...(isHttpError ? { httpStatus } : {}),
+      });
     } finally {
       setReferralMeLoading(false);
     }
@@ -5879,18 +5891,24 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
    */
   const loadReferralHistory = useCallback(async (reset: boolean = false) => {
     setReferralHistoryLoading(true);
+    let httpStatus: number | undefined;
     try {
       const cursor = reset ? null : referralHistoryCursor;
       const qs = new URLSearchParams({ limit: '20' });
       if (cursor) qs.set('before', cursor);
       const res = await tgFetch(`/tg/referral/history?${qs.toString()}`);
+      httpStatus = res.status;
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json() as ReferralHistoryPage;
       setReferralHistory((prev) => reset ? data.items : [...prev, ...data.items]);
       setReferralHistoryCursor(data.nextBefore);
       setReferralHistoryHasMore(!!data.nextBefore);
     } catch {
-      trackEvent('referral.history_load_failed');
+      const isHttpError = httpStatus !== undefined && httpStatus >= 400;
+      trackEvent('referral.history_load_failed', {
+        reason: inferReferralLoadFailReason(isHttpError ? httpStatus : undefined),
+        ...(isHttpError ? { httpStatus } : {}),
+      });
     } finally {
       setReferralHistoryLoading(false);
     }
@@ -11441,7 +11459,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               background: item.imageUrl ? undefined : 'linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.2), rgba(168,85,247,0.2))',
               display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, flexShrink: 0, overflow: 'hidden',
             }}>
-              {item.imageUrl ? <img src={item.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '📦'}
+              {item.imageUrl ? <img src={proxyImageUrl(item.imageUrl)} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '📦'}
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'inline-block', background: 'rgba(74, 222, 128, 0.15)', color: 'var(--wb-success, #4ADE80)', fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 8, marginBottom: 6 }}>
@@ -13727,7 +13745,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                         display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0,
                                       }}>
                                         {it.imageUrl
-                                          ? <img src={it.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                          ? <img src={proxyImageUrl(it.imageUrl)} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                           : '🎁'}
                                       </div>
                                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -14504,7 +14522,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                 display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0,
                               }}>
                                 {it.imageUrl
-                                  ? <img src={it.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  ? <img src={proxyImageUrl(it.imageUrl)} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                   : '🎁'}
                               </div>
                               <div style={{ flex: 1, minWidth: 0 }}>
@@ -17895,7 +17913,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   padding: '8px 12px', background: C.surface, borderRadius: 10,
                 }}>
                   {item.imageUrl ? (
-                    <img src={item.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover' }} />
+                    <img src={proxyImageUrl(item.imageUrl)} alt="" loading="lazy" decoding="async" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover' }} />
                   ) : (
                     <div style={{ width: 36, height: 36, borderRadius: 8, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🎁</div>
                   )}
@@ -18203,7 +18221,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div style={{
                     width: 44, height: 44, borderRadius: 10, flexShrink: 0,
                     background: placementsForItem.imageUrl ? undefined : 'linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.3), rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.1))',
-                    backgroundImage: placementsForItem.imageUrl ? `url(${placementsForItem.imageUrl})` : undefined,
+                    backgroundImage: placementsForItem.imageUrl ? `url(${proxyImageUrl(placementsForItem.imageUrl)})` : undefined,
                     backgroundSize: 'cover', backgroundPosition: 'center',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: 20,
@@ -22626,7 +22644,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             }}
           >
             {onboardingDemoItem.imageUrl && (
-              <img src={onboardingDemoItem.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: 160, objectFit: 'cover', display: 'block' }} />
+              <img src={proxyImageUrl(onboardingDemoItem.imageUrl)} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: 160, objectFit: 'cover', display: 'block' }} />
             )}
             <div style={{ padding: '14px 16px' }}>
               <div style={{ fontSize: 16, fontWeight: 600, color: C.text, marginBottom: 4 }}>{onboardingDemoItem.title}</div>
@@ -22664,7 +22682,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {/* Real wish card */}
               <div style={{ width: '100%', background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.06)', border: '1.5px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.2)', borderRadius: 18, overflow: 'hidden', marginBottom: 24 }}>
                 <div style={{ height: 100, background: 'linear-gradient(135deg, #1f1840, #162040)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48, position: 'relative' }}>
-                  {onboardingTryResult.item.imageUrl ? <img src={onboardingTryResult.item.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '📦'}
+                  {onboardingTryResult.item.imageUrl ? <img src={proxyImageUrl(onboardingTryResult.item.imageUrl)} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '📦'}
                   <div style={{ position: 'absolute', top: 10, left: 10, background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.8)', color: '#fff', fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 8 }}>✨ {t('onboarding_complete_your_wish', locale)}</div>
                 </div>
                 <div style={{ padding: '14px 16px' }}>
