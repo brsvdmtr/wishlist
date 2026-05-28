@@ -37,6 +37,7 @@ import { t, localeToBCP47, type Locale } from '@wishlist/shared';
 import { UserAvatar } from '../../components/UserAvatar';
 import { parsePaywallError } from '../../lib/paywall';
 import { resolveReservePrefill } from '../../lib/reservePrefill';
+import { proxyImageUrl } from '../../lib/proxyImage';
 import type { Dispatch, SetStateAction } from 'react';
 import type { GroupGiftState, GroupGiftData } from '../../hooks/useGroupGiftState';
 import type { GuestItem, Item, ProfileData, TgUser } from '../../MiniApp';
@@ -239,7 +240,7 @@ export function GroupGiftRoot(props: GroupGiftRootProps) {
               backdropFilter: 'blur(14px)' as never,
             }}>
               {groupGiftCreateItem.imageUrl ? (
-                <img src={groupGiftCreateItem.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: 50, height: 50, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
+                <img src={proxyImageUrl(groupGiftCreateItem.imageUrl)} alt="" loading="lazy" decoding="async" style={{ width: 50, height: 50, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
               ) : (
                 <div style={{
                   width: 50, height: 50, borderRadius: 14,
@@ -415,7 +416,7 @@ export function GroupGiftRoot(props: GroupGiftRootProps) {
               backdropFilter: 'blur(14px)' as never,
             }}>
               {gg.item.imageUrl ? (
-                <img src={gg.item.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: 50, height: 50, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
+                <img src={proxyImageUrl(gg.item.imageUrl)} alt="" loading="lazy" decoding="async" style={{ width: 50, height: 50, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
               ) : (
                 <div style={{
                   width: 50, height: 50, borderRadius: 14,
@@ -740,7 +741,7 @@ export function GroupGiftRoot(props: GroupGiftRootProps) {
               backdropFilter: 'blur(14px)' as never,
             }}>
               {gg.item.imageUrl ? (
-                <img src={gg.item.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: 50, height: 50, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
+                <img src={proxyImageUrl(gg.item.imageUrl)} alt="" loading="lazy" decoding="async" style={{ width: 50, height: 50, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
               ) : (
                 <div style={{
                   width: 50, height: 50, borderRadius: 14,

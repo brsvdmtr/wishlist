@@ -30,6 +30,7 @@ import {
 } from './components';
 import { ct, ctDays, ctDaysAgo } from './i18n';
 import { safeUserUrl } from '../../lib/isSafeUrl';
+import { proxyImageUrl } from '../../lib/proxyImage';
 
 interface Props {
   tgFetch: TgFetch;
@@ -544,7 +545,7 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
                       style={{
                         width: 56, height: 56, borderRadius: 12, flexShrink: 0,
                         padding: 0, fontFamily: 'inherit', cursor: 'pointer',
-                        backgroundImage: `url(${idea.imageUrl})`,
+                        backgroundImage: `url(${proxyImageUrl(idea.imageUrl) ?? ''})`,
                         backgroundSize: 'cover', backgroundPosition: 'center',
                         border: '1px solid var(--wb-border)',
                       }}
@@ -601,7 +602,7 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
                         style={{
                           display: 'block', width: '100%', maxWidth: 280, aspectRatio: '4/3',
                           borderRadius: 14, marginBottom: 10, padding: 0, fontFamily: 'inherit',
-                          cursor: 'pointer', backgroundImage: `url(${idea.imageUrl})`,
+                          cursor: 'pointer', backgroundImage: `url(${proxyImageUrl(idea.imageUrl) ?? ''})`,
                           backgroundSize: 'cover', backgroundPosition: 'center',
                           border: '1px solid var(--wb-border)',
                         }}

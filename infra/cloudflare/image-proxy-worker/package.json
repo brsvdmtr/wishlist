@@ -1,0 +1,21 @@
+{
+  "name": "@wishlist/image-proxy-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker that proxies external item-image fetches so the viewer's IP / UA never reach a third-party host listed in a wishlist.",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "dev": "wrangler dev",
+    "deploy": "pnpm run build && wrangler deploy",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20251001.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.0",
+    "wrangler": "^3.114.0"
+  }
+}

@@ -48,6 +48,7 @@ import { t, type Locale } from '@wishlist/shared';
 import { parsePaywallError, paywallContextFromError } from '../../lib/paywall';
 import { renderSantaAlias } from '../../lib/santa-alias';
 import { safeUserUrl } from '../../lib/isSafeUrl';
+import { proxyImageUrl } from '../../lib/proxyImage';
 import type { Dispatch, SetStateAction } from 'react';
 import type {
   SantaCampaignDetail, SantaCampaignSummary, GuestItem,
@@ -2455,7 +2456,7 @@ export function SantaRoot(props: SantaRootProps) {
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                         {/* Item image */}
                         {item.imageUrl && (
-                          <img src={item.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: 52, height: 52, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
+                          <img src={proxyImageUrl(item.imageUrl)} alt="" loading="lazy" decoding="async" style={{ width: 52, height: 52, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
                         )}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 2 }}>{item.title}</div>

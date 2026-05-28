@@ -186,6 +186,168 @@ event is already in the DB.
 
 ---
 
+## 2026-05-28 — Security audit cont'd: full M2 (CF Worker image proxy)
+
+The Mini App side of finding M2 (IP-leak via `<img src={item.imageUrl}>`)
+is now fully closed by a Cloudflare Worker that interposes between the
+viewer and the third-party image host. Pairs with the earlier
+`<meta name="referrer" content="no-referrer">` change which closed the
+Referer-leak; together the two changes mean an attacker who hosts a
+tracker as a wishlist item image gets NEITHER the viewer's IP NOR the
+URL they came from.
+
+### Симптом
+
+Same as the Referer-leak above:
+
+1. Owner sets `item.imageUrl =
+   https://attacker.example/track.gif?uid=foo` in a wishlist item.
+2. Every guest viewing the wishlist makes a direct browser request to
+   `attacker.example` for the image.
+3. `attacker.example` logs: viewer IP, User-Agent, timestamp, the
+   `?uid=foo` correlation token, plus repeat-view frequency.
+
+The Referer half of this was closed already; the IP half wasn't,
+because closing it requires the request to come from somewhere OTHER
+than the viewer.
+
+### Why the Worker (and not an API route)
+
+`apps/api` could host the proxy, but the bandwidth would land on our
+Vultr origin: ~150 GB/month at 1 k views/day with realistic
+wishlist sizes. Cloudflare Workers handle outbound bandwidth on
+their network (already in front of the origin since 2026-05-22),
+with edge caching free out of the box. The choice was 5-minute
+discussion with the operator; logged here so it stays the default
+when future "let's move it to the API" pressure comes up.
+
+### Architecture
+
+```
+viewer browser            Cloudflare edge              third-party host
+─────────────────         ───────────────────          ─────────────────
+GET /cdn-img/?url=X  ─▶   image-proxy-worker  ─▶ fetch(X) ──▶ attacker.example
+                           │                             ◀───── 200 + image
+                           ├── cache.put(req,res)
+                           ├── strip Set-Cookie / Server / X-Powered-By
+                           ├── rewrite Cache-Control + CORP + nosniff
+                           ▼
+                          200 image/jpeg with our headers
+viewer browser  ◀──────── (next viewer of same URL: HIT, no upstream fetch)
+```
+
+Routes claimed by the Worker:
+- `wishlistik.ru/cdn-img/*`
+- `www.wishlistik.ru/cdn-img/*`
+
+Other paths pass through unchanged (the Worker is defensive — anything
+unrecognised falls back to `return fetch(req)`, so a misrouted request
+behaves as if the Worker weren't there).
+
+### Lesson
+
+- **Privacy-leak surfaces that span domain boundaries are cheaper to
+  close at the CDN edge than at the API origin.** The bandwidth and
+  cache-hit-ratio numbers strongly favour CF; the validation /
+  allowlist logic is the same code either way.
+- **The Worker is NOT the only guard.** It strips
+  `Set-Cookie` / `Server` / `X-Powered-By`, enforces a strict
+  Content-Type allowlist (image/{jpeg,png,webp,gif,svg+xml,avif,heic,heif}),
+  rejects private-IP hostnames as a layer on top of CF's runtime
+  guard, caps response size at 15 MB, and applies a 10 s upstream
+  timeout. Every one of these is independent; killing any one of them
+  still leaves a safe-by-default proxy.
+- **Kill switches on both sides.** The Worker has
+  `IMAGE_PROXY_DISABLED=1` (env var, no code change); the Mini App
+  helper has `NEXT_PUBLIC_IMAGE_PROXY=disabled` (build-time env).
+  Either side can revert to direct loads without touching the other.
+
+### Rule
+
+- **Routing user-content images through this Worker is the default
+  in the Mini App** as of 2026-05-28. `proxyImageUrl()` from
+  `apps/web/app/miniapp/lib/proxyImage.ts` is the ONLY function that
+  gets to compose an `<img src>` value for external URLs. Direct
+  `<img src={item.imageUrl}>` writes must go through code review
+  with an explicit waiver — there is no "for now, just for this
+  screen" exception.
+- **Same-origin URLs (`/api/uploads/*`, `wishlistik.ru/*`,
+  `data:*`) bypass the proxy** because no third party is involved
+  and the round-trip would just add latency.
+- **Adding a new `<img>` to the Mini App = adding a `proxyImageUrl()`
+  call.** PR template + grep-time CI rule candidate.
+
+### Deploy ordering (default-off rollout)
+
+`proxyImageUrl()` reads `NEXT_PUBLIC_IMAGE_PROXY` at build time and
+falls back to a no-op (returns the raw URL) unless the env equals
+exactly `"enabled"`. So the rollout is three independent steps and
+nothing breaks if they happen out of order:
+
+1. **Ship the Mini App code.** `git push origin main`. Without the
+   env var the helper is a no-op — every `<img>` keeps loading
+   directly from the third-party host (same as pre-fix).
+2. **Deploy the Worker.**
+   ```
+   cd infra/cloudflare/image-proxy-worker
+   wrangler login         # once, interactive
+   pnpm deploy            # binds the /cdn-img/* routes to the Worker
+   ```
+   Verify with `curl -I
+   'https://wishlistik.ru/cdn-img/?url=https://example.com/x.jpg'` —
+   expect 200 (or a structured Worker error code, NOT 404).
+3. **Activate.** Set `NEXT_PUBLIC_IMAGE_PROXY=enabled` in the build
+   environment (Vultr `.env` for the web container) and trigger a
+   Mini App rebuild. After the rebuild, all external `<img>` go
+   through the Worker.
+
+Revert paths (any one of them is enough):
+- Unset / clear the env var and rebuild → Mini App returns to direct
+  loads.
+- Set `IMAGE_PROXY_DISABLED=1` in the Worker's `wrangler.toml` and
+  redeploy → Worker becomes pass-through; the Mini App's request
+  goes to origin via the Worker, origin returns 404, broken images.
+  Use the Mini-App-side kill switch in preference unless the Worker
+  is the problem.
+
+### Better code
+
+- `infra/cloudflare/image-proxy-worker/` — new Worker
+  (`src/index.ts` ~150 LOC, `wrangler.toml` ~25 LOC, 19 unit tests
+  in `test/worker.test.ts`).
+- `apps/web/app/miniapp/lib/proxyImage.ts` — Mini App helper with
+  12 unit tests covering proxy routing, same-origin passthroughs,
+  `data:` URIs, scheme rejection, kill switch, and control-char
+  sanitisation.
+- 13 Mini App callsites rewritten (`<img src>` and CSS
+  `backgroundImage: url(...)`):
+  - `apps/web/app/miniapp/MiniApp.tsx` × 7 (incl. one
+    `backgroundImage` at `placementsForItem.imageUrl`)
+  - `apps/web/app/miniapp/screens/calendar/CalendarDetail.tsx` × 2
+    (both `backgroundImage`)
+  - `apps/web/app/miniapp/screens/group-gift/GroupGiftRoot.tsx` × 3
+  - `apps/web/app/miniapp/screens/santa/SantaRoot.tsx` × 1
+
+### What's NOT covered
+
+- **SSRF-via-DNS-rebinding inside the Worker.** The CF Workers
+  runtime doesn't expose a resolver hook the way Node's undici does;
+  the Worker can't pin DNS the way the H1 fix does for
+  `downloadAndProcessImage`. CF's runtime already blocks fetches to
+  RFC1918 / IPv6-ULA at the network layer, which is the bulk of the
+  SSRF class for this surface; resolver-level pinning would close
+  the residual hole. Worth a separate follow-up if a Worker resolver
+  API ever ships.
+- **Anti-tracking via image content (steganography, ETag-as-cookie).**
+  Out of scope. A determined attacker who controls the image bytes
+  can correlate viewers through stable ETags or visually-imperceptible
+  pixel changes per viewer. Mitigating that needs server-side
+  re-encoding (the API-side `processImage` does this for uploads but
+  the Worker doesn't, by design — re-encoding every external image
+  through sharp at the edge is a different cost profile).
+
+---
+
 ## 2026-05-28 — Security audit cont'd: Mini App XSS hygiene + Referer-no-referrer
 
 Three Low-severity Mini App findings that the agent flagged in the

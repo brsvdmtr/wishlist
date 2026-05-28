@@ -1,0 +1,31 @@
+name = "wishlist-image-proxy-worker"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+account_id = "2e54560360d0ce9bd32b5079b8f33e3b"
+
+# The Worker only handles `/cdn-img/*` on the prod domain (and its `www`
+# mirror). Unrecognised paths fall through to `fetch(req)` so even if a
+# misconfigured route ever sends extra traffic to this Worker the response
+# is the same as without it.
+
+[[routes]]
+pattern = "wishlistik.ru/cdn-img/*"
+zone_id = "e98ef6854fcc5620f1ac712f9b48c6e0"
+
+[[routes]]
+pattern = "www.wishlistik.ru/cdn-img/*"
+zone_id = "e98ef6854fcc5620f1ac712f9b48c6e0"
+
+[vars]
+# Kill switch: set to "1" and redeploy to make the Worker a pure
+# pass-through. Useful if a third-party host starts misbehaving and we
+# need to fall back to direct loads without unbinding the route.
+IMAGE_PROXY_DISABLED = "0"
+
+# Optional max upstream-image size override. Defaults to 15 MB in the
+# Worker; bump here only if real product photos consistently exceed it.
+# IMAGE_PROXY_MAX_BYTES = "15728640"
+
+[observability]
+enabled = true
+head_sampling_rate = 1.0
