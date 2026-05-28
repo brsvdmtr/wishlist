@@ -81,8 +81,12 @@ jobs:
             echo "Q1: attributed_in_window=$ATTRIBUTED active_users_in_window=$ACTIVE_USERS pct=${PCT}%"
 
             # === Query 2: source distribution (not monocline) ===
-            SOURCES_CSV=$($PSQL -c "SELECT \"firstAcquisitionSource\" || ':' || COUNT(*) FROM \"UserProfile\" WHERE \"createdAt\" >= '$DEPLOY_DATE' AND \"firstAcquisitionSource\" IS NOT NULL GROUP BY \"firstAcquisitionSource\" ORDER BY COUNT(*) DESC;" | tr '\n' ' ')
-            DISTINCT_SOURCES=$($PSQL -c "SELECT COUNT(DISTINCT \"firstAcquisitionSource\") FROM \"UserProfile\" WHERE \"createdAt\" >= '$DEPLOY_DATE' AND \"firstAcquisitionSource\" IS NOT NULL;")
+            # Filter by firstAcquisitionAt (when beacon wrote) NOT createdAt
+            # — for the same reason Q1 was rewritten 2026-05-28: first-touch
+            # fires on existing users too, and the window is about beacon
+            # activity, not user-cohort creation.
+            SOURCES_CSV=$($PSQL -c "SELECT \"firstAcquisitionSource\" || ':' || COUNT(*) FROM \"UserProfile\" WHERE \"firstAcquisitionAt\" >= '$DEPLOY_DATE' AND \"firstAcquisitionSource\" IS NOT NULL GROUP BY \"firstAcquisitionSource\" ORDER BY COUNT(*) DESC;" | tr '\n' ' ')
+            DISTINCT_SOURCES=$($PSQL -c "SELECT COUNT(DISTINCT \"firstAcquisitionSource\") FROM \"UserProfile\" WHERE \"firstAcquisitionAt\" >= '$DEPLOY_DATE' AND \"firstAcquisitionSource\" IS NOT NULL;")
             echo "Q2: distinct_sources=$DISTINCT_SOURCES sources=[$SOURCES_CSV]"
 
             # === Query 3: guest.converted_to_user emit rate ===
