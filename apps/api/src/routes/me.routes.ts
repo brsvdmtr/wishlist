@@ -1277,12 +1277,26 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
 
   // ─── Account + god-mode ────────────────────────────────────────────
   // DELETE /tg/me/account — delete user and all related data
+  //
+  // SantaCampaign.owner uses `onDelete: Restrict` (intentional — prevents
+  // accidental orphaning of active campaigns mid-event). The user-level
+  // check below blocks deletion when any active campaign is still owned,
+  // but COMPLETED/CANCELLED campaigns would otherwise survive that check
+  // and then hit the FK Restrict on user.delete → 500. We explicitly
+  // delete the COMPLETED/CANCELLED campaigns before user.delete; their
+  // children (participants, rounds, assignments, messages, broadcast
+  // logs) cascade via the schema-level Cascade on each of those relations.
+  //
+  // The delete-completed + user.delete pair runs in a Serializable txn
+  // with a re-check of active campaigns INSIDE the txn — closes the race
+  // where a concurrent request creates a new campaign between the outer
+  // check and the inner delete.
   meRouter.delete(
     '/me/account',
     asyncHandler(async (req, res) => {
       const user = await getOrCreateTgUser(req.tgUser!);
-  
-      // Block if user owns active Santa campaigns (must cancel first)
+
+      // Outer check — keeps the friendly 409 + campaign list shape.
       const activeSantaCampaigns = await prisma.santaCampaign.findMany({
         where: { ownerId: user.id, status: { notIn: ['COMPLETED', 'CANCELLED'] } },
         select: { id: true, title: true, status: true },
@@ -1294,8 +1308,39 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
           campaigns: activeSantaCampaigns,
         });
       }
-  
-      await prisma.user.delete({ where: { id: user.id } });
+
+      try {
+        await prisma.$transaction(
+          async (tx) => {
+            // Re-check inside the txn: a concurrent POST /santa/campaigns
+            // could have created a new campaign between the outer find
+            // and now. Throw a typed error so the caller surfaces it as
+            // 409 instead of a 500.
+            const stillActive = await tx.santaCampaign.count({
+              where: { ownerId: user.id, status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+            });
+            if (stillActive > 0) throw new Error('active_santa_campaigns_race');
+
+            // Delete completed/cancelled campaigns; child rows cascade.
+            await tx.santaCampaign.deleteMany({
+              where: { ownerId: user.id, status: { in: ['COMPLETED', 'CANCELLED'] } },
+            });
+            await tx.user.delete({ where: { id: user.id } });
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (err) {
+        if (err instanceof Error && err.message === 'active_santa_campaigns_race') {
+          return res.status(409).json({
+            error: 'active_santa_campaigns',
+            message: 'A new Secret Santa campaign was created during account deletion. Cancel or complete it before retrying.',
+          });
+        }
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+          return res.status(409).json({ error: 'concurrent_modification', code: 'SERIALIZATION_CONFLICT', message: 'Please retry the request.' });
+        }
+        throw err;
+      }
       return res.json({ success: true });
     }),
   );

@@ -5,6 +5,135 @@ New entries go at the top.
 
 ---
 
+## 2026-05-28 — Security audit cont'd: cascade COMPLETED/CANCELLED Santa campaigns on account delete
+
+### Симптом
+
+`DELETE /tg/me/account` is documented to "delete user and all related
+data" but the implementation hit a Postgres FK violation in a specific
+case: when the user owned COMPLETED or CANCELLED Santa campaigns. The
+sequence:
+
+1. Pre-delete guard (`me.routes.ts:1287`) finds active campaigns by
+   `status: { notIn: ['COMPLETED', 'CANCELLED'] }`. With only
+   completed/cancelled campaigns the list is empty → guard passes,
+   returns 200 path.
+2. `prisma.user.delete({ where: { id: user.id } })` fires.
+3. `SantaCampaign.owner` is declared with `onDelete: Restrict` (schema
+   line 1087) — Postgres rejects the user delete because there are
+   still FK references.
+4. User sees a 500 / unhandled error; account is NOT actually deleted.
+
+Other related entities (Wishlist, Profile, Comment, Hint, etc.) use
+`onDelete: Cascade`, so they go away cleanly. SantaCampaign was the
+single outlier — intentionally so, to prevent accidental orphaning
+mid-campaign — but the handler never cleaned them up after the user
+explicitly OK'd deletion.
+
+### Root cause
+
+Mismatch between two layers' definitions of "data to keep":
+- The schema's `onDelete: Restrict` says "never cascade-delete a
+  campaign just because the owner is gone."
+- The handler's pre-check says "block deletion when active campaigns
+  exist; completed/cancelled are fine to leave behind."
+
+Neither layer is wrong on its own, but the gap between them — what to
+DO with completed/cancelled campaigns at user-delete time — was
+unspecified. The default behavior (let Postgres reject) is the worst
+possible outcome: the operation fails partway, and the user has no
+clear path forward.
+
+### Lesson
+
+- **Every `onDelete: Restrict` relation on a user-aggregate model
+  needs an explicit handler-level decision.** Either cascade in code
+  (delete the children first, then the user), reassign ownership, or
+  block at the API boundary with a clear error. "Just let Postgres
+  reject" is never the right answer because the caller can't
+  distinguish a real FK violation from a 500.
+- **Pre-delete guards and post-delete behavior must agree.** If the
+  guard blocks on `status notIn [COMPLETED, CANCELLED]`, the handler
+  must explicitly process those statuses before the user delete. The
+  guard's filter list is the contract; the handler implements the
+  contract.
+- **Race-resistant deletes use Serializable + re-check.** A
+  concurrent POST that creates a new active campaign between the
+  guard and the delete would otherwise either (a) cascade away the
+  brand-new campaign or (b) trip the FK. Wrap the cleanup + delete in
+  a transaction with a re-check that throws a typed error → translated
+  to a 409 at the response boundary.
+
+### Rule
+
+- **For every `onDelete: Restrict` relation pointing at a deletable
+  entity, the deleting handler must:**
+  1. Run a pre-check that returns a friendly 409 with the blocking
+     rows when the relation has any "still-valuable" children
+     (active campaigns, in-flight orders, open tickets).
+  2. Inside a Serializable txn: re-check the pre-condition,
+     explicitly delete the "OK to clean up" children, then delete
+     the parent.
+  3. Translate the typed race-error to 409, not 500.
+- **No `prisma.user.delete()` without an audit of every relation's
+  `onDelete` setting.** Cascade relations handle themselves; SetNull
+  relations need confirmation that NULL is semantically OK for the
+  child; Restrict relations need explicit handler code (the case
+  above).
+
+### Better code
+
+`apps/api/src/routes/me.routes.ts:1280-1349`:
+
+```ts
+try {
+  await prisma.$transaction(async (tx) => {
+    const stillActive = await tx.santaCampaign.count({
+      where: { ownerId: user.id, status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+    });
+    if (stillActive > 0) throw new Error('active_santa_campaigns_race');
+    await tx.santaCampaign.deleteMany({
+      where: { ownerId: user.id, status: { in: ['COMPLETED', 'CANCELLED'] } },
+    });
+    await tx.user.delete({ where: { id: user.id } });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+} catch (err) {
+  if (err instanceof Error && err.message === 'active_santa_campaigns_race') {
+    return res.status(409).json({ error: 'active_santa_campaigns', ... });
+  }
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+    return res.status(409).json({ error: 'concurrent_modification', code: 'SERIALIZATION_CONFLICT' });
+  }
+  throw err;
+}
+```
+
+### Regression tests
+
+`apps/api/src/routes/me.account-delete.test.ts` — new file, 3 tests:
+1. Returns 409 with the campaign list when active campaigns are
+   owned (existing guard preserved).
+2. Cascades COMPLETED/CANCELLED then deletes the user — verifies
+   the call order so the FK Restrict doesn't trip.
+3. Returns 409 (not 500) when a new active campaign is created in
+   the race window between the outer check and the inner re-check.
+
+### What's NOT in this fix
+
+- The schema-level `onDelete: Restrict` on `SantaCampaign.owner`
+  stays — accidental cascade on a mid-event campaign is still the
+  greater of two evils. The handler-level cleanup is the right
+  layer to apply the user-consented removal.
+- Soft-delete / data-export-before-delete is out of scope. If the
+  product later adds "download my data" before account close, the
+  cleanup logic moves there.
+- Participant notification ("the campaign you joined is gone because
+  the organizer deleted their account") is deferred. The participants
+  cascade away via `SantaParticipant.campaign onDelete: Cascade`, so
+  they get no notification today.
+
+---
+
 ## 2026-05-28 — Security audit cont'd: god-mode env-only (no DB persistence)
 
 ### Симптом
