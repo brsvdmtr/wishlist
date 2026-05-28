@@ -28,6 +28,7 @@ import type { PrismaClient } from '@wishlist/db';
 import type { Logger } from 'pino';
 import { t, resolveLocaleWithSource } from '@wishlist/shared';
 import { buildReservationReminderDeepLink } from '../telegram/deepLinks';
+import { escapeTgHtml } from '../telegram/html';
 import { profileToLanguageSettings } from '../services/locale';
 
 export type ReservationReminderDeps = {
@@ -228,7 +229,7 @@ export function startSmartReservationSchedulers(deps: SmartReservationSchedulerD
             const { locale: gifterLocale } = resolveLocaleWithSource(
               profileToLanguageSettings(reserver.profile),
             );
-            void sendTgNotification(reserver.telegramChatId, t('notif_smart_res_auto_released_gifter', gifterLocale, { title: meta.item.title }));
+            void sendTgNotification(reserver.telegramChatId, t('notif_smart_res_auto_released_gifter', gifterLocale, { title: escapeTgHtml(meta.item.title) }));
           }
           // Notify owner. Owner's profile preloaded above with the wishlist
           // include — no extra round-trip.
@@ -237,7 +238,7 @@ export function startSmartReservationSchedulers(deps: SmartReservationSchedulerD
             const { locale: ownerLocale } = resolveLocaleWithSource(
               profileToLanguageSettings(meta.item.wishlist.owner.profile),
             );
-            void sendTgNotification(ownerChatId, t('notif_smart_res_auto_released_owner', ownerLocale, { title: meta.item.title }));
+            void sendTgNotification(ownerChatId, t('notif_smart_res_auto_released_owner', ownerLocale, { title: escapeTgHtml(meta.item.title) }));
           }
           logger.info({ metaId: meta.id, itemId: meta.item.id }, 'smart-res: auto-released');
         } catch (err) {
@@ -283,7 +284,7 @@ export function startSmartReservationSchedulers(deps: SmartReservationSchedulerD
             profileToLanguageSettings(reserver.profile),
           );
           const hoursLeft = Math.max(1, Math.round((meta.expiresAt.getTime() - now.getTime()) / 3600000));
-          const delivered = await sendTgNotification(reserver.telegramChatId, t('notif_smart_res_expiring', locale, { title: meta.item.title, hours: String(hoursLeft) }))
+          const delivered = await sendTgNotification(reserver.telegramChatId, t('notif_smart_res_expiring', locale, { title: escapeTgHtml(meta.item.title), hours: String(hoursLeft) }))
             .then(() => true).catch(() => false);
           logger.debug({ metaId: meta.id, locale, localeSource, delivered }, 'smart-res: reminder attempt');
           if (delivered) {

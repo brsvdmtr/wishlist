@@ -66,6 +66,7 @@ import {
   pickBirthdayDisplayName,
 } from '../services/birthday-reminders';
 import { profileToLanguageSettings } from '../services/locale';
+import { escapeTgHtml } from '../telegram/html';
 
 // Structural narrow over the real `getEffectiveEntitlements` return
 // shape — the birthday scheduler only reads `isPro`. Matches the
@@ -192,8 +193,8 @@ function buildBirthdayBotMessage(args: {
 
   if (!isOwner) {
     intro = isToday
-      ? t('bot_br_friend_intro_today', locale, { name: birthdayDisplayName })
-      : t('bot_br_friend_intro_days', locale, { days: daysUntil, dayWord, name: birthdayDisplayName });
+      ? t('bot_br_friend_intro_today', locale, { name: escapeTgHtml(birthdayDisplayName) })
+      : t('bot_br_friend_intro_days', locale, { days: daysUntil, dayWord, name: escapeTgHtml(birthdayDisplayName) });
     if (delivery.targetType === 'wishlist') {
       body = isToday ? t('bot_br_friend_body_today', locale) : t('bot_br_friend_body_wishlist', locale);
     } else {
@@ -201,7 +202,7 @@ function buildBirthdayBotMessage(args: {
     }
     lines.push(intro);
     if (customMessage && customMessage.trim().length > 0) {
-      lines.push(t('bot_br_friend_custom_message_wrap', locale, { message: customMessage.trim() }));
+      lines.push(t('bot_br_friend_custom_message_wrap', locale, { message: escapeTgHtml(customMessage.trim()) }));
     }
     lines.push(body);
   } else {

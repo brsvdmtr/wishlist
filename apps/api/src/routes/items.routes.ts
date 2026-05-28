@@ -50,7 +50,7 @@
 
 import { Router } from 'express';
 import { z } from 'zod';
-import { prisma } from '@wishlist/db';
+import { prisma, Prisma } from '@wishlist/db';
 import { t, resolveLocaleWithSource } from '@wishlist/shared';
 
 import { asyncHandler } from '../lib/asyncHandler';
@@ -59,6 +59,7 @@ import { getRequestLocale } from '../lib/locale';
 import { profileToLanguageSettings } from '../services/locale';
 import { makePlanLimitReached, makeProRequired, sendPaywall } from '../services/paywall';
 import { sendTgNotification } from '../telegram/botApi';
+import { escapeTgHtml } from '../telegram/html';
 import { upload } from '../uploads/upload.config';
 import { processImage } from '../uploads/imageProcessor';
 import { deleteUploadFile } from '../uploads/uploadCleanup';
@@ -495,6 +496,17 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
 
   // POST /tg/items/bulk-restore — restore multiple archived items
   // Must be placed before /items/:id to avoid route param collision.
+  //
+  // Quota check: archived items still have placement rows; flipping status to
+  // AVAILABLE re-activates every placement against the host wishlist's item
+  // limit. Without per-wishlist capacity verification a free user can
+  // create-archive-create-restore to N×limit items. We greedily restore items
+  // that fit the per-wishlist available budget and surface the rest as
+  // `target_limit_reached`.
+  //
+  // Race protection: the recount + per-item update sequence runs inside a
+  // Serializable transaction (matches the C2 item-create pattern); P2034
+  // surfaces as 409 so the client retries with a fresh Idempotency-Key.
   itemsRouter.post(
     '/items/bulk-restore',
     asyncHandler(async (req, res) => {
@@ -519,7 +531,7 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
       const restored: string[] = [];
       const failed: Array<{ itemId: string; reason: string }> = [];
 
-      const toRestore: string[] = [];
+      const eligibleIds: string[] = [];
       for (const req_id of itemIds) {
         const item = items.find((i) => i.id === req_id);
         if (!item || item.wishlist.ownerId !== user.id) {
@@ -534,15 +546,88 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
           failed.push({ itemId: req_id, reason: 'wishlist_archived' });
           continue;
         }
-        toRestore.push(req_id);
+        eligibleIds.push(req_id);
       }
 
-      if (toRestore.length > 0) {
-        await prisma.item.updateMany({
-          where: { id: { in: toRestore } },
-          data: { status: 'AVAILABLE', archivedAt: null, purgeAfter: null },
+      if (eligibleIds.length > 0) {
+        const ent = await getEffectiveEntitlements(user.id);
+        const placements = await prisma.wishlistItemPlacement.findMany({
+          where: { itemId: { in: eligibleIds }, wishlist: { archivedAt: null } },
+          select: { itemId: true, wishlistId: true },
         });
-        restored.push(...toRestore);
+        const placementsByItem = new Map<string, string[]>();
+        for (const p of placements) {
+          const arr = placementsByItem.get(p.itemId) ?? [];
+          arr.push(p.wishlistId);
+          placementsByItem.set(p.itemId, arr);
+        }
+
+        const ACTIVE_PLACEMENT_STATUSES = ['AVAILABLE', 'RESERVED', 'PURCHASED'] as const;
+        type BulkOutcome = { restored: string[]; capacityRejected: string[] };
+
+        let outcome: BulkOutcome | { kind: 'conflict' };
+        try {
+          outcome = await prisma.$transaction(
+            async (tx): Promise<BulkOutcome> => {
+              const wishlistIds = Array.from(new Set(placements.map(p => p.wishlistId)));
+              const remaining = new Map<string, number>();
+              for (const wlId of wishlistIds) {
+                const lim = ent.plan.items + (ent.extraItemsPerWishlist[wlId] ?? 0);
+                const cnt = await tx.wishlistItemPlacement.count({
+                  where: { wishlistId: wlId, item: { status: { in: [...ACTIVE_PLACEMENT_STATUSES] } } },
+                });
+                remaining.set(wlId, Math.max(0, lim - cnt));
+              }
+
+              const okIds: string[] = [];
+              const rejected: string[] = [];
+              for (const itemId of eligibleIds) {
+                const hostWishlists = placementsByItem.get(itemId) ?? [];
+                const fits = hostWishlists.every(wlId => (remaining.get(wlId) ?? 0) >= 1);
+                if (!fits) {
+                  rejected.push(itemId);
+                  continue;
+                }
+                for (const wlId of hostWishlists) {
+                  remaining.set(wlId, (remaining.get(wlId) ?? 0) - 1);
+                }
+                okIds.push(itemId);
+              }
+
+              if (okIds.length > 0) {
+                await tx.item.updateMany({
+                  where: { id: { in: okIds } },
+                  data: { status: 'AVAILABLE', archivedAt: null, purgeAfter: null },
+                });
+              }
+              return { restored: okIds, capacityRejected: rejected };
+            },
+            { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          );
+        } catch (err) {
+          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+            outcome = { kind: 'conflict' };
+          } else {
+            throw err;
+          }
+        }
+
+        if ('kind' in outcome && outcome.kind === 'conflict') {
+          return res.status(409).json({ error: 'concurrent_modification', code: 'SERIALIZATION_CONFLICT', message: 'Please retry the request.' });
+        }
+        if (!('kind' in outcome)) {
+          restored.push(...outcome.restored);
+          for (const itemId of outcome.capacityRejected) {
+            failed.push({ itemId, reason: 'target_limit_reached' });
+          }
+          if (outcome.capacityRejected.length > 0) {
+            trackEvent('feature_gate_hit_item_limit', user.id, {
+              plan: ent.plan.code,
+              context: 'bulk_restore',
+              rejectedCount: outcome.capacityRejected.length,
+            });
+          }
+        }
       }
 
       return res.json({ ok: true, restored, failed });
@@ -858,7 +943,7 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
             const { locale: notifLocale } = resolveLocaleWithSource(
               profileToLanguageSettings(reserver.profile),
             );
-            void sendTgNotification(reserver.telegramChatId, t('notif_description_updated', notifLocale, { title: item.title }));
+            void sendTgNotification(reserver.telegramChatId, t('notif_description_updated', notifLocale, { title: escapeTgHtml(item.title) }));
           }
         }
       }
@@ -929,7 +1014,7 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
           );
           void sendTgNotification(
             reserver.telegramChatId,
-            t('notif_archived', notifLocale, { title: item.title }),
+            t('notif_archived', notifLocale, { title: escapeTgHtml(item.title) }),
           );
         }
       }
@@ -998,7 +1083,7 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
           const { locale: notifLocale } = resolveLocaleWithSource(
             profileToLanguageSettings(reserver.profile),
           );
-          let msg = t('notif_completed', notifLocale, { title: item.title });
+          let msg = t('notif_completed', notifLocale, { title: escapeTgHtml(item.title) });
           // Soft CTA if reserver has no wishlists
           const reserverWlCount = await prisma.wishlist.count({
             where: { ownerId: reserver.id, type: 'REGULAR' },
@@ -1015,6 +1100,16 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
   );
 
   // POST /tg/items/:id/restore — restore item to AVAILABLE
+  //
+  // Quota check: an archived item still has its placement rows; the rows are
+  // filtered out of `countActivePlacementsInWishlist` only because the joined
+  // item.status is DELETED/COMPLETED/ARCHIVED. Flipping back to AVAILABLE
+  // re-activates every placement → we MUST re-verify capacity in every host
+  // wishlist before the status flip, otherwise free users can create N items,
+  // archive them, create N more, then restore = 2N total (quota bypass).
+  //
+  // Race protection: wrap the recount + update in a Serializable txn so two
+  // concurrent restores (or restore+create) cannot both pass capacity.
   itemsRouter.post(
     '/items/:id/restore',
     asyncHandler(async (req, res) => {
@@ -1032,21 +1127,73 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
         return res.status(409).json({ error: 'Item is not archived' });
       }
 
-      const updated = await prisma.item.update({
-        where: { id },
-        data: {
-          status: 'AVAILABLE',
-          archivedAt: null,
-          purgeAfter: null,
-        },
-        select: {
-          id: true, wishlistId: true, title: true, url: true, priceText: true,
-          currency: true, imageUrl: true, priority: true, position: true,
-          status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true,
-          wishlist: { select: { id: true, title: true } },
-        },
+      const ent = await getEffectiveEntitlements(user.id);
+      const placements = await prisma.wishlistItemPlacement.findMany({
+        where: { itemId: id, wishlist: { archivedAt: null } },
+        select: { wishlistId: true },
       });
-      const { wishlist, ...itemFields } = updated;
+
+      const ACTIVE_PLACEMENT_STATUSES = ['AVAILABLE', 'RESERVED', 'PURCHASED'] as const;
+      const restoreSelect = {
+        id: true, wishlistId: true, title: true, url: true, priceText: true,
+        currency: true, imageUrl: true, priority: true, position: true,
+        status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true,
+        wishlist: { select: { id: true, title: true } },
+      } as const;
+      type RestoreOutcome =
+        | { kind: 'over_limit'; wishlistId: string; count: number; limit: number }
+        | { kind: 'restored'; updated: Prisma.ItemGetPayload<{ select: typeof restoreSelect }> };
+
+      let outcome: RestoreOutcome | { kind: 'conflict' };
+      try {
+        outcome = await prisma.$transaction(
+          async (tx): Promise<RestoreOutcome> => {
+            for (const { wishlistId: wlId } of placements) {
+              const lim = ent.plan.items + (ent.extraItemsPerWishlist[wlId] ?? 0);
+              const cnt = await tx.wishlistItemPlacement.count({
+                where: { wishlistId: wlId, item: { status: { in: [...ACTIVE_PLACEMENT_STATUSES] } } },
+              });
+              if (cnt + 1 > lim) {
+                return { kind: 'over_limit', wishlistId: wlId, count: cnt, limit: lim };
+              }
+            }
+            const updated = await tx.item.update({
+              where: { id },
+              data: { status: 'AVAILABLE', archivedAt: null, purgeAfter: null },
+              select: restoreSelect,
+            });
+            return { kind: 'restored', updated };
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+          outcome = { kind: 'conflict' };
+        } else {
+          throw err;
+        }
+      }
+
+      if (outcome.kind === 'over_limit') {
+        trackEvent('feature_gate_hit_item_limit', user.id, {
+          plan: ent.plan.code,
+          count: outcome.count,
+          limit: outcome.limit,
+          context: 'restore',
+        });
+        return sendPaywall(res, 402, makePlanLimitReached('item_limit', {
+          limit: outcome.limit,
+          current: outcome.count,
+          planCode: ent.plan.code,
+          context: outcome.wishlistId,
+          skuCode: 'extra_items_5',
+        }));
+      }
+      if (outcome.kind === 'conflict') {
+        return res.status(409).json({ error: 'concurrent_modification', code: 'SERIALIZATION_CONFLICT', message: 'Please retry the request.' });
+      }
+
+      const { wishlist, ...itemFields } = outcome.updated;
       return res.json({ item: mapTgItem(itemFields), wishlistId: wishlist.id, wishlistTitle: wishlist.title });
     }),
   );

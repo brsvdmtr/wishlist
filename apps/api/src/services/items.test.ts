@@ -370,6 +370,44 @@ describe('notifySubscribersOfChange — per-recipient locale resolution', () => 
     expect(shared.loggerError).toHaveBeenCalled();
   });
 
+  it('escapes user-controlled fields before HTML interpolation — Tg parse_mode=HTML injection regression', async () => {
+    // Pre-fix: itemTitle/wishlistTitle/ownerName flowed unescaped into a
+    // template rendered with `parse_mode: 'HTML'`, so a user could set an
+    // item title to `<a href="https://evil">click</a>` and have it become a
+    // real clickable link in every subscriber's Telegram notification.
+    shared.wishlistSubscription.findMany.mockResolvedValueOnce([
+      {
+        id: 's1',
+        subscriber: {
+          id: 'r1',
+          telegramChatId: 'c1',
+          profile: { languageMode: 'auto', manualLanguage: null, normalizedLocale: 'en', language: null },
+        },
+      },
+    ]);
+    shared.wishlist.findUnique.mockResolvedValueOnce({ slug: 'birthday' });
+    shared.subscriptionUnread.upsert.mockResolvedValue({});
+
+    await notifySubscribersOfChange('w1', 'item-99', ['title'], 'item_added', {
+      itemTitle: '<a href="https://evil">click</a>',
+      wishlistTitle: 'B&day <b>list</b>',
+      ownerName: '<script>x</script>',
+    });
+
+    expect(shared.sendTgBotMessage).toHaveBeenCalledOnce();
+    const [, text] = shared.sendTgBotMessage.mock.calls[0]!;
+    // Tags must be escaped: no raw `<a`, `<b>`, `<script>` reaches Telegram.
+    expect(text).not.toContain('<a href');
+    expect(text).not.toContain('<b>');
+    expect(text).not.toContain('<script');
+    // Escaped sequences must be present (proves escapeTgHtml was applied to
+    // each interpolated value, not bypassed):
+    expect(text).toContain('&lt;a href=');
+    expect(text).toContain('&lt;b&gt;');
+    expect(text).toContain('&lt;script&gt;');
+    expect(text).toContain('B&amp;day');
+  });
+
   it('skips subscribers without telegramChatId (cannot DM)', async () => {
     shared.wishlistSubscription.findMany.mockResolvedValueOnce([
       {

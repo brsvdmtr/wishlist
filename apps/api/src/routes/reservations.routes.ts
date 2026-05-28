@@ -50,6 +50,7 @@ import { zodError } from '../lib/http';
 import { getRequestLocale } from '../lib/locale';
 import { secureCompare } from '../lib/crypto';
 import { sendTgNotification } from '../telegram/botApi';
+import { escapeTgHtml } from '../telegram/html';
 import { profileToLanguageSettings, resolveUserFirstName } from '../services/locale';
 import { recordForeignWishlistAccess } from '../services/foreign-wishlist-access';
 import { makeAddonRequired, makePlanLimitReached, makeProRequired, sendPaywall } from '../services/paywall';
@@ -982,7 +983,7 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
           const { locale: notifLocale } = resolveLocaleWithSource(
             profileToLanguageSettings(owner.profile),
           );
-          void sendTgNotification(owner.telegramChatId, t('notif_reserved', notifLocale, { name: displayName, title: result.title }));
+          void sendTgNotification(owner.telegramChatId, t('notif_reserved', notifLocale, { name: escapeTgHtml(displayName), title: escapeTgHtml(result.title) }));
         }
       }
 
@@ -1291,7 +1292,7 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
             const { locale: notifLocale } = resolveLocaleWithSource(
               profileToLanguageSettings(owner.profile),
             );
-            void sendTgNotification(owner.telegramChatId, t('notif_reserved', notifLocale, { name: displayName, title: itemData.title }));
+            void sendTgNotification(owner.telegramChatId, t('notif_reserved', notifLocale, { name: escapeTgHtml(displayName), title: escapeTgHtml(itemData.title) }));
           }
         }
 

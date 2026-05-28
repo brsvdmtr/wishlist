@@ -24,8 +24,11 @@ const shared = vi.hoisted(() => ({
     groupBy: vi.fn(),
     findFirst: vi.fn(),
     findUnique: vi.fn(),
+    findMany: vi.fn(),
     aggregate: vi.fn(),
     update: vi.fn(),
+    count: vi.fn(),
+    updateMany: vi.fn(),
   },
   hint: { findFirst: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
 }));
@@ -46,7 +49,23 @@ vi.mock('@wishlist/db', () => {
       return null;
     }),
   };
-  return { prisma };
+  // Minimal Prisma namespace shim: the Serializable transactions in C2/C3
+  // pass `{ isolationLevel: Prisma.TransactionIsolationLevel.Serializable }`,
+  // and the catch branch does `instanceof Prisma.PrismaClientKnownRequestError`.
+  // The stub mirrors the runtime shape just enough to keep both expressions
+  // valid in tests; we never simulate a P2034 conflict here.
+  class PrismaClientKnownRequestError extends Error {
+    code: string;
+    constructor(message: string, opts: { code: string }) {
+      super(message);
+      this.code = opts.code;
+    }
+  }
+  const Prisma = {
+    TransactionIsolationLevel: { Serializable: 'Serializable' as const },
+    PrismaClientKnownRequestError,
+  };
+  return { prisma, Prisma };
 });
 
 import { registerItemsRouter } from './items.routes';
@@ -206,5 +225,70 @@ describe('POST /items/:id/move-category — ownership gate (PRO-only gate remove
     shared.wishlistItemPlacement.findUnique.mockResolvedValueOnce(null);
     const res = await request(app).post('/items/i1/move-category').send({ categoryId: 'c1' });
     expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /items/:id/restore — capacity recheck (C3 regression)', () => {
+  // Pre-fix: restore flipped status from DELETED → AVAILABLE with no quota
+  // verification. A FREE user could create N items at the 20-item ceiling,
+  // soft-delete some, create more, then restore the deleted ones → 2N items
+  // in a single wishlist. The fix reuses ent.plan.items + extraItemsPerWishlist
+  // and re-counts placements inside a Serializable transaction.
+
+  it('returns 402 paywall when restoring would push the wishlist over plan limit', async () => {
+    const { app } = makeApp();
+    // Archived item owned by the caller.
+    shared.item.findUnique.mockResolvedValueOnce({
+      id: 'i-archived',
+      status: 'DELETED',
+      wishlist: { ownerId: 'u-test' },
+    });
+    // Item lives in one wishlist that is already at the FREE 20-item ceiling.
+    shared.wishlistItemPlacement.findMany.mockResolvedValueOnce([
+      { wishlistId: 'w-full' },
+    ]);
+    shared.wishlistItemPlacement.count.mockResolvedValueOnce(20);
+
+    const res = await request(app).post('/items/i-archived/restore').send({});
+
+    expect(res.status).toBe(402);
+    expect(res.body).toMatchObject({
+      error: 'plan_limit_reached',
+      feature: 'item_limit',
+      limit: 20,
+      current: 20,
+      context: 'w-full',
+    });
+    // Critical: the update MUST NOT have happened — status stays DELETED.
+    expect(shared.item.update).not.toHaveBeenCalled();
+  });
+
+  it('permits restore when the destination wishlist has capacity headroom', async () => {
+    const { app } = makeApp();
+    shared.item.findUnique.mockResolvedValueOnce({
+      id: 'i-ok',
+      status: 'COMPLETED',
+      wishlist: { ownerId: 'u-test' },
+    });
+    shared.wishlistItemPlacement.findMany.mockResolvedValueOnce([
+      { wishlistId: 'w-ok' },
+    ]);
+    shared.wishlistItemPlacement.count.mockResolvedValueOnce(5); // well under 20
+    shared.item.update.mockResolvedValueOnce({
+      id: 'i-ok', wishlistId: 'w-ok', title: 'Item', url: '', priceText: null,
+      currency: 'RUB', imageUrl: null, priority: 'MEDIUM', position: 1,
+      status: 'AVAILABLE', description: null, sourceUrl: null, sourceDomain: null,
+      importMethod: null, wishlist: { id: 'w-ok', title: 'My WL' },
+    });
+
+    const res = await request(app).post('/items/i-ok/restore').send({});
+
+    expect(res.status).toBe(200);
+    expect(shared.item.update).toHaveBeenCalledOnce();
+    expect(shared.item.update.mock.calls[0]![0].data).toMatchObject({
+      status: 'AVAILABLE',
+      archivedAt: null,
+      purgeAfter: null,
+    });
   });
 });

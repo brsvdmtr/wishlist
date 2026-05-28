@@ -1978,25 +1978,88 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
 
       const wlForSub = await prisma.wishlist.findUnique({ where: { id: wishlistId }, select: { title: true } });
 
-      const item = await prisma.item.create({
-        data: {
-          wishlistId,
-          title: parsed.data.title,
-          url: parsed.data.url ?? '',
-          priceText: parsed.data.price != null ? String(parsed.data.price) : null,
-          priority: numToPriority(parsed.data.priority ?? 2),
-          imageUrl: parsed.data.imageUrl ?? null,
-          currency,
-          categoryId: (await prisma.wishlistCategory.findFirst({ where: { wishlistId, isDefault: true }, select: { id: true } }))?.id ?? null,
-        },
-        select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, position: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true, categoryId: true },
-      });
+      // Race protection: the pre-checks above are an optimistic fast path. Without
+      // a Serializable transaction wrapping the recount + create + placements, two
+      // concurrent POSTs can both pass `count < limit` at the same instant and
+      // both succeed → quota bypass. Mirrors the categories pattern at line ~1685.
+      // P2034 = Postgres 40001 surfaced by Prisma; we return 409 so the client
+      // retries with a fresh Idempotency-Key instead of treating it as outage.
+      const ACTIVE_PLACEMENT_STATUSES = ['AVAILABLE', 'RESERVED', 'PURCHASED'] as const;
+      type CreateOutcome =
+        | { kind: 'over_limit'; wishlistId: string; count: number; limit: number; isAdditional: boolean }
+        | { kind: 'created'; item: { id: string; wishlistId: string; title: string; url: string; priceText: string | null; currency: string; imageUrl: string | null; priority: 'LOW' | 'MEDIUM' | 'HIGH'; position: number; status: 'AVAILABLE' | 'RESERVED' | 'PURCHASED' | 'DELETED' | 'COMPLETED' | 'ARCHIVED'; description: string | null; sourceUrl: string | null; sourceDomain: string | null; importMethod: string | null; categoryId: string | null } };
 
-      // Dual-write: mirror primary placement + create additional placements.
-      await ensureItemPlacement(prisma, { wishlistId, itemId: item.id, position: item.position, categoryId: item.categoryId });
-      for (const { id: addId } of validatedAdditionals) {
-        await ensureItemPlacement(prisma, { wishlistId: addId, itemId: item.id });
+      let createOutcome: CreateOutcome | { kind: 'conflict' };
+      try {
+        createOutcome = await prisma.$transaction(
+          async (tx): Promise<CreateOutcome> => {
+            const reCount = await tx.wishlistItemPlacement.count({
+              where: { wishlistId, item: { status: { in: [...ACTIVE_PLACEMENT_STATUSES] } } },
+            });
+            if (reCount >= effectiveItemLimit) {
+              return { kind: 'over_limit', wishlistId, count: reCount, limit: effectiveItemLimit, isAdditional: false };
+            }
+            for (const { id: addId } of validatedAdditionals) {
+              const lim = ent.plan.items + (ent.extraItemsPerWishlist[addId] ?? 0);
+              const cnt = await tx.wishlistItemPlacement.count({
+                where: { wishlistId: addId, item: { status: { in: [...ACTIVE_PLACEMENT_STATUSES] } } },
+              });
+              if (cnt >= lim) {
+                return { kind: 'over_limit', wishlistId: addId, count: cnt, limit: lim, isAdditional: true };
+              }
+            }
+
+            const defaultCategoryId = (await tx.wishlistCategory.findFirst({ where: { wishlistId, isDefault: true }, select: { id: true } }))?.id ?? null;
+            const created = await tx.item.create({
+              data: {
+                wishlistId,
+                title: parsed.data.title,
+                url: parsed.data.url ?? '',
+                priceText: parsed.data.price != null ? String(parsed.data.price) : null,
+                priority: numToPriority(parsed.data.priority ?? 2),
+                imageUrl: parsed.data.imageUrl ?? null,
+                currency,
+                categoryId: defaultCategoryId,
+              },
+              select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, position: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true, categoryId: true },
+            });
+
+            await ensureItemPlacement(tx, { wishlistId, itemId: created.id, position: created.position, categoryId: created.categoryId });
+            for (const { id: addId } of validatedAdditionals) {
+              await ensureItemPlacement(tx, { wishlistId: addId, itemId: created.id });
+            }
+
+            return { kind: 'created', item: created };
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+          createOutcome = { kind: 'conflict' };
+        } else {
+          throw err;
+        }
       }
+
+      if (createOutcome.kind === 'over_limit') {
+        trackEvent('feature_gate_hit_item_limit', user.id, {
+          plan: ent.plan.code,
+          count: createOutcome.count,
+          limit: createOutcome.limit,
+          ...(createOutcome.isAdditional ? { context: 'multi_placement' } : {}),
+        });
+        return sendPaywall(res, 402, makePlanLimitReached('item_limit', {
+          limit: createOutcome.limit,
+          current: createOutcome.count,
+          planCode: ent.plan.code,
+          ...(createOutcome.isAdditional ? { context: createOutcome.wishlistId } : {}),
+          skuCode: 'extra_items_5',
+        }));
+      }
+      if (createOutcome.kind === 'conflict') {
+        return res.status(409).json({ error: 'concurrent_modification', code: 'SERIALIZATION_CONFLICT', message: 'Please retry the request.' });
+      }
+      const item = createOutcome.item;
       if (validatedAdditionals.length > 0) {
         trackEvent('wish_multi_placement_created', user.id, {
           itemId: item.id,

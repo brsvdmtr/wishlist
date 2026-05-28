@@ -47,6 +47,7 @@ import { t, resolveLocaleWithSource, profileToLanguageSettings } from '@wishlist
 import { asyncHandler } from '../lib/asyncHandler';
 import { zodError } from '../lib/http';
 import { sendTgNotification } from '../telegram/botApi';
+import { escapeTgHtml } from '../telegram/html';
 import { makeAddonRequired, sendPaywall } from '../services/paywall';
 
 // Shape of the Telegram initData user object — duplicated from index.ts to
@@ -380,7 +381,7 @@ export function registerGroupGiftsRouter(deps: GroupGiftsRouterDeps): Router {
       });
       if (organizer?.telegramChatId) {
         const { locale } = resolveLocaleWithSource(profileToLanguageSettings(organizer.profile));
-        void sendTgNotification(organizer.telegramChatId, t('notif_group_gift_joined', locale, { name: displayName }));
+        void sendTgNotification(organizer.telegramChatId, t('notif_group_gift_joined', locale, { name: escapeTgHtml(displayName) }));
       }
 
       // Return updated group gift

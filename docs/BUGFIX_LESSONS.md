@@ -5,6 +5,174 @@ New entries go at the top.
 
 ---
 
+## 2026-05-28 — Security audit triage: HTML-injection в Telegram-уведомлениях + quota race на item create/restore
+
+Не классический «прилетел баг — починили», а аудит всего проекта на security
+(6 параллельных Explore-агентов). Из 30+ находок четыре прошли валидацию как
+эксплуатируемые Critical-сценарии и легли в этот bundle. Остальные — false
+positives либо отдельные тикеты в очередь.
+
+### Симптом
+
+Аудит подсветил три класса проблем, все три уже реальные в проде:
+
+1. **Telegram HTML-injection.** Item title, displayName, custom birthday
+   message и subscriber-notify metadata интерполируются в i18n-шаблоны и
+   отправляются через `sendTgNotification` / `sendTgBotMessage` с
+   `parse_mode: 'HTML'` (`apps/api/src/telegram/botApi.ts:32,61`). При этом
+   функция `escapeTgHtml()` уже существовала и применялась только в
+   `comments.routes.ts`, `commentNotificationQueue.ts` и
+   `research-survey-invite.ts` — но НЕ в reservations, items, group-gifts,
+   schedulers/reservations, services/items, schedulers/birthday-reminders.
+   Любой пользователь мог поставить title `<a href="https://evil">click</a>`
+   и владелец вишлиста получал клик-уведомление с реальной ссылкой на
+   фишинг-домен.
+2. **Item quota race.** `POST /tg/wishlists/:id/items` делал `count() → check
+   < limit → create()` снаружи транзакции (`wishlists.routes.ts:1921`). Два
+   параллельных POST из одной сессии оба читали count=19 при лимите 20, оба
+   проходили гейт, оба создавали → 21 item в FREE-вишлисте. Дешёвый
+   monetization-bypass через double-tap кнопки или GraphQL/REST batch.
+3. **Item restore quota bypass.** `POST /tg/items/:id/restore` и
+   `POST /tg/items/bulk-restore` флипали `status: DELETED|COMPLETED →
+   AVAILABLE` без проверки capacity. Поскольку placement-rows у архивных
+   item'ов остаются на месте и фильтруются только по item.status в
+   `countActivePlacementsInWishlist`, схема create-20 → delete-10 →
+   create-10 → restore-10 давала 30 active items при FREE-лимите 20.
+
+### Root cause
+
+**Общий шаблон у всех трёх — "доверять оптимистичной проверке без
+транзакции".** Authoring-layer (route handler) считает что `await count()`
+даст stable view, пока не дойдёт до `await create/update`. На read-committed
+PostgreSQL это просто неправда: между двумя awaits любой concurrent writer
+может изменить состояние, на которое мы опирались. C2 и C3 — буквально один
+и тот же anti-pattern; шаблон Serializable+P2034 для категорий уже жил в
+коде (`wishlists.routes.ts:1685`, `santa.routes.ts:2780`), но не был
+распространён на новые state-changing routes.
+
+Для HTML-injection root cause проще: `escapeTgHtml()` появилась с одним
+конкретным callsite (comments), и каждый следующий разработчик скопировал
+готовый паттерн `sendTgNotification(chatId, t(key, locale, {title}))` без
+проверки, что title прошёл через escape. Утилита была, дисциплина её
+применения — нет.
+
+### Lesson
+
+1. **`escapeTgHtml()` обязателен на любой interpolation, идущий через
+   `parse_mode: 'HTML'`.** Контракт ровно такой: всё, что НЕ из статичного
+   i18n-template, escape-нуть на границе в payload. Telegram парсит `<b>`,
+   `<a>`, `<code>` — никакой "доверенной" user-controlled строки не
+   существует, даже first_name из initDataUnsafe, потому что Telegram
+   разрешает почти любые Unicode-символы в profile name (включая `<>&`).
+
+2. **Quota-check pattern должен быть формализован как Serializable txn.**
+   В проекте уже есть рабочий шаблон в `wishlists.routes.ts:1685` (Categories
+   quota) и `santa.routes.ts:2780` (Santa join cap):
+   ```ts
+   let outcome: ... | { kind: 'conflict' };
+   try {
+     outcome = await prisma.$transaction(async (tx) => {
+       const cnt = await tx.X.count(...);
+       if (cnt >= limit) return { kind: 'over_limit', ... };
+       const row = await tx.X.create(...);
+       return { kind: 'ok', row };
+     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+   } catch (err) {
+     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+       outcome = { kind: 'conflict' };
+     } else throw err;
+   }
+   if (outcome.kind === 'conflict') return res.status(409).json({ ... });
+   ```
+   Это shared pattern — копировать целиком, не "оптимизировать".
+
+3. **State-transitions (status DELETED → AVAILABLE) — это тот же class
+   как create.** Restore делает то, что create делает: добавляет active
+   placement в wishlist. Если create check'ает quota, restore тоже обязан
+   check'ать. Если restore не check'ит — это не "minor convenience flow",
+   это просто create через back-door. Аналогично работает unarchive любого
+   container'а.
+
+4. **Find/replace audit — обязательная часть введения security-utility.**
+   Когда добавили `escapeTgHtml()` в одно место — должны были одновременно
+   gграрнуть `grep -rn "parse_mode.*HTML"` + `grep -rn "sendTgNotification"`
+   и убедиться, что во всех callsites с user input уже стоит escape. Что-то
+   вроде ESLint custom rule (или CI lint), которое падает на нескриненный
+   interpolation в `t(..., HTML-template)`, было бы лучше. Пока сделали
+   manual sweep.
+
+### Rule
+
+- **Новый state-changing route с quota / capacity / dedup check** — обязан
+  использовать Serializable txn по шаблону из `wishlists.routes.ts:1685`.
+  Снаружи txn разрешена только optimistic fast-path проверка (для UX —
+  чтобы не пейлоадить serializable retry на очевидный over-limit). In-tx
+  recount — единственный источник истины для capacity.
+
+- **Любой `sendTgNotification` / `sendTgBotMessage` callsite, который
+  интерполирует user-controlled значение (item title, display name, custom
+  message, search query, comment text)** — должен пропускать значение через
+  `escapeTgHtml()` ровно один раз, на границе. Не доверять `t(...)` — i18n
+  template даёт только статичный wrap, dynamic substitutions остаются raw.
+
+- **State transitions, которые re-activate ресурсы (status → AVAILABLE,
+  archivedAt → null, etc.)** должны проходить тот же entitlement / capacity
+  check, что и creation path. Не делать `prisma.X.update({status: ...})` без
+  recount.
+
+- **Аудит безопасности новых утилит**: добавил `escape*` / `validate*` /
+  `enforce*` helper — в том же PR пройди `grep -rn` по всем потенциальным
+  callsite-паттернам (`parse_mode`, `prisma.X.update`, etc.) и убедись, что
+  утилита применена во всех релевантных местах. Иначе она становится
+  опциональной — а opt-in security utility = uneven coverage.
+
+### Better code
+
+Все три класса фикснуты в одном bundle (этот коммит):
+
+1. **C1 (HTML escape)** — добавлен `escapeTgHtml()` на 9 callsite в 6
+   файлах: `reservations.routes.ts:985,1294`, `items.routes.ts:861,932,1001`,
+   `group-gifts.routes.ts:383`, `schedulers/reservations.ts:231,240,286`,
+   `services/items.ts:131-145`, `schedulers/birthday-reminders.ts:195-204`.
+   Регрессии: `telegram/html.test.ts` (юнит) +
+   `services/items.test.ts → notifySubscribersOfChange escape regression`.
+
+2. **C2 (Item create race)** — `wishlists.routes.ts:1981+` обёрнут в
+   Serializable txn с in-tx recount + P2034 → 409. Pre-tx fast-path
+   проверка сохранена для UX (моментальный 402 на очевидный over-limit).
+
+3. **C3 (Restore quota)** — `items.routes.ts:1017+` (single restore) и
+   `items.routes.ts:496+` (bulk-restore) — recount всех host-wishlist
+   placements в Serializable txn перед статус-флипом. Bulk-restore делает
+   greedy allocation: items без места в host-wishlist'е попадают в
+   `failed: [{itemId, reason: 'target_limit_reached'}]`. Регрессия:
+   `routes/items.routes.test.ts → POST /items/:id/restore — capacity recheck`.
+
+### Что НЕ вошло в этот bundle
+
+Из 30+ находок аудита 4 были подтверждены как Critical. Остальное:
+
+- **DNS rebinding TOCTOU в `imageProcessor.ts:97-104`** (URL-based avatar
+  upload) — отдельный фикс с `undici.Agent({connect: {lookup}})` для pin'а
+  IP-адреса между `assertDnsIsSafe()` и `fetch()`. Severity High,
+  не Critical → отдельный коммит.
+- **Item URL scheme allowlist в Mini App** — `<a href={item.url}>` без
+  scheme-фильтра позволяет `tg://user?id=...` deeplink, phishing-вектор.
+  Отдельный коммит.
+- **God-mode flag persisted в DB** — `user.godMode=true` остаётся после
+  удаления из `GOD_MODE_TELEGRAM_IDS` env. Insider-only, severity Medium.
+- **File upload MIME magic-bytes** — opt-in, отдельный тикет.
+- **Mini App `topbar.innerHTML = ${tgUser.first_name}`** — self-XSS only,
+  Low.
+
+False positives из аудита:
+- Smart Reservations TTL bypass (server controls expiresAt).
+- Telegram webhook signature missing (бот на long polling, нет surface).
+- Reservation visibility leak (`reserverUserId` виден участникам по
+  дизайну, скрыт от OWNER — это работает корректно).
+
+---
+
 ## 2026-05-27 — E11 `useExperiment` race: 401 before initData ready → user silently pinned to control
 
 ### Симптом

@@ -27,6 +27,7 @@ import { t, resolveLocaleWithSource } from '@wishlist/shared';
 import logger from '../logger';
 import { secureCompare } from '../lib/crypto';
 import { sendTgBotMessage, sendTgNotification } from '../telegram/botApi';
+import { escapeTgHtml } from '../telegram/html';
 import { getOrCreateTgUser, tgActorHash, type TelegramUser } from './telegram-auth';
 import { profileToLanguageSettings } from './locale';
 
@@ -130,18 +131,18 @@ export async function notifySubscribersOfChange(
         let text = '';
         if (eventType === 'item_added') {
           text = t('sub_notification_new_item', locale, {
-            owner: meta.ownerName ?? '…',
-            title: meta.itemTitle ?? '…',
-            wishlist: meta.wishlistTitle ?? '…',
+            owner: escapeTgHtml(meta.ownerName ?? '…'),
+            title: escapeTgHtml(meta.itemTitle ?? '…'),
+            wishlist: escapeTgHtml(meta.wishlistTitle ?? '…'),
           });
         } else if (eventType === 'item_updated') {
           text = t('sub_notification_updated', locale, {
-            title: meta.itemTitle ?? '…',
-            wishlist: meta.wishlistTitle ?? '…',
+            title: escapeTgHtml(meta.itemTitle ?? '…'),
+            wishlist: escapeTgHtml(meta.wishlistTitle ?? '…'),
           });
         } else {
           text = t('sub_notification_wishlist_updated', locale, {
-            title: meta.wishlistTitle ?? '…',
+            title: escapeTgHtml(meta.wishlistTitle ?? '…'),
           });
         }
 
