@@ -291,27 +291,47 @@ FROM "UserProfile" WHERE "userId" = '<test_user>';
 
 ## 5. Self-check (после мерджа)
 
-Запустить через 7 дней после деплоя:
+> **Changelog 2026-05-28:** Q1 переписан после первого dry-run'а
+> [`.github/workflows/referral-self-check.yml`](../../.github/workflows/referral-self-check.yml).
+> Старая формулировка считала только NEW users
+> (`createdAt >= deploy_date`), но beacon работает first-touch на EXISTING
+> users тоже — за 1 день post-deploy в проде было 3 атрибуции (все
+> существующих юзеров) и 0 new-user-атрибуций. Старый Q1 = 0%, при
+> работающей фиче — потому что 9 новых юзеров за день пришли органикой,
+> а не через share. См. § 5.1 нижe для текущей версии.
+
+Автоматизировано через GitHub Actions cron `referral-self-check.yml`,
+fires 2026-06-03 07:00 UTC. Можно прогнать вручную через `workflow_dispatch`.
+
+### 5.1 SQL (текущая версия)
 
 ```sql
--- Ratio of users with attribution
+-- Q1: attribution write rate per active Mini App session in window.
+-- Numerator: first-touch beacon writes that landed in the window
+--   (irrespective of when UserProfile was created — first-touch fires
+--    on existing users too).
+-- Denominator: distinct userIds with at least one AnalyticsEvent in
+--   the window (proxy for "active Mini App users").
 SELECT
-  COUNT(*) AS total,
-  COUNT("firstAcquisitionSource") AS attributed,
-  ROUND(100.0 * COUNT("firstAcquisitionSource") / COUNT(*), 1) AS pct
-FROM "UserProfile"
-WHERE "createdAt" >= '<deploy-date>';
--- expectation: 25-40% (зависит от share-traffic share; <10% = что-то не подключено)
+  (SELECT COUNT(*)
+     FROM "UserProfile"
+     WHERE "firstAcquisitionAt" >= '<deploy-date>') AS attributed,
+  (SELECT COUNT(DISTINCT "userId")
+     FROM "AnalyticsEvent"
+     WHERE "createdAt" >= '<deploy-date>' AND "userId" IS NOT NULL) AS active_users;
+-- expectation: attributed / active_users ≥ 5%
+-- (lower than the original 20% — most users come via /start, not share-link;
+--  the absolute number matters more than the ratio under steady traffic)
 
--- Distribution of sources for new users
+-- Q2: source distribution
 SELECT "firstAcquisitionSource", COUNT(*)
 FROM "UserProfile"
-WHERE "createdAt" >= '<deploy-date>'
+WHERE "firstAcquisitionAt" >= '<deploy-date>'
   AND "firstAcquisitionSource" IS NOT NULL
 GROUP BY 1 ORDER BY 2 DESC;
--- expectation: share_link >> curated_selection > referral (~0 если program OFF)
+-- expectation: share_link >> curated_selection > public_profile > referral (~0 если program OFF)
 
--- guest.converted_to_user emission rate
+-- Q3: guest.converted_to_user emission rate
 SELECT
   (SELECT COUNT(*) FROM "AnalyticsEvent" WHERE event='guest.converted_to_user' AND "createdAt" >= '<deploy-date>') AS converted,
   (SELECT COUNT(*) FROM "AnalyticsEvent" WHERE event='guest.view_opened' AND "createdAt" >= '<deploy-date>') AS views,
@@ -320,13 +340,16 @@ SELECT
 ```
 
 **Что считаем pass:**
-- ≥ 20% новых пользователей за 7 дней имеют `firstAcquisitionSource != NULL`
+- ≥ 5% активных Mini App юзеров за период имеют `firstAcquisitionAt` в окне
 - `guest.converted_to_user` стреляет ≥ 5 раз за период
-- Распределение sources не моноклон (i.e. не 100% `share_link`)
+- Распределение sources не моноклон (≥ 2 distinct sources)
 
 **Что считаем fail (нужно копать дальше):**
-- 0–5% attribution rate → beacon не подключён где-то, или эндпоинт зеркалит ошибку
+- 0–1% attribution rate → beacon не подключён где-то, или эндпоинт зеркалит ошибку
 - 100% одного source → один path работает, остальные забыли подключить
+  (для текущего проде состояния `share_link` дominate'ит — нормально, но
+   stable-state с 1 источником на 100% означает, что `cs_`/`profile_`/`ref_`
+   path'ы либо не используются, либо не подключены)
 - emit rate близок к 0 → `evaluateGuestConversion` всё ещё over-gates, копать второй раз
 
 ---

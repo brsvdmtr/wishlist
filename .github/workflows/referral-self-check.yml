@@ -62,15 +62,23 @@ jobs:
             DEPLOY_DATE='2026-05-27'
             echo "=== Self-check window: rows created since $DEPLOY_DATE ==="
 
-            # === Query 1: attribution rate among new UserProfiles ===
-            TOTAL=$($PSQL -c "SELECT COUNT(*) FROM \"UserProfile\" WHERE \"createdAt\" >= '$DEPLOY_DATE';")
-            ATTRIBUTED=$($PSQL -c "SELECT COUNT(*) FROM \"UserProfile\" WHERE \"createdAt\" >= '$DEPLOY_DATE' AND \"firstAcquisitionSource\" IS NOT NULL;")
-            if [ "$TOTAL" -gt 0 ]; then
-              PCT=$(( ATTRIBUTED * 100 / TOTAL ))
+            # === Query 1: attribution rate among Mini App sessions in window ===
+            # Measures beacon health by counting first-touch writes that landed
+            # in the window — NOT users created in the window. The beacon is
+            # first-touch-only (updateMany WHERE firstAcquisitionSource IS NULL)
+            # so it fires for any user with a NULL column on their first eligible
+            # entry-path open, regardless of when their UserProfile row was
+            # created. Denominator: unique Mini App sessions in the window
+            # (proxied by distinct userIds in AnalyticsEvent, which fires on
+            # every Mini App boot via miniapp.* events).
+            ATTRIBUTED=$($PSQL -c "SELECT COUNT(*) FROM \"UserProfile\" WHERE \"firstAcquisitionAt\" >= '$DEPLOY_DATE';")
+            ACTIVE_USERS=$($PSQL -c "SELECT COUNT(DISTINCT \"userId\") FROM \"AnalyticsEvent\" WHERE \"createdAt\" >= '$DEPLOY_DATE' AND \"userId\" IS NOT NULL;")
+            if [ "$ACTIVE_USERS" -gt 0 ]; then
+              PCT=$(( ATTRIBUTED * 100 / ACTIVE_USERS ))
             else
               PCT=0
             fi
-            echo "Q1: total=$TOTAL attributed=$ATTRIBUTED pct=${PCT}%"
+            echo "Q1: attributed_in_window=$ATTRIBUTED active_users_in_window=$ACTIVE_USERS pct=${PCT}%"
 
             # === Query 2: source distribution (not monocline) ===
             SOURCES_CSV=$($PSQL -c "SELECT \"firstAcquisitionSource\" || ':' || COUNT(*) FROM \"UserProfile\" WHERE \"createdAt\" >= '$DEPLOY_DATE' AND \"firstAcquisitionSource\" IS NOT NULL GROUP BY \"firstAcquisitionSource\" ORDER BY COUNT(*) DESC;" | tr '\n' ' ')
@@ -85,11 +93,14 @@ jobs:
 
             # === Thresholds from guest-conversion-spec.md § 5 ===
             # PASS:
-            #   - attribution rate ≥ 20%
+            #   - attribution rate ≥ 5% of active Mini App users in the window
+            #     (rewritten 2026-05-28: the old "≥ 20% of NEW users" threshold
+            #      missed the first-touch fires on EXISTING users, which is the
+            #      dominant case under steady traffic — see § 5 changelog)
             #   - guest.converted_to_user ≥ 5
             #   - distinct sources ≥ 2 (not monocline)
             FAILURES=()
-            [ "$PCT" -lt 20 ]              && FAILURES+=("attribution rate is ${PCT}% (need ≥ 20%)")
+            [ "$PCT" -lt 5 ]               && FAILURES+=("attribution rate is ${PCT}% of active users (need ≥ 5%)")
             [ "$CONVERTED" -lt 5 ]         && FAILURES+=("guest.converted_to_user fired $CONVERTED times (need ≥ 5)")
             [ "$DISTINCT_SOURCES" -lt 2 ]  && FAILURES+=("only $DISTINCT_SOURCES distinct source(s) — monocline distribution")
 
@@ -108,7 +119,7 @@ jobs:
               NEXT_STEP="Investigate before flipping:${NL}${FAIL_LIST}${NL}Likely cause: one of 4 entry paths in apps/web/app/miniapp/lib/attribution.ts didn't wire correctly. Trace which start-payload types are absent from the source distribution above — that's the broken path."
             fi
 
-            REPORT="${EMOJI} Referral self-check ${DATE} — ${VERDICT}${NL}${NL}Q1 attribution rate: ${PCT}% (${ATTRIBUTED}/${TOTAL})${NL}Q2 sources: ${SOURCES_CSV}${NL}Q3 guest.converted: ${CONVERTED} (views ${VIEWS}, new wishlists ${NEW_WISHLISTS})${NL}${NL}Next step:${NL}${NEXT_STEP}${NL}${NL}— delete .github/workflows/referral-self-check.yml after this fires (one-shot)."
+            REPORT="${EMOJI} Referral self-check ${DATE} — ${VERDICT}${NL}${NL}Q1 attribution rate: ${PCT}% (${ATTRIBUTED} attributed / ${ACTIVE_USERS} active users in window)${NL}Q2 sources: ${SOURCES_CSV}${NL}Q3 guest.converted: ${CONVERTED} (views ${VIEWS}, new wishlists ${NEW_WISHLISTS})${NL}${NL}Next step:${NL}${NEXT_STEP}${NL}${NL}— delete .github/workflows/referral-self-check.yml after this fires (one-shot)."
 
             echo "=== REPORT ==="
             echo "$REPORT"
