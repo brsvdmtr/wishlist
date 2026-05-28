@@ -237,6 +237,21 @@ importers:
         specifier: ^2.1.9
         version: 2.1.9(@types/node@20.14.11)(jsdom@25.0.1)
 
+  infra/cloudflare/image-proxy-worker:
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20251001.0
+        version: 4.20260525.1
+      typescript:
+        specifier: ^5.5.4
+        version: 5.5.4
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@20.14.11)(jsdom@25.0.1)
+      wrangler:
+        specifier: ^3.114.0
+        version: 3.114.17(@cloudflare/workers-types@4.20260525.1)
+
   infra/cloudflare/maintenance-worker:
     devDependencies:
       '@cloudflare/workers-types':
