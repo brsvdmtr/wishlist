@@ -130,6 +130,11 @@ services:
         # using the runtime `environment:` block below.
         NEXT_PUBLIC_GLITCHTIP_DSN: ${NEXT_PUBLIC_GLITCHTIP_DSN:-}
         NEXT_PUBLIC_APP_RELEASE: ${APP_RELEASE:-unknown}
+        # Kill switch for the Cloudflare image-proxy Worker. Unset / any
+        # value ≠ "enabled" → `proxyImageUrl()` returns the raw URL
+        # (pre-2026-05-28 direct loads). Set to "enabled" once the Worker
+        # at infra/cloudflare/image-proxy-worker is deployed.
+        NEXT_PUBLIC_IMAGE_PROXY: ${NEXT_PUBLIC_IMAGE_PROXY:-}
     restart: unless-stopped
     stop_grace_period: 30s
     environment:
