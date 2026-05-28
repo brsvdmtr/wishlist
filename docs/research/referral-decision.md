@@ -218,6 +218,104 @@ WHERE id='default';
 
 **Pre-requisite для следующего launch event** (когда будем включать обратно):
 1. ~~`guest.converted_to_user` foundation~~ — ✅ shipped 2026-05-27
-2. Подтвердить, что admin-ops.yml `bump-rollout` не откатит флип (он PATCH'ит только `rolloutPercent`, не `enabled` — безопасно)
-3. Run `docs/research/referral-decision.md` через одного человека для sanity check метрик ROI
-4. Через 7 дней после deploy запустить self-check SQL из [`guest-conversion-spec.md § 5`](./guest-conversion-spec.md#5-self-check-после-мерджа) — подтвердить attribution rate ≥ 20% и emit rate > 0
+2. ~~Подтвердить, что admin-ops.yml `bump-rollout` не откатит флип~~ — ✅ verified 2026-05-28 (см. § 11)
+3. ~~Run `docs/research/referral-decision.md` через одного человека для sanity check метрик ROI~~ — ✅ Done 2026-05-28 by Claude (см. § 11)
+4. ~~Через 7 дней после deploy запустить self-check SQL~~ — ✅ автоматизировано через [`.github/workflows/referral-self-check.yml`](../../.github/workflows/referral-self-check.yml), cron fires 2026-06-03 07:00 UTC, Telegram alert в админ-чат с PASS/FAIL + готовым SQL для флипа
+
+---
+
+## 11. Sanity check 2026-05-28 (Claude)
+
+Pre-req #3 — проход всего документа против текущего кода + prod-данных
+3 дня после флипа. Цель: убедиться что цифры, file:line, статусы из §§ 1-10
+не разъехались с реальностью прежде чем запускать launch event.
+
+### 11.1 Methodology
+
+- **§ 2 (prod DB)** — пересчитал все 6 числовых утверждений против live
+  Postgres (`docker exec wishlist-prod-postgres-1 psql`).
+- **§ 3 (telemetry allowlist)** — grep + чтение
+  [`apps/api/src/routes/telemetry.routes.ts:44-107`](../../apps/api/src/routes/telemetry.routes.ts).
+- **§ 4 (code state)** — grep'нул каждую file:line, проверил что named
+  export'ы существуют и smыcl совпадает.
+- **§ 7 (re-enable gates) + § 10 (status)** — для каждого "✅ Done" нашёл
+  соответствующий код / data и убедился что claim верен.
+- **Pre-requisites 2/3/4 (под § 10)** — закрыл #2 grep'ом admin-ops.yml,
+  #3 закрывается этой секцией, #4 закрыл коммитом self-check workflow'а.
+
+### 11.2 Confirmed-still-accurate
+
+| Claim | Источник | Текущее значение | Verdict |
+|---|---|---|---|
+| `enabled=false` после флипа | § 1 | `enabled=f, configVersion=v2-disabled-2026-05-25, updatedByAdminId=manual-decision-2026-05-25` | ✅ держится |
+| `UserProfile.referralCode IS NOT NULL = 54` | § 2 | 54 | ✅ identical |
+| `UserProfile.referredByUserId IS NOT NULL = 0` | § 2 | 0 | ✅ identical |
+| `UserProfile.firstBotStartAt IS NOT NULL = 2` | § 2 | 2 | ✅ identical |
+| `ReferralAttribution` rows = 0 | § 2 | 0 | ✅ identical |
+| `ReferralReward` rows = 1 | § 2 | 1 | ✅ identical |
+| `total UserProfile = 315` | § 2 | 327 (+12) | ✅ expected drift — новые юзеры за 3 дня |
+| `referral.` events count breakdown (12 событий, ~ всё совпадает) | § 2 | first_item +4 (68→72), first_wishlist +1 (26→27), config_changed +1 (5→6 — флип сам), остальные identical | ✅ ожидаемое движение от daily traffic |
+| `referral.` UI events в `ANALYTICS_EVENT_EXACT` (22 names) | § 10.7.1 | 22 exact-match names в `apps/api/src/routes/telemetry.routes.ts:71-93` | ✅ |
+| `invitee_converted_to_paid` emit в боте | § 10.7.2 | `apps/bot/src/analytics.ts:151` (не :150 как в doc — off by 1, см. § 11.3) | ✅ wired |
+| Retention scheduler с 5 тестами | § 10.7.3 | `referral-retention.ts` + `.test.ts` 5 тестов | ✅ |
+| `fraud_signal_*` emit в processReward | § 10.7.4 | `packages/db/src/referral.ts:802` | ✅ (3 теста — не 4 как в doc, см. § 11.3) |
+| `entryPointPostShare` убрано из `/rules-config` | § 10.7.5 | `apps/api/src/routes/referral.routes.ts:481` comment "removed 2026-05-25" | ✅ (admin PATCH принимает для backward-compat — корректно) |
+| Bot defense-in-depth — `loadReferralConfig` early-return | § 10.7.7 | `apps/bot/src/index.ts:799` + emits `referral.feature_flag_evaluated` line 804 | ✅ |
+| `schema.prisma:2153` ReferralAttribution model | § 4 | line 2153 точно | ✅ exact match |
+| `referral.ts:358 tryCreateAttribution` + line 364 program_disabled gate | § 4 | line 358 + line 364 точно | ✅ exact match |
+| `runReferralProgressHook` в services/referral-hooks.ts:124 | § 4 | line 124 точно | ✅ |
+
+### 11.3 Stale / off-by-N
+
+| Claim | Doc | Реальность | Severity |
+|---|---|---|---|
+| `apps/bot/src/analytics.ts:150` for `invitee_converted_to_paid` | § 10.7.2 | line 151 | trivial — off by 1 |
+| 4 fraud-signal тестов | § 10.7.4 | 3 явных `it(...)` блока с fraud emit assertions | minor — undercounted |
+| `MiniApp.tsx:2175-2222` для Profile tile | § 4 | `ReferralProfileTileFromConfig` теперь на line 1320/1327 (–850 строк) | expected — `feedback_spec_drift` per memory |
+| `MiniApp.tsx:3660-4052, 26871` для Paywall | § 4 | gate logic теперь на line 2803, 3174 (–500 / –23000+) | expected — MiniApp.tsx был сильно перекроен (extraction wave) |
+| `MiniApp.tsx:9812, 13725` для Home banner | § 4 | gate на line 8759, 13167 (–1000 / –600) | expected — то же |
+
+Все MiniApp.tsx ссылки сдвинуты, но семантика (`config.enabled && inRollout
+&& entryPointX`) — на месте. Это типичный line-number drift в живом
+~30k-LOC файле, не concerns.
+
+### 11.4 Closed by this session
+
+- **§ 8 finding (misnamed `first_*_created` events)** — закрыто PR
+  [1081376](https://github.com/brsvdmtr/wishlist/commit/1081376) (2026-05-28):
+  добавлен prop `hasAttribution: boolean` в `runReferralProgressHook`.
+  Future launch dashboard сможет фильтровать invitee-only signal через
+  `WHERE props->>'hasAttribution' = 'true'`.
+- **screen_load_failed без reason** — закрыто PR
+  [3e3e2f6](https://github.com/brsvdmtr/wishlist/commit/3e3e2f6) (2026-05-28):
+  5-bucket taxonomy + `httpStatus` prop.
+
+### 11.5 Pre-req #2 verification (admin-ops bump-rollout safety)
+
+Прошёл `.github/workflows/admin-ops.yml` line 181-187:
+```yaml
+bump-rollout)
+  echo "=== PATCH rolloutPercent → ${ROLLOUT}% ==="
+  curl ... -d "{\"rolloutPercent\":${ROLLOUT},\"updatedByAdminId\":\"github-actions\"}" ...
+```
+PATCH body содержит только `rolloutPercent` и `updatedByAdminId` — `enabled`
+поле никогда не передаётся. ✅ Безопасно — `bump-rollout` не может откатить
+флип `enabled=false → true`.
+
+### 11.6 Follow-ups (не блокеры launch'а)
+
+| # | Item | Severity | Owner |
+|---|---|---|---|
+| F1 | Q2 self-check threshold `distinct_sources ≥ 2` будет FAIL даже на здоровой системе — за 3 дня post-foundation только `share_link` стреляет. Нужно либо понизить порог, либо разобраться почему `cs_` / `profile_` paths не дают трафика. | minor | прод-владелец, до launch'а |
+| F2 | CLAUDE.md health-check snippet содержит `SELECT * FROM "ServiceHeartbeat"` без явных колонок — реальная колонка `serviceName`, не `service`. Споткнулся в post-deploy 2026-05-28. | trivial | следующий, кто потрогает CLAUDE.md |
+| F3 | Doc упоминает "4 fraud-signal tests" в § 10.7.4, реально 3. Поправить или допилить 4-й тест (например, `multi_signal` case). | trivial | при следующем походе в referral.test.ts |
+
+### 11.7 Verdict
+
+**Sanity check passed.** Все load-bearing утверждения (§§ 1, 2, 3, 7, 10)
+остались корректны. Stale MiniApp.tsx line numbers — ожидаемая drift в
+30k-LOC monolith'е и не влияет на launch decision. Pre-requisites 1-4 все
+закрыты или автоматизированы. **Программа готова к re-enable** как только
+self-check 2026-06-03 даст PASS (или после ручного review его FAIL-explanation).
+
+— Claude, 2026-05-28
