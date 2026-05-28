@@ -480,7 +480,7 @@ export const PRODUCT_EVENTS = [
     domain: 'santa',
     action: 'gate_hit',
     description:
-      'A FREE user hit a Secret Santa PRO gate — the API returned 402 pro_required. props.feature: santa_multi_wave | santa_exclusions | santa_exclusion_groups. Server-authoritative — emitted by the route handler, never trusted from a client.',
+      'A FREE user hit a Secret Santa PRO gate — the API returned 402 pro_required. props.feature: santa_multi_wave | santa_exclusions | santa_exclusion_groups | santa_hint. For santa_hint the FREE allowance is quota-based (1/campaign) — props also include limit, previousCount, plan, campaignId. Server-authoritative — emitted by the route handler, never trusted from a client.',
     sources: ['server'],
     pii: 'userId-only',
   },

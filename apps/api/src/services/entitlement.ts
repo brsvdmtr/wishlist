@@ -57,10 +57,27 @@ export const PLANS = {
     items: 70,       // reduced from 100; MAX tier will be 200+
     participants: 20,
     subscriptions: 5, // reduced from 7; 5 covers active users well; MAX will offer 15+
-    categoriesPerWishlist: 20,
+    // PRO is "unlimited categories" — the sentinel signals no upper bound to
+    // the counter UI (only FREE renders "used/limit"; PRO suppresses the chip)
+    // and aligns with PRO URL-import / hints being unmetered.
+    categoriesPerWishlist: Number.MAX_SAFE_INTEGER,
     features: ['comments', 'url_import', 'hints'],
   },
 } as const;
+
+// ─── SKU visibility ─────────────────────────────────────────────────────────
+// SKUs whose entry stays in ONE_TIME_SKUS (so historical purchases keep
+// resolving and direct invoice payloads still work) but which are HIDDEN
+// from the add-on inventory endpoints. The store / paywall sheet never
+// renders a buy card for these SKUs — existing buyers keep what they have,
+// new buyers can't acquire them through the visible UI.
+//
+// Why hide instead of delete: payment-event reconciliation, refund flows,
+// and the bot's invoice handler all index by SKU code. Removing the
+// catalogue entry breaks those, so we filter only at the inventory boundary.
+export const HIDDEN_FROM_INVENTORY_SKUS = new Set<string>([
+  'seasonal_decoration', // 2026-05-28 Conservative pricing patch: unused in visible UI
+]);
 
 export type PlanCode = keyof typeof PLANS;
 export type PlanInfo = (typeof PLANS)[PlanCode];

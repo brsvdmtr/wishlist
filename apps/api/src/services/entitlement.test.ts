@@ -44,6 +44,7 @@ import {
   PRO_SUBSCRIPTION_PERIOD,
   ONE_TIME_SKUS,
   ADDON_CAPS,
+  HIDDEN_FROM_INVENTORY_SKUS,
   GIFT_NOTES_PRICE_XTR,
   GROUP_GIFT_PRICE_XTR,
   SECRET_RESERVATION_PRICE_XTR,
@@ -104,12 +105,15 @@ describe('PLANS catalogue', () => {
     expect(PLANS.PRO.subscriptions / PLANS.FREE.subscriptions).toBe(2.5);
   });
 
-  it('categoriesPerWishlist: FREE=1 (one free user category), PRO=20 (no soft limit)', () => {
+  it('categoriesPerWishlist: FREE=1 (one free user category), PRO=unlimited', () => {
     // The "Без категории" default never counts; only user-created categories
     // consume the quota. FREE gets exactly one free slot — beyond that the
-    // create endpoint returns 402 with paywall='categories'.
+    // create endpoint returns 402 with paywall='categories'. PRO uses the
+    // MAX_SAFE_INTEGER sentinel so the create handler's `existing >= limit`
+    // branch is unreachable in practice — the wire field carries the same
+    // sentinel down to the FE, which never renders a counter for PRO.
     expect(PLANS.FREE.categoriesPerWishlist).toBe(1);
-    expect(PLANS.PRO.categoriesPerWishlist).toBe(20);
+    expect(PLANS.PRO.categoriesPerWishlist).toBe(Number.MAX_SAFE_INTEGER);
   });
 });
 
@@ -174,6 +178,25 @@ describe('ONE_TIME_SKUS catalogue', () => {
         expect(sku.addonType).toBeTruthy();
       }
     }
+  });
+});
+
+describe('HIDDEN_FROM_INVENTORY_SKUS', () => {
+  it('hides seasonal_decoration (Conservative pricing 2026-05-28)', () => {
+    expect(HIDDEN_FROM_INVENTORY_SKUS.has('seasonal_decoration')).toBe(true);
+  });
+
+  it('hidden SKUs still exist in ONE_TIME_SKUS (purchase machinery preserved)', () => {
+    for (const code of HIDDEN_FROM_INVENTORY_SKUS) {
+      expect(ONE_TIME_SKUS).toHaveProperty(code);
+    }
+  });
+
+  it('common SKUs are not hidden', () => {
+    expect(HIDDEN_FROM_INVENTORY_SKUS.has('extra_wishlist_slot')).toBe(false);
+    expect(HIDDEN_FROM_INVENTORY_SKUS.has('hints_pack_5')).toBe(false);
+    expect(HIDDEN_FROM_INVENTORY_SKUS.has('import_pack_10')).toBe(false);
+    expect(HIDDEN_FROM_INVENTORY_SKUS.has('reservation_pro_unlock')).toBe(false);
   });
 });
 

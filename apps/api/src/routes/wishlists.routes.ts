@@ -79,6 +79,7 @@ import { ITEM_ORDER_BY } from '../sort';
 import { recordForeignWishlistAccess, checkForeignWishlistLiveAccess } from '../services/foreign-wishlist-access';
 import { trackProductEvent } from '../services/analytics';
 import { evaluateGuestConversion } from '../services/wishlists';
+import { HIDDEN_FROM_INVENTORY_SKUS } from '../services/entitlement';
 import { makeAddonRequired, makePlanLimitReached, makeProRequired, sendPaywall } from '../services/paywall';
 import logger from '../logger';
 
@@ -465,12 +466,14 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
           freeHintsUsed: ent.freeHintsUsed,
           freeHintsLimit: ent.freeHintsLimit,
         },
-        skus: Object.values(ONE_TIME_SKUS).map(s => ({
-          code: s.code,
-          price: s.price,
-          type: s.type,
-          targetRequired: s.targetRequired,
-        })),
+        skus: Object.values(ONE_TIME_SKUS)
+          .filter(s => !HIDDEN_FROM_INVENTORY_SKUS.has(s.code))
+          .map(s => ({
+            code: s.code,
+            price: s.price,
+            type: s.type,
+            targetRequired: s.targetRequired,
+          })),
       });
     }),
   );

@@ -43,7 +43,11 @@ export function getWritableTargets<T extends WishlistFilterShape>(
  * server returns 402 if the FE-side check is stale.
  */
 export const FREE_CATEGORY_LIMIT = 1;
-export const PRO_CATEGORY_LIMIT = 20;
+// PRO is "unlimited categories" per Conservative pricing (2026-05-28). The
+// sentinel matches the backend `PLANS.PRO.categoriesPerWishlist`; FE renders
+// no counter for PRO (only FREE renders `used/limit`), so the large number
+// is never user-visible.
+export const PRO_CATEGORY_LIMIT = Number.MAX_SAFE_INTEGER;
 
 /** Return the category quota for a plan code. */
 export function categoryLimitFor(planCode: 'FREE' | 'PRO'): number {

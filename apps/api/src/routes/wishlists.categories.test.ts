@@ -83,7 +83,12 @@ const proPlan = {
   wishlists: 10,
   items: 70,
   participants: 20,
-  categoriesPerWishlist: 20,
+  // Mirror PLANS.PRO (services/entitlement.ts). Conservative pricing patch
+  // (2026-05-28) moved this to MAX_SAFE_INTEGER — the FE renders no counter
+  // for PRO and the `existing >= limit` branch is effectively unreachable in
+  // prod. The over-cap test below is kept as a defensive smoke test against
+  // anyone re-introducing a finite PRO cap by mistake.
+  categoriesPerWishlist: Number.MAX_SAFE_INTEGER,
   features: ['comments', 'url_import', 'hints'] as readonly string[],
 };
 
@@ -267,15 +272,43 @@ describe('POST /wishlists/:id/categories — quota gating', () => {
     expect(res.status).toBe(200);
   });
 
-  it('PRO user hits 400 (not 402) at the 20-category cap', async () => {
+  it('PRO user past 20 categories → still creates (no cap in prod)', async () => {
+    // Conservative pricing patch (2026-05-28): PRO is unlimited. This test
+    // pins the absence of a finite PRO cap — the previous "PRO hits 400 at
+    // 20" expectation was production-impossible once PLANS.PRO bumped to
+    // MAX_SAFE_INTEGER. If anyone reintroduces a hard cap this test fails
+    // and prompts a paired plan-table review.
     shared.wishlistCategory.count.mockResolvedValueOnce(20);
+    shared.wishlistCategory.findMany.mockResolvedValueOnce([]);
+    shared.wishlistCategory.findFirst.mockResolvedValueOnce({ id: 'default', isDefault: true });
+    shared.wishlistCategory.aggregate.mockResolvedValueOnce({ _max: { sortOrder: 19 } });
+    shared.wishlistCategory.create.mockResolvedValueOnce({
+      id: 'c-21', name: 'Extra', sortOrder: 20, isDefault: false,
+    });
+    const deps = buildDeps({ getEffectiveEntitlements: vi.fn(async () => makeEnt(proPlan, true)) });
+    const { app } = makeApp(deps);
+    const res = await request(app)
+      .post('/wishlists/w1/categories')
+      .send({ name: 'Extra' });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ category: { id: 'c-21', name: 'Extra', isDefault: false } });
+  });
+
+  it('PRO over-cap branch is unreachable: simulating count==MAX_SAFE_INTEGER returns 400, not 402', async () => {
+    // The handler's `existingCount >= limit` branch is dead code for PRO in
+    // production (PRO limit IS MAX_SAFE_INTEGER, so no count can ever reach
+    // it via real Postgres). We exercise it once with an impossible count to
+    // confirm the FREE-vs-PRO branching still emits 400 (not 402) on the PRO
+    // path, so a future tier (MAX) that reintroduces a finite cap behaves
+    // consistently with this contract.
+    shared.wishlistCategory.count.mockResolvedValueOnce(Number.MAX_SAFE_INTEGER);
     const deps = buildDeps({ getEffectiveEntitlements: vi.fn(async () => makeEnt(proPlan, true)) });
     const { app } = makeApp(deps);
     const res = await request(app)
       .post('/wishlists/w1/categories')
       .send({ name: 'OverCap' });
     expect(res.status).toBe(400);
-    expect(res.body).toMatchObject({ error: 'Category limit reached', limit: 20 });
+    expect(res.body).toMatchObject({ error: 'Category limit reached', limit: Number.MAX_SAFE_INTEGER });
   });
 
   it('FREE delete-then-create works: deleting frees the quota slot', async () => {

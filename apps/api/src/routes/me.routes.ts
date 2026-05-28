@@ -27,6 +27,7 @@ import {
 import { asyncHandler } from '../lib/asyncHandler';
 import { zodError } from '../lib/http';
 import { getRequestLocale } from '../lib/locale';
+import { HIDDEN_FROM_INVENTORY_SKUS } from '../services/entitlement';
 import logger from '../logger';
 import { getOrCreateProfile } from '../profile.js';
 import { upload } from '../uploads/upload.config';
@@ -351,12 +352,14 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
           freeHintsUsed: ent.freeHintsUsed,
           freeHintsLimit: ent.freeHintsLimit,
         },
-        skus: Object.values(ONE_TIME_SKUS).map(s => ({
-          code: s.code,
-          price: s.price,
-          type: s.type,
-          targetRequired: s.targetRequired,
-        })),
+        skus: Object.values(ONE_TIME_SKUS)
+          .filter(s => !HIDDEN_FROM_INVENTORY_SKUS.has(s.code))
+          .map(s => ({
+            code: s.code,
+            price: s.price,
+            type: s.type,
+            targetRequired: s.targetRequired,
+          })),
         reservationPro,
       });
     }),

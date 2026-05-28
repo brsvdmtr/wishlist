@@ -128,4 +128,31 @@ describe('GET /me/plan — reservationPro contract', () => {
       [],
     );
   });
+
+  // Conservative pricing patch (2026-05-28) hides seasonal_decoration from
+  // the inventory while keeping the SKU in ONE_TIME_SKUS so historical
+  // purchases and the bot's invoice handler still resolve. A wiring
+  // regression (someone refactoring the `Object.values(...).filter(...).map`
+  // and dropping the filter step) would silently re-expose the buy card.
+  // This test pins the filter at the route boundary.
+  it('GET /me/plan skus array hides HIDDEN_FROM_INVENTORY_SKUS (seasonal_decoration)', async () => {
+    const fakeSkus = {
+      extra_wishlist_slot: {
+        code: 'extra_wishlist_slot', price: 39, type: 'permanent', targetRequired: false,
+      },
+      seasonal_decoration: {
+        code: 'seasonal_decoration', price: 29, type: 'cosmetic', targetRequired: true,
+      },
+      hints_pack_5: {
+        code: 'hints_pack_5', price: 29, type: 'consumable', targetRequired: false,
+      },
+    } as Parameters<typeof registerMeRouter>[0]['ONE_TIME_SKUS'];
+    const { app } = appWith({ ONE_TIME_SKUS: fakeSkus });
+    const res = await request(app).get('/me/plan');
+    expect(res.status).toBe(200);
+    const codes = (res.body.skus as Array<{ code: string }>).map(s => s.code);
+    expect(codes).toContain('extra_wishlist_slot');
+    expect(codes).toContain('hints_pack_5');
+    expect(codes).not.toContain('seasonal_decoration');
+  });
 });

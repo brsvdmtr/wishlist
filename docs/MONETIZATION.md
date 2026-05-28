@@ -1,7 +1,7 @@
 # MONETIZATION
 
 > Source of truth for plans, limits, entitlements, billing flow, and paywall content.
-> Last updated: 2026-05-22 · Branch: main
+> Last updated: 2026-05-28 · Branch: main
 
 ---
 
@@ -29,6 +29,7 @@ const PLANS = {
     items: 20,
     participants: 10,
     subscriptions: 2,
+    categoriesPerWishlist: 1,   // one free user category per wishlist
     features: [],
   },
   PRO: {
@@ -37,6 +38,7 @@ const PLANS = {
     items: 70,
     participants: 20,
     subscriptions: 5,
+    categoriesPerWishlist: Number.MAX_SAFE_INTEGER, // unlimited
     features: ['comments', 'url_import', 'hints'],
   },
 };
@@ -44,6 +46,20 @@ const PLANS = {
 
 **This is the single source of truth for all numeric limits and feature flags.**
 Price and period are configurable via env vars: `PRO_PRICE_XTR` (default: 100), `PRO_SUBSCRIPTION_PERIOD` (default: 2592000 = 30 days).
+
+In addition to the per-list `categoriesPerWishlist` limit, FREE users have two
+monthly soft quotas (UTC calendar month, lazy reset; PRO unmetered):
+
+| Quota | Env | FREE/month | Source |
+|---|---|---|---|
+| URL imports | `FREE_IMPORT_QUOTA_PER_MONTH` | 5 | [`services/import-credits.ts`](../apps/api/src/services/import-credits.ts) |
+| Delivered hints | `FREE_HINT_QUOTA_PER_MONTH` | 3 | [`services/hint-credits.ts`](../apps/api/src/services/hint-credits.ts) |
+
+And one per-campaign quota inside Secret Santa (see § 16b):
+
+| Quota | FREE | PRO |
+|---|---|---|
+| `POST /tg/santa/campaigns/:id/hints` (giver hint request) | 1 per campaign | unlimited |
 
 ---
 
@@ -401,7 +417,7 @@ One-time purchases via Telegram Stars. Defined in `ONE_TIME_SKUS` constant in `a
 | `hints_pack_10` | 49 | consumable | +10 hint credits |
 | `import_pack_10` | 39 | consumable | +10 import credits |
 | `import_pack_25` | 79 | consumable | +25 import credits |
-| `seasonal_decoration` | 29 | cosmetic | Seasonal decoration for a wishlist (target required) |
+| `seasonal_decoration` | 29 | cosmetic | Seasonal decoration for a wishlist (target required). **Hidden from inventory since 2026-05-28** — entry stays in `ONE_TIME_SKUS` so prior buyers' add-on rows keep resolving and the bot payment handler still recognises the invoice payload; the `/tg/me/info` and `/tg/wishlists` inventory responses filter it out via `HIDDEN_FROM_INVENTORY_SKUS`. The Mini App store renders no buy card for it. |
 | `gift_notes_unlock` | 19 | permanent | Unlock Gift Notes feature |
 | `reservation_pro_unlock` | 50 | permanent | Unlock reservation PRO features (purchase status tracking, notes, reminders, history) |
 | `group_gift_unlock` | 79 | permanent | Unlock ability to create group gift collections. Not included in PRO subscription |
@@ -595,8 +611,11 @@ The Secret Santa domain ships three PRO-gated features. A **basic (classic) camp
 | **Multi-wave campaign** (`type: 'MULTI_WAVE'`) | `POST /tg/santa/campaigns` | 402 `pro_required` | A campaign type that runs several gift rounds in one campaign. `CLASSIC` is the free default. |
 | **Exclusion pairs** | `POST /tg/santa/campaigns/:id/exclusions` | 402 `pro_required` | Block specific participant pairs from drawing each other (couples, relatives). |
 | **Exclusion groups** | `POST /tg/santa/campaigns/:id/exclusions/groups`, `POST .../groups/:gid/members` | 402 `pro_required` | Named groups — no member draws another member. One rule replaces many pairs. |
+| **Hint request (giver → receiver)** | `POST /tg/santa/campaigns/:id/hints` | **1 hint per campaign** — beyond that returns 402 `pro_required` with `paywall: 'santa_hint'` | Unlimited hint requests per campaign. |
 
-All three checks are `getUserEntitlement(userId).isPro`. The 402 body is `{ error: 'pro_required', feature }` where `feature` is `santa_multi_wave`, `santa_exclusions`, or `santa_exclusion_groups`. Read endpoints (`GET .../exclusions`) and the delete/rename endpoints are owner-only but **not** PRO-gated — a user who downgrades keeps read access and can still remove existing rules.
+The first three checks are `getUserEntitlement(userId).isPro`. The 402 body is `{ error: 'pro_required', feature }` where `feature` is `santa_multi_wave`, `santa_exclusions`, or `santa_exclusion_groups`. Read endpoints (`GET .../exclusions`) and the delete/rename endpoints are owner-only but **not** PRO-gated — a user who downgrades keeps read access and can still remove existing rules.
+
+The hint quota (Conservative pricing patch, 2026-05-28) counts every prior `SantaHintRequest` row this giver has filed in the campaign across all rounds and statuses (PENDING, FULFILLED, EXPIRED, CANCELLED). Re-posting while the row is still PENDING returns the existing row at 200 — idempotency does **not** consume an additional allowance. The cap counts ledger rows, so any future endpoint that deletes hints (none ships today) would effectively restore the allowance for FREE users; if/when such an endpoint lands, decide explicitly whether deletion is allowed to refund FREE quota. The check runs inside a Serializable transaction (`Prisma.TransactionIsolationLevel.Serializable`); serialization conflicts surface as 409 `SANTA_HINT_CONCURRENT_WRITE` so a concurrent double-tap can't double-create. Analytics event: `santa.gate_hit` with `props.feature: 'santa_hint'`, `props.limit: 1`, `props.previousCount`, `props.plan`, `props.campaignId` (server, mirrors the multi-wave / exclusions gates). Toast copy: `santa_hint_pro_required` (reworded to "Free hint already used in this campaign — Pro removes the limit").
 
 ### Paywall contexts
 

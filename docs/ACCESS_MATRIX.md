@@ -1,6 +1,6 @@
 # ACCESS_MATRIX.md — Access Control Matrix
 
-> Date: 2026-04-02. Verified from source code (`apps/api/src/index.ts`, `apps/web/middleware.ts`).
+> Date: 2026-05-28. Verified from source code (`apps/api/src/routes/`, `apps/api/src/services/`, `apps/web/middleware.ts`).
 
 ---
 
@@ -232,8 +232,10 @@ FREE users can access PRO-gated features via credits purchased as consumable add
 | Feature | FREE | PRO | Gate behavior |
 |---------|:----:|:---:|--------------|
 | Comments (read + write) | No | Yes | 402 `{ error: 'Pro feature', feature: 'comments' }` — the code checks if **both** parties lack the feature; if **either** party (owner or commenter) has PRO, access is granted (OR logic) |
-| URL import (`/tg/import-url`) | No | Yes | 402 `{ error: 'Pro feature', feature: 'url_import' }` |
-| Hint waves (`/tg/items/:id/hint`) | No | Yes | 402 `{ error: 'Pro feature', feature: 'hints' }` |
+| URL import (`/tg/import-url`) | **5/UTC month + paid `import_pack_*` credits** | Unlimited | Credit-gated via [`services/import-credits.ts`](../apps/api/src/services/import-credits.ts). Beyond free + paid: 402 `addon_required` with `skuCode: 'import_pack_10'` |
+| Hint waves (`/tg/items/:id/hint`) | **3/UTC month delivered + paid `hints_pack_*` credits** | Unlimited | Credit-gated via [`services/hint-credits.ts`](../apps/api/src/services/hint-credits.ts). Only DELIVERED hints are charged; SENT/CANCELLED/EXPIRED are free. Beyond quota: 402 `addon_required` with `skuCode: 'hints_pack_5'` |
+| Categories (per wishlist) | **1 user category** | Unlimited | `POST /tg/wishlists/:id/categories` returns 402 `pro_required` with `paywall: 'categories'` for FREE beyond the 1st. The "Без категории" default never counts |
+| Santa hint request (`POST /tg/santa/campaigns/:id/hints`) | **1 per campaign** | Unlimited | 402 `pro_required` with `paywall: 'santa_hint'` once a FREE giver has filed any prior hint in the campaign (any status counts). PENDING idempotency returns the existing row at 200 without consuming an allowance. See [MONETIZATION.md § 16b](MONETIZATION.md#16b-secret-santa-pro-gates) |
 | Wishlist visibility `PUBLIC_PROFILE` | No | Yes | 403 `{ error: 'pro_required' }` |
 | Wishlist visibility `PRIVATE` | No | Yes | 403 `{ error: 'pro_required' }` |
 | `allowSubscriptions=NOBODY` | No | Yes | 403 `{ error: 'pro_required' }` |

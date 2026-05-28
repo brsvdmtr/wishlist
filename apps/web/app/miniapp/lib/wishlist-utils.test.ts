@@ -43,9 +43,9 @@ describe('categoryLimitFor', () => {
     expect(categoryLimitFor('FREE')).toBe(1);
   });
 
-  it('returns the PRO quota for PRO', () => {
+  it('returns the PRO quota for PRO (unlimited sentinel)', () => {
     expect(categoryLimitFor('PRO')).toBe(PRO_CATEGORY_LIMIT);
-    expect(categoryLimitFor('PRO')).toBe(20);
+    expect(categoryLimitFor('PRO')).toBe(Number.MAX_SAFE_INTEGER);
   });
 });
 

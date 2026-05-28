@@ -55,7 +55,7 @@
 
 import { Router } from 'express';
 import { z } from 'zod';
-import { prisma } from '@wishlist/db';
+import { prisma, Prisma } from '@wishlist/db';
 import { t, type Locale } from '@wishlist/shared';
 
 import { asyncHandler } from '../lib/asyncHandler';
@@ -2683,7 +2683,24 @@ export function registerSantaRouter(deps: SantaRouterDeps): Router {
     });
   }));
 
-  // POST /tg/santa/campaigns/:id/hints — giver requests a hint (idempotent; PRO-gated)
+  // POST /tg/santa/campaigns/:id/hints — giver requests a hint
+  //
+  // Quota model (Conservative pricing patch, 2026-05-28):
+  //   FREE — 1 hint request per campaign (any status counts — request once,
+  //          live with the outcome). Beyond that returns 402 pro_required.
+  //   PRO  — unlimited.
+  //
+  // Idempotency: re-posting while a PENDING request exists returns the same
+  // row at 200 (no new charge against the FREE allowance). EXPIRED / CANCELLED
+  // requests DO count against the FREE allowance — that is the explicit
+  // trade-off for opening this feature to FREE without unbounded retries.
+  //
+  // Race protection: the PENDING-idempotency lookup + quota count + insert
+  // run in a Serializable transaction so two concurrent POSTs from the same
+  // FREE user can't both pass `previousCount < 1` and double-create. Postgres
+  // surfaces a serialization conflict as Prisma P2034 — we map it to 409 with
+  // a dedicated `code` so the FE retries cleanly with a fresh Idempotency-Key
+  // (same pattern as POST /tg/wishlists/:id/categories).
   santaRouter.post('/santa/campaigns/:id/hints', asyncHandler(async (req, res) => {
     const user = await getOrCreateTgUser(req.tgUser!);
     const campaignId = req.params.id ?? '';
@@ -2704,43 +2721,98 @@ export function registerSantaRouter(deps: SantaRouterDeps): Router {
     if (!campaign.currentRoundId) return res.status(404).json({ error: 'No active round' });
     const roundId = campaign.currentRoundId;
 
-    // 3. PRO-gate: only giver's effective plan is checked — receiver's plan is irrelevant
-    const ent = await getUserEntitlement(user.id, user.godMode);
-    if (!ent.isPro) return res.status(403).json({ error: 'pro_required', message: 'Hint requests require a Pro subscription' });
-
-    // 4. Resolve giver's assignment (giver-centric: roundId + giverParticipantId)
+    // 3. Resolve giver's assignment (giver-centric: roundId + giverParticipantId)
     const assignment = await prisma.santaAssignment.findUnique({
       where: { roundId_giverParticipantId: { roundId, giverParticipantId: participant.id } },
       select: { id: true, receiverParticipantId: true, receiver: { select: { linkedWishlistId: true } } },
     });
     if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
 
-    // 5. Receiver must have a linked wishlist — no point in requesting a hint otherwise
+    // 4. Receiver must have a linked wishlist — no point in requesting a hint otherwise
     if (!assignment.receiver.linkedWishlistId) {
       return res.status(409).json({ error: 'receiver_no_wishlist', message: 'Your gift recipient has no linked wishlist' });
     }
 
-    // 6. Idempotency: if PENDING hint already exists for this assignment, return it (don't duplicate)
-    const existing = await prisma.santaHintRequest.findFirst({
-      where: { assignmentId: assignment.id, status: 'PENDING' },
-    });
-    if (existing) {
-      return res.status(200).json(serializeSantaHintForGiver(existing));
+    // 5. Resolve entitlement before the txn so the read happens once.
+    const ent = await getUserEntitlement(user.id, user.godMode);
+
+    // 6. Idempotency + FREE quota + insert under Serializable isolation.
+    //    Outcome shape mirrors the categories handler so the caller branches
+    //    once on `kind` instead of unpacking partial results.
+    type HintOutcome =
+      | { kind: 'idempotent'; existing: NonNullable<Awaited<ReturnType<typeof prisma.santaHintRequest.findFirst>>> }
+      | { kind: 'over_quota'; previousCount: number }
+      | { kind: 'created'; hint: Awaited<ReturnType<typeof prisma.santaHintRequest.create>> };
+
+    let outcome: HintOutcome | { kind: 'conflict' };
+    try {
+      outcome = await prisma.$transaction(
+        async (tx): Promise<HintOutcome> => {
+          // 6a. PENDING idempotency — return existing row without consuming quota.
+          const existing = await tx.santaHintRequest.findFirst({
+            where: { assignmentId: assignment.id, status: 'PENDING' },
+          });
+          if (existing) return { kind: 'idempotent', existing };
+
+          // 6b. FREE 1/campaign quota check. PRO/godMode short-circuit.
+          if (!ent.isPro) {
+            const previousCount = await tx.santaHintRequest.count({
+              where: { campaignId, giverParticipantId: participant.id },
+            });
+            if (previousCount >= 1) return { kind: 'over_quota', previousCount };
+          }
+
+          // 6c. Create hint request with 48h TTL.
+          const expiresAt = new Date(Date.now() + SANTA_HINT_TTL_HOURS * 60 * 60 * 1000);
+          const hint = await tx.santaHintRequest.create({
+            data: {
+              campaignId,
+              roundId,
+              assignmentId: assignment.id,
+              giverParticipantId: participant.id,
+              receiverParticipantId: assignment.receiverParticipantId,
+              status: 'PENDING',
+              expiresAt,
+            },
+          });
+          return { kind: 'created', hint };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+        outcome = { kind: 'conflict' };
+      } else {
+        throw err;
+      }
     }
 
-    // 7. Create hint request with 48h TTL
-    const expiresAt = new Date(Date.now() + SANTA_HINT_TTL_HOURS * 60 * 60 * 1000);
-    const hint = await prisma.santaHintRequest.create({
-      data: {
-        campaignId,
-        roundId,
-        assignmentId: assignment.id,
-        giverParticipantId: participant.id,
-        receiverParticipantId: assignment.receiverParticipantId,
-        status: 'PENDING',
-        expiresAt,
-      },
-    });
+    if (outcome.kind === 'idempotent') {
+      return res.status(200).json(serializeSantaHintForGiver(outcome.existing));
+    }
+    if (outcome.kind === 'over_quota') {
+      trackProductEvent({
+        event: 'santa.gate_hit',
+        userId: user.id,
+        props: {
+          feature: 'santa_hint',
+          plan: ent.plan.code,
+          limit: 1,
+          previousCount: outcome.previousCount,
+          campaignId,
+        },
+      });
+      return sendPaywall(res, 402, makeProRequired('santa_hint', {
+        planCode: ent.plan.code,
+        paywallTag: 'santa_hint',
+        message: 'Free hint already used in this campaign',
+      }));
+    }
+    if (outcome.kind === 'conflict') {
+      return res.status(409).json({ error: 'Concurrent write conflict, please retry', code: 'SANTA_HINT_CONCURRENT_WRITE' });
+    }
+
+    const hint = outcome.hint;
 
     // Notification to receiver is sent by the TTL/polling loop or bot layer.
     // notificationSentAt is set by the notification sender — not here — to allow dedup on retry.
@@ -2774,7 +2846,13 @@ export function registerSantaRouter(deps: SantaRouterDeps): Router {
     });
     if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
 
-    // Most recent hint for this assignment (draw reset via cascade-delete clears old hints)
+    // Most recent hint for this assignment. No endpoint currently deletes
+    // SantaHintRequest rows, so the "most recent" here is functionally
+    // identical to "latest by requestedAt". If a draw-reset endpoint ever
+    // lands and chooses to cascade-delete hints, this query keeps working
+    // because it's a per-assignment lookup (cascade-deleted rows would just
+    // disappear; the FREE giver allowance — separately enforced in the POST
+    // handler — would then refresh as a side effect).
     const hint = await prisma.santaHintRequest.findFirst({
       where: { assignmentId: assignment.id },
       orderBy: { requestedAt: 'desc' },
