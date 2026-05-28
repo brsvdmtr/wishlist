@@ -29,6 +29,7 @@ import {
   monthLabelLong, weekdayLabels, useIsKeyboardOpen,
 } from './components';
 import { ct, ctDays, ctDaysAgo } from './i18n';
+import { safeUserUrl } from '../../lib/isSafeUrl';
 
 interface Props {
   tgFetch: TgFetch;
@@ -569,7 +570,7 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
                         {priceText && <span style={{ fontWeight: 700, color: 'var(--wb-text-secondary)', fontFeatureSettings: '"tnum"' }}>{priceText}</span>}
                         {!expanded && linkDomain && (
                           idea.link
-                            ? <a href={idea.link} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ color: 'var(--wb-accent-strong)', textDecoration: 'none' }}>↗ {linkDomain}</a>
+                            ? <a href={safeUserUrl(idea.link) ?? '#'} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ color: 'var(--wb-accent-strong)', textDecoration: 'none' }}>↗ {linkDomain}</a>
                             : <span>· {linkDomain}</span>
                         )}
                       </div>
@@ -614,7 +615,7 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
                     )}
                     {idea.link && (
                       <a
-                        href={idea.link}
+                        href={safeUserUrl(idea.link) ?? '#'}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{

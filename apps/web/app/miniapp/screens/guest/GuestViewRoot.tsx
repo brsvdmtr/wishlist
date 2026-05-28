@@ -52,6 +52,7 @@ import React from 'react';
 import { Banner, Button, Card, CounterBadge, HeroCard, Sheet as BottomSheet } from '@wishlist/ui';
 import { t, pluralize, localeToBCP47, type Locale } from '@wishlist/shared';
 import { getEmoji } from '../../lib/emoji';
+import { safeUserUrl } from '../../lib/isSafeUrl';
 import { ProBadge } from '../../components/ProBadge';
 import type { ComponentType, Dispatch, RefObject, SetStateAction } from 'react';
 import type {
@@ -388,7 +389,7 @@ export function GuestViewRoot(props: GuestViewRootProps) {
             {/* URL */}
             {viewingItem.url && (
               <div style={{ marginTop: 0, maxWidth: '100%' }}>
-                <a href={viewingItem.url} target="_blank" rel="noreferrer" style={{
+                <a href={safeUserUrl(viewingItem.url) ?? '#'} target="_blank" rel="noopener noreferrer" style={{
                   display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13,
                   color: C.accent, background: C.accentSoft, padding: '8px 14px',
                   borderRadius: 12, textDecoration: 'none',

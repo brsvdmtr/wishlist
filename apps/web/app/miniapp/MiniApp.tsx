@@ -80,6 +80,7 @@ import {
   E11_ONBOARDING_ENTRY_POINT,
 } from './lib/postReservationCta';
 import { resolveReservePrefill, MAX_DISPLAY_NAME_LEN, type ReservePrefillSource } from './lib/reservePrefill';
+import { safeUserUrl } from './lib/isSafeUrl';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
 import { initSentry, captureException } from './sentry';
 import {
@@ -1781,7 +1782,7 @@ function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash, local
           fontSize: 11, color: 'var(--wb-text-muted)',
         }}>
           {item.url && (
-            <a href={item.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ textDecoration: 'none' }}>
+            <a href={safeUserUrl(item.url) ?? '#'} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ textDecoration: 'none' }}>
               <Chip tone="accent" size="sm">{t('link_label', locale)}</Chip>
             </a>
           )}
@@ -14815,9 +14816,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {url && (
               <div style={{ marginBottom: 14 }}>
                 <a
-                  href={url}
+                  href={safeUserUrl(url) ?? '#'}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13,
@@ -16030,7 +16031,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 </span>
               )}
               {viewingItem.url && (
-                <a href={viewingItem.url} target="_blank" rel="noreferrer" style={{
+                <a href={safeUserUrl(viewingItem.url) ?? '#'} target="_blank" rel="noopener noreferrer" style={{
                   display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 12px',
                   background: 'var(--wb-surface)',
                   border: '1px solid var(--wb-border)',
@@ -16280,7 +16281,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {/* URL + source badge */}
             {viewingItem.url && (
               <div style={{ marginTop: 0, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                <a href={viewingItem.url} target="_blank" rel="noreferrer" style={{
+                <a href={safeUserUrl(viewingItem.url) ?? '#'} target="_blank" rel="noopener noreferrer" style={{
                   display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13,
                   color: C.accent, background: C.accentSoft, padding: '8px 14px',
                   borderRadius: 12, textDecoration: 'none', wordBreak: 'break-all',

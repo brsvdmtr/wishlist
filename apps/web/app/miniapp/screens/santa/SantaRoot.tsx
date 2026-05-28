@@ -47,6 +47,7 @@ import { SnowflakeOverlay } from '../../components/SnowflakeOverlay';
 import { t, type Locale } from '@wishlist/shared';
 import { parsePaywallError, paywallContextFromError } from '../../lib/paywall';
 import { renderSantaAlias } from '../../lib/santa-alias';
+import { safeUserUrl } from '../../lib/isSafeUrl';
 import type { Dispatch, SetStateAction } from 'react';
 import type {
   SantaCampaignDetail, SantaCampaignSummary, GuestItem,
@@ -2493,7 +2494,7 @@ export function SantaRoot(props: SantaRootProps) {
                         {/* Open link */}
                         {item.url && (
                           <a
-                            href={item.url} target="_blank" rel="noreferrer"
+                            href={safeUserUrl(item.url) ?? '#'} target="_blank" rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
                             style={{ flexShrink: 0, fontSize: 11, color: C.accent, textDecoration: 'none', padding: '6px 0' }}
                           >

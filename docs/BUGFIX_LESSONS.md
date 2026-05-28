@@ -5,6 +5,115 @@ New entries go at the top.
 
 ---
 
+## 2026-05-28 — Security audit cont'd: URL scheme allowlist на Mini App `<a href>`
+
+Continuation of the 2026-05-28 audit. Closes the Mini App phishing vector
+where user-controlled URLs from wishlist items / gift-occasion ideas were
+rendered as live `<a href>` links without any scheme validation.
+
+### Симптом
+
+Eight `<a href={X}>` callsites in the Mini App (`MiniApp.tsx:1784, 14818,
+16033, 16283`; `screens/calendar/CalendarDetail.tsx:572, 617`;
+`screens/guest/GuestViewRoot.tsx:391`; `screens/santa/SantaRoot.tsx:2496`)
+took the URL straight from the API response and passed it into `href`
+without checking the scheme. The values are user-controlled: a wishlist
+owner types the link into their item, and every guest who views the list
+sees that link rendered as a clickable anchor.
+
+Concrete attack: owner sets `item.url` to `tg://resolve?domain=evil_bot`.
+Guest opens the wishlist in the Mini App, clicks the link, lands on the
+attacker's bot inside Telegram. The bot can:
+
+- Phish for Telegram-account-linkable data (claim to be a "WishBoard
+  helper", ask for the wishlist code, harvest gift selections).
+- Run a /start that adds the user to an attacker-controlled channel.
+- Mimic the WishBoard support flow (most users won't notice the bot
+  username differs).
+
+Same pattern works for `javascript:alert(1)` and `data:text/html,…` —
+blocked in modern Chrome / iOS Safari for top-level navigation, but the
+Telegram WebViews on Android trail upstream Chrome by months, and `<a
+href="javascript:…">` historically slipped through some embeds.
+
+### Root cause
+
+The Mini App was treating `item.url` as a trusted product link. The
+mental model was "users type real product URLs from marketplace pages,
+worst case is a 404". The threat model is "user A's wishlist is viewed
+by user B, and user A can write whatever scheme they want into a value
+that ends up in B's `<a href>`".
+
+This is structurally the same class as the C1 fix above
+(escapeTgHtml in Telegram notifications) — user content flowing into a
+context with an active interpretation (HTML / URL scheme) — except the
+context is `<a href>` in B's browser instead of `parse_mode=HTML` in
+B's Telegram notification. Both surfaces need to ask "what scheme /
+markup is this string about to be interpreted as?" before rendering.
+
+### Lesson
+
+- **Every `<a href={X}>` in the Mini App where X is user-controlled
+  needs scheme validation.** http/https/mailto only. No `tg://`, no
+  `javascript:`, no `data:`, no `file:`. The Mini App lives inside
+  Telegram so the `tg://` exclusion matters specifically — inside
+  Telegram WebViews tg:// links open in-app, which is exactly what an
+  attacker wants for a deep-link phishing flow.
+- **The URL parser strips control characters as a primary defense, not
+  a secondary one.** Newlines / tabs inside a scheme name have
+  historically bypassed naïve regex-only checks (`java\nscript:`
+  parses as `javascript:` in some browsers). The helper rejects
+  control chars before scheme inspection.
+- **Wrap once at the boundary, not at every render.** `safeUserUrl()`
+  takes the raw URL and returns either the trimmed URL or `null`. The
+  callsite either gets a safe URL or falls back to `'#'`. No callsite
+  is allowed to do its own scheme checking — they all share the helper
+  so the contract is uniform.
+
+### Rule
+
+- **No new `<a href={someUserField}>` in the Mini App without
+  `safeUserUrl()`** at the boundary. Lint-rule candidate (not added
+  yet): forbid `JSXAttribute[name=href][value.type=JSXExpressionContainer]`
+  where the expression is not call-named `safeUserUrl`.
+- **`safeUserUrl()` is for USER-CONTROLLED URLs only.** App-constructed
+  deep links (the `tg://t.me/…` onboarding CTA, the `WebApp.openInvoice`
+  invoice URL the server returned) bypass it because they're trusted
+  by construction. Mixing the two cases would block legitimate flows.
+- **`rel="noopener noreferrer"` is mandatory** on every external `<a
+  target="_blank">` in user content. Modern browsers auto-add noopener,
+  but explicit is the contract — and Telegram WebViews on older
+  Android trail browsers by months, so we don't rely on the default.
+
+### Better code
+
+- `apps/web/app/miniapp/lib/isSafeUrl.ts` — new file. `isSafeUserUrl()`
+  + `safeUserUrl()`. Allowlist: `http:`, `https:`, `mailto:`. Rejects
+  control chars + non-allowlisted schemes + relative URLs.
+- `apps/web/app/miniapp/lib/isSafeUrl.test.ts` — 15 tests covering
+  positives (http/https/mailto + whitespace trim), phishing rejections
+  (tg://, javascript:, data:, vbscript:), control-char bypasses,
+  internal schemes (file:/chrome:/about:/intent:/ftp:), and malformed
+  inputs.
+- Eight callsite patches: each `<a href={X}>` is now `<a
+  href={safeUserUrl(X) ?? '#'}>` and `rel` is normalised to
+  `"noopener noreferrer"`.
+
+### What's deliberately NOT in scope
+
+- The visible chip / link UI is unchanged. If `safeUserUrl()` returns
+  null, the anchor still renders but `href='#'` makes the click inert.
+  A cleaner UX would render plain text instead — deferred until we see
+  whether real users hit the inert state often enough to justify it.
+- Cyrillic / look-alike domain detection (`https://wíldberries.ru/...`).
+  Punycode confusables are a separate phishing class; out of scope for
+  this audit.
+- The non-Mini App surfaces (admin web UI, public share page) are
+  unchanged — they have their own attack surfaces but didn't surface
+  in the Mini App audit scope.
+
+---
+
 ## 2026-05-28 — Security audit cont'd: DNS rebinding pin + upload magic-bytes + Helmet
 
 Continuation of the 2026-05-28 audit. Three High/Medium findings tightened
