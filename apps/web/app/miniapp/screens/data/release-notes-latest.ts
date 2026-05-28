@@ -8,4 +8,4 @@
 // otherwise the whole array gets pulled into the main chunk via the
 // transitive import.
 
-export const LATEST_RELEASE_ID: string | null = '2026-05-21';
+export const LATEST_RELEASE_ID: string | null = '2026-05-28';
