@@ -5,6 +5,105 @@ New entries go at the top.
 
 ---
 
+## 2026-05-28 — Security audit cont'd: DNS rebinding pin + upload magic-bytes + Helmet
+
+Continuation of the 2026-05-28 audit. Three High/Medium findings tightened
+on the upload + network surface; less impactful than the Critical bundle
+above but each closes a known defense-gap with a clear, contained patch.
+
+### Симптом
+
+1. **H1 — DNS rebinding TOCTOU в `imageProcessor.ts`.** The
+   `downloadAndProcessImage` helper resolves DNS via `assertDnsIsSafe(url)`
+   and then calls `fetch(url.href, …)`, which resolves the hostname AGAIN
+   at connect time. An attacker controlling DNS for an inbound hostname
+   can flip the answer between the two queries: `assertDnsIsSafe` sees a
+   public address, `fetch` ends up connecting to `169.254.169.254` / a
+   private IP. The audit comment in the file already acknowledged the
+   window — this fix closes it.
+2. **M1 — Upload MIME claim is client-controlled.** Multer's `fileFilter`
+   trusts `file.mimetype` from the multipart Content-Type header. An
+   attacker can claim `image/jpeg` while uploading SVG (XML, potentially
+   XXE-laden), HEIC, a PDF, or any other format. Sharp does re-encode the
+   buffer to JPEG and strip foreign payload, but bytes shouldn't reach a
+   decoder at all if they obviously aren't an image.
+3. **M3 — No origin-side HSTS / `X-Content-Type-Options` / Referrer-Policy
+   на API.** Cloudflare sits in front (2026-05-22) and sets some headers
+   itself, but origin-only hardening matters when CF is bypassed (direct
+   IP probes, mis-routed CDN edge, internal LAN traffic). Without `nosniff`
+   на `/api/uploads/<uuid>.jpg`, a polyglot that slipped past the magic
+   gate could be MIME-sniffed as HTML by some browsers.
+
+### Root cause
+
+1. **H1** — `undici`'s default fetch uses the OS resolver, which has no
+   coordination with `dns.resolve` calls made earlier in Node. Two calls
+   = two queries = two potentially-different answers.
+2. **M1** — Defense was assumed to be the sharp re-encoding step. True
+   for image-shaped polyglots, but SVG-claimed-as-JPEG is an arbitrary
+   XML document that sharp's SVG path will happily process via librsvg.
+3. **M3** — Express bootstrap had `corsMiddleware → express.json →
+   requestLogger`. No layer added security headers; we relied entirely on
+   Cloudflare for HSTS / nosniff / etc. Adding Helmet at origin makes the
+   chain defensible-in-depth without changing the CF policy.
+
+### Lesson
+
+- **Validate-then-pin is the only safe pattern for SSRF-sensitive outbound
+  HTTP.** `validateUrl()` + `assertDnsIsSafe()` returns the safe IPs; pass
+  ONE of them into the connect path so the resolver is never consulted a
+  second time. `curl-impersonate.ts` already does this via its `pin`
+  option; `imageProcessor.ts` now does it via `undici.Agent({ connect:
+  { lookup } })`. Any new outbound fetch in this codebase must follow the
+  same pattern — anything else has a TOCTOU window that's exploitable in
+  CI/CD environments where the attacker can win the DNS race.
+- **MIME claims from the client are client-supplied input.** Treat them
+  as you would a `?role=admin` query param. Magic-byte validation is
+  cheap and a one-time per-upload cost; it belongs upstream of every
+  decoder that touches attacker bytes.
+- **Origin headers are not redundant with CDN headers.** Cloudflare and
+  origin both set HSTS — fine; the browser deduplicates harmlessly.
+  Origin headers protect the paths CF doesn't cover (direct IP, internal
+  routing tools, future CDN-less debug deploys).
+
+### Rule
+
+- **Every new outbound `fetch` in API code where the URL is, transitively,
+  user-supplied** — must (1) call `validateUrl()` for structure, (2) call
+  `assertDnsIsSafe()` for the resolved IPs, (3) construct an `undici.Agent`
+  with a pinned-IP `connect.lookup` for the actual request, (4) close the
+  agent in `finally`. The four-step pattern is the contract; abbreviated
+  forms (skip pinning "just for this one helper") reintroduce the TOCTOU
+  window.
+- **Every multer-backed route** must call `hasAllowedImageMagic(buffer)`
+  (or its format-specific equivalent for non-image uploads) before
+  anything downstream — sharp, archive extraction, MIME inference for
+  serving — touches the bytes. The MIME claim in `file.mimetype` is a
+  weak hint, not a gate.
+- **Helmet (or an equivalent header layer) is mandatory on every
+  Express bootstrap** in this codebase, even for pure-JSON APIs. CSP
+  may be opt-out per-process (irrelevant if no HTML is served), but
+  HSTS / `X-Content-Type-Options: nosniff` / `Referrer-Policy` /
+  `X-DNS-Prefetch-Control: off` are not negotiable.
+
+### Better code
+
+- `apps/api/src/uploads/imageProcessor.ts`:
+  - `downloadAndProcessImage` — `safeIps` from `assertDnsIsSafe` →
+    `Agent({ connect: { lookup: (_h, _o, cb) => cb(null, ip, family) } })`
+    passed as `dispatcher`. Replaces the previous unpinned `fetch`.
+  - `processImage` — calls `hasAllowedImageMagic(buffer)` first; throws
+    "Unsupported file type" with the same message multer's fileFilter
+    uses, so existing handlers and tests classify the error identically.
+- `apps/api/src/index.ts` — `app.use(helmet({ contentSecurityPolicy:
+  false }))` between `etag` config and `corsMiddleware`. CSP off because
+  the API serves JSON + static images, not HTML.
+- Test: `apps/api/src/uploads/imageProcessor.test.ts` — 10 unit tests
+  for `hasAllowedImageMagic` covering JPEG/PNG/GIF87/GIF89/WebP positives
+  plus SVG/HTML/PDF/BMP/TIFF/HEIC/ZIP negatives plus the < 12-byte floor.
+
+---
+
 ## 2026-05-28 — Security audit triage: HTML-injection в Telegram-уведомлениях + quota race на item create/restore
 
 Не классический «прилетел баг — починили», а аудит всего проекта на security

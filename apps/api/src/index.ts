@@ -8,6 +8,7 @@ import './bootstrap/env';
 import './bootstrap/sentry';
 
 import express from 'express';
+import helmet from 'helmet';
 import type { NextFunction, Request, Response } from 'express';
 import crypto from 'node:crypto';
 import { z } from 'zod';
@@ -197,10 +198,22 @@ app.set('trust proxy', 1);
 // see docs/BUGFIX_LESSONS.md (2026-05-18) for the full chain.
 app.set('etag', false);
 
-// Middleware order MUST stay: cors → express.json → requestLogger → /uploads
-// → /health → maintenance gate → routers → error handler. See docs/BACKEND_MAP.md
-// § "Middleware Chain". The infrastructure pieces have moved into modules
-// under ./middleware, ./uploads, ./health — the order here is unchanged.
+// Middleware order MUST stay: helmet → cors → express.json → requestLogger →
+// /uploads → /health → maintenance gate → routers → error handler. See
+// docs/BACKEND_MAP.md § "Middleware Chain". The infrastructure pieces have
+// moved into modules under ./middleware, ./uploads, ./health — the order
+// here is unchanged except for helmet which was added 2026-05-28.
+//
+// Helmet config: CSP disabled because this process serves JSON + /uploads
+// (static images), no HTML — there's no document context for inline-script
+// rules to apply to. The Mini App lives in apps/web behind Cloudflare and
+// has its own headers there. We keep all other Helmet defaults: HSTS
+// (Cloudflare also sets it; duplicate-header is harmless and origin-only
+// hardening matters when CF is bypassed), X-Content-Type-Options: nosniff
+// (prevents browsers from MIME-sniffing `/api/uploads/<uuid>.jpg` as HTML
+// if an attacker ever lands a polyglot past the magic-bytes guard),
+// Referrer-Policy: no-referrer, and X-DNS-Prefetch-Control: off.
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(corsMiddleware);
 app.use(express.json());
 app.use(requestLogger);

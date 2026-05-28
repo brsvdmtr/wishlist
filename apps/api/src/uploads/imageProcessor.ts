@@ -10,7 +10,9 @@
 
 import sharp from 'sharp';
 import crypto from 'node:crypto';
+import net from 'node:net';
 import path from 'node:path';
+import { fetch as undiciFetch, Agent } from 'undici';
 import { UPLOAD_DIR } from './upload.config';
 import { validateUrl, assertDnsIsSafe } from '../url-parser.js';
 
@@ -20,10 +22,53 @@ import { validateUrl, assertDnsIsSafe } from '../url-parser.js';
 // product photo, well below the libvips default of 268 M.
 const SHARP_INPUT_PIXEL_LIMIT = 50_000_000;
 
+/**
+ * Magic-byte sniff for the four image formats we accept (mirrors
+ * `ALLOWED_MIME_TYPES` in upload.config.ts).
+ *
+ * Why this exists on top of multer's MIME check: multer's fileFilter reads
+ * `file.mimetype` from the multipart Content-Type header, which is fully
+ * client-controlled. An attacker can claim `image/jpeg` while sending an
+ * SVG body (or any other format). Sharp would still re-encode the result
+ * to JPEG and strip the foreign payload, but the rejection should happen
+ * one step earlier — before any decoder touches arbitrary attacker bytes.
+ *
+ * Returns `false` for anything that isn't a JPEG/PNG/GIF/WebP file header.
+ * Notably rejects SVG (XML-based, no fixed magic) and BMP/TIFF/HEIC.
+ */
+export function hasAllowedImageMagic(buf: Buffer): boolean {
+  if (buf.length < 12) return false;
+  // JPEG: FF D8 FF
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return true;
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47 &&
+    buf[4] === 0x0d && buf[5] === 0x0a && buf[6] === 0x1a && buf[7] === 0x0a
+  ) return true;
+  // GIF: GIF87a / GIF89a
+  if (
+    buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38 &&
+    (buf[4] === 0x37 || buf[4] === 0x39) && buf[5] === 0x61
+  ) return true;
+  // WebP: 'RIFF' .... 'WEBP'
+  if (
+    buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+    buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50
+  ) return true;
+  return false;
+}
+
 export async function processImage(
   buffer: Buffer,
   opts: { maxDim: number; quality?: number; suffix?: string },
 ): Promise<{ filename: string; filepath: string; sizeBytes: number; width: number; height: number }> {
+  if (!hasAllowedImageMagic(buffer)) {
+    // Client claimed an allowed MIME but the bytes don't match. Reject before
+    // sharp's decoder sees attacker input. This catches SVG-claimed-as-JPEG,
+    // BMP/TIFF/HEIC slipping past the MIME allowlist, and arbitrary files
+    // (PDFs, archives, scripts) being uploaded with `image/*` Content-Type.
+    throw new Error('Unsupported file type. Use JPEG, PNG, WebP, or GIF.');
+  }
   const id = crypto.randomUUID();
   const suffix = opts.suffix ?? 'full';
   const filename = `${id}-${suffix}.jpg`;
@@ -50,14 +95,12 @@ export async function processImage(
 // CDNs (Yandex / WB / Ozon) for 88px thumbnails.
 //
 // SSRF defence reuses the same validateUrl + assertDnsIsSafe helpers that
-// guard the HTML fetch in url-parser.
-//
-// NOTE on TOCTOU: assertDnsIsSafe resolves DNS, then fetch() resolves it
-// again — a DNS-rebinding attacker can flip the answer between the two
-// calls. Same window the existing fetchHtml has; closing it requires
-// resolving once and passing the IP via undici's `lookup` option, which
-// is out of scope here. Documented so future readers don't assume the
-// SSRF check is bulletproof.
+// guard the HTML fetch in url-parser, AND pins the connection IP through a
+// per-call undici Agent with a `connect.lookup` override. assertDnsIsSafe
+// returns the validated A/AAAA records; we hand the first one to the
+// dispatcher so undici never re-resolves the hostname at connect time,
+// closing the DNS-rebinding window between validation and connect. Same
+// pattern curl-impersonate uses via its `pin` option in marketplace flows.
 //
 // Redirects are not followed (manual mode + reject 3xx) — marketplace
 // image CDNs serve direct URLs.
@@ -95,19 +138,34 @@ export async function downloadAndProcessImage(
   const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
 
   const url = validateUrl(imageUrl);
-  await assertDnsIsSafe(url);
+  const safeIps = await assertDnsIsSafe(url);
+  if (safeIps.length === 0) {
+    throw new Error('DNS resolution failed for image fetch');
+  }
+  // Pin the first validated IP into the dispatcher so undici doesn't issue
+  // a second DNS query at connect time (which an attacker could rebind to
+  // an internal address). family is inferred from the literal so undici
+  // creates the right socket type.
+  const pinnedIp = safeIps[0]!;
+  const family = net.isIPv6(pinnedIp) ? 6 : 4;
+  const pinDispatcher = new Agent({
+    connect: {
+      lookup: (_host, _opts, cb) => cb(null, pinnedIp, family),
+    },
+  });
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
 
   try {
-    const res = await fetch(url.href, {
+    const res = await undiciFetch(url.href, {
       signal: ctrl.signal,
       headers: {
         'User-Agent': FETCH_USER_AGENT,
         'Accept': 'image/jpeg,image/png,image/webp,image/gif,image/*;q=0.8',
       },
       redirect: 'manual',
+      dispatcher: pinDispatcher,
     });
 
     if (res.status >= 300 && res.status < 400) {
@@ -158,5 +216,9 @@ export async function downloadAndProcessImage(
     return processImage(Buffer.concat(chunks, total), opts);
   } finally {
     clearTimeout(timer);
+    // Release the pinned dispatcher's keep-alive sockets — we never reuse
+    // it across calls, and leaving it open would hold a connection per
+    // import. Swallow rejections; close failure isn't actionable.
+    await pinDispatcher.close().catch(() => { /* ignore */ });
   }
 }
