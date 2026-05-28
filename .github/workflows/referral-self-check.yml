@@ -1,0 +1,158 @@
+name: Referral Self-Check (one-shot)
+
+# One-shot self-check for the guest.converted_to_user foundation that
+# ungated the next Referral launch event. Fires once at 2026-06-03
+# 07:00 UTC (10:00 MSK) — 7 days after the foundation deploy
+# (2026-05-27). Implements the 3 SQL checks from
+# docs/research/guest-conversion-spec.md § 5 and posts a PASS/FAIL
+# verdict to the admin Telegram chat with a recommended next step.
+#
+# Why one-shot: the year-guard inside the script makes this a no-op
+# from 2027 onwards even though the cron expression `0 7 3 6 *` fires
+# every June 3rd. After the 2026-06-03 run completes, delete this
+# file — there is no other consumer.
+#
+# Workflow_dispatch is wired so we can rehearse the check ahead of
+# the date, or rerun if the first attempt was inconclusive.
+#
+# Related:
+#   • Decision context: docs/research/referral-decision.md § 10
+#   • Foundation spec:  docs/research/guest-conversion-spec.md § 5
+#   • Daily monitor:    .github/workflows/referral-monitor.yml
+
+on:
+  schedule:
+    # 07:00 UTC, June 3rd. Year-bounded inside the script.
+    - cron: '0 7 3 6 *'
+  workflow_dispatch:
+
+concurrency:
+  group: referral-self-check
+  cancel-in-progress: false
+
+jobs:
+  self-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Run guest-conversion self-check
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          command_timeout: 5m
+          script: |
+            set -euo pipefail
+            source /opt/wishlist/.env
+            PSQL="docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist -At"
+
+            # Year guard: the cron fires every June 3rd; we only want
+            # the 2026 run. workflow_dispatch bypasses the guard for
+            # manual reruns by setting GITHUB_EVENT_NAME outside of
+            # 'schedule'.
+            CUR_YEAR=$(date -u '+%Y')
+            EVENT_NAME="${GITHUB_EVENT_NAME:-unknown}"
+            if [ "$CUR_YEAR" != "2026" ] && [ "$EVENT_NAME" = "schedule" ]; then
+              echo "Year is $CUR_YEAR, event=$EVENT_NAME — self-check is for 2026 only. Skipping."
+              exit 0
+            fi
+
+            DEPLOY_DATE='2026-05-27'
+            echo "=== Self-check window: rows created since $DEPLOY_DATE ==="
+
+            # === Query 1: attribution rate among new UserProfiles ===
+            TOTAL=$($PSQL -c "SELECT COUNT(*) FROM \"UserProfile\" WHERE \"createdAt\" >= '$DEPLOY_DATE';")
+            ATTRIBUTED=$($PSQL -c "SELECT COUNT(*) FROM \"UserProfile\" WHERE \"createdAt\" >= '$DEPLOY_DATE' AND \"firstAcquisitionSource\" IS NOT NULL;")
+            if [ "$TOTAL" -gt 0 ]; then
+              PCT=$(( ATTRIBUTED * 100 / TOTAL ))
+            else
+              PCT=0
+            fi
+            echo "Q1: total=$TOTAL attributed=$ATTRIBUTED pct=${PCT}%"
+
+            # === Query 2: source distribution (not monocline) ===
+            SOURCES_CSV=$($PSQL -c "SELECT \"firstAcquisitionSource\" || ':' || COUNT(*) FROM \"UserProfile\" WHERE \"createdAt\" >= '$DEPLOY_DATE' AND \"firstAcquisitionSource\" IS NOT NULL GROUP BY 1 ORDER BY 2 DESC;" | tr '\n' ' ')
+            DISTINCT_SOURCES=$($PSQL -c "SELECT COUNT(DISTINCT \"firstAcquisitionSource\") FROM \"UserProfile\" WHERE \"createdAt\" >= '$DEPLOY_DATE' AND \"firstAcquisitionSource\" IS NOT NULL;")
+            echo "Q2: distinct_sources=$DISTINCT_SOURCES sources=[$SOURCES_CSV]"
+
+            # === Query 3: guest.converted_to_user emit rate ===
+            CONVERTED=$($PSQL -c "SELECT COUNT(*) FROM \"AnalyticsEvent\" WHERE event = 'guest.converted_to_user' AND \"createdAt\" >= '$DEPLOY_DATE';")
+            VIEWS=$($PSQL -c "SELECT COUNT(*) FROM \"AnalyticsEvent\" WHERE event = 'guest.view_opened' AND \"createdAt\" >= '$DEPLOY_DATE';")
+            NEW_WISHLISTS=$($PSQL -c "SELECT COUNT(*) FROM \"Wishlist\" WHERE \"createdAt\" >= '$DEPLOY_DATE';")
+            echo "Q3: converted=$CONVERTED views=$VIEWS new_wishlists=$NEW_WISHLISTS"
+
+            # === Thresholds from guest-conversion-spec.md § 5 ===
+            # PASS:
+            #   - attribution rate ≥ 20%
+            #   - guest.converted_to_user ≥ 5
+            #   - distinct sources ≥ 2 (not monocline)
+            FAILURES=()
+            [ "$PCT" -lt 20 ]              && FAILURES+=("attribution rate is ${PCT}% (need ≥ 20%)")
+            [ "$CONVERTED" -lt 5 ]         && FAILURES+=("guest.converted_to_user fired $CONVERTED times (need ≥ 5)")
+            [ "$DISTINCT_SOURCES" -lt 2 ]  && FAILURES+=("only $DISTINCT_SOURCES distinct source(s) — monocline distribution")
+
+            DATE=$(date -u '+%Y-%m-%d')
+
+            if [ ${#FAILURES[@]} -eq 0 ]; then
+              VERDICT="PASS"
+              EMOJI="🟢"
+              NEXT_STEP="Ready to flip ReferralProgramConfig enabled=true. Run the SQL from referral-decision.md § Стage 3 (sandbox or admin shell):
+
+UPDATE \"ReferralProgramConfig\"
+SET enabled=true,
+    \"configVersion\"='v3-launch-${DATE}',
+    \"updatedAt\"=now(),
+    \"updatedByAdminId\"='manual-launch-${DATE}'
+WHERE id='default';
+
+rolloutPercent is already at 100. Watch referral-monitor.yml for the next 24h."
+            else
+              VERDICT="FAIL"
+              EMOJI="🔴"
+              FAIL_LIST=""
+              for f in "${FAILURES[@]}"; do FAIL_LIST+="• $f
+"; done
+              NEXT_STEP="Investigate before flipping:
+${FAIL_LIST}
+Likely cause: one of 4 entry paths in apps/web/app/miniapp/lib/attribution.ts didn't wire correctly. Trace which start-payload types are absent from the source distribution above — that's the broken path."
+            fi
+
+            REPORT="${EMOJI} Referral self-check ${DATE} — ${VERDICT}
+
+Q1 attribution rate: ${PCT}% (${ATTRIBUTED}/${TOTAL})
+Q2 sources: ${SOURCES_CSV}
+Q3 guest.converted: ${CONVERTED} (views ${VIEWS}, new wishlists ${NEW_WISHLISTS})
+
+Next step:
+${NEXT_STEP}
+
+— delete .github/workflows/referral-self-check.yml after this fires (one-shot)."
+
+            echo "=== REPORT ==="
+            echo "$REPORT"
+
+            # Always notify Telegram on both PASS and FAIL — this is a launch
+            # milestone, not a daily monitor, so silence-on-clean does not
+            # apply here.
+            if [ -n "${ADMIN_ALERT_CHAT_IDS:-}" ] && [ -n "${BOT_TOKEN:-}" ]; then
+              for chat_id in $(echo "$ADMIN_ALERT_CHAT_IDS" | tr ',' ' '); do
+                curl -sf -X POST \
+                  "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+                  -d "chat_id=${chat_id}" \
+                  --data-urlencode "text=$REPORT" \
+                  -o /dev/null && echo "sent to $chat_id" || echo "send failed for $chat_id"
+              done
+            else
+              echo "ADMIN_ALERT_CHAT_IDS or BOT_TOKEN missing — report not sent"
+            fi
+
+      - name: Pin report to job summary
+        if: always()
+        run: |
+          echo "### Referral self-check (one-shot, 2026-06-03)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "PASS/FAIL verdict + next step is in the **Run guest-conversion self-check** step above (scroll to \`=== REPORT ===\`). A Telegram alert is sent to \`ADMIN_ALERT_CHAT_IDS\` regardless of verdict." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "After the 2026-06-03 run, **delete \`.github/workflows/referral-self-check.yml\`** — it is single-purpose and the year-guard inside the script makes future runs no-ops anyway." >> "$GITHUB_STEP_SUMMARY"
