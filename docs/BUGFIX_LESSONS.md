@@ -5,6 +5,136 @@ New entries go at the top.
 
 ---
 
+## 2026-05-28 — Security audit cont'd: god-mode env-only (no DB persistence)
+
+### Симптом
+
+God-mode was stored as `User.godMode` boolean column. The toggle endpoint
+(`POST /tg/me/god-mode`) checked `GOD_MODE_TELEGRAM_IDS` env at write time
+and flipped the DB flag — but every subsequent read used the DB flag
+directly, with NO env re-check. Concrete bypass:
+
+1. Operator A added to `GOD_MODE_TELEGRAM_IDS=A`. Toggles god on →
+   `User(A).godMode = true` persisted in DB.
+2. Operator A removed from env (incident response, team rotation,
+   contractor offboarding). Server restart picks up new env.
+3. Operator A's next API request → `getOrCreateTgUser` returns the user
+   row with `godMode: true` straight from the DB.
+4. Every downstream `if (!user.godMode)` admin gate and every
+   `getEffectiveEntitlements(userId, godMode: true)` call still grant
+   unlimited PRO / admin endpoints. The env revocation didn't propagate.
+
+The DB column was a parallel source of truth that desynced from the
+intended source of truth (env). Same anti-pattern as a session that
+caches "is admin" without re-checking the admin allowlist on every
+request — works until the allowlist changes.
+
+### Root cause
+
+The toggle endpoint was designed when god-mode was a "dev convenience"
+(flip it on for yourself once, no re-auth). The threat model expanded
+when god-mode became privilege-granting (PRO entitlement bypass, admin
+analytics access, Santa test-mode toggle, etc.). Once it grants
+privilege, the access decision MUST be re-evaluated on every request
+against the live env allowlist — same way you'd never trust a session
+flag for `is_admin` without re-checking your admin table.
+
+The DB column was structurally wrong; it should never have existed.
+
+### Lesson
+
+- **Privilege-granting flags are computed, not stored.** Anything an
+  operator's removal-from-env should immediately revoke must be
+  derived from env at read time, not stored. Storing it creates a
+  desync window where the DB lags the env, and the larger the team /
+  the more contractors / the more incidents, the more likely that
+  window matters.
+- **Toggle endpoints are anti-patterns for env-derived state.** If the
+  source of truth is env, "toggle" is semantically meaningless — env
+  is set by the operator updating `/opt/wishlist/.env` and restarting,
+  not by a HTTP request. The toggle endpoint was a misleading UI
+  element that suggested user agency where there was none.
+- **Foreign-user privilege reads need the same env check.** It's easy
+  to fix the "I see my own god-mode" path and miss the "I'm reading
+  ANOTHER user's god-mode for entitlement comparison" path. Both
+  `reservations.routes.ts:1203` (owner's god-mode when reserving on
+  their wishlist) and `public.routes.ts:483` (owner's god-mode for
+  public profile entitlements) read `User.godMode` directly; both
+  needed updating to use `isGodModeTelegramId(otherUser.telegramId)`.
+
+### Rule
+
+- **Any new privilege-granting flag (admin, beta, god, dev) must
+  derive from env at read time** — not stored in DB, not cached in
+  session. If you find yourself writing `await prisma.user.update({
+  data: { isAdmin: true } })` for a privilege-granting field, stop —
+  there's an `XADMIN_TELEGRAM_IDS` env var you should consult instead.
+- **`isGodModeTelegramId(telegramId)` is the only god-mode predicate.**
+  Don't read `User.godMode` directly anywhere. The column is
+  deprecated and dropped by a follow-up migration; the schema-level
+  `@default(false)` keeps existing rows valid until then.
+- **When you delete a toggle endpoint, also delete the client UI that
+  drives it.** Otherwise the next operator gets a confusing 404 toast
+  and may try to "fix" it. The Mini App's god-mode button at
+  `screens/profile/ProfileRoot.tsx:1155` was replaced with a read-only
+  "env" pill in the same commit as the server change.
+
+### Better code
+
+- `apps/api/src/services/telegram-auth.ts`:
+  - New export `isGodModeTelegramId(telegramId)` — pure function over
+    `process.env.GOD_MODE_TELEGRAM_IDS`. Whitespace-tolerant
+    comma-separated allowlist.
+  - `getOrCreateTgUser` now overrides the DB `godMode` field with
+    the env-derived value before returning. Every caller using
+    `req.tgUser → getOrCreateTgUser → user.godMode` automatically
+    gets the live env answer.
+- `apps/api/src/services/entitlement.ts:259`:
+  - `getEffectiveEntitlements(userId)` (no godMode arg) — looks up
+    `telegramId`, passes through `isGodModeTelegramId`. Stops reading
+    the deprecated `godMode` column on the auto-resolve path.
+- `apps/api/src/routes/reservations.routes.ts:1203`,
+  `apps/api/src/routes/public.routes.ts:483` — foreign-user reads
+  switch `select: { godMode: true }` → `select: { telegramId: true }`
+  and apply `isGodModeTelegramId(otherUser.telegramId)`.
+- `apps/api/src/routes/me.routes.ts:1303-1322` — `POST /me/god-mode`
+  handler removed (kept as a doc-only comment for the historical
+  context). `apps/api/src/index.ts:688` route registration removed in
+  the same commit.
+- `apps/web/app/miniapp/screens/profile/ProfileRoot.tsx:1140` — the
+  interactive toggle button is replaced with a read-only "env" chip
+  next to the status text. Operators still see their current god
+  state but can't click anything.
+
+### Schema migration
+
+The `User.godMode` column itself is not dropped in this commit. Reason:
+schema migrations require a separate rollout discipline (deploy code
+that no longer reads the column → wait for full rollout / cache
+invalidation → migration that drops the column → wait → ...). Both
+steps in one commit are reversible only by another two-step rollback.
+A follow-up `prisma migrate` will drop the column once this code has
+been live for one full deploy cycle.
+
+Until then: writes to the column stop (toggle removed), reads from the
+column stop (`getOrCreateTgUser` overrides, `getEffectiveEntitlements`
+no longer reads on the auto-resolve path, foreign-user reads switched).
+The remaining DB rows with `godMode: true` are inert.
+
+### Regression tests
+
+- `apps/api/src/services/telegram-auth.test.ts` — 6 new tests on
+  `isGodModeTelegramId`: env in/out, empty/unset env, whitespace
+  tolerance, null/undefined telegramId, and the regression case
+  where stale DB `godMode=true` does NOT grant access if env is
+  empty.
+- `apps/api/src/services/entitlement.test.ts:592` — rewritten "falls
+  back to DB godMode" test to assert env-derived fallback instead.
+  Plus a new test asserting NO god-mode when env doesn't include
+  the user's telegramId.
+
+---
+
 ## 2026-05-28 — Security audit cont'd: URL scheme allowlist на Mini App `<a href>`
 
 Continuation of the 2026-05-28 audit. Closes the Mini App phishing vector

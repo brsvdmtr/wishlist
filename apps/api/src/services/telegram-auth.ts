@@ -138,6 +138,25 @@ export function requireTelegramAuth(req: Request, res: Response, next: NextFunct
   return next();
 }
 
+/**
+ * Pure env-derived god-mode predicate. The `GOD_MODE_TELEGRAM_IDS` env var
+ * is the SOLE source of truth — operator removal from the env list revokes
+ * access on the next request, with no DB persistence to clean up. The
+ * `User.godMode` column is deprecated as of 2026-05-28 and no longer
+ * granted-on by anything; a follow-up migration drops the column.
+ *
+ * Comma-separated whitespace-tolerant: `GOD_MODE_TELEGRAM_IDS=42, 99, 1000`
+ * grants god to Telegram IDs 42, 99, 1000.
+ */
+export function isGodModeTelegramId(telegramId: string | null | undefined): boolean {
+  if (!telegramId) return false;
+  const allowlist = (process.env.GOD_MODE_TELEGRAM_IDS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return allowlist.includes(telegramId);
+}
+
 export async function getOrCreateTgUser(tgUser: TelegramUser) {
   // Capture every Telegram-supplied identity field on every authenticated
   // request. These are non-auth fields (no security decision relies on
@@ -187,7 +206,12 @@ export async function getOrCreateTgUser(tgUser: TelegramUser) {
       props: { source: 'telegram', isPremium },
     });
   }
-  return user;
+  // Override the DB-stored `godMode` flag with the env-derived predicate.
+  // The DB column persists across env-allowlist changes, which let removed
+  // operators retain god access until a manual UPDATE. Computing from env
+  // every request closes that window: revoke = update env, restart, done.
+  // The column itself is deprecated and removed by a follow-up migration.
+  return { ...user, godMode: isGodModeTelegramId(user.telegramId) };
 }
 
 /**

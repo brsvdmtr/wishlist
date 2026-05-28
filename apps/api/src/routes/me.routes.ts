@@ -1300,26 +1300,17 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
     }),
   );
   
-  // POST /tg/me/god-mode — toggle god mode (dev only, whitelisted users)
-  meRouter.post(
-    '/me/god-mode',
-    asyncHandler(async (req, res) => {
-      const user = await getOrCreateTgUser(req.tgUser!);
-  
-      const godModeAllowedIds = (process.env.GOD_MODE_TELEGRAM_IDS ?? '').split(',').filter(Boolean);
-      if (!user.telegramId || !godModeAllowedIds.includes(user.telegramId)) {
-        return res.status(403).json({ error: 'Forbidden' });
-      }
-  
-      const updated = await prisma.user.update({
-        where: { id: user.id },
-        data: { godMode: !user.godMode },
-        select: { godMode: true },
-      });
-  
-      return res.json({ godMode: updated.godMode });
-    }),
-  );
+  // POST /tg/me/god-mode — REMOVED 2026-05-28.
+  //
+  // God-mode is now exclusively derived from the GOD_MODE_TELEGRAM_IDS env
+  // allowlist (see services/telegram-auth.ts isGodModeTelegramId). The toggle
+  // endpoint was the only writer of User.godMode; with godMode env-derived
+  // the toggle has no effect and the endpoint is gone. The Mini App's
+  // "God mode: on/off" switch is correspondingly removed.
+  //
+  // The route registration in index.ts:688 is also removed, so a stale
+  // client hitting POST /tg/me/god-mode receives a 404 instead of a 200
+  // with a stale flag.
 
   // ─── God-stats ─────────────────────────────────────────────────────
   // GET /tg/me/god-stats — internal analytics dashboard (god mode users only)

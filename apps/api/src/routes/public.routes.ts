@@ -23,6 +23,7 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { zodError } from '../lib/http';
 import { secureCompare } from '../lib/crypto';
 import { PLACEMENT_ORDER_BY } from '../placements/orderBy';
+import { isGodModeTelegramId } from '../services/telegram-auth';
 
 export type PublicRouterDeps = {
   // Narrow tuple-like type so `[...ACTIVE_STATUSES]` resolves to a literal
@@ -479,8 +480,9 @@ export function registerPublicRouter(deps: PublicRouterDeps): Router {
           dontGiftCustomItems: true,
           dontGiftComment: true,
           dontGiftVisible: true,
-          // Owner godMode — needed so entitlement check honours god-mode PRO
-          user: { select: { godMode: true } },
+          // Owner telegramId — used to derive god-mode from the env allowlist
+          // (the DB godMode column is deprecated; see services/telegram-auth.ts).
+          user: { select: { telegramId: true } },
         },
       });
       if (!profile) return res.status(404).json({ error: 'Profile not found' });
@@ -539,7 +541,7 @@ export function registerPublicRouter(deps: PublicRouterDeps): Router {
       } = null;
 
       if (isPublic && profile.showcaseEnabled) {
-        const ownerEnt = await getUserEntitlement(profile.userId, profile.user?.godMode ?? false);
+        const ownerEnt = await getUserEntitlement(profile.userId, isGodModeTelegramId(profile.user?.telegramId));
         if (ownerEnt.isPro) {
           // Filter pinned IDs to only include wishlists that are still public
           const pinnedSet = new Set(profile.showcasePinnedIds);

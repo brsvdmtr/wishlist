@@ -589,11 +589,37 @@ describe('getEffectiveEntitlements — add-on aggregation', () => {
     expect(r.hasGroupGift).toBe(true);
   });
 
-  it('falls back to DB godMode when not passed explicitly', async () => {
-    shared.userFindUnique.mockResolvedValueOnce({ godMode: true });
-    const r = await getEffectiveEntitlements('u1');
-    expect(r.isPro).toBe(true);
-    expect(r.proSource).toBe('god_mode');
+  it('falls back to env-derived godMode when not passed explicitly — telegramId in GOD_MODE_TELEGRAM_IDS', async () => {
+    // Post-2026-05-28 contract: god-mode is no longer pulled from the
+    // deprecated User.godMode column; the resolver now looks up the user's
+    // telegramId and consults the GOD_MODE_TELEGRAM_IDS env allowlist.
+    const prev = process.env.GOD_MODE_TELEGRAM_IDS;
+    process.env.GOD_MODE_TELEGRAM_IDS = '777';
+    try {
+      shared.userFindUnique.mockResolvedValueOnce({ telegramId: '777' });
+      const r = await getEffectiveEntitlements('u1');
+      expect(r.isPro).toBe(true);
+      expect(r.proSource).toBe('god_mode');
+    } finally {
+      if (prev === undefined) delete process.env.GOD_MODE_TELEGRAM_IDS;
+      else process.env.GOD_MODE_TELEGRAM_IDS = prev;
+    }
+  });
+
+  it('falls back to NO god-mode when telegramId is NOT in env allowlist (stale DB flag is ignored)', async () => {
+    // Regression: pre-2026-05-28 a user with User.godMode=true in DB but no
+    // longer in the env list still got isPro=true via god_mode. Env is now
+    // the sole source of truth; DB flag is irrelevant.
+    const prev = process.env.GOD_MODE_TELEGRAM_IDS;
+    process.env.GOD_MODE_TELEGRAM_IDS = '999';
+    try {
+      shared.userFindUnique.mockResolvedValueOnce({ telegramId: '777' });
+      const r = await getEffectiveEntitlements('u1');
+      expect(r.proSource).not.toBe('god_mode');
+    } finally {
+      if (prev === undefined) delete process.env.GOD_MODE_TELEGRAM_IDS;
+      else process.env.GOD_MODE_TELEGRAM_IDS = prev;
+    }
   });
 });
 

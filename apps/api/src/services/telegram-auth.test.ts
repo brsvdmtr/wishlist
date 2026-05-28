@@ -33,6 +33,7 @@ import {
   SYSTEM_ACTOR_HASH,
   getOrCreateTgUser,
   resolveTgUserId,
+  isGodModeTelegramId,
   INIT_DATA_MAX_AGE_SECONDS,
   INIT_DATA_CLOCK_SKEW_SECONDS,
   clampMaxAgeSeconds,
@@ -315,5 +316,58 @@ describe('resolveTgUserId', () => {
     expect(await resolveTgUserId(undefined)).toBeNull();
     expect(await resolveTgUserId(null)).toBeNull();
     expect(shared.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// isGodModeTelegramId — env-derived god-mode predicate. Sole source of truth
+// as of 2026-05-28; the previous User.godMode DB column is deprecated.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('isGodModeTelegramId', () => {
+  beforeEach(() => { delete process.env.GOD_MODE_TELEGRAM_IDS; });
+
+  it('returns true when telegramId is in the env allowlist', () => {
+    process.env.GOD_MODE_TELEGRAM_IDS = '42,99,1000';
+    expect(isGodModeTelegramId('42')).toBe(true);
+    expect(isGodModeTelegramId('99')).toBe(true);
+    expect(isGodModeTelegramId('1000')).toBe(true);
+  });
+
+  it('returns false when telegramId is NOT in the env allowlist', () => {
+    process.env.GOD_MODE_TELEGRAM_IDS = '42,99';
+    expect(isGodModeTelegramId('1000')).toBe(false);
+    expect(isGodModeTelegramId('420')).toBe(false); // not a substring match
+  });
+
+  it('returns false when env var is empty / unset', () => {
+    delete process.env.GOD_MODE_TELEGRAM_IDS;
+    expect(isGodModeTelegramId('42')).toBe(false);
+    process.env.GOD_MODE_TELEGRAM_IDS = '';
+    expect(isGodModeTelegramId('42')).toBe(false);
+    process.env.GOD_MODE_TELEGRAM_IDS = '   ';
+    expect(isGodModeTelegramId('42')).toBe(false);
+  });
+
+  it('tolerates whitespace around comma-separated ids', () => {
+    process.env.GOD_MODE_TELEGRAM_IDS = '42, 99 ,1000';
+    expect(isGodModeTelegramId('42')).toBe(true);
+    expect(isGodModeTelegramId('99')).toBe(true);
+    expect(isGodModeTelegramId('1000')).toBe(true);
+  });
+
+  it('returns false for null / undefined / empty telegramId without consulting env', () => {
+    process.env.GOD_MODE_TELEGRAM_IDS = '42';
+    expect(isGodModeTelegramId(null)).toBe(false);
+    expect(isGodModeTelegramId(undefined)).toBe(false);
+    expect(isGodModeTelegramId('')).toBe(false);
+  });
+
+  it('regression: stale User.godMode=true in DB does NOT grant god access (env is the gate)', () => {
+    // Pre-2026-05-28 a removed-from-env operator with godMode=true in DB
+    // retained god access until manual DB cleanup. The new predicate ignores
+    // the DB column entirely — only env matters. The test simulates env
+    // revocation by emptying the allowlist; god access is gone immediately.
+    process.env.GOD_MODE_TELEGRAM_IDS = '';
+    expect(isGodModeTelegramId('42')).toBe(false);
   });
 });

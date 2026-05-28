@@ -51,6 +51,7 @@ import { getRequestLocale } from '../lib/locale';
 import { secureCompare } from '../lib/crypto';
 import { sendTgNotification } from '../telegram/botApi';
 import { escapeTgHtml } from '../telegram/html';
+import { isGodModeTelegramId } from '../services/telegram-auth';
 import { profileToLanguageSettings, resolveUserFirstName } from '../services/locale';
 import { recordForeignWishlistAccess } from '../services/foreign-wishlist-access';
 import { makeAddonRequired, makePlanLimitReached, makeProRequired, sendPaywall } from '../services/paywall';
@@ -1200,8 +1201,12 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
         let smartRes = false;
         let smartResExpiresAt: Date | null = null;
         if (wishlist) {
-          const ownerUser = await tx.user.findUnique({ where: { id: wishlist.ownerId }, select: { godMode: true } });
-          const ownerEnt = await getEffectiveEntitlements(wishlist.ownerId, ownerUser?.godMode ?? false);
+          // Foreign user god-mode is computed from the env allowlist via the
+          // owner's telegramId; the DB `godMode` column is deprecated (see
+          // services/telegram-auth.ts isGodModeTelegramId).
+          const ownerUser = await tx.user.findUnique({ where: { id: wishlist.ownerId }, select: { telegramId: true } });
+          const ownerGodMode = isGodModeTelegramId(ownerUser?.telegramId);
+          const ownerEnt = await getEffectiveEntitlements(wishlist.ownerId, ownerGodMode);
           const activeReservations = await tx.item.findMany({
             where: { wishlistId: item.wishlistId, status: 'RESERVED' },
             select: { reserverUserId: true },
@@ -1222,7 +1227,7 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
           // Smart Reservations: double-check both toggle AND owner entitlement
           if (wishlist.smartReservationsEnabled) {
             smartRes = hasSmartReservations(
-              { godMode: ownerUser?.godMode ?? false }, ownerEnt.isPro, ownerEnt.addOns, item.wishlistId
+              { godMode: ownerGodMode }, ownerEnt.isPro, ownerEnt.addOns, item.wishlistId
             );
           }
           if (smartRes) {
