@@ -73,6 +73,7 @@ import { parsePaywallError, paywallContextFromError } from './lib/paywall';
 import { fireAttributionBeacon } from './lib/attribution';
 import { useExperiment } from './lib/experiments';
 import { inferReferralLoadFailReason } from './lib/referralFailReason';
+import { withChunkRetry } from './lib/chunkRetry';
 import {
   shouldShowE11Cta,
   readLastSeenAt as readE11LastSeenAt,
@@ -93,7 +94,7 @@ import {
   SECURITY_TOAST_CODES,
   CLIENT_BUG_CODES,
 } from './idempotency';
-import { parseReservationReminderPayload, parseEventReminderPayload, parseSurveyInvitePayload, looksLikeId } from './startParam';
+import { parseReservationReminderPayload, parseEventReminderPayload, parseSurveyInvitePayload, parseItemOpenPayload, looksLikeId } from './startParam';
 // Tiny constant — the full RELEASE_NOTES array stays in the lazy ChangelogScreen
 // chunk; only the latest id is referenced from the main chunk (changelog "new!"
 // badge in settings). HAND-SYNC on release: see release-notes-latest.ts.
@@ -138,19 +139,19 @@ import type { ReferralHistoryPage } from './hooks/useReferralState';
 // destroy the perf win.
 
 const AppearanceSettings = dynamic(
-  () => import('./screens/AppearanceSettings').then(m => ({ default: m.AppearanceSettings })),
+  withChunkRetry(() => import('./screens/AppearanceSettings').then(m => ({ default: m.AppearanceSettings }))),
   { ssr: false, loading: () => <Skeleton variant="settings" /> },
 );
 const CalendarRoot = dynamic(
-  () => import('./screens/calendar/CalendarRoot').then(m => ({ default: m.CalendarRoot })),
+  withChunkRetry(() => import('./screens/calendar/CalendarRoot').then(m => ({ default: m.CalendarRoot }))),
   { ssr: false, loading: () => <Skeleton variant="calendar" /> },
 );
 const SearchScreen = dynamic(
-  () => import('./screens/SearchScreen').then(m => ({ default: m.SearchScreen })),
+  withChunkRetry(() => import('./screens/SearchScreen').then(m => ({ default: m.SearchScreen }))),
   { ssr: false, loading: () => <Skeleton variant="list" /> },
 );
 const SurveyScreen = dynamic(
-  () => import('./screens/survey/SurveyScreen').then(m => ({ default: m.SurveyScreen })),
+  withChunkRetry(() => import('./screens/survey/SurveyScreen').then(m => ({ default: m.SurveyScreen }))),
   { ssr: false, loading: () => <Skeleton variant="form" /> },
 );
 
@@ -159,19 +160,19 @@ const SurveyScreen = dynamic(
 // locale data out of the main chunk. The data files (./screens/data/*) are
 // transitive imports of these lazy chunks — they ride along, not into main.
 const FAQScreen = dynamic(
-  () => import('./screens/FAQScreen').then(m => ({ default: m.FAQScreen })),
+  withChunkRetry(() => import('./screens/FAQScreen').then(m => ({ default: m.FAQScreen }))),
   { ssr: false, loading: () => <Skeleton variant="settings" /> },
 );
 const ChangelogScreen = dynamic(
-  () => import('./screens/ChangelogScreen').then(m => ({ default: m.ChangelogScreen })),
+  withChunkRetry(() => import('./screens/ChangelogScreen').then(m => ({ default: m.ChangelogScreen }))),
   { ssr: false, loading: () => <Skeleton variant="list" /> },
 );
 const LegalMenuScreen = dynamic(
-  () => import('./screens/LegalMenuScreen').then(m => ({ default: m.LegalMenuScreen })),
+  withChunkRetry(() => import('./screens/LegalMenuScreen').then(m => ({ default: m.LegalMenuScreen }))),
   { ssr: false, loading: () => <Skeleton variant="settings" /> },
 );
 const LegalDocViewerScreen = dynamic(
-  () => import('./screens/LegalDocViewerScreen').then(m => ({ default: m.LegalDocViewerScreen })),
+  withChunkRetry(() => import('./screens/LegalDocViewerScreen').then(m => ({ default: m.LegalDocViewerScreen }))),
   { ssr: false, loading: () => <Skeleton variant="form" /> },
 );
 
@@ -179,7 +180,7 @@ const LegalDocViewerScreen = dynamic(
 // fires once per user lifetime. 193 LOC of UI + 4-locale strings → its own
 // lazy chunk.
 const GiftNotesOnboardingContent = dynamic(
-  () => import('./screens/GiftNotesOnboardingContent').then(m => ({ default: m.GiftNotesOnboardingContent })),
+  withChunkRetry(() => import('./screens/GiftNotesOnboardingContent').then(m => ({ default: m.GiftNotesOnboardingContent }))),
   { ssr: false, loading: () => <Skeleton variant="form" /> },
 );
 
@@ -188,7 +189,7 @@ const GiftNotesOnboardingContent = dynamic(
 // All state still lives in MiniAppInner via `useSantaState` — the chunk
 // receives those refs through a `ctx` prop bag rather than re-instantiating.
 const SantaRoot = dynamic(
-  () => import('./screens/santa/SantaRoot').then(m => ({ default: m.SantaRoot })),
+  withChunkRetry(() => import('./screens/santa/SantaRoot').then(m => ({ default: m.SantaRoot }))),
   { ssr: false, loading: () => <Skeleton variant="settings" /> },
 );
 
@@ -200,7 +201,7 @@ const SantaRoot = dynamic(
 // as a 17-LOC dispatcher to the already-extracted `GiftNotesOnboardingContent`
 // (F4 Wave A++, separate lazy chunk).
 const GiftNotesRoot = dynamic(
-  () => import('./screens/gift-notes/GiftNotesRoot').then(m => ({ default: m.GiftNotesRoot })),
+  withChunkRetry(() => import('./screens/gift-notes/GiftNotesRoot').then(m => ({ default: m.GiftNotesRoot }))),
   { ssr: false, loading: () => <Skeleton variant="form" /> },
 );
 
@@ -213,7 +214,7 @@ const GiftNotesRoot = dynamic(
 // MiniApp.tsx for the language/visibility/comments-default sheets that
 // live outside the cluster.
 const SettingsRoot = dynamic(
-  () => import('./screens/settings/SettingsRoot').then(m => ({ default: m.SettingsRoot })),
+  withChunkRetry(() => import('./screens/settings/SettingsRoot').then(m => ({ default: m.SettingsRoot }))),
   { ssr: false, loading: () => <Skeleton variant="settings" /> },
 );
 
@@ -223,7 +224,7 @@ const SettingsRoot = dynamic(
 // `useShowcaseState`; the chunk receives those refs through a `ctx` prop
 // bag — same pattern as SantaRoot/GiftNotesRoot.
 const ShowcaseRoot = dynamic(
-  () => import('./screens/showcase/ShowcaseRoot').then(m => ({ default: m.ShowcaseRoot })),
+  withChunkRetry(() => import('./screens/showcase/ShowcaseRoot').then(m => ({ default: m.ShowcaseRoot }))),
   { ssr: false, loading: () => <Skeleton variant="form" /> },
 );
 
@@ -233,7 +234,7 @@ const ShowcaseRoot = dynamic(
 // MiniAppInner via `useGroupGiftState`; the chunk receives those refs
 // through a `ctx` prop bag.
 const GroupGiftRoot = dynamic(
-  () => import('./screens/group-gift/GroupGiftRoot').then(m => ({ default: m.GroupGiftRoot })),
+  withChunkRetry(() => import('./screens/group-gift/GroupGiftRoot').then(m => ({ default: m.GroupGiftRoot }))),
   { ssr: false, loading: () => <Skeleton variant="form" /> },
 );
 
@@ -246,7 +247,7 @@ const GroupGiftRoot = dynamic(
 // MiniApp.tsx as global overlays sharing the same hook instance; only the
 // inline screen JSX is in this chunk.
 const ProfileRoot = dynamic(
-  () => import('./screens/profile/ProfileRoot').then(m => ({ default: m.ProfileRoot })),
+  withChunkRetry(() => import('./screens/profile/ProfileRoot').then(m => ({ default: m.ProfileRoot }))),
   { ssr: false, loading: () => <Skeleton variant="list" /> },
 );
 
@@ -258,7 +259,7 @@ const ProfileRoot = dynamic(
 // (subscribeToProfile, unsubscribeFromProfile, loadGuestWishlist) are
 // forwarded via ctx.
 const PublicProfileRoot = dynamic(
-  () => import('./screens/public-profile/PublicProfileRoot').then(m => ({ default: m.PublicProfileRoot })),
+  withChunkRetry(() => import('./screens/public-profile/PublicProfileRoot').then(m => ({ default: m.PublicProfileRoot }))),
   { ssr: false, loading: () => <Skeleton variant="list" /> },
 );
 
@@ -270,7 +271,7 @@ const PublicProfileRoot = dynamic(
 // in MiniAppInner so they can compose with auth + analytics, and they
 // read the same hook instance via destructure.
 const ReferralRoot = dynamic(
-  () => import('./screens/referral/ReferralRoot').then(m => ({ default: m.ReferralRoot })),
+  withChunkRetry(() => import('./screens/referral/ReferralRoot').then(m => ({ default: m.ReferralRoot }))),
   { ssr: false, loading: () => <Skeleton variant="list" /> },
 );
 
@@ -282,7 +283,7 @@ const ReferralRoot = dynamic(
 // MiniAppInner via `useGuestViewState`; the chunk receives those refs
 // through a `ctx` prop bag — same pattern as Group Gift / Showcase.
 const GuestViewRoot = dynamic(
-  () => import('./screens/guest/GuestViewRoot').then(m => ({ default: m.GuestViewRoot })),
+  withChunkRetry(() => import('./screens/guest/GuestViewRoot').then(m => ({ default: m.GuestViewRoot }))),
   { ssr: false, loading: () => <Skeleton variant="list" /> },
 );
 
@@ -8022,7 +8023,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         flushTelemetry();
       };
 
-      trackEvent('miniapp.bootstrap_started', { startParamType: startParam ? (startParam.startsWith('santa_') ? 'santa' : startParam.startsWith('src_') ? 'attribution' : startParam.includes('__') ? 'guest' : 'service') : 'none' });
+      trackEvent('miniapp.bootstrap_started', { startParamType: startParam ? (startParam.startsWith('santa_') ? 'santa' : startParam.startsWith('src_') ? 'attribution' : startParam.startsWith('item_') && !startParam.includes('__item_') ? 'item' : startParam.includes('__') ? 'guest' : 'service') : 'none' });
 
       // Reset birthday-deeplink context on every boot. Telegram caches the
       // Mini App root component, so a previous `br_<deliveryId>` session can
@@ -8374,6 +8375,72 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 trackEvent('event_reminder_deeplink_unavailable', { occasionId: targetOccasionId, reason: occResult.kind });
                 setGnViewingOccasion(null);
                 bootSetScreen('my-wishlists');
+              }
+            })
+            .catch(handleErr);
+        }
+      } else if (startParam && startParam.startsWith('item_') && !startParam.includes('__item_')) {
+        // Owner-facing item-open deep link: item_<itemId>.
+        // Sent by the "🎁 Перейти к желанию" inline button on owner notifications
+        // (reserve, secret→public promotion, smart-res auto-release). Lands
+        // the owner directly on the item-detail screen.
+        //
+        // Mutual exclusion with the legacy `<slug>__item_<id>` guest-share
+        // format is enforced two ways: (a) the `!includes('__item_')` guard
+        // here, (b) the parser rejects payloads containing `__item_` so even
+        // a stray match falls into the malformed branch instead of
+        // half-routing. The legacy branch handles `<slug>__item_<id>` in the
+        // next else-if.
+        //
+        // Stale-state handling mirrors the crpl_ (comment-reply) branch:
+        // 200 → owner role expected, set viewingItem + item-detail.
+        // 404 / 403 / error → item-unavailable screen with explicit reason
+        // (auto-released → AVAILABLE is still 200 because the owner still
+        // owns the item; only deletion/archive-via-wishlist-deletion yields
+        // 404). Notification copy stays accurate because the message text
+        // already references the moment of reservation, not the current
+        // state.
+        const parsed = parseItemOpenPayload(startParam);
+        if (parsed.kind !== 'ok') {
+          trackEvent('item_deeplink_opened', { reason: 'malformed', payload: startParam });
+          loadWishlists()
+            .then(() => {
+              trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
+              pushToast(t('item_deeplink_malformed_toast', locale), 'error');
+              bootSetScreen('my-wishlists');
+            })
+            .catch(handleErr);
+        } else {
+          const targetItemId = parsed.itemId;
+          trackEvent('item_deeplink_opened', { itemId: targetItemId });
+          const itemPromise = tgFetch(`/tg/items/${encodeURIComponent(targetItemId)}`)
+            .then(async (res) => {
+              if (res.status === 404) return { kind: 'not_found' as const };
+              if (res.status === 403) return { kind: 'forbidden' as const };
+              if (!res.ok) return { kind: 'error' as const };
+              const json = await res.json() as { item: Item };
+              return { kind: 'ok' as const, item: json.item };
+            })
+            .catch(() => ({ kind: 'error' as const }));
+
+          Promise.all([loadWishlists().catch(() => {}), itemPromise])
+            .then(([, itemResult]) => {
+              trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
+              if (itemResult.kind === 'ok') {
+                setViewingItem(itemResult.item);
+                bootSetScreen('item-detail');
+              } else if (itemResult.kind === 'not_found') {
+                trackEvent('item_deeplink_unavailable', { itemId: targetItemId, reason: 'not_found' });
+                setItemUnavailableReason('not_found');
+                bootSetScreen('item-unavailable');
+              } else if (itemResult.kind === 'forbidden') {
+                trackEvent('item_deeplink_unavailable', { itemId: targetItemId, reason: 'forbidden' });
+                setItemUnavailableReason('forbidden');
+                bootSetScreen('item-unavailable');
+              } else {
+                trackEvent('item_deeplink_unavailable', { itemId: targetItemId, reason: 'error' });
+                setItemUnavailableReason('unknown');
+                bootSetScreen('item-unavailable');
               }
             })
             .catch(handleErr);

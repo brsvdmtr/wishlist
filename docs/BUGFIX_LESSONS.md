@@ -5,6 +5,103 @@ New entries go at the top.
 
 ---
 
+## 2026-05-28 — Settings screen "froze" for Wish_Support post-referral-flip — actually a transient `ChunkLoadError`
+
+### Symptom
+
+Wish_Support (the operator's own account) clicked a referral link
+right after the 14:21 UTC flip, the bot processed `?start=ref_9TS5M9`
+and rejected attribution (INVITEE_HAD_PRIOR_WISHLIST — Wish_Support is
+an existing user). User opened Mini App, navigated to Settings. Screen
+appeared frozen. They reloaded; second attempt worked fine.
+
+### Root cause
+
+Not a referral bug. GlitchTip event `WISHLIST-WEB-2` at
+2026-05-28 14:27:00 UTC on release `f880d6e`:
+
+> `ChunkLoadError: Loading chunk 7679 failed.`
+> `(error: https://wishlistik.ru/_next/static/chunks/7679.9b56564421b1427f.js)`
+> mechanism.handled = true
+
+Chunk 7679 is the lazy-loaded `AppearanceSettings` component
+([apps/web/app/miniapp/MiniApp.tsx:141](../apps/web/app/miniapp/MiniApp.tsx#L141)),
+which renders in Settings between Profile-card and Calendar sections.
+The chunk file existed on disk and in the bind-mounted
+`/opt/wishlist/web-chunks/` (verified by curl 14:41 UTC: HTTP 200) —
+this was a transient fetch failure (CF edge miss / mobile network blip
+/ Telegram WKWebView quirk).
+
+The `dynamic()` import threw → Suspense fell through to
+`MiniAppErrorBoundary` → boundary rendered the "😕 Reload" UI. User
+described that as "frozen" (the screen showed an error, not the
+expected Settings). They tapped reload, second attempt fetched the
+chunk cleanly, Settings loaded normally.
+
+### Lesson
+
+- **`next/dynamic` has no built-in retry.** A single transient chunk
+  fetch failure surfaces as the same error UI as a genuinely-broken
+  build. Webpack-retry-chunk-load-plugin exists but is webpack-config
+  invasive; a simple importer wrapper achieves the same outcome
+  without touching the build pipeline.
+- **One retry is enough for the dominant failure mode.** Transient
+  fetch failures (CF edge MISS coinciding with origin timeout, mobile
+  connectivity glitch, WKWebView race) almost always recover on the
+  next attempt. A 500ms backoff keeps the user-perceived skeleton time
+  reasonable; longer backoffs make legitimate failures slower to
+  surface.
+- **Don't retry non-chunk errors.** Real bugs (TypeError, ReferenceError,
+  network DNS failure) should reach the boundary immediately. The
+  retry guard only fires on `ChunkLoadError` name OR
+  `/Loading chunk \w+ failed/i` message — both webpack-emitted patterns.
+- **CDN edge caching can MASK the bug at investigation time.** When I
+  curl'd the chunk URL ~15 minutes after the user hit the error, it
+  returned 200 cleanly. The same URL was 404/timeout for them at the
+  moment of failure. Lesson: GlitchTip's per-event timestamp is the
+  ground truth, not a post-hoc curl.
+
+### Rule
+
+- **Every `next/dynamic` call in the Mini App MUST wrap its importer
+  with `withChunkRetry`** from `apps/web/app/miniapp/lib/chunkRetry.ts`.
+  The monolith-guards regex tolerates an optional wrapper around the
+  `() => import(...)` arg, so the pattern is enforced without
+  hard-coding the helper name.
+- **Don't widen the retry beyond ChunkLoadError.** The helper exists
+  for the specific case of webpack chunk fetch failures. Generic
+  network errors / API failures have their own retry strategies (e.g.
+  tgFetch idempotency keys); folding them in here muddles the contract.
+
+### Better code
+
+- [`apps/web/app/miniapp/lib/chunkRetry.ts`](../apps/web/app/miniapp/lib/chunkRetry.ts) —
+  new helper. ~30 LOC, no dependencies, pure function.
+- [`apps/web/app/miniapp/lib/chunkRetry.test.ts`](../apps/web/app/miniapp/lib/chunkRetry.test.ts) —
+  6 unit tests: success path, retry-on-name, retry-on-message, non-chunk
+  errors propagate immediately, both attempts fail propagate, 500ms
+  spacing.
+- [`apps/web/app/miniapp/MiniApp.tsx`](../apps/web/app/miniapp/MiniApp.tsx) —
+  all 18 `dynamic()` call sites wrapped:
+  `withChunkRetry(() => import(...).then(m => ({ default: m.X })))`.
+- [`apps/web/app/miniapp/monolith-guards.test.ts`](../apps/web/app/miniapp/monolith-guards.test.ts) —
+  regex tweaked to allow an optional wrapper function around the
+  importer. 92/92 lazy-screen guards still pass.
+
+### What's NOT in this fix
+
+- **Auto-reload from MiniAppErrorBoundary on ChunkLoadError.** Tempting
+  but the current manual reload UI is safer — a runaway auto-reload
+  loop is worse than a static error screen. If users start hitting
+  double-fail ChunkLoadError in observable volume, revisit then with
+  proper loop-guard testing.
+- **Webpack `output.chunkLoadTimeout` or `crossOrigin` headers.**
+  These help only specific subclasses of failure. The retry covers
+  them all generically. If the failure mode narrows in future
+  investigation, can layer the specific knob on top.
+
+---
+
 ## 2026-05-28 — Referral analytics: `screen_load_failed` and `history_load_failed` fire without a `reason` prop — untriageable
 
 ### Symptom

@@ -155,8 +155,12 @@ describe('MiniApp.tsx — F1 lazy-screen regression guard (2026-05-25)', () => {
       // Tolerant of whitespace / line-breaks; strict on the wrapper
       // and the ssr:false toggle.
       const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Tolerant of an optional importer wrapper (e.g. withChunkRetry(() => import(...)))
+      // — the 2026-05-28 chunkRetry helper retries ChunkLoadError once before
+      // surrendering to the boundary. The wrapper must NOT defeat dynamic()'s
+      // chunk-split (separately asserted via the static-import guard below).
       const dynamicCall = new RegExp(
-        `const\\s+${name}\\s*=\\s*dynamic\\(\\s*\\(\\)\\s*=>\\s*import\\(['"]${escapedPath}['"]\\)`,
+        `const\\s+${name}\\s*=\\s*dynamic\\(\\s*(?:\\w+\\(\\s*)?\\(\\)\\s*=>\\s*import\\(['"]${escapedPath}['"]\\)`,
       );
       expect(MINI_APP_SRC, `${name} must be dynamic()-wrapped`).toMatch(dynamicCall);
       // The ssr:false toggle is what keeps the chunk out of the server
