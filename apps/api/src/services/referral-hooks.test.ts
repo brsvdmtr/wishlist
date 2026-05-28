@@ -12,6 +12,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const shared = vi.hoisted(() => ({
   userFindUnique: vi.fn(),
+  userProfileFindUnique: vi.fn(),
   loadReferralConfig: vi.fn(),
   markFirstWishlist: vi.fn(),
   markFirstItem: vi.fn(),
@@ -26,7 +27,10 @@ const shared = vi.hoisted(() => ({
 }));
 
 vi.mock('@wishlist/db', () => ({
-  prisma: { user: { findUnique: shared.userFindUnique } },
+  prisma: {
+    user: { findUnique: shared.userFindUnique },
+    userProfile: { findUnique: shared.userProfileFindUnique },
+  },
   loadReferralConfig: shared.loadReferralConfig,
   markFirstWishlist: shared.markFirstWishlist,
   markFirstItem: shared.markFirstItem,
@@ -59,6 +63,9 @@ import { notifyReferralInviterRewarded, runReferralProgressHook } from './referr
 beforeEach(() => {
   for (const v of Object.values(shared)) (v as ReturnType<typeof vi.fn>).mockReset?.();
   shared.loadReferralConfig.mockResolvedValue({ notifyInviterReward: true });
+  // Default: organic user (no invite). Tests that exercise the invitee branch
+  // override this with mockResolvedValueOnce({ referredByUserId: 'inviter-X' }).
+  shared.userProfileFindUnique.mockResolvedValue({ referredByUserId: null });
 });
 
 describe('notifyReferralInviterRewarded', () => {
@@ -143,23 +150,55 @@ describe('runReferralProgressHook — milestone marking', () => {
     shared.tryQualifyAttribution.mockResolvedValue({ kind: 'not_qualified' });
   });
 
-  it('first_wishlist milestone calls markFirstWishlist + tracks event', async () => {
+  it('first_wishlist milestone calls markFirstWishlist + tracks event with hasAttribution=false for organic user', async () => {
     await runReferralProgressHook('u1', 'first_wishlist');
     expect(shared.markFirstWishlist).toHaveBeenCalled();
     expect(shared.markFirstItem).not.toHaveBeenCalled();
     expect(shared.trackAnalyticsEvent).toHaveBeenCalledWith({
       event: 'referral.first_wishlist_created',
       userId: 'u1',
+      props: { hasAttribution: false },
     });
   });
 
-  it('first_item milestone calls markFirstItem + tracks event', async () => {
+  it('first_item milestone calls markFirstItem + tracks event with hasAttribution=false for organic user', async () => {
     await runReferralProgressHook('u2', 'first_item');
     expect(shared.markFirstItem).toHaveBeenCalled();
     expect(shared.markFirstWishlist).not.toHaveBeenCalled();
     expect(shared.trackAnalyticsEvent).toHaveBeenCalledWith({
       event: 'referral.first_item_created',
       userId: 'u2',
+      props: { hasAttribution: false },
+    });
+  });
+
+  it('first_wishlist for invitee (referredByUserId set) emits hasAttribution=true', async () => {
+    shared.userProfileFindUnique.mockResolvedValueOnce({ referredByUserId: 'inviter-7' });
+    await runReferralProgressHook('invitee-1', 'first_wishlist');
+    expect(shared.trackAnalyticsEvent).toHaveBeenCalledWith({
+      event: 'referral.first_wishlist_created',
+      userId: 'invitee-1',
+      props: { hasAttribution: true },
+    });
+  });
+
+  it('first_item for invitee (referredByUserId set) emits hasAttribution=true', async () => {
+    shared.userProfileFindUnique.mockResolvedValueOnce({ referredByUserId: 'inviter-9' });
+    await runReferralProgressHook('invitee-2', 'first_item');
+    expect(shared.trackAnalyticsEvent).toHaveBeenCalledWith({
+      event: 'referral.first_item_created',
+      userId: 'invitee-2',
+      props: { hasAttribution: true },
+    });
+  });
+
+  it('treats missing UserProfile row as hasAttribution=false (no crash)', async () => {
+    shared.userProfileFindUnique.mockResolvedValueOnce(null);
+    await runReferralProgressHook('u-noprofile', 'first_wishlist');
+    expect(shared.trackAnalyticsEvent).toHaveBeenCalledWith({
+      event: 'referral.first_wishlist_created',
+      userId: 'u-noprofile',
+      props: { hasAttribution: false },
     });
   });
 

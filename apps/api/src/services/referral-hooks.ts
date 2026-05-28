@@ -126,12 +126,30 @@ export async function runReferralProgressHook(
   milestone: 'first_wishlist' | 'first_item',
 ): Promise<void> {
   try {
+    // hasAttribution disambiguates invitee milestones from organic ones — the
+    // first_*_created events fire for every user on every wishlist/item create,
+    // not just invitees. referredByUserId is set only by tryCreateAttribution
+    // when program.enabled=true, so this is the authoritative invitee signal.
+    const profile = await prisma.userProfile.findUnique({
+      where: { userId },
+      select: { referredByUserId: true },
+    });
+    const hasAttribution = profile?.referredByUserId != null;
+
     if (milestone === 'first_wishlist') {
       await markFirstWishlist(prisma, userId);
-      trackAnalyticsEvent({ event: 'referral.first_wishlist_created', userId });
+      trackAnalyticsEvent({
+        event: 'referral.first_wishlist_created',
+        userId,
+        props: { hasAttribution },
+      });
     } else {
       await markFirstItem(prisma, userId);
-      trackAnalyticsEvent({ event: 'referral.first_item_created', userId });
+      trackAnalyticsEvent({
+        event: 'referral.first_item_created',
+        userId,
+        props: { hasAttribution },
+      });
     }
 
     const qualified = await tryQualifyAttribution(prisma, userId);

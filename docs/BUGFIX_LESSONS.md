@@ -5,6 +5,95 @@ New entries go at the top.
 
 ---
 
+## 2026-05-28 — Referral analytics: `first_*_created` events are not invitee-only — add `hasAttribution` prop
+
+### Symptom
+
+[`docs/research/referral-decision.md § 8`](research/referral-decision.md)
+flagged that `referral.first_item_created` (63 events / 30 days) and
+`referral.first_wishlist_created` (21 / 30 days) fire for **every** user
+on every first wishlist / item create — not just invitees. The names
+strongly imply "first item by an invitee", which is what an analyst
+needs at launch to compute conversion / qualifying rates. Without a way
+to filter, the events mix signal (invitees crossing the qualifying
+threshold) with noise (every organic user reaching the same milestone)
+and become unusable for the launch dashboard.
+
+This is structural — the hook runs unconditionally from
+`wishlists.routes.ts:874` and `:2084`, then enters
+`runReferralProgressHook` which emits the event before
+`tryQualifyAttribution` even runs. `tryQualifyAttribution` itself
+short-circuits cleanly on `no attribution row → not_applicable`, but the
+event is already in the DB.
+
+### Lesson
+
+- **Naming a server-authoritative analytics event after a domain it
+  doesn't gate is a permanent footgun.** Once the event is in
+  `AnalyticsEvent` with a misleading name, every future dashboard query
+  has to remember to filter or join the right column. The cheapest fix
+  is to keep the name (renaming would break existing queries +
+  dashboards built on the 90+ events already in DB) and add a
+  disambiguating prop — `hasAttribution: boolean` — that the dashboard
+  filters on.
+- **The signal we want is `UserProfile.referredByUserId IS NOT NULL`.**
+  That column is set only by `tryCreateAttribution` in the bot when
+  `config.enabled = true`, so during the current OFF window it's
+  uniformly false (matches reality: 0 invitees). When the program flips
+  back on, future invitees will surface as `hasAttribution=true`
+  without changing the event name.
+- **One extra `SELECT referredByUserId FROM UserProfile WHERE userId=?`
+  per first-milestone fire is fine.** The hook is bounded — runs once
+  per item/wishlist create, low-volume relative to the DB. Don't
+  short-circuit on "we'll query when we actually need it" — the cost is
+  not the query, the cost is the future analyst stuck reverse-engineering
+  whose conversion they're seeing.
+
+### Rule
+
+- **Any analytics event whose name implies an audience or condition
+  (`invitee_*`, `paid_*`, `gifted_*`, etc.) must include the
+  condition's truth value as a prop**, or be gated so it only fires
+  when the condition holds. Naming-only signals get filtered out as
+  noise.
+- **Before adding a new prop to an analytics event, check that all
+  existing call sites still emit it.** `referral.first_wishlist_created`
+  and `first_item_created` are emitted only from `runReferralProgressHook`
+  — single owner, easy. Multi-emitter events need every caller updated
+  in the same commit.
+
+### Better code
+
+- [`apps/api/src/services/referral-hooks.ts:128-150`](../apps/api/src/services/referral-hooks.ts) —
+  added one `prisma.userProfile.findUnique({ select: { referredByUserId: true } })`
+  before the milestone block; both events now emit
+  `props: { hasAttribution }` where `hasAttribution = profile?.referredByUserId != null`.
+- [`apps/api/src/services/referral-hooks.test.ts`](../apps/api/src/services/referral-hooks.test.ts) —
+  added 3 new tests: invitee→true for first_wishlist, invitee→true for
+  first_item, missing UserProfile row→false (defensive). Existing
+  "organic user" tests updated to assert `hasAttribution: false`.
+
+### What's NOT in this fix
+
+- **Renaming the events** — would invalidate existing dashboard
+  queries and 84+ rows already in `AnalyticsEvent` from the 38-day
+  period when the program was accidentally ON. Prop-based
+  disambiguation is the cheaper migration.
+- **Suppressing the event when `markFirstWishlist`/`markFirstItem`
+  no-ops on a repeat call** — the markers are idempotent but the
+  current API doesn't return "was this the first call or a no-op?".
+  Adding that return type is a separate change with broader impact;
+  the dashboard can still answer "distinct users per milestone" via
+  `COUNT(DISTINCT userId)` on the event, so the over-emit doesn't
+  block the launch metric.
+- **Backfilling `hasAttribution` on the existing 84 rows** — they all
+  predate the foundation fix (2026-05-27) so `referredByUserId` was
+  uniformly NULL on the source profiles. Treat the pre-2026-05-28
+  rows as the "uninstrumented" baseline; future launch metrics start
+  from the prop's first emission.
+
+---
+
 ## 2026-05-28 — Security audit cont'd: Mini App XSS hygiene + Referer-no-referrer
 
 Three Low-severity Mini App findings that the agent flagged in the
