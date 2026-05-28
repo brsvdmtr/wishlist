@@ -95,40 +95,20 @@ jobs:
 
             DATE=$(date -u '+%Y-%m-%d')
 
+            NL=$'\n'
             if [ ${#FAILURES[@]} -eq 0 ]; then
               VERDICT="PASS"
               EMOJI="🟢"
-              NEXT_STEP="Ready to flip ReferralProgramConfig enabled=true. Run the SQL from referral-decision.md § Стage 3 (sandbox or admin shell):
-
-UPDATE \"ReferralProgramConfig\"
-SET enabled=true,
-    \"configVersion\"='v3-launch-${DATE}',
-    \"updatedAt\"=now(),
-    \"updatedByAdminId\"='manual-launch-${DATE}'
-WHERE id='default';
-
-rolloutPercent is already at 100. Watch referral-monitor.yml for the next 24h."
+              NEXT_STEP="Ready to flip ReferralProgramConfig enabled=true. Run the SQL from referral-decision.md § Stage 3 (sandbox or admin shell):${NL}${NL}UPDATE \"ReferralProgramConfig\"${NL}SET enabled=true,${NL}    \"configVersion\"='v3-launch-${DATE}',${NL}    \"updatedAt\"=now(),${NL}    \"updatedByAdminId\"='manual-launch-${DATE}'${NL}WHERE id='default';${NL}${NL}rolloutPercent is already at 100. Watch referral-monitor.yml for the next 24h."
             else
               VERDICT="FAIL"
               EMOJI="🔴"
               FAIL_LIST=""
-              for f in "${FAILURES[@]}"; do FAIL_LIST+="• $f
-"; done
-              NEXT_STEP="Investigate before flipping:
-${FAIL_LIST}
-Likely cause: one of 4 entry paths in apps/web/app/miniapp/lib/attribution.ts didn't wire correctly. Trace which start-payload types are absent from the source distribution above — that's the broken path."
+              for f in "${FAILURES[@]}"; do FAIL_LIST+="• $f${NL}"; done
+              NEXT_STEP="Investigate before flipping:${NL}${FAIL_LIST}${NL}Likely cause: one of 4 entry paths in apps/web/app/miniapp/lib/attribution.ts didn't wire correctly. Trace which start-payload types are absent from the source distribution above — that's the broken path."
             fi
 
-            REPORT="${EMOJI} Referral self-check ${DATE} — ${VERDICT}
-
-Q1 attribution rate: ${PCT}% (${ATTRIBUTED}/${TOTAL})
-Q2 sources: ${SOURCES_CSV}
-Q3 guest.converted: ${CONVERTED} (views ${VIEWS}, new wishlists ${NEW_WISHLISTS})
-
-Next step:
-${NEXT_STEP}
-
-— delete .github/workflows/referral-self-check.yml after this fires (one-shot)."
+            REPORT="${EMOJI} Referral self-check ${DATE} — ${VERDICT}${NL}${NL}Q1 attribution rate: ${PCT}% (${ATTRIBUTED}/${TOTAL})${NL}Q2 sources: ${SOURCES_CSV}${NL}Q3 guest.converted: ${CONVERTED} (views ${VIEWS}, new wishlists ${NEW_WISHLISTS})${NL}${NL}Next step:${NL}${NEXT_STEP}${NL}${NL}— delete .github/workflows/referral-self-check.yml after this fires (one-shot)."
 
             echo "=== REPORT ==="
             echo "$REPORT"
