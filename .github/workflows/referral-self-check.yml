@@ -111,7 +111,27 @@ jobs:
             DATE=$(date -u '+%Y-%m-%d')
 
             NL=$'\n'
-            if [ ${#FAILURES[@]} -eq 0 ]; then
+
+            # Detect whether the flip already happened — if so, this run is a
+            # post-launch snapshot, not a pre-launch gate. Recommendation text
+            # changes accordingly.
+            CURRENT_ENABLED=$($PSQL -c "SELECT enabled FROM \"ReferralProgramConfig\" WHERE id='default';")
+            CURRENT_VERSION=$($PSQL -c "SELECT \"configVersion\" FROM \"ReferralProgramConfig\" WHERE id='default';")
+
+            if [ "$CURRENT_ENABLED" = "t" ]; then
+              # Program already on — this run is a snapshot of post-launch
+              # foundation health, not a green-light gate.
+              if [ ${#FAILURES[@]} -eq 0 ]; then
+                VERDICT="PASS (post-launch snapshot)"
+                EMOJI="🟢"
+              else
+                VERDICT="DEGRADED (post-launch snapshot)"
+                EMOJI="🟡"
+              fi
+              FAIL_LIST=""
+              for f in "${FAILURES[@]}"; do FAIL_LIST+="• $f${NL}"; done
+              NEXT_STEP="Program is ALREADY enabled (configVersion=${CURRENT_VERSION}). This run is a post-launch foundation snapshot. No flip needed.${NL}${NL}${FAIL_LIST}Watch referral-monitor.yml for the steady-state daily health. If Q3 stays at 0 for >7 days post-launch, the guest.converted_to_user path needs investigation."
+            elif [ ${#FAILURES[@]} -eq 0 ]; then
               VERDICT="PASS"
               EMOJI="🟢"
               NEXT_STEP="Ready to flip ReferralProgramConfig enabled=true. Run the SQL from referral-decision.md § Stage 3 (sandbox or admin shell):${NL}${NL}UPDATE \"ReferralProgramConfig\"${NL}SET enabled=true,${NL}    \"configVersion\"='v3-launch-${DATE}',${NL}    \"updatedAt\"=now(),${NL}    \"updatedByAdminId\"='manual-launch-${DATE}'${NL}WHERE id='default';${NL}${NL}rolloutPercent is already at 100. Watch referral-monitor.yml for the next 24h."

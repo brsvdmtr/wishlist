@@ -319,3 +319,37 @@ PATCH body содержит только `rolloutPercent` и `updatedByAdminId` 
 self-check 2026-06-03 даст PASS (или после ручного review его FAIL-explanation).
 
 — Claude, 2026-05-28
+
+---
+
+## 12. Re-enable event (2026-05-28)
+
+| Field | Value |
+|---|---|
+| Action | PATCH `/admin/referral/config` `{enabled: true, configVersion: 'v3-launch-2026-05-28', updatedByAdminId: 'manual-launch-2026-05-28'}` |
+| Timestamp | 2026-05-28 14:21:14 UTC |
+| Method | Admin API (auto-invalidates `loadReferralConfig` cache + emits `referral.config_changed`) |
+| Operator decision | Owner explicitly chose to not wait for the 2026-06-03 self-check window — Q1 already PASS'd at 30% in dry-run, and the foundation was confirmed working end-to-end |
+| Rollout | 100% (rolloutPercent unchanged from prior state) |
+| Reward terms | rewardDaysInviter=30, qualificationWindowDays=14, monthlyCap=3, yearlyCap=12 — identical to pre-disable config |
+
+**Pre-requisites status at flip:**
+- ✅ #1 foundation shipped 2026-05-27
+- ✅ #2 admin-ops bump-rollout PATCHes only rolloutPercent (verified § 11.5)
+- ✅ #3 sanity check passed (§ 11)
+- 🟡 #4 self-check cron will fire 2026-06-03 as **post-launch snapshot** (workflow updated to detect already-enabled state and emit "no flip needed" recommendation)
+
+**Post-flip verification:**
+- `enabled=t`, `configVersion=v3-launch-2026-05-28` confirmed in `ReferralProgramConfig`
+- `referral.config_changed` event recorded at 14:21:14.168
+- 0 `error:*` events in 15 minutes post-flip
+- All 4 prod containers up
+
+**What to watch in first 24h** (via `referral-monitor.yml` daily at 07:07 UTC):
+- New `ReferralAttribution` rows (was 0 for entire OFF period — first non-zero number signals success)
+- Rejection rate vs new_24h (should stay <30%)
+- `FRAUD_REVIEW` queue depth
+- Spike in `referral.attribution_rejected_on_write` (signal for bug, not for fraud)
+- `referral.first_*_created` events with `hasAttribution=true` (per PR 1081376 — the launch-day signal)
+
+— Claude, 2026-05-28 14:21 UTC
