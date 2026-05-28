@@ -1779,6 +1779,7 @@ startEventSchedulers({
 startSmartReservationSchedulers({
   prisma, logger,
   sendTgNotification,
+  sendTgBotMessage,
   getSmartResLeadHours,
   SYSTEM_ACTOR_HASH,
 });

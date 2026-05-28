@@ -28,6 +28,8 @@ import type { PrismaClient } from '@wishlist/db';
 import type { Logger } from 'pino';
 import { t, resolveLocaleWithSource } from '@wishlist/shared';
 import { buildReservationReminderDeepLink } from '../telegram/deepLinks';
+import { buildOpenWishKeyboard } from '../notifications/openWishKeyboard';
+import { isCrossUserReservation } from '../notifications/crossUserReservation';
 import { escapeTgHtml } from '../telegram/html';
 import { profileToLanguageSettings } from '../services/locale';
 
@@ -40,7 +42,14 @@ export type ReservationReminderDeps = {
 export type SmartReservationSchedulerDeps = {
   prisma: PrismaClient;
   logger: Logger;
+  // Plain-text sender — used for gifter (reserver) notifications that have no
+  // CTA (they no longer hold the reservation, so there's no item-detail screen
+  // useful for them) and for the smart-res lead-time reminder.
   sendTgNotification: (chatId: string, text: string) => Promise<void>;
+  // Keyboard-capable sender — used for the owner side of the auto-release
+  // notification, which carries an "Open wish" inline button so the owner
+  // can review the now-available item without hunting.
+  sendTgBotMessage: (chatId: string, text: string, replyMarkup?: Record<string, unknown>) => Promise<boolean>;
   getSmartResLeadHours: (ttlH: number) => number;
   SYSTEM_ACTOR_HASH: string;
 };
@@ -149,7 +158,7 @@ export function startReservationReminderScheduler(deps: ReservationReminderDeps)
  * pre-extraction sequence (events-calendar was position 2).
  */
 export function startSmartReservationSchedulers(deps: SmartReservationSchedulerDeps): void {
-  const { prisma, logger, sendTgNotification, getSmartResLeadHours, SYSTEM_ACTOR_HASH } = deps;
+  const { prisma, logger, sendTgNotification, sendTgBotMessage, getSmartResLeadHours, SYSTEM_ACTOR_HASH } = deps;
 
   // ─── Smart Reservations: auto-release cron (every 5 min) ─────────────────────
   setInterval(async () => {
@@ -217,28 +226,40 @@ export function startSmartReservationSchedulers(deps: SmartReservationSchedulerD
             });
           });
 
-          // Notify gifter (= reserver). Per-recipient locale from persisted profile.
-          const reserver = await prisma.user.findUnique({
-            where: { id: meta.reserverUserId },
-            select: {
-              telegramChatId: true,
-              profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
-            },
-          });
-          if (reserver?.telegramChatId) {
-            const { locale: gifterLocale } = resolveLocaleWithSource(
-              profileToLanguageSettings(reserver.profile),
-            );
-            void sendTgNotification(reserver.telegramChatId, t('notif_smart_res_auto_released_gifter', gifterLocale, { title: escapeTgHtml(meta.item.title) }));
-          }
-          // Notify owner. Owner's profile preloaded above with the wishlist
-          // include — no extra round-trip.
-          const ownerChatId = meta.item.wishlist.owner.telegramChatId;
-          if (ownerChatId) {
-            const { locale: ownerLocale } = resolveLocaleWithSource(
-              profileToLanguageSettings(meta.item.wishlist.owner.profile),
-            );
-            void sendTgNotification(ownerChatId, t('notif_smart_res_auto_released_owner', ownerLocale, { title: escapeTgHtml(meta.item.title) }));
+          // Skip notifications entirely on self-reservation (owner reserved
+          // their own item, e.g. bookmark flow). Sending both "your
+          // reservation expired" and "your wish is available again" to the
+          // same chat is noise. See isCrossUserReservation for the policy.
+          if (isCrossUserReservation(meta.reserverUserId, meta.item.wishlist.ownerId)) {
+            // Notify gifter (= reserver). Per-recipient locale from persisted profile.
+            const reserver = await prisma.user.findUnique({
+              where: { id: meta.reserverUserId },
+              select: {
+                telegramChatId: true,
+                profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
+              },
+            });
+            if (reserver?.telegramChatId) {
+              const { locale: gifterLocale } = resolveLocaleWithSource(
+                profileToLanguageSettings(reserver.profile),
+              );
+              void sendTgNotification(reserver.telegramChatId, t('notif_smart_res_auto_released_gifter', gifterLocale, { title: escapeTgHtml(meta.item.title) }));
+            }
+            // Notify owner. Owner's profile preloaded above with the wishlist
+            // include — no extra round-trip. Includes the "Open wish" inline
+            // button (item is back to AVAILABLE — owner may want to re-check
+            // or re-share without scrolling through wishlists).
+            const ownerChatId = meta.item.wishlist.owner.telegramChatId;
+            if (ownerChatId) {
+              const { locale: ownerLocale } = resolveLocaleWithSource(
+                profileToLanguageSettings(meta.item.wishlist.owner.profile),
+              );
+              void sendTgBotMessage(
+                ownerChatId,
+                t('notif_smart_res_auto_released_owner', ownerLocale, { title: escapeTgHtml(meta.item.title) }),
+                buildOpenWishKeyboard(meta.item.id, ownerLocale),
+              );
+            }
           }
           logger.info({ metaId: meta.id, itemId: meta.item.id }, 'smart-res: auto-released');
         } catch (err) {
@@ -258,12 +279,32 @@ export function startSmartReservationSchedulers(deps: SmartReservationSchedulerD
         where: { isSmartRes: true, active: true, reminderSent: false, expiresAt: { not: null, gt: now } },
         take: 50,
         include: {
-          item: { select: { id: true, title: true } },
+          // wishlist.ownerId added 2026-05-28 to support the self-reservation
+          // skip — same noise class the auto-release path closes. Without it
+          // a self-reserve bookmark gets a "your reservation expires in 24h"
+          // DM about their own item.
+          item: { select: { id: true, title: true, wishlist: { select: { ownerId: true } } } },
         },
       });
       for (const meta of candidates) {
         try {
           if (!meta.expiresAt) continue;
+
+          // Self-reservation guard runs BEFORE the window-start check so
+          // the `reminderSent: true` write fires immediately on the first
+          // tick that sees this row, regardless of how far the bookmark is
+          // from its expiry. Putting it after the window check would let
+          // bookmarks outside the reminder window churn the cron
+          // (`reminderSent: false` + `expiresAt > now` keeps them in the
+          // findMany result set for up to `leadH` hours), starving genuine
+          // cross-user reminders when N bookmarks > the `take: 50` cap.
+          // Same "filter forever from future cron ticks" shape as the
+          // no-chat-ID branch further down in this loop.
+          if (!isCrossUserReservation(meta.reserverUserId, meta.item.wishlist.ownerId)) {
+            await prisma.reservationMeta.update({ where: { id: meta.id }, data: { reminderSent: true } });
+            continue;
+          }
+
           const leadH = getSmartResLeadHours(meta.smartResTtlHours ?? 72);
           const windowStart = meta.expiresAt.getTime() - leadH * 3600000;
           if (now.getTime() < windowStart) continue; // not in reminder window yet

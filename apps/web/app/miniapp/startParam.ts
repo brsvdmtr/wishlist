@@ -11,6 +11,7 @@
 //   reservation-reminder — rrem_<itemId>__m_<reservationMetaId>
 //   event-reminder       — evnt_<occasionId>
 //   research-survey      — srvy_<inviteId>
+//   item-open            — item_<itemId>
 
 // Cuid-shape guard reused by every deep-link parser. cuids are
 // `^[a-z0-9]{20,30}$` in practice, but the looser regex below also accepts
@@ -78,4 +79,32 @@ export function parseSurveyInvitePayload(payload: string): SurveyInvitePayload {
 
   if (!looksLikeId(inviteId)) return { kind: 'malformed' };
   return { kind: 'ok', inviteId };
+}
+
+export type ItemOpenPayload =
+  | { kind: 'ok'; itemId: string }
+  | { kind: 'malformed' };
+
+// Critical: must NOT match the legacy `<slug>__item_<id>` guest-share format
+// (handled by a separate branch in MiniApp.tsx). That format contains
+// `__item_` in the middle of the string; this one starts with `item_` at
+// position 0. The `startsWith` + double-underscore check makes the two
+// mutually exclusive.
+export function parseItemOpenPayload(payload: string): ItemOpenPayload {
+  if (!payload.startsWith('item_')) return { kind: 'malformed' };
+  // Guard against the legacy `<slug>__item_<id>` shape where the payload
+  // would technically pass startsWith only if the slug is empty (which the
+  // bootstrap already filters earlier), but the double-underscore separator
+  // is a defining marker. Reject defensively.
+  if (payload.includes('__item_')) return { kind: 'malformed' };
+
+  let itemId: string;
+  try {
+    itemId = decodeURIComponent(payload.slice('item_'.length));
+  } catch {
+    return { kind: 'malformed' };
+  }
+
+  if (!looksLikeId(itemId)) return { kind: 'malformed' };
+  return { kind: 'ok', itemId };
 }

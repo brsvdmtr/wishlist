@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseReservationReminderPayload, parseEventReminderPayload, parseSurveyInvitePayload } from './startParam';
+import { parseReservationReminderPayload, parseEventReminderPayload, parseSurveyInvitePayload, parseItemOpenPayload } from './startParam';
 
 describe('parseReservationReminderPayload', () => {
   it('parses a well-formed rrem_<itemId>__m_<metaId> payload', () => {
@@ -155,5 +155,77 @@ describe('parseSurveyInvitePayload', () => {
   it('rejects undecodable percent-encoded payloads', () => {
     const result = parseSurveyInvitePayload('srvy_%E0%A4%A');
     expect(result).toEqual({ kind: 'malformed' });
+  });
+});
+
+describe('parseItemOpenPayload', () => {
+  it('parses a well-formed item_<itemId> payload', () => {
+    const result = parseItemOpenPayload('item_cmaa1bb2ccdd');
+    expect(result).toEqual({ kind: 'ok', itemId: 'cmaa1bb2ccdd' });
+  });
+
+  it('round-trips the wire format produced by buildItemOpenDeepLink', () => {
+    // Contract test — keeps the API helper's encode and the parser's decode
+    // symmetric. Wire format documented in apps/api/src/telegram/deepLinks.ts.
+    const itemId = 'cmaa1bb2ccdd';
+    const wirePayload = `item_${encodeURIComponent(itemId)}`;
+    expect(parseItemOpenPayload(wirePayload)).toEqual({ kind: 'ok', itemId });
+  });
+
+  it('rejects payload without item_ prefix', () => {
+    expect(parseItemOpenPayload('rrem_cmaa1bb2ccdd__m_cmm9zz8yyxx')).toEqual({ kind: 'malformed' });
+    expect(parseItemOpenPayload('evnt_cmaa1bb2ccdd')).toEqual({ kind: 'malformed' });
+    expect(parseItemOpenPayload('foo')).toEqual({ kind: 'malformed' });
+    expect(parseItemOpenPayload('')).toEqual({ kind: 'malformed' });
+  });
+
+  it('rejects the legacy `<slug>__item_<id>` guest-share format', () => {
+    // The legacy guest-share deep link is handled by a separate branch in
+    // MiniApp.tsx (it loads `loadGuestWishlist(slug)` and looks for the item
+    // in the public response). It must NOT be claimed by the item-open
+    // parser, otherwise an authenticated owner clicking a shared link would
+    // be silently routed through the authenticated `/tg/items/:id` lookup
+    // instead of the public path — which would 403 if the slug is foreign.
+    expect(parseItemOpenPayload('username_123__item_cmaa1bb2ccdd')).toEqual({ kind: 'malformed' });
+    // Edge case: payload starts with `item_` AND contains `__item_` — must
+    // still be rejected so the malformed branch in MiniApp.tsx falls through
+    // safely rather than half-routing.
+    expect(parseItemOpenPayload('item_foo__item_cmaa1bb2ccdd')).toEqual({ kind: 'malformed' });
+  });
+
+  it('rejects ids that fail the strict cuid-shape regex', () => {
+    // Too short
+    expect(parseItemOpenPayload('item_short')).toEqual({ kind: 'malformed' });
+    // Too long
+    expect(parseItemOpenPayload(`item_${'a'.repeat(50)}`)).toEqual({ kind: 'malformed' });
+    // Forbidden character (`!`)
+    expect(parseItemOpenPayload('item_cmaa1bb2c!dd')).toEqual({ kind: 'malformed' });
+    // Decoded value is real but contains a space — strict regex rejects.
+    expect(parseItemOpenPayload('item_id%20with%20space')).toEqual({ kind: 'malformed' });
+  });
+
+  it('does not throw on a malformed URI-encoded payload', () => {
+    // Lone `%` is invalid for decodeURIComponent — must surface as
+    // malformed, not bubble up as an exception.
+    expect(parseItemOpenPayload('item_%E0%A4%A')).toEqual({ kind: 'malformed' });
+  });
+
+  it('does not match other deep-link payload prefixes', () => {
+    for (const other of [
+      'crpl_cmaa1bb2ccdd__c_cmcc3dd4eeff',
+      'rrem_cmaa1bb2ccdd__m_cmm9zz8yyxx',
+      'evnt_cmaa1bb2ccdd',
+      'srvy_cmaa1bb2ccdd',
+      'br_cmaa1bb2ccdd',
+      'santa_join_token123',
+      'gg_token123',
+      'occasion_cmaa1bb2ccdd',
+      'profile_someuser',
+      'src_email__med_marketing',
+      'cs_token123',
+      'create_wishlist',
+    ]) {
+      expect(parseItemOpenPayload(other)).toEqual({ kind: 'malformed' });
+    }
   });
 });

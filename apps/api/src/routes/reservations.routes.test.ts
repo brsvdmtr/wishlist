@@ -43,7 +43,15 @@ vi.mock('../services/foreign-wishlist-access', () => ({
   recordForeignWishlistAccess: vi.fn(async () => {}),
 }));
 
+vi.mock('../telegram/botApi', () => ({
+  sendTgNotification: vi.fn(async () => {}),
+  sendTgBotMessage: vi.fn(async () => true),
+}));
+
 import { registerReservationsRouter } from './reservations.routes';
+import { sendTgBotMessage } from '../telegram/botApi';
+
+const mockSendTgBotMessage = vi.mocked(sendTgBotMessage);
 
 function buildDeps(over: Partial<Parameters<typeof registerReservationsRouter>[0]> = {}) {
   return {
@@ -88,6 +96,8 @@ beforeEach(() => {
   shared.comment.count.mockResolvedValue(0);
   shared.groupGift.findMany.mockResolvedValue([]);
   shared.groupGiftParticipant.findMany.mockResolvedValue([]);
+  mockSendTgBotMessage.mockClear();
+  mockSendTgBotMessage.mockResolvedValue(true);
 });
 
 describe('GET /reservations — reserved-items list', () => {
@@ -400,5 +410,169 @@ describe('POST /items/:id/reserve — participant limit', () => {
       limit: 20,
       current: 20,
     });
+  });
+});
+
+describe('POST /items/:id/reserve — owner "Open wish" notification', () => {
+  // Pins the post-2026-05-28 UX contract: a successful public reservation
+  // sends the owner a DM with an inline "Перейти к желанию" button that
+  // deep-links into the Mini App via `?startapp=item_<itemId>`.
+  // A future refactor that drops the keyboard arg or swaps the wire format
+  // (`item_<id>` → something else) will fail HERE rather than ship a silent
+  // regression.
+  function setupSuccessfulReserve(opts: {
+    ownerId: string;
+    ownerChatId: string | null;
+    reserverUserId: string;
+  }) {
+    shared.$transaction.mockImplementation((cb: (tx: typeof shared) => unknown) => cb(shared));
+    shared.item.findUnique.mockResolvedValue({
+      status: 'AVAILABLE', reservationEpoch: 0, wishlistId: 'wl1',
+      title: 'Gold Apple',
+      wishlist: { ownerId: opts.ownerId, smartResTtlHours: 72, smartResAllowExtend: false, smartResMaxExtensions: 0 },
+    });
+    shared.wishlist.findUnique.mockResolvedValue({
+      ownerId: opts.ownerId, smartReservationsEnabled: false,
+      smartResTtlHours: 72, smartResAllowExtend: false, smartResMaxExtensions: 0,
+    });
+    // Two `prisma.user.findUnique` calls in the reserve flow with disjoint
+    // `select` sets — one for the godMode lookup (telegramId only) inside
+    // the transaction, one for the owner notification (telegramChatId +
+    // profile) afterwards. Dispatch by `select` shape, NOT by call order:
+    // a future refactor could re-order them and the test should survive
+    // as long as the select sets remain disjoint.
+    //
+    // Throw on a fall-through rather than returning null silently. If a
+    // future refactor merges the two selects into one (e.g. adds
+    // telegramId to the owner-side call for telegram-link verification),
+    // a silent `null` here would leave the notification path looking
+    // skipped — fail-loud surfaces it.
+    shared.user.findUnique.mockImplementation(async (args: { select?: Record<string, unknown> }) => {
+      if (args.select?.telegramId) return { godMode: false, telegramId: '99' };
+      if (args.select?.telegramChatId) {
+        return {
+          telegramChatId: opts.ownerChatId,
+          profile: { languageMode: 'auto', manualLanguage: null, normalizedLocale: 'ru', language: null },
+        };
+      }
+      throw new Error(`unexpected user.findUnique select shape: ${JSON.stringify(args.select)}`);
+    });
+    shared.item.findMany.mockResolvedValue([]); // no existing reservers
+    shared.item.update.mockResolvedValue({});
+    shared.reservationEvent.create.mockResolvedValue({});
+    shared.comment.create.mockResolvedValue({});
+    shared.comment.updateMany.mockResolvedValue({});
+    shared.reservationMeta.upsert.mockResolvedValue({});
+    const getOrCreateTgUser = vi.fn(async () => ({ id: opts.reserverUserId, telegramId: '42', godMode: false }));
+    const { app } = makeApp(buildDeps({ getOrCreateTgUser }));
+    return { app };
+  }
+
+  it('sends owner DM with inline "Open wish" keyboard pointing at item_<id> deep link', async () => {
+    const { app } = setupSuccessfulReserve({
+      ownerId: 'owner1', ownerChatId: 'chat-owner', reserverUserId: 'u-reserver',
+    });
+    const res = await request(app).post('/items/it1/reserve').send({ displayName: 'Anna' });
+    expect(res.status).toBe(200);
+
+    expect(mockSendTgBotMessage).toHaveBeenCalledOnce();
+    const [chatId, text, replyMarkup] = mockSendTgBotMessage.mock.calls[0]!;
+    expect(chatId).toBe('chat-owner');
+    expect(text).toContain('Gold Apple');
+    expect(text).toContain('Anna');
+    expect((replyMarkup as { inline_keyboard: unknown[][] }).inline_keyboard[0]).toHaveLength(1);
+    const btn = (replyMarkup as { inline_keyboard: Array<Array<{ text: string; web_app: { url: string } }>> }).inline_keyboard[0]![0]!;
+    expect(btn.web_app.url).toMatch(/\?startapp=item_it1$/);
+  });
+
+  it('skips notification entirely when reserver is the owner (self-reservation)', async () => {
+    // Self-reservation as bookmark flow: the public reserve route allows
+    // owner === reserver, but pushing "you reserved your own wish" + a
+    // button to navigate to it is noise. The guard added in this PR makes
+    // the DM fire only for genuine cross-user reservations.
+    const { app } = setupSuccessfulReserve({
+      ownerId: 'u-self', ownerChatId: 'chat-self', reserverUserId: 'u-self',
+    });
+    const res = await request(app).post('/items/it1/reserve').send({ displayName: 'Self' });
+    expect(res.status).toBe(200);
+    expect(mockSendTgBotMessage).not.toHaveBeenCalled();
+  });
+
+  it('skips notification when owner has no telegramChatId (never linked Telegram)', async () => {
+    const { app } = setupSuccessfulReserve({
+      ownerId: 'owner1', ownerChatId: null, reserverUserId: 'u-reserver',
+    });
+    const res = await request(app).post('/items/it1/reserve').send({ displayName: 'Anna' });
+    expect(res.status).toBe(200);
+    expect(mockSendTgBotMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /secret-reservations/:id/promote — owner "Open wish" notification', () => {
+  // Same contract as the public-reserve test above, but for the
+  // secret→public promotion path. Two distinct code sites, same wire shape.
+  function setupSecretPromote(opts: {
+    ownerId: string;
+    ownerChatId: string | null;
+    reserverUserId: string;
+  }) {
+    shared.secretReservation.findUnique.mockResolvedValue({
+      id: 'sr1', itemId: 'it1', reserverUserId: opts.reserverUserId, status: 'ACTIVE',
+    });
+    shared.$transaction.mockImplementation((cb: (tx: typeof shared) => unknown) => cb(shared));
+    // Two `prisma.item.findUnique` calls in the secret-promote flow with
+    // disjoint `select` sets:
+    //   1. in-transaction (route line ~931) — selects status/reservationEpoch/
+    //      wishlistId/title/archivedAt for the conflict check.
+    //   2. post-transaction (route line ~969) — selects wishlist.ownerId for
+    //      the notification routing.
+    // Dispatch by select shape so the test survives a future re-ordering
+    // (an extra read between them would have shifted mockResolvedValueOnce
+    // off-by-one — silent regression risk).
+    shared.item.findUnique.mockImplementation(async (args: { select?: Record<string, unknown> }) => {
+      if (args.select?.status) {
+        return { status: 'AVAILABLE', reservationEpoch: 0, wishlistId: 'wl1', title: 'Gold Apple', archivedAt: null };
+      }
+      if (args.select?.wishlist) {
+        return { wishlist: { ownerId: opts.ownerId } };
+      }
+      throw new Error(`unexpected item.findUnique select shape: ${JSON.stringify(args.select)}`);
+    });
+    shared.user.findUnique.mockResolvedValueOnce({
+      telegramChatId: opts.ownerChatId,
+      profile: { languageMode: 'auto', manualLanguage: null, normalizedLocale: 'ru', language: null },
+    });
+    shared.secretReservation.update.mockResolvedValue({});
+    shared.item.update.mockResolvedValue({});
+    shared.reservationEvent.create.mockResolvedValue({});
+    shared.comment.create.mockResolvedValue({});
+    shared.comment.updateMany.mockResolvedValue({});
+    shared.reservationMeta.upsert.mockResolvedValue({});
+    const getOrCreateTgUser = vi.fn(async () => ({ id: opts.reserverUserId, telegramId: '42', godMode: false }));
+    const { app } = makeApp(buildDeps({ getOrCreateTgUser }));
+    return { app };
+  }
+
+  it('sends owner DM with item_<id> deep-link button on successful promotion', async () => {
+    const { app } = setupSecretPromote({
+      ownerId: 'owner1', ownerChatId: 'chat-owner', reserverUserId: 'u-reserver',
+    });
+    const res = await request(app).post('/secret-reservations/sr1/promote').send({ displayName: 'Anna' });
+    expect(res.status).toBe(200);
+
+    expect(mockSendTgBotMessage).toHaveBeenCalledOnce();
+    const [chatId, , replyMarkup] = mockSendTgBotMessage.mock.calls[0]!;
+    expect(chatId).toBe('chat-owner');
+    const btn = (replyMarkup as { inline_keyboard: Array<Array<{ web_app: { url: string } }>> }).inline_keyboard[0]![0]!;
+    expect(btn.web_app.url).toMatch(/\?startapp=item_it1$/);
+  });
+
+  it('skips notification when reserver is the owner (self-promotion)', async () => {
+    const { app } = setupSecretPromote({
+      ownerId: 'u-self', ownerChatId: 'chat-self', reserverUserId: 'u-self',
+    });
+    const res = await request(app).post('/secret-reservations/sr1/promote').send({ displayName: 'Self' });
+    expect(res.status).toBe(200);
+    expect(mockSendTgBotMessage).not.toHaveBeenCalled();
   });
 });

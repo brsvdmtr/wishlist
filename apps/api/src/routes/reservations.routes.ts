@@ -49,7 +49,9 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { zodError } from '../lib/http';
 import { getRequestLocale } from '../lib/locale';
 import { secureCompare } from '../lib/crypto';
-import { sendTgNotification } from '../telegram/botApi';
+import { sendTgBotMessage } from '../telegram/botApi';
+import { buildOpenWishKeyboard } from '../notifications/openWishKeyboard';
+import { isCrossUserReservation } from '../notifications/crossUserReservation';
 import { escapeTgHtml } from '../telegram/html';
 import { isGodModeTelegramId } from '../services/telegram-auth';
 import { profileToLanguageSettings, resolveUserFirstName } from '../services/locale';
@@ -977,14 +979,23 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
             profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
           },
         });
-        if (owner?.telegramChatId) {
+        // Skip self-notification (bookmark flow); see isCrossUserReservation
+        // for the policy reasoning.
+        if (owner?.telegramChatId && isCrossUserReservation(user.id, itemData.wishlist.ownerId)) {
           // Recipient = owner. Reserver's request locale is irrelevant; resolve
           // the owner's effective locale from their persisted profile (no live
           // ctx for the owner here).
           const { locale: notifLocale } = resolveLocaleWithSource(
             profileToLanguageSettings(owner.profile),
           );
-          void sendTgNotification(owner.telegramChatId, t('notif_reserved', notifLocale, { name: escapeTgHtml(displayName), title: escapeTgHtml(result.title) }));
+          // Same inline "Open wish" button as the public-reserve path: the
+          // user-facing event is identical ("your wish was reserved") and
+          // owners benefit from the same one-tap navigation.
+          void sendTgBotMessage(
+            owner.telegramChatId,
+            t('notif_reserved', notifLocale, { name: escapeTgHtml(displayName), title: escapeTgHtml(result.title) }),
+            buildOpenWishKeyboard(row.itemId, notifLocale),
+          );
         }
       }
 
@@ -1291,13 +1302,23 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
               profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
             },
           });
-          if (owner?.telegramChatId) {
+          // Skip self-notification (bookmark flow); see isCrossUserReservation
+          // for the policy reasoning.
+          if (owner?.telegramChatId && isCrossUserReservation(user.id, itemData.wishlist.ownerId)) {
             // Recipient = owner. Resolve owner's locale from persisted profile
             // — reserver's request locale is irrelevant for owner's notification.
             const { locale: notifLocale } = resolveLocaleWithSource(
               profileToLanguageSettings(owner.profile),
             );
-            void sendTgNotification(owner.telegramChatId, t('notif_reserved', notifLocale, { name: escapeTgHtml(displayName), title: escapeTgHtml(itemData.title) }));
+            // Inline "Open wish" button deep-links straight to the item-detail
+            // screen — owner can see context (who reserved, comments) without
+            // hunting through wishlists. Stale-state handling lives in the
+            // Mini App parser (item_ branch in MiniApp.tsx).
+            void sendTgBotMessage(
+              owner.telegramChatId,
+              t('notif_reserved', notifLocale, { name: escapeTgHtml(displayName), title: escapeTgHtml(itemData.title) }),
+              buildOpenWishKeyboard(id, notifLocale),
+            );
           }
         }
 

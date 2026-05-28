@@ -1262,6 +1262,17 @@ const ru: Dict = {
   notif_res_reminder_note: '📝 {{note}}',
   notif_res_reminder_btn_open: '📱 Открыть',
   notif_res_reminder_btn_purchased: '✓ Куплено',
+  // "Open wish" CTA on owner-side notifications (reserve, secret→public
+  // promotion, smart-res auto-release). Distinct key from
+  // sub_notification_open_item_btn even though the text matches — keeps the
+  // semantic separation so reservation copy can evolve without leaking into
+  // subscription notifications.
+  notif_open_wish_btn: '🎁 Перейти к желанию',
+  // Toast shown when an item-open deep link FAILS TO PARSE (corrupt
+  // payload, length out of range, charset violation). Not the
+  // "item-was-deleted" path — that uses the item-unavailable screen with
+  // its own copy. Keep the wording focused on the link, not the item.
+  item_deeplink_malformed_toast: 'Не удалось открыть желание — проверьте ссылку',
   // Group-gift fanout notifications (sent from POST /tg/group-gifts/:id/{join,complete,cancel}).
   notif_group_gift_joined: '👥 {{name}} присоединился к совместному подарку',
   notif_group_gift_completed: '✅ Совместный подарок завершён!',
@@ -4309,6 +4320,8 @@ const en: Dict = {
   notif_res_reminder_note: '📝 {{note}}',
   notif_res_reminder_btn_open: '📱 Open',
   notif_res_reminder_btn_purchased: '✓ Purchased',
+  notif_open_wish_btn: '🎁 Open wish',
+  item_deeplink_malformed_toast: 'Couldn\'t open wish — check the link',
   notif_group_gift_joined: '👥 {{name}} joined the group gift',
   notif_group_gift_completed: '✅ Group gift completed!',
   notif_group_gift_cancelled: '❌ Group gift cancelled',
@@ -8413,6 +8426,8 @@ const zhCN: Dict = {
   notif_res_reminder_note: '📝 {{note}}',
   notif_res_reminder_btn_open: '📱 打开',
   notif_res_reminder_btn_purchased: '✓ 已购买',
+  notif_open_wish_btn: '🎁 查看愿望',
+  item_deeplink_malformed_toast: '无法打开愿望 — 请检查链接',
   notif_group_gift_joined: '👥 {{name}} 加入了团购礼物',
   notif_group_gift_completed: '✅ 团购礼物已完成！',
   notif_group_gift_cancelled: '❌ 团购礼物已取消',
@@ -11315,6 +11330,8 @@ const hi: Dict = {
   notif_res_reminder_note: '📝 {{note}}',
   notif_res_reminder_btn_open: '📱 खोलें',
   notif_res_reminder_btn_purchased: '✓ खरीदा',
+  notif_open_wish_btn: '🎁 इच्छा देखें',
+  item_deeplink_malformed_toast: 'इच्छा नहीं खोल पाए — लिंक जाँचें',
   notif_group_gift_joined: '👥 {{name}} ग्रुप गिफ्ट में शामिल हुए',
   notif_group_gift_completed: '✅ ग्रुप गिफ्ट पूरा हुआ!',
   notif_group_gift_cancelled: '❌ ग्रुप गिफ्ट रद्द',
@@ -14218,6 +14235,8 @@ const es: Dict = {
   notif_res_reminder_note: '📝 {{note}}',
   notif_res_reminder_btn_open: '📱 Abrir',
   notif_res_reminder_btn_purchased: '✓ Comprado',
+  notif_open_wish_btn: '🎁 Ver deseo',
+  item_deeplink_malformed_toast: 'No se pudo abrir el deseo — revisa el enlace',
   notif_group_gift_joined: '👥 {{name}} se unió al regalo grupal',
   notif_group_gift_completed: '✅ ¡Regalo grupal completado!',
   notif_group_gift_cancelled: '❌ Regalo grupal cancelado',
@@ -17124,6 +17143,8 @@ const ar: Dict = {
   notif_res_reminder_note: '📝 {{note}}',
   notif_res_reminder_btn_open: '📱 فتح',
   notif_res_reminder_btn_purchased: '✓ تم الشراء',
+  notif_open_wish_btn: '🎁 عرض الأمنية',
+  item_deeplink_malformed_toast: 'تعذّر فتح الأمنية — تحقق من الرابط',
   notif_group_gift_joined: '👥 {{name}} انضم إلى الهدية الجماعية',
   notif_group_gift_completed: '✅ اكتملت الهدية الجماعية!',
   notif_group_gift_cancelled: '❌ تم إلغاء الهدية الجماعية',

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { buildCommentReplyDeepLink, buildReservationReminderDeepLink, buildEventReminderDeepLink } from './deepLinks';
+import { buildCommentReplyDeepLink, buildReservationReminderDeepLink, buildEventReminderDeepLink, buildItemOpenDeepLink } from './deepLinks';
 
 // Snapshot env vars and restore between cases — the helpers read at call
 // time, so each test sets up its own env.
@@ -111,5 +111,56 @@ describe('buildEventReminderDeepLink', () => {
     expect(a).not.toContain('occasion_');
     expect(b).toContain('rrem_');
     expect(c).toContain('crpl_');
+  });
+});
+
+describe('buildItemOpenDeepLink', () => {
+  it('uses MINI_APP_URL when set', () => {
+    process.env.MINI_APP_URL = 'https://t.me/WishBoardBot/app';
+    const url = buildItemOpenDeepLink('cmaa1bb2ccdd');
+    expect(url).toBe('https://t.me/WishBoardBot/app?startapp=item_cmaa1bb2ccdd');
+  });
+
+  it('falls back to WEB_ORIGIN + /miniapp when MINI_APP_URL is missing', () => {
+    process.env.WEB_ORIGIN = 'https://example.com';
+    const url = buildItemOpenDeepLink('cmaa1bb2ccdd');
+    expect(url).toBe('https://example.com/miniapp?startapp=item_cmaa1bb2ccdd');
+  });
+
+  it('falls back to wishlistik.ru/miniapp when both env vars missing', () => {
+    const url = buildItemOpenDeepLink('cmaa1bb2ccdd');
+    expect(url).toBe('https://wishlistik.ru/miniapp?startapp=item_cmaa1bb2ccdd');
+  });
+
+  it('encodes itemId via encodeURIComponent (defensive — real cuids never need it)', () => {
+    process.env.MINI_APP_URL = 'https://t.me/WishBoardBot/app';
+    const url = buildItemOpenDeepLink('id with space');
+    expect(url).toBe('https://t.me/WishBoardBot/app?startapp=item_id%20with%20space');
+  });
+
+  it('produces a payload ≤ 64 chars for realistic cuid sizes (Telegram startapp limit)', () => {
+    // cuid2 ids are typically 24 chars; `item_` prefix adds 5 → 29 chars total.
+    // Allow plenty of headroom but assert the contract.
+    const url = buildItemOpenDeepLink('cmaa1bb2ccddeeff0011gghh');
+    const startapp = new URL(url).searchParams.get('startapp')!;
+    expect(startapp.length).toBeLessThanOrEqual(64);
+  });
+
+  it('does not collide with other deep-link prefixes', () => {
+    const item = buildItemOpenDeepLink('cmaa1bb2ccdd');
+    const rrem = buildReservationReminderDeepLink('cmaa1bb2ccdd', 'cmm9zz8yyxx');
+    const crpl = buildCommentReplyDeepLink('cmaa1bb2ccdd', 'cmcc3dd4eeff');
+    const evnt = buildEventReminderDeepLink('cmaa1bb2ccdd');
+    expect(item).toContain('?startapp=item_');
+    // The `item_` prefix is a hard substring of nothing else in the family —
+    // accidental drift here would silently break either the reservation
+    // notification button (sends item_X) or the existing `<slug>__item_<id>`
+    // guest-share format (which lives in MiniApp.tsx, not deepLinks.ts).
+    expect(item).not.toContain('rrem_');
+    expect(item).not.toContain('crpl_');
+    expect(item).not.toContain('evnt_');
+    expect(rrem).not.toMatch(/\?startapp=item_/);
+    expect(crpl).not.toMatch(/\?startapp=item_/);
+    expect(evnt).not.toMatch(/\?startapp=item_/);
   });
 });
