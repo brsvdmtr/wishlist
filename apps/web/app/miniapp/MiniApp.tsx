@@ -7841,13 +7841,24 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     document.querySelectorAll('.wb-nav-item').forEach(el => {
       el.classList.toggle('active', el.getAttribute('data-screen') === activeScreen);
     });
-    // Update topbar user info
+    // Update topbar user info via DOM API (no innerHTML).
+    //
+    // Telegram allows almost any Unicode in first_name, including `<`, `>`,
+    // `&`, and `"`. Previously this block did `topbar.innerHTML = ${first_name}`
+    // — a self-XSS in the current user's own header. Not cross-user
+    // exploitable today, but a textbook anti-pattern: `textContent`
+    // assignments + structural `createElement` are the right primitives
+    // for rendering user-controlled strings into the DOM outside React.
     const topbar = document.getElementById('wb-topbar-user');
     if (topbar && tgUser) {
-      topbar.innerHTML = `
-        <span>${tgUser.first_name || ''}</span>
-        <div class="wb-topbar-avatar">${(tgUser.first_name ?? 'U')[0]?.toUpperCase() ?? 'U'}</div>
-      `;
+      while (topbar.firstChild) topbar.removeChild(topbar.firstChild);
+      const span = document.createElement('span');
+      span.textContent = tgUser.first_name || '';
+      const avatar = document.createElement('div');
+      avatar.className = 'wb-topbar-avatar';
+      avatar.textContent = (tgUser.first_name ?? 'U')[0]?.toUpperCase() ?? 'U';
+      topbar.appendChild(span);
+      topbar.appendChild(avatar);
     }
   }, [isDesktop, screen, tgUser]);
 
@@ -20436,7 +20447,20 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 );
               })()}
             </div>
-            <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: t('reserve_privacy', locale) }} />
+            {/* `reserve_privacy` includes a single `<b>` segment in every locale.
+                Render it as structured JSX (no dangerouslySetInnerHTML) so any
+                future translation that contains an unexpected tag is rendered
+                as literal text rather than executed. Translations live in
+                packages/shared/src/i18n.ts and are bundled at build time, so
+                the bytes here are NOT user-controlled today — but treating
+                them as if they were is the right default. */}
+            <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.5 }}>
+              {(() => {
+                const raw = t('reserve_privacy', locale);
+                const m = raw.match(/^(.*?)<b>(.*?)<\/b>(.*)$/s);
+                return m ? <>{m[1]}<b>{m[2]}</b>{m[3]}</> : raw;
+              })()}
+            </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <Button variant="ghost" style={{ flex: 1 }} onClick={closeReserveSheet}>{t('cancel', locale)}</Button>
               <Button

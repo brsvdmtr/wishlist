@@ -5,6 +5,118 @@ New entries go at the top.
 
 ---
 
+## 2026-05-28 — Security audit cont'd: Mini App XSS hygiene + Referer-no-referrer
+
+Three Low-severity Mini App findings that the agent flagged in the
+2026-05-28 audit + a partial M2 (referer-leak, IP-leak deferred).
+Bundled here because individually they're 5-line fixes but the
+underlying patterns are worth pinning.
+
+### Findings
+
+1. **L1 — `topbar.innerHTML = ${tgUser.first_name}` self-XSS.** The
+   topbar render at `MiniApp.tsx:7846` was old-style imperative DOM
+   inside a `useEffect` and used `innerHTML` to interpolate the
+   current user's Telegram `first_name`. Self-XSS only (the value is
+   from the viewer's own `initDataUnsafe.user`, not another user's
+   data), so no cross-user impact. But Telegram permits practically
+   any Unicode in profile names including `<`, `>`, `&`, `"` — so
+   the user could XSS themselves by setting first_name to
+   `<img src=x onerror=alert(1)>`. Real defense-in-depth concern: the
+   pattern, if copied to a context where `tgUser` is a foreign
+   participant (Santa, group-gift, comments), becomes cross-user.
+
+2. **L2 — `dangerouslySetInnerHTML={{ __html: t('reserve_privacy') }}`.**
+   The translation contains a single hard-coded `<b>…</b>` segment.
+   Today the values are bundled at build time from
+   `packages/shared/src/i18n.ts`, so they're not user-controlled. But
+   `dangerouslySetInnerHTML` is forever a load-bearing trust
+   assumption: the moment translations move to DB / CMS / runtime
+   merge with user overrides, the file becomes a stored-XSS sink.
+
+3. **Partial M2 — `<img>`s render external URLs that leak Referer.**
+   12+ `<img src={item.imageUrl}>` callsites + 2 CSS
+   `backgroundImage: url(...)` callsites send the page Referer to
+   third-party image hosts when fetching. An attacker hosting
+   `https://attacker.example/track.gif` as a wishlist item image
+   gets the Referer header of every guest who views that wishlist —
+   leaks the share-link / public profile URL the viewer was on. Full
+   M2 (server-side image proxy) is deferred because of bandwidth
+   implications; the Referer-leak portion is closed cheaply via a
+   document-level `<meta name="referrer" content="no-referrer">`.
+
+### Lesson
+
+- **`innerHTML` is the wrong primitive for any string that isn't a
+  hard-coded constant.** `textContent` / `createElement` are about
+  the same length and remove the entire XSS class. The `useEffect`
+  + imperative DOM pattern lives in MiniApp.tsx because some
+  rendering is outside React's tree (the topbar predates the React
+  port); even there, the DOM API is safe-by-default and `innerHTML`
+  needs a `// safe — this string came from <constant>` justification
+  comment if it stays.
+- **`dangerouslySetInnerHTML` should never render a translation
+  string verbatim.** Use `<b>` / `<i>` / `<a>` JSX nodes explicitly,
+  or write a tiny inline parser that converts a single known tag to
+  structured JSX (the pattern we landed: `match(/^(.*?)<b>(.*?)<\/b>(.*)$/s)`).
+- **The document-level `referrer` Metadata controls every
+  subresource.** `<img>` (per-element `referrerPolicy`), CSS
+  `backgroundImage`, fetch, every external load — all of them
+  honour the `<meta name="referrer">` policy. Setting it once in
+  `app/miniapp/layout.tsx` is a single line that closes the
+  Referer-leak class for the entire route.
+
+### Rule
+
+- **No new `innerHTML` writes anywhere in `apps/web`.** Use
+  `textContent` for plain strings; use DOM-construction
+  (`createElement` + `appendChild`) for structural HTML; use React
+  for everything else. If you find existing `innerHTML` while
+  touching a region, replace it on touch.
+- **`dangerouslySetInnerHTML` requires an explicit
+  `// safe — origin: ...` comment** on the same line and proof in
+  review that the string is a hard-coded constant (i18n bundle,
+  static asset, design-system token). New uses without the comment
+  get rejected at review.
+- **`apps/web/app/miniapp/layout.tsx` keeps `referrer:
+  'no-referrer'`** in its `Metadata`. Removing it requires a
+  separate decision logged in
+  `docs/design-system/DESIGN_DECISIONS.md` or equivalent.
+
+### Better code
+
+- `apps/web/app/miniapp/MiniApp.tsx:7844-7860` — `innerHTML` block
+  rewritten as `replaceChildren` + `createElement` + `textContent`.
+- `apps/web/app/miniapp/MiniApp.tsx:20450` —
+  `dangerouslySetInnerHTML` block rewritten as inline JSX with a
+  `match(/^(.*?)<b>(.*?)<\/b>(.*)$/s)` parser. Falls back to plain
+  text if the translation no longer contains a `<b>` segment.
+- `apps/web/app/miniapp/layout.tsx` — `metadata.referrer =
+  'no-referrer'` added, emits `<meta name="referrer"
+  content="no-referrer">` on every Mini App route.
+
+### What's NOT in this fix
+
+- **L4 (`startParam` regex `/^[a-z0-9_-]{10,40}$/i`)** was a
+  false-positive. The file's own comment explains the `_-` is
+  intentional for legacy ids + test fixtures; tightening would
+  break backwards compatibility. The agent's own assessment was
+  "not directly exploitable" — kept as-is.
+- **L3 (localStorage onboarding flags)** is a privacy / hygiene
+  concern, not a security one. The keys (`changelog_seen_id`,
+  `gift_notes_onboarded`) hold non-PII state and don't motivate a
+  fix.
+- **Full M2 (server-side image proxy)** stays deferred. The
+  Referer-leak portion is closed by the meta tag; the IP-leak
+  portion needs the proxy. Implementing it means an
+  `/api/proxy-image` endpoint that re-encodes through sharp,
+  reusing the H1 DNS-pin + magic-byte gates from
+  `downloadAndProcessImage` — net ~2× server bandwidth on every
+  guest view of a wishlist with external images. Cost-vs-coverage
+  decision deferred to a dedicated infra spike.
+
+---
+
 ## 2026-05-28 — Security audit cont'd: cascade COMPLETED/CANCELLED Santa campaigns on account delete
 
 ### Симптом
