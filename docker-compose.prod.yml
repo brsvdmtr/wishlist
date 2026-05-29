@@ -108,6 +108,8 @@ services:
       # (same gotcha as RESEARCH_SURVEY_* above). One pair per active experiment.
       EXP_E11_POST_RESERVE_CTA_ENABLED: ${EXP_E11_POST_RESERVE_CTA_ENABLED:-false}
       EXP_E11_POST_RESERVE_CTA_ROLLOUT: ${EXP_E11_POST_RESERVE_CTA_ROLLOUT:-0}
+      EXP_E13_GUEST_BANNER_ENABLED: ${EXP_E13_GUEST_BANNER_ENABLED:-false}
+      EXP_E13_GUEST_BANNER_ROLLOUT: ${EXP_E13_GUEST_BANNER_ROLLOUT:-0}
     volumes:
       - wishlist_uploads:/data/uploads
       - ./logs/api:/app/logs
