@@ -313,7 +313,6 @@ model Wishlist {
   owner                 User                    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   items                 Item[]
   placements            WishlistItemPlacement[]
-  tags                  Tag[]
   categories            WishlistCategory[]
   wishlistSubscriptions WishlistSubscription[]
   santaParticipants     SantaParticipant[]      @relation("SantaLinkedWishlists")
@@ -357,7 +356,6 @@ model Item {
   wishlist              Wishlist                @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
   category              WishlistCategory?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   placements            WishlistItemPlacement[]
-  itemTags              ItemTag[]
   reservationEvents     ReservationEvent[]
   comments              Comment[]
   commentReadCursors    CommentReadCursor[]
@@ -371,28 +369,6 @@ model Item {
   @@index([purgeAfter])
   @@index([wishlistId, priority, position])
   @@index([categoryId])
-}
-
-model Tag {
-  id         String   @id @default(cuid())
-  wishlistId String
-  name       String
-  createdAt  DateTime @default(now())
-
-  wishlist Wishlist  @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
-  itemTags ItemTag[]
-
-  @@index([wishlistId])
-}
-
-model ItemTag {
-  itemId String
-  tagId  String
-
-  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
-
-  @@id([itemId, tagId])
 }
 
 model ReservationEvent {
