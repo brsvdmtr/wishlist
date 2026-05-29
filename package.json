@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "format": "prettier -w .",
     "seed": "pnpm --filter @wishlist/api seed",
+    "billing:reconcile": "pnpm --filter @wishlist/api run billing:reconcile",
     "db:generate": "pnpm -C packages/db db:generate",
     "db:migrate": "pnpm -C packages/db db:migrate:dev",
     "db:deploy": "pnpm -C packages/db db:migrate:deploy",

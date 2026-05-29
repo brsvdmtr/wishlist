@@ -19,6 +19,7 @@ import { prisma, Prisma, processReward, tryQualifyAttribution, sweepExpiredPendi
 import { asyncHandler } from '../lib/asyncHandler';
 import { zodError } from '../lib/http';
 import { secureCompare } from '../lib/crypto';
+import { reconcileBilling } from '../services/billing-reconciliation';
 import { generateUniqueSlug } from '../wishlists/slug';
 import { ensureItemPlacement } from '../placements/ensureItemPlacement';
 
@@ -822,6 +823,21 @@ export function registerAdminRouter(deps: AdminRouterDeps): Router {
         props: { expired: result.expired, source: 'admin_sweep' },
       });
       return res.json({ ok: true, result });
+    }),
+  );
+
+  // GET /admin/billing/reconcile
+  // Read-only cross-table billing reconciliation (PaymentEvent / Subscription
+  // / Purchase). Lets an operator inspect discrepancies without SSH. The
+  // report contains only opaque internal ids + hashed charge ids — never raw
+  // payment identifiers or user PII. Mutations (the safe relink backfill) are
+  // intentionally CLI-only (`pnpm billing:reconcile -- --apply`); a GET must
+  // stay side-effect-free. Full runbook: docs/ops/billing-reconciliation.md.
+  privateRouter.get(
+    '/admin/billing/reconcile',
+    asyncHandler(async (_req, res) => {
+      const report = await reconcileBilling(prisma);
+      return res.json(report);
     }),
   );
 

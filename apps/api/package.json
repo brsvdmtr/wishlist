@@ -10,6 +10,7 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "seed": "pnpm -C ../../packages/db build && tsx src/seed.ts",
+    "billing:reconcile": "tsx src/scripts/billing-reconcile.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
