@@ -121,6 +121,10 @@ describe('classifyPaymentEvent', () => {
     expect(classifyPaymentEvent('reminder_sent_1d')).toBe('non_payment');
     expect(classifyPaymentEvent('totally_unknown')).toBe('non_payment');
   });
+  it('classifies the legacy GIFT_CALENDAR flow (gc_payment_received is a real payment)', () => {
+    expect(classifyPaymentEvent('gc_payment_received')).toBe('subscription_payment');
+    expect(classifyPaymentEvent('gc_invoice_created')).toBe('non_payment');
+  });
 });
 
 describe('hashChargeId', () => {
@@ -380,6 +384,18 @@ describe('reconcileBilling — bucket 2 precision (orphaned link vs genuinely un
       subs: [sub({ id: 's_r', userId: 'u_r', telegramChargeId: 'c_paid', source: 'telegram_stars' })],
     });
     expect(report.findings.some((f) => f.kind === 'subscription_without_payment_event' && f.subscriptionId === 's_r')).toBe(true);
+  });
+
+  it('does NOT flag a paid GIFT_CALENDAR sub whose only payment is the legacy gc_payment_received event', async () => {
+    // Regression (2026-05-30): gc_payment_received (legacy GIFT_CALENDAR Stars
+    // flow) is a REAL subscription payment. A code-grep-built taxonomy missed
+    // it, so a paid GIFT_CALENDAR sub false-positived as "no payment trail" —
+    // caught only by running against prod data.
+    const report = await run({
+      events: [event({ userId: 'u_gc', subscriptionId: 's_gc', eventType: 'gc_payment_received', telegramPaymentChargeId: 'stx_gc' })],
+      subs: [sub({ id: 's_gc', userId: 'u_gc', planCode: 'GIFT_CALENDAR', source: 'telegram_stars', telegramChargeId: 'stx_gc' })],
+    });
+    expect(kindsOf(report.findings)).not.toContain('subscription_without_payment_event');
   });
 });
 

@@ -5,6 +5,56 @@ New entries go at the top.
 
 ---
 
+## 2026-05-30 — Billing reconciler false-positived a paid GIFT_CALENDAR sub as "no payment trail"
+
+### Symptom
+
+Right after deploying the billing reconciler, running it against PROD reported a
+high-severity `subscription_without_payment_event` finding: a `telegram_stars`
+subscription (49⭐) flagged as "PRO granted with no payment trail." The earlier
+(pre-hardening) version had reported "0 discrepancies" on the same data.
+
+### Root cause
+
+A **false positive from an incomplete eventType taxonomy.** The flagged row was
+a legacy `GIFT_CALENDAR` subscription (planCode ≠ PRO) and it HAD been paid — its
+`gc_payment_received` PaymentEvent (49⭐) was even linked by `subscriptionId`.
+But `SUBSCRIPTION_PAYMENT_EVENT_TYPES` was built by grepping the *current* bot/api
+code (PRO `payment_success*` + `addon_payment_success`), which surfaced no `gc_*`
+events because the GIFT_CALENDAR payment flow had since been removed from the
+code. So `classifyPaymentEvent('gc_payment_received')` fell through to
+`non_payment`, the linked payment wasn't counted, and the paid sub looked unpaid.
+(The hardened "count only subscription-payment events as a trail" logic was
+correct — it just relied on a taxonomy missing a real, historical eventType.)
+
+### Lesson
+
+- **A reconciler's enum/eventType taxonomy must be validated against the ACTUAL
+  data it scans, not just current code paths.** Code-grep finds *live* flows; a
+  reconciler also meets *historical/legacy* rows whose producing code is gone.
+  `SELECT DISTINCT "eventType" FROM "PaymentEvent"` on prod is the truth.
+- **Only running on the real surface caught this.** 31 unit + 7 integration
+  tests and four adversarial review rounds all passed — they shared the same
+  incomplete domain model. The first prod run exposed it instantly. (Reinforces
+  the `feedback_verify_real_surface` memory.)
+
+### Rule
+
+When auditing a classifier that partitions a persisted enum column, diff the
+code-derived allowlist against `SELECT DISTINCT <col>` on prod before shipping;
+treat any unrecognised value as a coverage gap to resolve, never silently bucket
+it into the default.
+
+### Better code
+
+`gc_payment_received` is recognised as a subscription payment via a separate
+`LEGACY_SUBSCRIPTION_PAYMENT_EVENT_TYPES` set (kept apart from the PRO set so
+`applySafeFixes`' relink stays PRO-only), and `gc_invoice_created` is listed
+explicitly as a non-payment marker. Regression tests pin both the classifier and
+the "paid GIFT_CALENDAR sub is not flagged" behaviour.
+
+---
+
 ## 2026-05-29 — "Режим бога не отключается" — security fix removed the off-switch instead of decoupling it
 
 ### Symptom

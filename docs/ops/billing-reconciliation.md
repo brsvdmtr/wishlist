@@ -43,11 +43,18 @@ money. The reconciler classifies every row before checking it:
 
 | `eventType` | Class | Reconciliation expectation |
 |---|---|---|
-| `payment_success`, `payment_success_yearly`, `payment_success_lifetime` | subscription payment | must link to a live `Subscription` |
+| `payment_success`, `payment_success_yearly`, `payment_success_lifetime` | subscription payment (PRO) | must link to a live `Subscription` |
+| `gc_payment_received` | subscription payment (**legacy** GIFT_CALENDAR) | counts as a payment trail; never auto-relinked (PRO-only) |
 | `addon_payment_success` | add-on payment | must have a matching `Purchase` by charge id |
 | `payment_success_post_lifetime` | lifetime guard | money taken after lifetime, **no** new value → refund candidate |
-| `invoice_created`, `addon_invoice_created`, `gift_notes_invoice_created` | non-payment (checkout stub, synthetic charge id) | **ignored** |
+| `invoice_created`, `addon_invoice_created`, `gift_notes_invoice_created`, `gc_invoice_created` | non-payment (checkout stub, synthetic charge id) | **ignored** |
 | `reminder_sent_*` | non-payment (renewal-reminder dedup marker) | **ignored** |
+
+> The `gc_*` rows are a **legacy GIFT_CALENDAR** Stars flow (planCode
+> `GIFT_CALENDAR`) whose producing code was removed but whose historical rows
+> remain in prod. The taxonomy must keep recognising them — see the 2026-05-30
+> [BUGFIX_LESSONS](../BUGFIX_LESSONS.md) entry. Audit coverage with
+> `SELECT DISTINCT "eventType" FROM "PaymentEvent"` before trusting a clean run.
 
 Subscriptions also carry a `source`. Only `telegram_stars` subs are *paid*
 and must have a `PaymentEvent`. Free grants (`referral_reward`,

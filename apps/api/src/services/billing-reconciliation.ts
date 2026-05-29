@@ -54,13 +54,24 @@ export const SUBSCRIPTION_PAYMENT_EVENT_TYPES = [
   'payment_success_yearly',
   'payment_success_lifetime',
 ] as const;
+// LEGACY paid subscription flow: the (now-removed) GIFT_CALENDAR product wrote
+// gc_payment_received on a successful Stars charge (planCode GIFT_CALENDAR).
+// Historical rows still live in prod, so the reconciler MUST recognise this as
+// a real subscription payment — otherwise a paid GIFT_CALENDAR sub
+// false-positives as "no payment trail" (found running against prod; see the
+// 2026-05-30 BUGFIX_LESSONS entry). Kept separate from the PRO set so
+// applySafeFixes' relink stays PRO-only.
+export const LEGACY_SUBSCRIPTION_PAYMENT_EVENT_TYPES = ['gc_payment_received'] as const;
 export const ADDON_PAYMENT_EVENT_TYPE = 'addon_payment_success';
 export const LIFETIME_GUARD_EVENT_TYPE = 'payment_success_post_lifetime';
 // Charge ids on these are synthetic checkout/reminder stubs, not real money.
+// (gc_invoice_created is the GIFT_CALENDAR invoice marker; the paid counterpart
+// is gc_payment_received, classified as a subscription payment above.)
 export const NON_PAYMENT_EVENT_TYPES = [
   'invoice_created',
   'addon_invoice_created',
   'gift_notes_invoice_created',
+  'gc_invoice_created',
 ] as const;
 const REMINDER_EVENT_PREFIX = 'reminder_sent_';
 
@@ -82,7 +93,10 @@ export type PaymentEventClass =
 
 /** Pure classifier — the single source of truth for "is this row real money". */
 export function classifyPaymentEvent(eventType: string): PaymentEventClass {
-  if ((SUBSCRIPTION_PAYMENT_EVENT_TYPES as readonly string[]).includes(eventType)) {
+  if (
+    (SUBSCRIPTION_PAYMENT_EVENT_TYPES as readonly string[]).includes(eventType) ||
+    (LEGACY_SUBSCRIPTION_PAYMENT_EVENT_TYPES as readonly string[]).includes(eventType)
+  ) {
     return 'subscription_payment';
   }
   if (eventType === ADDON_PAYMENT_EVENT_TYPE) return 'addon_payment';
