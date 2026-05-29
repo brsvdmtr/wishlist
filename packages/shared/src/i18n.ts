@@ -966,6 +966,11 @@ const ru: Dict = {
   e11_cta_primary: 'Создать мой вишлист',
   e11_cta_ghost: 'Позже',
 
+  // ── E13 — Passive guest-view "create your own wishlist" banner ──────────────
+  e13_banner_title: 'Хочешь такой же список для себя?',
+  e13_banner_desc: 'Создай свой вишлист за минуту — и друзья будут дарить без угадайки.',
+  e13_banner_cta: 'Создать свой вишлист',
+
   // ── Comments ──────────────────────────────────────────────────────────────
   comments_title: 'Комментарии',
   comments_subtitle: 'Личный чат между автором и тем, кто забронировал',
@@ -4030,6 +4035,11 @@ const en: Dict = {
   e11_cta_primary: 'Create my wishlist',
   e11_cta_ghost: 'Later',
 
+  // ── E13 — Passive guest-view "create your own wishlist" banner ──────────────
+  e13_banner_title: 'Want a list like this for yourself?',
+  e13_banner_desc: 'Create your own wishlist in a minute — and let friends gift without guessing.',
+  e13_banner_cta: 'Create my wishlist',
+
   // ── Comments ──────────────────────────────────────────────────────────────
   comments_title: 'Comments',
   comments_subtitle: 'Private chat between the author and the person who reserved',
@@ -6908,6 +6918,11 @@ const zhCN: Dict = {
   e11_cta_hint: '添加几个心愿并分享链接，约 1 分钟即可。',
   e11_cta_primary: '创建我的心愿单',
   e11_cta_ghost: '稍后',
+
+  // ── E13 — Passive guest-view "create your own wishlist" banner ──────────────
+  e13_banner_title: '想为自己也建一个这样的清单吗？',
+  e13_banner_desc: '一分钟创建你自己的心愿单，让朋友送礼不再靠猜。',
+  e13_banner_cta: '创建我的心愿单',
 
   // ── Comments ──────────────────────────────────────────────────────────────
   comments_title: '评论',
@@ -9816,6 +9831,11 @@ const hi: Dict = {
   e11_cta_primary: 'मेरी विशलिस्ट बनाएँ',
   e11_cta_ghost: 'बाद में',
 
+  // ── E13 — Passive guest-view "create your own wishlist" banner ──────────────
+  e13_banner_title: 'अपने लिए भी ऐसी सूची चाहते हैं?',
+  e13_banner_desc: 'एक मिनट में अपनी विशलिस्ट बनाएँ — और दोस्तों को बिना अंदाज़ा लगाए तोहफ़े देने दें।',
+  e13_banner_cta: 'मेरी विशलिस्ट बनाएँ',
+
   // ── Comments ──────────────────────────────────────────────────────────────
   comments_title: 'टिप्पणियाँ',
   comments_subtitle: 'मालिक और बुकिंग करने वाले के बीच निजी चैट',
@@ -12719,6 +12739,11 @@ const es: Dict = {
   e11_cta_hint: 'Añade un par de deseos y comparte el enlace — alrededor de 1 minuto.',
   e11_cta_primary: 'Crear mi lista',
   e11_cta_ghost: 'Más tarde',
+
+  // ── E13 — Passive guest-view "create your own wishlist" banner ──────────────
+  e13_banner_title: '¿Quieres una lista así para ti?',
+  e13_banner_desc: 'Crea tu propia lista en un minuto y deja que tus amigos regalen sin adivinar.',
+  e13_banner_cta: 'Crear mi lista',
 
   // ── Comments ──────────────────────────────────────────────────────────────
   comments_title: 'Comentarios',
@@ -15624,6 +15649,11 @@ const ar: Dict = {
   e11_cta_hint: 'أضِف بضع رغبات وشارك الرابط — حوالي دقيقة واحدة.',
   e11_cta_primary: 'إنشاء قائمتي',
   e11_cta_ghost: 'لاحقًا',
+
+  // ── E13 — Passive guest-view "create your own wishlist" banner ──────────────
+  e13_banner_title: 'هل تريد قائمة مثلها لنفسك؟',
+  e13_banner_desc: 'أنشئ قائمتك الخاصة خلال دقيقة — ودع أصدقاءك يهدونك دون تخمين.',
+  e13_banner_cta: 'إنشاء قائمتي',
 
   // ── Comments ──────────────────────────────────────────────────────────────
   comments_title: 'التعليقات',

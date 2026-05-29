@@ -84,7 +84,8 @@ type EntryPoint =
   | 'organic_returning_underactivated'
   | 'forced_rollout_test'
   | 'manual_cta'
-  | 'post_reservation_claim';
+  | 'post_reservation_claim'
+  | 'guest_view_banner';
 type CompletionReason =
   | 'demo_converted'
   | 'real_item_created'

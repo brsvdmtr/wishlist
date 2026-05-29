@@ -589,6 +589,34 @@ export const PRODUCT_EVENTS = [
     sources: ['client'],
     pii: 'none',
   },
+  // ── Guest → Owner conversion funnel (E13 passive guest-view banner) ──
+  {
+    name: 'guest_banner.shown',
+    domain: 'guest_banner',
+    action: 'shown',
+    description:
+      'Passive "create your own wishlist" banner scrolled into view at the end of a guest-view, for a guest with zero own wishlists (E13 — see docs/research/06-experiment-backlog.md). Fires once per session when it enters the viewport; capped at N impressions / 7 days. props: wishlistId, experimentKey, variant, shownCountInWindow, godModeForce.',
+    sources: ['client'],
+    pii: 'none',
+  },
+  {
+    name: 'guest_banner.clicked',
+    domain: 'guest_banner',
+    action: 'clicked',
+    description:
+      'Guest tapped the E13 banner CTA ("Create my wishlist"). props: wishlistId, destination ("onboarding-entry"), experimentKey, variant, godModeForce. Intent signal — the CTA launches onboarding, so the downstream join key is onboarding_started.entry_point="guest_view_banner" (NOT wishlist.created.source, which is always "miniapp"); final guest→owner conversion is the server-emitted guest.converted_to_user.',
+    sources: ['client'],
+    pii: 'none',
+  },
+  {
+    name: 'guest_banner.dismissed',
+    domain: 'guest_banner',
+    action: 'dismissed',
+    description:
+      'Guest closed the E13 banner via the × button (carried in the `method` prop). Mutes the banner for the rest of the 7-day window. Funnel drop-off signal.',
+    sources: ['client'],
+    pii: 'none',
+  },
   // ── Experiments (A/B infrastructure — server-assigned sticky buckets) ──
   {
     name: 'experiment.assigned',

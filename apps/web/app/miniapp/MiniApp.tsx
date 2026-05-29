@@ -81,6 +81,7 @@ import {
   E11_EXPERIMENT_KEY,
   E11_ONBOARDING_ENTRY_POINT,
 } from './lib/postReservationCta';
+import { E13_EXPERIMENT_KEY } from './lib/guestBannerCta';
 import { resolveReservePrefill, MAX_DISPLAY_NAME_LEN, type ReservePrefillSource } from './lib/reservePrefill';
 import { safeUserUrl } from './lib/isSafeUrl';
 import { proxyImageUrl } from './lib/proxyImage';
@@ -4536,6 +4537,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // `dismissed` (method: 'swipe_or_backdrop') are mutually exclusive paths.
   const [postReservationCtaItem, setPostReservationCtaItem] = useState<GuestItem | null>(null);
   const e11SessionShownRef = useRef(false);
+  // E13 — passive guest-view banner session guards. Kept in the PARENT (not in
+  // the lazy GuestViewRoot) so they survive its unmount/remount when the user
+  // leaves and re-enters guest screens in one session — otherwise the banner
+  // would re-fire `shown` and burn the 7-day impression budget every re-entry.
+  // Mirrors e11SessionShownRef living here rather than in the child.
+  const e13SessionShownRef = useRef(false);
+  const [e13DismissedThisSession, setE13DismissedThisSession] = useState(false);
 
   // Comments
   const [comments, setComments] = useState<CommentDTO[]>([]);
@@ -5184,6 +5192,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // X-TG-INIT-DATA header, the server 401s, and the user is pinned to
   // control for the rest of the session (see commit log on this fix).
   const { variant: e11Variant } = useExperiment(tgFetch, E11_EXPERIMENT_KEY, { ready: tgReady });
+
+  // E13 — passive guest-view banner. Enroll only true guests (zero own
+  // wishlists) while they're actually on a guest screen, so owners and
+  // users who never open a shared link don't pollute the experiment
+  // population. The hook re-fires when `ready` flips true (useExperiment dep).
+  const e13OnGuestScreen = screen === 'guest-view' || screen === 'guest-item-detail';
+  const { variant: e13Variant } = useExperiment(tgFetch, E13_EXPERIMENT_KEY, {
+    ready: tgReady && wishlistsLoaded && wishlists.length === 0 && e13OnGuestScreen,
+  });
 
   // --- Santa season loader (used on init + after god/testMode toggles)
   const loadSantaSeason = useCallback(async () => {
@@ -12240,6 +12257,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     myActorHashRef, planInfo, tgUser,
     isSubscribed, subscribing, handleSubscribe, handleUnsubscribe,
     birthdayContext, setBirthdayContext, trackBirthdayAttributedEvent,
+    // E13 passive guest-view banner inputs (decision + handlers live in GuestViewRoot)
+    e13Variant, wishlistsLoaded, wishlistCount: wishlists.length, godMode, startOnboarding,
+    e13SessionShownRef, e13DismissedThisSession, setE13DismissedThisSession,
     setPublicProfileUsername, setPublicProfileSubscribed, setPublicProfileError,
     setPublicProfileData, loadProfileSubscribeStatus, loadPublicProfile,
     reservations, reservationPro,

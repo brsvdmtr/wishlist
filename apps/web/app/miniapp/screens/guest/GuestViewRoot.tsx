@@ -48,9 +48,20 @@
 
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Banner, Button, Card, CounterBadge, HeroCard, Sheet as BottomSheet } from '@wishlist/ui';
 import { t, pluralize, localeToBCP47, type Locale } from '@wishlist/shared';
+import { GuestViewBanner } from './GuestViewBanner';
+import {
+  shouldShowGuestBanner,
+  reportedShownCount,
+  readGuestBannerShownTimestamps,
+  recordGuestBannerShown,
+  readGuestBannerDismissedAt,
+  recordGuestBannerDismissed,
+  E13_EXPERIMENT_KEY,
+  E13_ONBOARDING_ENTRY_POINT,
+} from '../../lib/guestBannerCta';
 import { getEmoji } from '../../lib/emoji';
 import { safeUserUrl } from '../../lib/isSafeUrl';
 import { ProBadge } from '../../components/ProBadge';
@@ -151,6 +162,17 @@ export type GuestViewRootCtx = GuestViewState & {
   birthdayContext: BirthdayContext | null;
   setBirthdayContext: Dispatch<SetStateAction<BirthdayContext | null>>;
   trackBirthdayAttributedEvent: (event: string, props?: Record<string, unknown>) => void;
+
+  // E13 — passive guest-view banner inputs (decision + handlers live below)
+  e13Variant: 'control' | 'treatment';
+  wishlistsLoaded: boolean;
+  wishlistCount: number;
+  godMode: boolean;
+  startOnboarding: (entryPoint: string) => Promise<void> | void;
+  // Session-stable guards forwarded from the parent (survive remounts).
+  e13SessionShownRef: { current: boolean };
+  e13DismissedThisSession: boolean;
+  setE13DismissedThisSession: Dispatch<SetStateAction<boolean>>;
 
   // Public-profile setters (clicked from the wishlist hero)
   setPublicProfileUsername: Dispatch<SetStateAction<string | null>>;
@@ -278,6 +300,8 @@ export function GuestViewRoot(props: GuestViewRootProps) {
     myActorHashRef, planInfo, tgUser,
     isSubscribed, subscribing, handleSubscribe, handleUnsubscribe,
     birthdayContext, setBirthdayContext, trackBirthdayAttributedEvent,
+    e13Variant, wishlistsLoaded, wishlistCount, godMode, startOnboarding,
+    e13SessionShownRef, e13DismissedThisSession, setE13DismissedThisSession,
     setPublicProfileUsername, setPublicProfileSubscribed, setPublicProfileError,
     setPublicProfileData, loadProfileSubscribeStatus, loadPublicProfile,
     reservations, reservationPro,
@@ -296,6 +320,32 @@ export function GuestViewRoot(props: GuestViewRootProps) {
     setGroupGiftCreateItemId, setGroupGiftCreateItem,
     setGgTargetAmt, setGgDeadline, setGgNote, setGgMyAmount, setGgCreating,
   } = ctx;
+
+  // Yield to the contextual birthday banner — one promo banner at a time (§ E13.10).
+  const e13BirthdayBannerActive = !!(
+    birthdayContext && !birthdayContext.isOwner && !birthdayContext.bannerDismissed
+  );
+  // Decide once per relevant-input change rather than on every guest-view
+  // re-render (filter / subscribe / comment churn). The localStorage reads +
+  // Date.now() are intentionally captured at decision time and are NOT deps:
+  // the only mutation that must HIDE the banner is the dismiss, which flips
+  // `e13DismissedThisSession` (a dep). That session flag — not the localStorage
+  // write — is what re-runs this memo and hides the banner, so a future change
+  // must keep setting it (not rely on the dismiss LS write alone).
+  const e13Decision = useMemo(
+    () => shouldShowGuestBanner({
+      dismissedThisSession: e13DismissedThisSession,
+      wishlistsLoaded,
+      wishlistCount,
+      birthdayBannerActive: e13BirthdayBannerActive,
+      variant: e13Variant,
+      dismissedAt: readGuestBannerDismissedAt(),
+      shownTs: readGuestBannerShownTimestamps(),
+      now: Date.now(),
+      godModeForce: godMode,
+    }),
+    [e13DismissedThisSession, wishlistsLoaded, wishlistCount, e13BirthdayBannerActive, e13Variant, godMode],
+  );
 
   return (
     <>
@@ -1322,6 +1372,55 @@ export function GuestViewRoot(props: GuestViewRootProps) {
               )}
             </div>
           )}
+
+          {/* ── E13 — passive "create your own wishlist" banner ───────────
+              Soft, end-of-list. Never overlaps the reserve CTA (which lives
+              on the separate guest-item-detail screen) and is inline (never
+              fixed/overlay). Gated by shouldShowGuestBanner; fires `shown`
+              once on viewport entry. See lib/guestBannerCta.ts. */}
+          {(() => {
+            if (!e13Decision.show) return null;
+            return (
+              <GuestViewBanner
+                locale={locale}
+                onShown={() => {
+                  if (e13SessionShownRef.current) return;
+                  e13SessionShownRef.current = true;
+                  const tsNow = Date.now();
+                  const shownCountInWindow = reportedShownCount(readGuestBannerShownTimestamps(), tsNow);
+                  recordGuestBannerShown(tsNow);
+                  trackEvent('guest_banner.shown', {
+                    wishlistId: guestWl?.id,
+                    experimentKey: E13_EXPERIMENT_KEY,
+                    variant: e13Variant,
+                    shownCountInWindow,
+                    godModeForce: godMode,
+                  });
+                }}
+                onCreate={() => {
+                  trackEvent('guest_banner.clicked', {
+                    wishlistId: guestWl?.id,
+                    destination: 'onboarding-entry',
+                    experimentKey: E13_EXPERIMENT_KEY,
+                    variant: e13Variant,
+                    godModeForce: godMode,
+                  });
+                  void startOnboarding(E13_ONBOARDING_ENTRY_POINT);
+                }}
+                onDismiss={() => {
+                  trackEvent('guest_banner.dismissed', {
+                    wishlistId: guestWl?.id,
+                    method: 'tap_x',
+                    experimentKey: E13_EXPERIMENT_KEY,
+                    variant: e13Variant,
+                    godModeForce: godMode,
+                  });
+                  recordGuestBannerDismissed(Date.now());
+                  setE13DismissedThisSession(true);
+                }}
+              />
+            );
+          })()}
 
         </div>
       )}
