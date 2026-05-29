@@ -80,6 +80,7 @@ import { recordForeignWishlistAccess, checkForeignWishlistLiveAccess } from '../
 import { trackProductEvent } from '../services/analytics';
 import { evaluateGuestConversion } from '../services/wishlists';
 import { HIDDEN_FROM_INVENTORY_SKUS } from '../services/entitlement';
+import { resolveGroupGiftUnlockPrice } from '../services/group-gift-pricing';
 import { makeAddonRequired, makePlanLimitReached, makeProRequired, sendPaywall } from '../services/paywall';
 import logger from '../logger';
 
@@ -152,7 +153,9 @@ type WishlistsEntitlements = {
   hasGiftNotes: boolean;
   giftNotes: unknown;
   hasGroupGift: boolean;
-  groupGift: unknown;
+  // Narrowed (not `unknown`) so the E24 bucket-price overlay reads `.unlocked`
+  // / `.priceXtr` type-safely — keep in sync with getEffectiveEntitlements.
+  groupGift: { unlocked: boolean; priceXtr: number };
   hasSecretReservations: boolean;
   secretReservations: unknown;
 };
@@ -406,6 +409,19 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
       ]);
       const reservationsCount = regularReservationsCount + santaReservationsCount + ggParticipantCount;
 
+      // E24 — Group Gift unlock price is bucket-aware. The paywall SCREEN reads
+      // this `groupGift.priceXtr` (→ ggAccess), and the Mini App tags its paywall
+      // impression with `priceVariant`. Resolve only for users who have NOT
+      // unlocked it — entitled users never see the paywall, so assigning them is
+      // noise. When the experiment is off (default), this returns control (79)
+      // with no DB work, so the bootstrap payload is byte-identical to today.
+      const ggEnt = ent.groupGift;
+      let groupGift: { unlocked: boolean; priceXtr: number; priceVariant?: string } = ggEnt;
+      if (!ggEnt.unlocked) {
+        const ggPrice = await resolveGroupGiftUnlockPrice(user.id);
+        groupGift = { unlocked: false, priceXtr: ggPrice.priceXtr, priceVariant: ggPrice.variant };
+      }
+
       return res.json({
         wishlists: wishlists.map((wl, idx) => {
           const active = wl.items.filter((i) => (ACTIVE_STATUSES as readonly string[]).includes(i.status));
@@ -442,7 +458,7 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
         proSource: ent.proSource,
         promoPro: ent.promoPro,
         giftNotes: ent.giftNotes,
-        groupGift: ent.groupGift,
+        groupGift,
         secretReservations: ent.secretReservations,
         cardDisplayMode: ent.isPro ? (userProfile?.cardDisplayMode ?? 'auto') : 'auto',
         godMode: user.godMode,

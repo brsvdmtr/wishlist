@@ -70,7 +70,7 @@ import type {
   BirthdayContext, CommentDTO, GuestItem, GuestSort, HomeTab, Item, PlanInfo,
   ReservationItem, SantaReservationItem, TgUser,
 } from '../../MiniApp';
-import type { GroupGiftData } from '../../hooks/useGroupGiftState';
+import type { GroupGiftData, GgAccess } from '../../hooks/useGroupGiftState';
 import type { GuestViewState } from '../../hooks/useGuestViewState';
 import type { SantaDetailContext } from '../../hooks/useSantaState';
 import type {
@@ -220,7 +220,7 @@ export type GuestViewRootCtx = GuestViewState & {
   commentNodeRefs: { current: Map<string, HTMLElement | null> } | RefObject<Map<string, HTMLElement | null>>;
 
   // Group-gift create flow (triggered from guest-item-detail CTA)
-  ggAccess: { unlocked: boolean; priceXtr: number };
+  ggAccess: GgAccess;
   setGroupGiftData: Dispatch<SetStateAction<GroupGiftData | null>>;
   setGroupGiftCreateItemId: Dispatch<SetStateAction<string | null>>;
   setGroupGiftCreateItem: Dispatch<SetStateAction<{
@@ -595,6 +595,10 @@ export function GuestViewRoot(props: GuestViewRootProps) {
                               setGgDeadline(''); setGgNote(''); setGgMyAmount(''); setGgCreating(false);
                               setScreen('group-gift-create');
                             } else {
+                              // Paywall impression (group_gift.unlock_paywall_variant)
+                              // is emitted from the paywall screen's mount effect in
+                              // GroupGiftRoot — it fires on every entry path, not just
+                              // this CTA — so it's intentionally NOT emitted here.
                               setScreen('group-gift-paywall');
                             }
                           })();

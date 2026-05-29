@@ -114,7 +114,7 @@ function makeEnt(plan: typeof freePlan | typeof proPlan, isPro: boolean) {
     hasGiftNotes: isPro,
     giftNotes: null,
     hasGroupGift: false,
-    groupGift: null,
+    groupGift: { unlocked: false, priceXtr: 79 },
     hasSecretReservations: isPro,
     secretReservations: null,
   };

@@ -627,6 +627,23 @@ export const PRODUCT_EVENTS = [
     sources: ['server'],
     pii: 'userId-only',
   },
+  // ── Group Gift price elasticity (E24 — `group-gift-price` experiment) ──
+  // The unlock price is bucket-aware: control = GROUP_GIFT_PRICE_XTR (79),
+  // treatment = GROUP_GIFT_PRICE_TEST_XTR (39). The sticky variant is assigned
+  // server-side (experiment.assigned, above); this event is the UI IMPRESSION
+  // and the denominator for the primary metric (revenue per paywall impression).
+  // Variant attribution for revenue/guardrail readouts comes from the
+  // ExperimentAssignment table, not from this client event — see
+  // docs/research/experiments/group-gift-price-e24.md.
+  {
+    name: 'group_gift.unlock_paywall_variant',
+    domain: 'group_gift',
+    action: 'unlock_paywall_variant',
+    description:
+      'The Group Gift unlock paywall screen was shown to a non-entitled user. UI impression emitted from the Mini App when the group-gift-paywall screen opens. props.variant (control | treatment) and props.priceXtr (the Stars price actually shown for this bucket). Denominator for the E24 revenue-per-group-gift-paywall-impression primary metric.',
+    sources: ['client'],
+    pii: 'none',
+  },
 ] as const satisfies readonly ProductEventDescriptor[];
 
 export type ProductEventName = (typeof PRODUCT_EVENTS)[number]['name'];
