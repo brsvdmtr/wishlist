@@ -1,6 +1,6 @@
 # WishBoard — User Flows
 
-> Source of truth for all user journeys. Last updated: 2026-05-15 · Branch: main
+> Source of truth for all user journeys. Last updated: 2026-05-29 · Branch: main
 >
 > This document reflects the product as implemented, not aspirational features.
 
@@ -11,12 +11,12 @@
 1. [Onboarding / First Launch (v2)](#flow-1-onboarding--first-launch-v2)
 2. [Creating a Wishlist](#flow-2-creating-a-wishlist)
 3. [Adding a Wish (Manual)](#flow-3-adding-a-wish-manual)
-4. [Adding a Wish via URL Import (PRO)](#flow-4-adding-a-wish-via-url-import-pro)
+4. [Adding a Wish via URL Import (free quota + paid credits)](#flow-4-adding-a-wish-via-url-import-free-quota--paid-credits)
 5. [Sharing a Wishlist](#flow-5-sharing-a-wishlist)
 6. [Guest Viewing a Wishlist](#flow-6-guest-viewing-a-wishlist)
 7. [Reservation (Surprise Mode)](#flow-7-reservation-surprise-mode)
 8. [Comments (PRO)](#flow-8-comments-pro)
-9. [Hints (PRO)](#flow-9-hints-pro)
+9. [Hints (free quota + paid packs)](#flow-9-hints-free-quota--paid-packs)
 10. [Subscribing to a Friend's Wishlist (PRO)](#flow-10-subscribing-to-a-friends-wishlist-pro)
 11. [Editing a Wish](#flow-11-editing-a-wish)
 12. [Completing / Archiving a Wish](#flow-12-completing--archiving-a-wish)
@@ -44,6 +44,7 @@
 34. [Item Placements (cross-wishlist)](#flow-34-item-placements-cross-wishlist)
 35. [Birthday Reminders](#flow-35-birthday-reminders)
 36. [Events Calendar v2.1](#flow-36-events-calendar-v21)
+37. [Guest → Account Claim (E11 post-reservation CTA)](#flow-37-guest--account-claim-e11-post-reservation-cta)
 
 ---
 
@@ -53,16 +54,19 @@
 |---|---|---|
 | Wishlists | 2 | 10 |
 | Items per wishlist | 20 | 70 |
-| Participants (reservers) | 5 | 20 |
+| Participants (reservers) | 10 | 20 |
 | Subscriptions | 2 | 5 |
+| Categories per wishlist | 1 | Unlimited (sentinel) |
 | Comments | — | Yes |
-| URL Import | — | Yes |
-| Hints | — | Yes |
+| URL Import | Free monthly quota (`FREE_IMPORT_QUOTA_PER_MONTH`, default 5/UTC-month) + paid `import_pack_*` credits | Unlimited |
+| Hints | Free monthly quota (`FREE_HINT_QUOTA_PER_MONTH`, default 3/UTC-month, charged on delivery) + paid `hints_pack_*` credits | Unlimited |
 | Visibility: PUBLIC_PROFILE / PRIVATE | — | Yes |
 | allowSubscriptions: NOBODY | — | Yes |
 | commentPolicy: SUBSCRIBERS | — | Yes |
 | Notification settings | — | Yes |
 | Gift Notes | 19 XTR one-time | Included |
+
+> **URL Import & Hints are no longer hard PRO gates** (2026-05). FREE users get a monthly free quota plus optional paid credit packs; PRO is unlimited. **Categories** are no longer PRO-only — FREE gets 1 user category per wishlist (the default "Без категории" section doesn't count), PRO is effectively unlimited. **Participant limit** for FREE was raised 5 → 10. See Flow 4 (URL Import), Flow 9 (Hints), Flow 26 (Categories). PRO gates that still hard-block return a unified paywall envelope (402 / 403 / 409) via `services/paywall.ts`.
 
 ---
 
@@ -171,26 +175,31 @@ The onboarding catalog is locale-aware. Two market segments determine which temp
 
 ---
 
-## Flow 4: Adding a Wish via URL Import (PRO)
+## Flow 4: Adding a Wish via URL Import (free quota + paid credits)
 
-**Actor:** Authenticated PRO owner, inside an open wishlist.
+**Actor:** Authenticated owner (FREE or PRO), inside an open wishlist.
+
+> **No longer a hard PRO gate** (opened to FREE 2026-05, commits `8a898c7`, `45d8d68`, `e17452c`). FREE users get a **monthly free-import quota** (`FREE_IMPORT_QUOTA_PER_MONTH`, default **5 per UTC calendar month**, env-tunable). Beyond the free quota they spend paid `import_pack_*` credits. **PRO is unlimited.** Credit logic lives in `apps/api/src/services/import-credits.ts`; the route is `apps/api/src/routes/import.routes.ts`.
 
 1. User opens a wishlist.
 2. User taps the **link/import icon** (distinct from the "+" button).
-3. **If FREE user:** The app shows an **upsell sheet** with reason `url_import` before any import is attempted. Flow ends here unless the user upgrades.
-4. **If PRO user:** An input field appears for pasting a product URL.
-5. User pastes a URL. Supported domains include: Ozon, Wildberries, Yandex Market, Lamoda, Goldapple, Tekhnopark, Bork, Amazon, IKEA, Sephora, Nike, and arbitrary public URLs.
-6. App sends `POST /tg/import-url` with `{ url }`.
+3. An input field appears for pasting a product URL (no PRO gate up front).
+4. User pastes a URL. Supported domains include: Ozon, Wildberries, Yandex Market, Lamoda, Goldapple, Tekhnopark, Bork, Amazon, IKEA, Sephora, Nike, and arbitrary public URLs.
+5. App sends `POST /tg/import-url` with `{ url }`.
+6. **Allowance gate** (`getImportAllowance`): PRO is always allowed; FREE is allowed while monthly quota OR paid credits remain.
+   - **If the FREE user has no free quota left and no paid credits:** the server returns a **402 paywall envelope** (`makeAddonRequired('url_import', …)`) suggesting the `import_pack_10` / `import_pack_25` packs, carrying `freeLimit`, `freeUsed`, `paidCredits`. The Mini App shows the credit-pack paywall. Flow ends unless the user buys a pack or upgrades.
 7. Server validates the URL, scrapes the product page, and extracts available data: title, price, and product image.
 8. **On success:** A new item is created and placed in the **Drafts** wishlist, not the current wishlist.
-9. User navigates to Drafts to review the imported item, edit fields if needed, and optionally move it to another wishlist.
-10. **On 402:** Upsell sheet with reason `url_import` is shown.
+9. **Charge model — charge on delivered value, not on attempt:** a credit is consumed (`consumeImportCredit`) **only when the parse succeeds or is partial** (`parseStatus` `ok` / `partial`). Free monthly quota is spent first, then paid credits. A **failed** parse still creates a domain-stub item but **costs nothing**. PRO never decrements. The success response carries an `importQuota` object (`importCredits`, `freeImportsUsed`, `freeImportsLimit`) so the UI can update the remaining-quota counter.
+10. User navigates to Drafts to review the imported item, edit fields if needed, and optionally move it to another wishlist.
 11. **On rate limit (429):** The user has exceeded 10 import requests within 60 seconds. A rate-limit error is shown and the user must wait.
 
 **Edge cases:**
+- **Monthly reset is lazy** — there is no scheduler. `freeImportsPeriod` stores the `"YYYY-MM"` bucket on `UserCredits`; a stale bucket is treated as a zeroed counter on both the read (`resolveFreeImports`) and write (`consumeImportCredit`) paths.
 - Items always land in Drafts regardless of which wishlist the user is viewing when they trigger the import.
-- If the server cannot scrape the target page (e.g. anti-bot protection, unsupported domain), partial data or an error is returned; the user can manually complete missing fields.
-- Rate limit: **10 requests per 60 seconds** per user.
+- If the server cannot scrape the target page (e.g. anti-bot protection, unsupported domain), partial data or an error is returned; the user can manually complete missing fields. A genuinely failed parse does not cost a credit.
+- Setting `FREE_IMPORT_QUOTA_PER_MONTH=0` disables the FREE tier entirely (FREE then needs paid credits or PRO).
+- Rate limit: **10 requests per 60 seconds** per user (`importUrlLimiter`).
 
 ---
 
@@ -297,25 +306,29 @@ The onboarding catalog is locale-aware. Two market segments determine which temp
 
 ---
 
-## Flow 9: Hints (PRO)
+## Flow 9: Hints (free quota + paid packs)
 
-**Actor:** Authenticated PRO owner.
+**Actor:** Authenticated owner (FREE or PRO).
 
-**Precondition:** User must have an active PRO subscription.
+> **No longer a hard PRO gate** (opened to FREE 2026-05, commit `e17452c`). FREE users get a **monthly free-hint quota** (`FREE_HINT_QUOTA_PER_MONTH`, default **3 per UTC calendar month**, env-tunable). Beyond the free quota they spend paid `hints_pack_*` credits. **PRO is unlimited.** The **key difference from URL import: the quota is charged on DELIVERY, not on creation.** Credit logic lives in `apps/api/src/services/hint-credits.ts`; the wave-creation route is `apps/api/src/routes/hints.routes.ts`.
 
-1. Owner opens a wishlist and taps on one of their own items.
-2. Item detail view shows a **"Hint"** button (visible to PRO owners only).
-3. Owner taps **"Hint"**.
-4. A contact selector appears; owner picks a specific friend (contact) to send the hint to.
-5. App sends `POST /tg/items/:id/hint` with `{ recipientId }` (or equivalent contact identifier).
-6. Server creates a **time-limited hint record** (valid for **72 hours**) visible only to the selected recipient.
-7. The recipient, when they open the wishlist item via a share link, sees the hint nudge during the 72-hour window.
-8. After 72 hours the hint expires automatically.
+1. Owner opens a wishlist and taps on one of their own (AVAILABLE) items.
+2. Item detail view shows a **"Hint friends"** button.
+3. Owner taps it. App sends `POST /tg/items/:id/hint`.
+4. The server runs gates in order: item exists → owner-owned → owner's `hintsEnabled` not disabled (else `403 hints_disabled`) → item is `AVAILABLE` (else `400 item_not_available`) → **allowance gate last**.
+5. **Allowance gate** (`getHintAllowance`, read-only): PRO is always allowed; FREE is allowed while monthly quota OR paid credits remain.
+   - **If FREE has no free quota and no paid credits:** the server returns a **402 paywall envelope** (`makeAddonRequired('hints', …)`) suggesting the `hints_pack_5` / `hints_pack_10` packs, carrying `freeLimit`, `freeUsed`, `paidCredits`. The Mini App shows the credit-pack paywall.
+6. On pass, the server creates a `Hint` record (status `SENT`, `expiresAt = now + 30 days`) and **fires a Telegram contact-picker keyboard** into the owner's bot chat (best-effort, bounded 3 s race so the request returns fast). The response is `{ hintId, status: 'pending_selection' }`.
+7. Owner switches to the bot chat and picks one or more friends from the native `request_users` keyboard. The bot processes the `users_shared` event, delivers the hint to each picked friend's DM, and flips the hint `SENT → DELIVERED`.
+8. **Charge on delivery** (`consumeHintCharge`, called by the bot via `POST /internal/hints/credit`): only a `DELIVERED` hint is chargeable. Free monthly quota is spent first, then a paid pack credit. Every charge writes a `HintQuotaCharge` ledger row (`userId`, unique `hintId`, `period`, `source` ∈ `free_monthly` / `paid_pack` / `grace` / `pro`, `charged`). "Free hints used this month" is a `COUNT` over that ledger — there is no counter column to drift.
 
 **Edge cases:**
-- If the owner is on FREE, the **"Hint"** button is not shown, or tapping it shows the PRO upsell.
-- The hint is visible **only** to the specified recipient, not to all guests.
-- Sending multiple hints to the same recipient for the same item creates a new 72-hour window.
+- **A hint that is never delivered costs nothing** — keyboard lost, picker abandoned, item reserved, or hint expired all leave the user uncharged ("charge on delivered value, not on attempt").
+- **Grace delivery:** if the FREE quota was available at wave-creation but exhausted by delivery time (a concurrent hint drained it), the hint is still delivered and recorded `source='grace', charged=false` — we never break a scenario the user already started.
+- **Idempotent on `hintId`** — a duplicate `users_shared` event (Telegram double-fire) or an internal retry returns outcome `replay` without a second charge. The whole decision runs under a per-user advisory lock so two simultaneous deliveries can't both slip past the monthly cap.
+- **Anti-spam, independent of monetization:** max **3 hint waves per item per 30 days** (`429 item_hint_limit`) and **5 hints per sender per day** (`429 daily_hint_limit`); god-mode bypasses both. A re-tap within the 30-min bot lookup window returns the existing `SENT` hint (idempotent, no new slot burned); stale `SENT` hints older than that window are auto-cancelled.
+- **No bot chat:** if the owner has never `/start`-ed the bot (`telegramChatId` null), the response carries `noBotChat: true` and the Mini App prompts them to open the bot first.
+- Setting `FREE_HINT_QUOTA_PER_MONTH=0` disables the FREE tier entirely (FREE then needs paid credits or PRO).
 
 ---
 
@@ -526,7 +539,7 @@ The onboarding catalog is locale-aware. Two market segments determine which temp
 1. User opens **Settings**.
 2. User finds the **PRO card** showing their current subscription status and renewal date.
 3. User taps **"Cancel renewal"**.
-4. An **anti-churn sheet** appears listing **9 features** the user will lose upon cancellation (wishlists, items, participants, comments, URL import, hints, subscriptions, advanced privacy, calendar).
+4. An **anti-churn sheet** appears listing **9 features** the user will lose or have reduced upon cancellation (wishlists, items, participants, comments, URL import, hints, subscriptions, advanced privacy, calendar). Note: **URL import and hints are no longer lost entirely** — reverting to FREE drops PRO's *unlimited* usage back to the FREE monthly quota (see [Flow 4](#flow-4-adding-a-wish-via-url-import-free-quota--paid-credits) / [Flow 9](#flow-9-hints-free-quota--paid-packs)), and limits (wishlists, items, participants, subscriptions) fall to the FREE caps after the degradation lifecycle.
 5. User must explicitly tap **"Cancel subscription"** (a secondary confirmation button within the sheet) to proceed.
 6. App sends `POST /tg/billing/subscription/cancel`.
 7. Server sets `cancelAtPeriodEnd = true` on the subscription record.
@@ -898,13 +911,16 @@ This flow manages what happens when a user loses PRO access (subscription expire
 
 **Actor:** Authenticated wishlist owner, or guest viewing a wishlist.
 
+> **Quota** (no longer PRO-only): FREE gets **1 user category per wishlist** (`PLANS.FREE.categoriesPerWishlist = 1`; the default "Без категории" section does not count); **PRO is effectively unlimited** (`Number.MAX_SAFE_INTEGER` sentinel). Only **CREATE** beyond the limit is gated — rename, delete, reorder, and item move-category stay open so the FREE category is fully usable.
+
 ### Creating a category
 
 1. Owner opens a wishlist detail view.
 2. Owner taps the **"+"** button or opens the menu and selects "Add category".
 3. Owner enters a **category name**.
 4. App sends the create request; server creates a category record associated with the wishlist.
-5. The new category appears as a collapsible section in the wishlist.
+5. **On 402 (category limit):** a FREE owner who already has 1 user category gets a `categories` paywall envelope. Upgrading to PRO (or the existing category being deleted) unblocks creation.
+6. The new category appears as a collapsible section in the wishlist.
 
 ### Renaming a category
 
@@ -1357,3 +1373,44 @@ See `docs/SETTINGS_AND_PRIVACY.md` § Birthday reminders, `docs/MONETIZATION.md`
 - **Onboarding glyph quality / settings width / copy polish** across rounds 1–3 of bug-fix sweeps (`commit ea6b568`, `6212217`, `f610963`).
 
 See `docs/DATA_MODEL.md` (`GiftOccasion`, `GiftOccasionIdea`, `GiftOccasionReminder`, `Holiday`, `CalendarInboxEntry`), `docs/API_REFERENCE.md` § Events Calendar v2.1.
+
+---
+
+## Flow 37: Guest → Account Claim (E11 post-reservation CTA)
+
+**Actor:** Guest who has just successfully reserved an item on a friend's wishlist and has **no wishlists of their own**.
+
+> **Shipped 2026-05** (commits `0268fe2`, `90e8f01`, `b9fadd2`). This is the most viral moment in the product — the user just reserved a gift and is one tap from owning the other side of the loop. It is an **A/B experiment, off by default.** Decision logic: `apps/web/app/miniapp/lib/postReservationCta.ts` (pure, fully unit-tested); rendering + handlers in `MiniApp.tsx`.
+
+### Experiment gating
+
+- Experiment key: **`e11-post-reserve-cta`**, resolved server-side via `useExperiment`. The Mini App reads the bucket (`control` / `treatment`).
+- Enable per host in `/opt/wishlist/.env` (then `docker compose up -d api`):
+  ```
+  EXP_E11_POST_RESERVE_CTA_ENABLED=true
+  EXP_E11_POST_RESERVE_CTA_ROLLOUT=50
+  ```
+  Without these the hook returns `control` and the sheet never shows.
+
+### Flow
+
+1. Guest reserves an item in surprise mode ([Flow 7](#flow-7-reservation-surprise-mode)) — a **regular** (non-secret) reservation succeeds.
+2. The client evaluates `shouldShowE11Cta(...)`. Gate order (first `show: false` wins): per-session de-dup (`session_shown`) → god-mode force bypass → wishlists actually loaded (`wishlists_not_loaded`, conservative so a transient `/tg/wishlists` 5xx can't mistake an owner for a guest) → not a secret reservation (`secret_reservation`) → user has **zero own wishlists** (`owner_as_guest`) → experiment is `treatment` (`not_in_treatment`) → 30-day localStorage cooldown (`cooldown`, key `wb_e11_cta_seen_at_v1`).
+3. **If all gates pass:** instead of the usual reservation-success toast, a **BottomSheet** opens (it *is* the success confirmation). Copy (`e11_cta_*` i18n keys):
+   - Title: *"Готово, подарок скрыт от владельца 🎁"* ("Done — the gift stays hidden from the owner")
+   - Subtitle: *"Хочешь сделать свой вишлист, чтобы тебе тоже дарили без угадайки?"*
+   - Info banner: *"Добавь пару желаний и поделись ссылкой — это ~1 минута."*
+   - Primary button: **"Создать мой вишлист"** · Ghost button: **"Позже"**
+4. The session flag is set, a 30-day cooldown timestamp is written to localStorage, and `guest_owner_cta.shown` fires (`experimentKey`, `variant`, `godModeForce`).
+5. **Primary tap ("Создать мой вишлист"):** fires `guest_owner_cta.clicked` (`destination: 'onboarding-entry'`) and launches onboarding with entry point **`post_reservation_claim`** (→ [Flow 1](#flow-1-onboarding--first-launch-v2)). First-touch attribution tags the resulting `guest.converted_to_user` conversion to this entry point.
+6. **Dismiss:** the ghost "Позже" button fires `guest_owner_cta.dismissed` (`method: 'tap_later'`); swipe / backdrop fires it with `method: 'swipe_or_backdrop'`. Either way the sheet closes and the guest stays a guest until next eligibility.
+
+### Edge cases
+
+- **One shot per app-open** — `session_shown` wins even over the god-mode force-show, so operators testing the sheet still see it at most once per session.
+- **Secret reservations are excluded** (different paywall context, [Flow 28](#flow-28-secret-reservations)).
+- **Owners never see it** — the `owner_as_guest` gate (wishlist count > 0) skips anyone who already owns a list, including [Flow 19](#flow-19-guest-detecting-they-are-the-owner) owner-as-guest.
+- **God-mode force** (`godModeForce: true`) bypasses segmentation / experiment / cooldown for operator verification; all E11 analytics carry `godModeForce` so the funnel can filter operator impressions (`WHERE NOT (props->>'godModeForce' = 'true')`).
+- **localStorage write is best-effort** — quota / private-mode failures are swallowed; worst case the sheet re-shows next session.
+
+See `apps/web/app/miniapp/lib/postReservationCta.ts`, `docs/research/06-experiment-backlog.md` § E11, `docs/design-system/mockups/approved/e11-post-reservation-cta.html`.

@@ -1,8 +1,8 @@
 # Data Model — Wishlist Telegram Mini App
 
-_Last updated: 2026-05-20_
+_Last updated: 2026-05-29_
 
-> **78 models, 38 enums** (PostgreSQL 16, managed by Prisma ORM)
+> **81 models, 38 enums** (PostgreSQL 16, managed by Prisma ORM)
 
 ---
 
@@ -443,6 +443,9 @@ A registered user, identified primarily by their Telegram account.
 - `groupGiftsOrganized[]` → `GroupGift` (group gifts organized by this user)
 - `groupGiftParticipations[]` → `GroupGiftParticipant` (group gift participations)
 - `groupGiftMessages[]` → `GroupGiftMessage` (messages sent in group gifts)
+- `hintQuotaCharges[]` → `HintQuotaCharge` (hint-quota consumption ledger)
+- `dailyActivity[]` → `UserDailyActivity` (per-day product-loop rollup)
+- `experimentAssignments[]` → `ExperimentAssignment` (A/B bucket assignments)
 
 ---
 
@@ -537,6 +540,7 @@ An ordered collection of wish items owned by a user.
 | `allowSubscriptions` | `AllowSubscriptions`  | Yes      | `ALL`        | Whether new subscribers can follow this wishlist                               |
 | `commentPolicy`      | `CommentPolicy`       | Yes      | `ALL`        | Who can post comments on items in this wishlist                                |
 | `type`               | `WishlistType`        | Yes      | `REGULAR`    | `SYSTEM_DRAFTS` is auto-created, one per user, for URL imports                 |
+| `isDefault`          | Boolean               | Yes      | `false`      | Marks the auto-created default REGULAR wishlist materialised for new users at bootstrap (E04 activation). Cleared when the user names their first wishlist via `POST /tg/onboarding/create-wishlist` or `POST /tg/wishlists` — both sites RENAME the row in place (preserving id, items, placements), never insert a duplicate. Pre-existing rows stay `false` (no backfill). See `services/wishlists.ts:createGetOrCreateDefaultWishlist` |
 | `createdAt`          | DateTime              | Yes      | now          |                                                                                |
 | `updatedAt`          | DateTime              | Yes      | auto         |                                                                                |
 
@@ -557,6 +561,8 @@ An ordered collection of wish items owned by a user.
 - `categories[]` → `WishlistCategory` (item categories within this wishlist)
 - `wishlistSubscriptions[]` → `WishlistSubscription`
 - `santaParticipants[]` → `SantaParticipant` (linked wishlists in Santa campaigns)
+
+**Partial unique index:** `(ownerId) WHERE isDefault = true` — enforces "at most one default wishlist per owner" at the DB level. Prisma DSL can't express partial indexes, so the constraint lives in migration `20260525130000_unique_default_wishlist_per_owner/migration.sql`. Both the bootstrap and onboarding-rename paths catch `P2002` on this index and fall through to a re-fetch to handle the race.
 
 ---
 
@@ -767,6 +773,27 @@ An owner-sent nudge to a friend suggesting they reserve a specific item. Deliver
 
 ---
 
+### `HintQuotaCharge`
+Immutable audit ledger for hint-quota consumption — one row per delivered hint, written by `consumeHintCharge()` (`services/hint-credits.ts`) when the bot reports a hint `DELIVERED` via `POST /internal/hints/credit`. The ledger (not the `Hint` rows) is the source of truth for "free hints used this month" (`COUNT` by `userId` + `period`).
+
+`hintId` is a plain denormalized string, **not** a foreign key: a charge row must outlive its `Hint` (Hints cascade-delete with their `Item`), otherwise a user could refund their monthly quota just by deleting the wish.
+
+| Field       | Type     | Required | Default | Notes                                                                                                  |
+|-------------|----------|----------|---------|--------------------------------------------------------------------------------------------------------|
+| `id`        | String   | Yes      | cuid    |                                                                                                        |
+| `userId`    | String   | Yes      | —       | FK → `User` (CASCADE delete)                                                                           |
+| `hintId`    | String   | Yes      | —       | **Unique** — the idempotency guard. Telegram can double-fire `users_shared`; the unique constraint makes a second charge a no-op. Denormalized string, not a FK |
+| `period`    | String   | Yes      | —       | `"YYYY-MM"` quota bucket the charge counts against                                                     |
+| `source`    | String   | Yes      | —       | `free_monthly` \| `paid_pack` \| `grace` \| `pro`                                                       |
+| `charged`   | Boolean  | Yes      | —       | `true` only for `free_monthly` / `paid_pack` (a unit was actually spent)                               |
+| `amount`    | Int      | Yes      | `1`     | Units spent by this charge. Always 1 today; recorded explicitly for a future multi-unit charge          |
+| `reason`    | String   | No       | —       | Why a `grace` delivery happened (quota was available at wave-create time but exhausted by delivery)     |
+| `createdAt` | DateTime | Yes      | now     |                                                                                                        |
+
+**Index:** `(userId, period)`.
+
+---
+
 ### `WishlistSubscription`
 A follow relationship: a user subscribing to a wishlist to receive change notifications.
 
@@ -879,15 +906,17 @@ Permanent add-on purchased via Telegram Stars. Each row represents one unit of a
 ---
 
 ### `UserCredits`
-Consumable credit balances. PRO users bypass credit checks entirely.
+Consumable balances + the monthly free-tier URL-import quota. PRO users bypass every credit/quota check entirely (server-side).
 
-| Field          | Type     | Required | Default | Notes                   |
-|----------------|----------|----------|---------|-------------------------|
-| `id`           | String   | Yes      | cuid    |                         |
-| `userId`       | String   | Yes      | --      | Unique FK -> `User`     |
-| `hintCredits`  | Int      | Yes      | `0`     | Available hint credits  |
-| `importCredits`| Int      | Yes      | `0`     | Available import credits|
-| `updatedAt`    | DateTime | Yes      | auto    |                         |
+| Field               | Type     | Required | Default | Notes                                                                                          |
+|---------------------|----------|----------|---------|------------------------------------------------------------------------------------------------|
+| `id`                | String   | Yes      | cuid    |                                                                                                |
+| `userId`            | String   | Yes      | --      | Unique FK -> `User`                                                                            |
+| `hintCredits`       | Int      | Yes      | `0`     | Paid one-time hint packs (`hints_pack_*`). Never expire                                        |
+| `importCredits`     | Int      | Yes      | `0`     | Paid one-time import packs (`import_pack_*`). Never expire                                      |
+| `freeImportsUsed`   | Int      | Yes      | `0`     | FREE-tier URL imports consumed in the current period. Consumption order is free-first, then paid |
+| `freeImportsPeriod` | String   | No       | --      | `"YYYY-MM"` UTC-calendar-month bucket. Consume lazily zeroes the counter when the month rolls over (no scheduler). See `services/import-credits.ts` |
+| `updatedAt`         | DateTime | Yes      | auto    |                                                                                                |
 
 ---
 
@@ -1181,6 +1210,51 @@ Lightweight analytics event log for god-mode dashboard metrics. Not a full event
 | `userId`   | String   | No       | --      | Associated user (nullable)                   |
 | `props`    | Json     | No       | --      | Structured event properties                  |
 | `createdAt`| DateTime | Yes      | now     |                                              |
+
+---
+
+### `ExperimentAssignment`
+A/B experiment infrastructure — one sticky bucket assignment per `(user, experiment)`. Phase 0 of `docs/research/06-experiment-backlog.md`. The row is the source of truth for stickiness: once written, the variant never changes when `EXP_<NAME>_ROLLOUT` shifts later — only `ENABLED=false` (the kill switch) overrides it. It is also the dedup guard for the `experiment.assigned` analytics event (the unique index means the row — and the event — is created exactly once per user per experiment, even under concurrent requests). See `services/experiments.service.ts` and `docs/research/experiments/README.md`.
+
+| Field           | Type     | Required | Default | Notes                                       |
+|-----------------|----------|----------|---------|---------------------------------------------|
+| `id`            | String   | Yes      | cuid    |                                             |
+| `userId`        | String   | Yes      | —       | FK → `User` (CASCADE delete)               |
+| `experimentKey` | String   | Yes      | —       | Identifies the experiment                   |
+| `variant`       | String   | Yes      | —       | `'control'` \| `'treatment'`                 |
+| `holdout`       | Boolean  | Yes      | `false` | `true` → global holdout cohort              |
+| `createdAt`     | DateTime | Yes      | now     |                                             |
+
+**Unique constraint:** `(userId, experimentKey)`.
+**Index:** `(experimentKey, variant)`.
+
+---
+
+### `UserDailyActivity`
+Daily product-loop rollup — one row per `(userId, UTC calendar day)`. Source is `AnalyticsEvent` (which has a 90-day TTL); the aggregator runs hourly and re-computes yesterday + today in UTC, idempotently upserting by `(userId, date)`. The rollup survives the `AnalyticsEvent` TTL so D30/D60/D90 cohorts, share rate D7, guest→owner D7, reservation rate, and paywall conversion stay queryable indefinitely. See `services/daily-activity.service.ts` (event→field mapping), `schedulers/daily-activity-rollup.ts` (hourly cron), `scripts/backfill-daily-activity.ts` (one-shot backfill), and `docs/research/core-loop-dashboard.md` (SQL panels).
+
+| Field                   | Type     | Required | Default | Notes                                        |
+|-------------------------|----------|----------|---------|----------------------------------------------|
+| `userId`                | String   | Yes      | —       | FK → `User` (CASCADE delete)                |
+| `date`                  | Date     | Yes      | —       | UTC calendar day (`@db.Date`)                |
+| `sessionStarted`        | Int      | Yes      | `0`     | Per-day count                                |
+| `createdRealWish`       | Int      | Yes      | `0`     | Per-day count                                |
+| `createdWishlist`       | Int      | Yes      | `0`     | Per-day count                                |
+| `sharedWishlist`        | Int      | Yes      | `0`     | Per-day count                                |
+| `guestOpened`           | Int      | Yes      | `0`     | Per-day count                                |
+| `reservedItem`          | Int      | Yes      | `0`     | Per-day count                                |
+| `convertedGuestToOwner` | Int      | Yes      | `0`     | Per-day count                                |
+| `paywallViewed`         | Int      | Yes      | `0`     | Per-day count                                |
+| `checkoutStarted`       | Int      | Yes      | `0`     | Per-day count                                |
+| `paymentCompleted`      | Int      | Yes      | `0`     | Per-day count                                |
+| `proActivated`          | Int      | Yes      | `0`     | Per-day count                                |
+| `usedUrlImport`         | Int      | Yes      | `0`     | Per-day count                                |
+| `usedHint`              | Int      | Yes      | `0`     | Per-day count                                |
+| `createdAt`             | DateTime | Yes      | now     |                                              |
+| `updatedAt`             | DateTime | Yes      | auto    |                                              |
+
+**Primary key:** `(userId, date)`.
+**Index:** `(date)`.
 
 ---
 
@@ -1582,6 +1656,9 @@ Item ──► WishlistItemPlacement[] ──► Wishlist (cross-list refs) │
 SupportSession (standalone, TTL-based routing)                  │
 ServiceHeartbeat (standalone, liveness ping)                    │
 AnalyticsEvent (standalone, god-mode metrics)                   │
+UserDailyActivity (User-scoped daily product-loop rollup)       │
+ExperimentAssignment (User-scoped A/B bucket, sticky)           │
+HintQuotaCharge (User-scoped hint-quota ledger)                 │
 ReferralProgramConfig (singleton config, id="default")          │
 SantaGlobalConfig / SantaSeasonConfig / SantaSeasonalBroadcastLog │
 ```
@@ -1677,6 +1754,12 @@ SantaGlobalConfig / SantaSeasonConfig / SantaSeasonalBroadcastLog │
 | `ReferralReward`         | `userId`                                  | Rewards granted to a user                                 |
 | `ReferralReward`         | `attributionId`                           | Rewards for a specific attribution                        |
 | `ReferralReward`         | `status`                                  | Filter rewards by status                                  |
+| `HintQuotaCharge`        | `hintId` (unique)                         | Idempotency guard against double-fired `users_shared`     |
+| `HintQuotaCharge`        | `(userId, period)`                        | Count free hints used in the current month                |
+| `ExperimentAssignment`   | `(userId, experimentKey)` (unique)        | One sticky bucket per user per experiment                 |
+| `ExperimentAssignment`   | `(experimentKey, variant)`                | Cohort-size queries per variant                           |
+| `UserDailyActivity`      | `(userId, date)` (PK)                     | Per-user daily rollup lookup / idempotent upsert          |
+| `UserDailyActivity`      | `date`                                     | Date-range cohort scans                                   |
 
 ---
 

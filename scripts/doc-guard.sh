@@ -63,12 +63,12 @@ done
 # -----------------------------
 # Required current truth markers
 # -----------------------------
-if ! grep -q "78 Prisma models, 38 enums" docs/INDEX.md; then
+if ! grep -q "81 Prisma models, 38 enums" docs/INDEX.md; then
   fail "docs/INDEX.md does not contain updated model/enum count"
 fi
 
-if ! grep -q "78 models" docs/DATA_MODEL.md; then
-  fail "docs/DATA_MODEL.md does not confirm 78 models"
+if ! grep -q "81 models" docs/DATA_MODEL.md; then
+  fail "docs/DATA_MODEL.md does not confirm 81 models"
 fi
 
 if ! grep -q "61 screens" docs/INDEX.md; then
@@ -79,8 +79,8 @@ if ! grep -q "61 screens" docs/FRONTEND_MAP.md; then
   fail "docs/FRONTEND_MAP.md does not contain 61 screens"
 fi
 
-if ! grep -q "78 Prisma models" docs/CURRENT_PRODUCT_STATE.md; then
-  fail "docs/CURRENT_PRODUCT_STATE.md does not confirm 78 Prisma models"
+if ! grep -q "81 Prisma models" docs/CURRENT_PRODUCT_STATE.md; then
+  fail "docs/CURRENT_PRODUCT_STATE.md does not confirm 81 Prisma models"
 fi
 
 if ! grep -q "61 screens" docs/CURRENT_PRODUCT_STATE.md; then

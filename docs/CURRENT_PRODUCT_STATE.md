@@ -2,7 +2,7 @@
 
 Production feature inventory for the Wishlist Telegram Mini App.
 
-**Last updated:** 2026-05-20
+**Last updated:** 2026-05-29
 
 ---
 
@@ -33,18 +33,22 @@ Production feature inventory for the Wishlist Telegram Mini App.
 |-----------------|------|-----|
 | Wishlists       | 2    | 10  |
 | Items           | 20   | 70  |
-| Participants    | 5    | 20  |
+| Participants    | 10   | 20  |
 | Subscriptions   | 2    | 5   |
 
-PRO-only features: `comments`, `url_import`, `hints`, `dont_gift`, `showcase`, `curated_selections`, `profile_subscriptions`.
+PRO-only features: `comments`, `dont_gift`, `showcase`, `curated_selections`, `profile_subscriptions`.
+
+Freemium with monthly quotas (FREE tier gets a metered allowance, PRO is unlimited): `url_import`, `hints`. Santa hints are 1 free per campaign then PRO. Categories are 1 free per wishlist then PRO (20 with PRO).
 
 See also: `docs/MONETIZATION.md`
 
 ## Scale
 
-- **78 Prisma models**, **38 enums**
+- **81 Prisma models**, **38 enums**
 - **61 screens** in the Mini App
 - **14 add-on SKUs**
+
+Verify counts: `grep -c '^model ' packages/db/prisma/schema.prisma` (81), `grep -c '^enum ' packages/db/prisma/schema.prisma` (38). The three models added since 2026-05-20 are `HintQuotaCharge`, `ExperimentAssignment`, `UserDailyActivity`.
 
 ## Lifecycle & Retention
 
@@ -63,7 +67,7 @@ See also: `docs/MONETIZATION.md`
 | Profile redesign          | Rolled out (100%)         |
 | Onboarding v2             | Default                   |
 | Onboarding v1             | Deprecated                |
-| Referral Program          | Disabled (enabled=false, flag-controlled) |
+| Referral Program          | Rolled out (100%) — re-enabled 2026-05-28 (enabled=true) |
 
 ## Operational Toggles
 
@@ -81,6 +85,18 @@ See also: `docs/MONETIZATION.md`
 
 ## Recently Shipped
 
+- **Conservative pricing pass (2026-05-28)** — Re-balanced the freemium boundary to charge for delivered value rather than gating attempts. Santa hints: 1 free per campaign, then PRO. Categories: 1 free per wishlist, then PRO (20 with PRO). URL import opened to the FREE tier behind a monthly quota. Hints dropped the hard PRO gate for a FREE monthly quota. FREE participant limit raised 5 → 10. `seasonal_decoration` SKU hidden. Reservation PRO contract aligned. Unified paywall error envelope across `402 PRO_REQUIRED` / `403` / `409` with paywall context. New model `HintQuotaCharge` tracks metered hint usage. See [docs/MONETIZATION.md](MONETIZATION.md)
+- **A/B experiment infrastructure — Phase 0 (2026-05-2x)** — Sticky bucket assignment with a per-user `ExperimentAssignment` row (deterministic, persisted so a user stays in the same arm across sessions/devices). `useExperiment` Mini App hook gated on `tgReady` so buckets resolve only after Telegram init. Foundation for upcoming pricing/onboarding experiments
+- **E04 — default wishlist for new users (2026-05-2x)** — New users get an auto-created default wishlist (`Wishlist.isDefault`, unique-default-per-owner constraint) so the first-run experience is never an empty state
+- **E11 — guest-conversion CTA (2026-05-2x)** — After a guest reserves a wish, a post-reservation account-claim CTA invites them to create an account. New `guest.converted_to_user` attribution funnel measures conversion
+- **Research / PMF surveys — survey-pmf-v1 (2026-05-2x)** — In-app product-market-fit survey infrastructure: 4 new models plus survey routes and UI for collecting structured feedback inside the Mini App
+- **Global search (2026-05-2x)** — Postgres `pg_trgm` trigram search across wishes, including foreign-wishlist access so users can search shared lists
+- **URL import — global + free tier (2026-05-2x)** — Import opened to the FREE tier (monthly quota, soft cap), global-marketplace parsing, JD.com adapter, and scraper-API retry on failure
+- **Security wave (2026-05-2x)** — Mini App XSS hygiene + URL-scheme allowlist; DNS-pinning + magic-byte guard + Helmet headers on the API; god-mode moved to env-only (dropped the `User.godMode` DB column); idempotency enforced on critical routes with integration tests; Cloudflare Worker image proxy for external CDN images
+- **Next.js 15.5.18 + React 19 upgrade (2026-05-22)** — CVE-driven framework upgrade across the Mini App, deployed and verified with regression tests. nginx WS-block kept as defense-in-depth
+- **MiniApp.tsx decomposition F0–F7 (2026-05-2x)** — The Mini App monolith was split into lazy-loaded screen clusters (F0–F7); main chunk down to ~295 KB brotli. Screen count unchanged (still 61 — the refactor added/removed zero screens). `ChunkLoadError` now auto-retries the failed `next/dynamic` chunk import once, fixing stale-HTML splash hangs in cached Telegram WebViews
+- **Daily activity tracking (2026-05-2x)** — New `UserDailyActivity` model records per-user daily activity for retention analytics
+- **Owner-side "Open wish" inline button (2026-05-28)** — Reservation DMs to wishlist owners now carry an inline button that deep-links straight to the reserved wish
 - **Pro Lifetime tier (2026-05-09)** — Third Pro SKU alongside Monthly (100 ⭐) and Yearly (800 ⭐): **Lifetime — 2 490 ⭐**, one-time, permanent Pro entitlement, no expiry. Storage: `Subscription` row with `billingPeriod='lifetime'`, `currentPeriodEnd=2099-12-31` sentinel, `cancelAtPeriodEnd=false`. Canonical discriminator is `billingPeriod` (never the date) — `LIFETIME_BILLING_PERIOD` / `PRO_LIFETIME_PERIOD_END_ISO` / `isLifetimeSubscription` live in `@wishlist/shared`. Payload `pro_lifetime:<tgId>:<sessionId>`. Bot `successful_payment` upserts within a transaction, writes `payment_success_lifetime` PaymentEvent, sends `bot_pro_activated_lifetime` DM. **Downgrade-protection:** if `pro_monthly` / `pro_yearly` charges arrive after lifetime activates (still-active Telegram-side auto-renewal), the handler audits as `payment_success_post_lifetime` and preserves the lifetime row. API: `POST /tg/billing/pro/checkout` accepts `plan='lifetime'`; already-lifetime users short-circuit to `{ alreadySubscribed: true, lifetime: true }`. `subscription/cancel` and `subscription/reactivate` return **409 `lifetime_cannot_cancel`** for lifetime users. `/tg/me/plan` exposes `proLifetimePriceStars`. Schedulers (`pro-renewal` reminders, `billing` expiry sweep) add an explicit `NOT { billingPeriod: 'lifetime' }` filter. Frontend: 2+1 plan selector — Monthly + Yearly in the existing 2-col grid, Lifetime as a full-width premium tile below (gold accent, ∞ glyph, "Навсегда" badge). Lifetime tile renders in **every** paywall sheet (feature gates AND voluntary `pro_main`) for discovery + price anchoring. Settings PRO card has a parallel lifetime variant: gold pill, "Без срока окончания", hidden cancel/reactivate, static info note about cancelling any pre-existing monthly auto-renewal separately. Celebratory success sheet on activation. 17 i18n keys × 6 locales. Mockup at [docs/design-system/mockups/approved/pro-lifetime-v1.html](design-system/mockups/approved/pro-lifetime-v1.html) (Variant A approved 2026-05-09)
 - **Multi-signal market bucket resolver (2026-05-08)** — Closes the 77%-unknown gap on the Сегменты god-mode dashboard. Resolves `marketBucket` from a priority chain (`lang_code → X-Browser-Language → X-Browser-Timezone → IP country → first_name script regex`). Mini App sends two new request headers; API uses geoip-lite (lazy-loaded, prewarmed at `app.listen`). Bot `/start` upserts UserProfile so bot-only users get segmented. Atomic SQL upsert (`packages/db/locale-persistence`) is the single source of truth for "never downgrade known to unknown". New `User` columns: `lastName`, `username`, `isPremium`. One-shot backfill script `apps/api/src/scripts/backfill-market-buckets.ts`. 31 unit tests. Kill switch `LOCALE_DETECTION_ENABLED`. Migration: `20260508000000_user_telegram_identity_fields`
 - **Item image perf — local cache + lazy load (2026-05-08)** — URL-imported items used to store the raw external CDN URL (e.g. Yandex `/orig` — multi-MB originals); the Mini App rendered all `<img>` without lazy/decoding hints, kicking off ~28 parallel full-res downloads from external CDNs on opening a wishlist. Fix: `url-import` now downloads the parsed image through the existing `sharp` pipeline (resize 1600 / mozjpeg q80) and stores it under `/api/uploads/`; failure falls back to the remote URL. All 19 `<img>` renders in `MiniApp.tsx` get `loading="lazy"` and `decoding="async"`. Item create + `ensureItemPlacement` wrapped in `prisma.$transaction` via `createItemWithPlacement` helper (rollback the Item row if placement fails). Defensive hardening on `downloadAndProcessImage`: `limitInputPixels=50M` (decompression-bomb guard), strict mime allowlist (jpeg/png/webp/gif — SVG excluded for XXE/script safety), stream-and-cap on the response body, SSRF via `validateUrl` + `assertDnsIsSafe`. One-shot backfill `apps/api/src/scripts/backfill-item-images.ts` for the 78 existing remote-URL items

@@ -1,6 +1,6 @@
 # API_REFERENCE.md — Complete Endpoint Reference
 
-> Last updated: 2026-05-15. Since the P1–P5s refactor (closed 2026-05-07), `apps/api/src/index.ts` is a **1,789-LOC composition root**; route handlers live in **23 domain routers** under `apps/api/src/routes/<domain>.routes.ts`, with cross-cutting work in `apps/api/src/services/` (13 modules) and crons in `apps/api/src/schedulers/` (9 modules). Endpoints below remain the same; only their source files moved. See [docs/API_ARCHITECTURE_RULES.md](API_ARCHITECTURE_RULES.md).
+> Last updated: 2026-05-29. Since the P1–P5s refactor (closed 2026-05-07), `apps/api/src/index.ts` is a composition root; route handlers live in **25 domain routers** under `apps/api/src/routes/<domain>.routes.ts` (the latest two: `experiments.routes.ts` and `research-survey.routes.ts`), with cross-cutting work in `apps/api/src/services/` and crons in `apps/api/src/schedulers/` (9 modules). See [docs/API_ARCHITECTURE_RULES.md](API_ARCHITECTURE_RULES.md).
 
 ---
 
@@ -53,6 +53,15 @@ ASCII validation: language is constrained to BCP-47 characters; timezone to IANA
 
 **Wave 2 expansion (2026-05-06..07):** coverage extended to Santa actions, gift-notes (web + api), items Pro extras (priority bump, photo upload multipart), categories, subscriptions, and remaining P4 misc state-changing routes. All `/tg/*` POST/PATCH/DELETE handlers now declare a rate-limit category and accept `Idempotency-Key`; multipart uploads opt out of replay (lock-only).
 
+**Categories added since 2026-05-20** (in `apps/api/src/security/rateLimits.ts`):
+
+| Category | Window | Limit | Applied to |
+|----------|--------|-------|-----------|
+| `search` | 60 s | 30 / actor | `GET /tg/search` (throttles typing-bursts that bypass FE debounce) |
+| `access.record` | 5 min | 60 / actor | `POST /tg/access/wishlist-opened` (fire-and-forget FWA write) |
+| `research.read` | 5 min | 60 / actor | `GET /tg/research/*` survey load, `GET /tg/experiments/:key` |
+| `research.write` | 5 min | 30 / actor | `POST /tg/research/surveys/:id/{answer,complete,dismiss}` |
+
 ### Idempotency-Key (since 2026-04-29)
 
 All state-changing `/tg/*` routes accept an `Idempotency-Key` header. The middleware:
@@ -64,6 +73,43 @@ All state-changing `/tg/*` routes accept an `Idempotency-Key` header. The middle
 - Storage row TTL is 24 h (default) or 7 d (billing). Purged by an in-process cleanup job once `expiresAt` passes.
 
 Action-key naming convention: `domain.verb` for singletons (`wishlist.create`); `domain.verb:${entityId}` for entity-scoped actions; sorted-IDs join for bulk operations. See [docs/API_SECURITY.md](API_SECURITY.md) for the full contract. Env kill switch: `SECURITY_IDEMPOTENCY_ENABLED`.
+
+---
+
+## Paywall Error Envelope (unified, since 2026-05-25)
+
+Every state-changing route that gates behind PRO, an add-on SKU, or a numeric plan limit emits a **single canonical JSON shape** via `sendPaywall(...)` in `apps/api/src/services/paywall.ts`. Before this, ~30 endpoints emitted six divergent shapes; the Mini App now parses one contract.
+
+**Status codes encode purchase-path semantics:**
+
+| Status | `error` codes | Meaning |
+|--------|---------------|---------|
+| **402** | `pro_required` · `addon_required` · `plan_limit_reached` | User can buy / upgrade out of the wall |
+| **403** | (hard denial) | Access denied; a purchase wouldn't help |
+| **409** | (state conflict) | e.g. a guest hits the owner's plan limit — the owner must upgrade |
+
+**Body fields** (only `error` + `feature` always present; the rest are opt-in per builder):
+
+```typescript
+{
+  error: 'pro_required' | 'addon_required' | 'plan_limit_reached';
+  feature: string;            // e.g. 'url_import', 'hints', 'reservation_history', 'secret_reservations', 'drafts_limit'
+  context?: string;           // sub-field that tripped the gate (e.g. 'audience')
+  planCode?: 'FREE' | 'PRO';
+  limit?: number;             // for plan_limit_reached
+  current?: number;
+  priceXtr?: number;          // resolved from SKU default if skuCode given
+  skuCode?: string;           // e.g. 'import_pack_10', 'hints_pack_5'
+  freeLimit?: number;         // monthly free-quota size (credit-model gates)
+  freeUsed?: number;
+  paidCredits?: number;       // remaining purchased pack credits
+  packs?: string[];           // suggested SKUs, e.g. ['import_pack_10','import_pack_25']
+  paywall?: string;           // legacy upsell tag (preserved for cached clients)
+  message?: string;           // localized human string (legacy)
+}
+```
+
+Builders: `makeProRequired`, `makeAddonRequired`, `makePlanLimitReached`. Legacy fields (`freeLimit` / `freeUsed` / `paidCredits` / `packs` / `paywall` / `message`) are preserved so cached Mini App clients keep working through the frontend rollout.
 
 ---
 
@@ -153,19 +199,19 @@ All routes require `X-TG-INIT-DATA` (HMAC-validated). User is auto-upserted on e
 | POST | `/tg/items/bulk-hard-delete` | Owner | Permanently delete archived items (DELETED, COMPLETED, or ARCHIVED only). Body: `{ itemIds }` |
 | POST | `/tg/archive/purge` | Owner | Permanently delete ALL DELETED/COMPLETED items for the user |
 
-### Wishlist Categories (PRO-gated)
+### Wishlist Categories (quota-based, since 2026-05-24)
 
-All category endpoints (except GET) require PRO. Max 20 user categories per wishlist. Default category ("Без категории") is auto-created when the first custom category is added.
+Converted from PRO-only to a per-wishlist quota (commit d7a9c8e): **FREE = 1 user category per wishlist, PRO = 20** (`ent.plan.categoriesPerWishlist`). The default category ("Без категории", system row) doesn't count and is auto-created when the first custom category is added. Only **CREATE** is quota-gated; rename / delete / reorder / move-category are now **open to all owners** (a FREE user must be able to manage and free up their one quota slot).
 
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
 | GET | `/tg/wishlists/:id/categories` | Owner | List categories for a wishlist. Ordered by `isDefault ASC, sortOrder ASC, createdAt ASC`. Response: `{ categories[] }` — each has `id`, `name`, `sortOrder`, `isDefault` |
-| POST | `/tg/wishlists/:id/categories` | Owner (PRO) | Create category. Body: `{ name: string (1-24 chars) }`. **402** if not PRO. **400** if limit (20) reached. **409** if duplicate name (case-insensitive). Response: `{ category, isFirst }` |
-| PATCH | `/tg/wishlists/:wlId/categories/:catId` | Owner (PRO) | Rename category. Body: `{ name: string (1-24 chars) }`. **402** if not PRO. **400** if default category. **409** if duplicate name. Response: `{ category }` |
-| DELETE | `/tg/wishlists/:wlId/categories/:catId` | Owner (PRO) | Delete category. Moves items to default category (preserving order). **402** if not PRO. **400** if default category. Response: `{ ok: true, movedItems: number }` |
-| POST | `/tg/wishlists/:id/categories/reorder` | Owner (PRO) | Reorder non-default categories. Body: `{ orderedIds: string[] (max 20) }`. Default category always stays last. Response: `{ ok: true }` |
-| POST | `/tg/items/:id/move-category` | Owner (PRO) | Move single item to a different category. Body: `{ categoryId }`. **400** if category not in same wishlist. Appends at end of target category. Response: `{ ok: true }` |
-| POST | `/tg/items/bulk-move-category` | Owner (PRO) | Move multiple items to a category. Body: `{ itemIds: string[] (max 100), categoryId }`. Only moves items that belong to the same wishlist as target category. Response: `{ ok: true, moved: number }` |
+| POST | `/tg/wishlists/:id/categories` | Owner | Create category. Body: `{ name: string (1-24 chars) }`. Count + duplicate check + insert run in a **Serializable** transaction. Beyond quota: FREE → **402 paywall envelope** (`pro_required`, `feature: 'categories'`, `paywall: 'categories'`); PRO → **400** `Category limit reached`. **409** on duplicate name (case-insensitive) or `CATEGORY_CONCURRENT_WRITE` (P2034 serialization conflict — client should retry). Response: `{ category, isFirst }` |
+| PATCH | `/tg/wishlists/:wlId/categories/:catId` | Owner | Rename category. Body: `{ name: string (1-24 chars) }`. **400** if default category. **409** if duplicate name. Response: `{ category }` |
+| DELETE | `/tg/wishlists/:wlId/categories/:catId` | Owner | Delete category. Moves items to default category (preserving order). **400** if default category. Response: `{ ok: true, movedItems: number }` |
+| POST | `/tg/wishlists/:id/categories/reorder` | Owner | Reorder non-default categories. Body: `{ orderedIds: string[] (max 20) }`. Default category always stays last. Response: `{ ok: true }` |
+| POST | `/tg/items/:id/move-category` | Owner | Move single item to a different category. Body: `{ categoryId }`. **400** if category not in same wishlist. Appends at end of target category. Response: `{ ok: true }` |
+| POST | `/tg/items/bulk-move-category` | Owner | Move multiple items to a category. Body: `{ itemIds: string[] (max 100), categoryId }`. Only moves items that belong to the same wishlist as target category. Response: `{ ok: true, moved: number }` |
 
 ### Items — Guest Actions
 
@@ -189,7 +235,7 @@ All category endpoints (except GET) require PRO. Max 20 user categories per wish
 
 ### Reservations PRO
 
-Access controlled by `hasReservationPro(user, isPro, addOns)` — unlocked by an active PRO subscription (monthly/yearly/lifetime/promo), the `reservation_pro_unlock` one-time add-on (50 ⭐), or `godMode`. Miss returns 402 `{ error: 'pro_required', feature: <name> }` and emits `feature_gate_hit_reservation_pro` analytics.
+Access controlled by `hasReservationPro(user, isPro, addOns)` — unlocked by an active PRO subscription (monthly/yearly/lifetime/promo), the `reservation_pro_unlock` one-time add-on (50 ⭐), or `godMode`. The legacy `reservationBeta` flag was removed (commit 6374154); `GET /tg/reservations` no longer returns it. A miss now emits the **unified 402 paywall envelope** via `requireReservationPro(...)` — `{ error: 'pro_required', feature: 'reservation_history' | 'reservation_meta' | 'reservation_reminder', planCode }` — and fires `feature_gate_hit_reservation_pro` with the sub-feature in props. Secret-reservation misses likewise now return **402** `addon_required` (`feature: 'secret_reservations'`, `skuCode: 'secret_reservation_unlock'`) instead of the old 403.
 
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
@@ -207,11 +253,13 @@ Access controlled by `hasReservationPro(user, isPro, addOns)` — unlocked by an
 | DELETE | `/tg/items/:id/comments/:commentId` | Owner or author | Delete comment. Owner can delete any USER comment. Reserver can only delete own. SYSTEM comments cannot be deleted |
 | POST | `/tg/items/:id/comments/mark-read` | Auth user | Upsert read cursor to current timestamp |
 
-### Hints (PRO-gated)
+### Hints (FREE monthly quota, since 2026-05-22)
+
+The hard PRO gate was dropped (commit e17452c). FREE users now get `FREE_HINT_QUOTA_PER_MONTH` *delivered* hints per month plus any `hints_pack_*` credits; PRO is unlimited. The allowance is only **checked** at create time; the actual charge happens on delivery (see `POST /internal/hints/credit` below) — a hint wave that is never delivered (picker abandoned, hint expired) costs nothing. Quota gate runs last, so the upsell only fires for a user who would otherwise succeed.
 
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
-| POST | `/tg/items/:id/hint` | Owner (PRO) | Create hint wave. **402** if not PRO. **403** if `hintsEnabled=false`. **400** if item is not AVAILABLE. **429** if >3 hints for item in 30 days or >5 hints per sender per day (godMode bypasses). Sends contact picker to owner's chat |
+| POST | `/tg/items/:id/hint` | Owner | Create hint wave. **403** if `hintsEnabled=false`. **400** if item is not AVAILABLE. Quota wall emits the **unified 402 paywall envelope** (`addon_required`, `feature: 'hints'`, `skuCode: 'hints_pack_5'`, `freeLimit/freeUsed/paidCredits`, `packs: ['hints_pack_5','hints_pack_10']`) — godMode/PRO bypass. **429** if >3 hints for item in 30 days or >5 hints per sender per day. Sends contact picker to owner's chat |
 | GET | `/tg/hints/:hintId` | Owner | Poll hint delivery status. Response: `{ hintId, status, sentCount, pendingCount, deliveredAt, itemTitle }` |
 
 ### Photos
@@ -221,11 +269,13 @@ Access controlled by `hasReservationPro(user, isPro, addOns)` — unlocked by an
 | POST | `/tg/items/:id/photo` | Owner | Upload item photo (multipart `photo` field). Sharp: resize to 1600px full + 480px thumb, JPEG 80%/70%. Deletes previous file. Max 30 MB |
 | DELETE | `/tg/items/:id/photo` | Owner | Remove item photo. Deletes local file |
 
-### URL Import (PRO-gated)
+### URL Import (FREE monthly quota, since 2026-05-22)
+
+Opened to the free tier (commits 4160e83, 8a898c7). FREE users get `FREE_IMPORT_QUOTA_PER_MONTH` imports/month plus any `import_pack_*` credits; PRO is unlimited (`apps/api/src/services/import-credits.ts`). A credit is **only consumed on a real import** (`parseStatus` `ok` or `partial`) — a failed parse still creates a domain-stub item but costs nothing, and PRO never decrements.
 
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
-| POST | `/tg/import-url` | Auth user (PRO) | Parse URL and create item in SYSTEM_DRAFTS. Body: `{ url, note?, source? }`. **402** if not PRO. **402** if SYSTEM_DRAFTS >= 50 items. Rate-limited: 10 req/min per user. Supports `X-Parse-No-Cache: 1` header |
+| POST | `/tg/import-url` | Auth user | Parse URL and create item in SYSTEM_DRAFTS. Body: `{ url, note?, source? }`. Quota wall emits the **unified 402 paywall envelope** (`addon_required`, `feature: 'url_import'`, `skuCode: 'import_pack_10'`, `freeLimit/freeUsed/paidCredits`, `packs: ['import_pack_10','import_pack_25']`). Drafts cap (≥50) returns 402 `plan_limit_reached` (`feature: 'drafts_limit'`). On success, FREE responses include `importQuota: { importCredits, freeImportsUsed, freeImportsLimit }`. Rate-limited: 10 req/min per user. Supports `X-Parse-No-Cache: 1` header |
 
 ### Subscriptions (Following)
 
@@ -239,7 +289,7 @@ Access controlled by `hasReservationPro(user, isPro, addOns)` — unlocked by an
 
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
-| GET | `/tg/me/profile` | Auth user | Profile + stats + plan info. Includes `supportId`, `avatarThumbUrl`, `avatarUpdatedAt`, `avatarPublic`, `language` |
+| GET | `/tg/me/profile` | Auth user | Profile + stats + plan info. Includes `supportId`, `avatarThumbUrl`, `avatarUpdatedAt`, `avatarPublic`, `language`. **E04 (since 2026-05-26):** fires a fire-and-forget `getOrCreateDefaultWishlist(user.id, locale)` so every user has ≥1 REGULAR wishlist by the time bootstrap returns (idempotent; a creation failure logs `e04_default_wishlist_bootstrap_failed` and never breaks the read) |
 | PATCH | `/tg/me/profile` | Auth user | Update displayName, username (3-30 chars `[a-zA-Z0-9_]`), bio (max 300), birthday, hideYear, avatarPublic. 409 if username taken |
 | POST | `/tg/me/profile/avatar` | Auth user | Upload avatar photo (multipart `avatar` field). Generates full 512px + thumb 256px. Deletes previous |
 | DELETE | `/tg/me/profile/avatar` | Auth user | Remove avatar. Deletes local files |
@@ -407,7 +457,7 @@ The 402 response is intentional — Pro fields are never silently saved as inact
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
 | GET | `/tg/onboarding/status` | Auth user | Check onboarding eligibility, current state, market segment |
-| POST | `/tg/onboarding/start` | Auth user | Begin onboarding: A/B variant assignment (v1_demo or v2_try), create demo item or initialize state. Body: `{ onboardingKey, entryPoint }` |
+| POST | `/tg/onboarding/start` | Auth user | Begin onboarding: A/B variant assignment (v1_demo or v2_try), create demo item or initialize state. Body: `{ onboardingKey, entryPoint }`. `entryPoint` now accepts `post_reservation_claim` (E11 guest→owner CTA shown after a successful guest reservation; the value propagates into `onboarding_create_wishlist_success.source`) |
 | POST | `/tg/onboarding/dismiss` | Auth user | Dismiss onboarding. Deletes untouched demo item if present |
 | POST | `/tg/onboarding/complete` | Auth user | Mark onboarding complete. Body: `{ onboardingKey, reason }`. Reasons: demo_converted, real_item_created, demo_deleted_then_real_created, demo_moved_to_user_wishlist, try_import_completed, catalog_selected, manual_created |
 | POST | `/tg/onboarding/try-import` | Auth user | v2: Import URL without PRO gate. Rate-limited: 3/min. Max 30 attempts, 20 successes. Body: `{ url, onboardingStateId }` |
@@ -516,7 +566,7 @@ The 402 response is intentional — Pro fields are never silently saved as inact
 
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
-| POST | `/tg/santa/campaigns/:id/hints` | Participant | Send anonymous hint to giver |
+| POST | `/tg/santa/campaigns/:id/hints` | Participant | Send anonymous hint to giver. **FREE = 1 hint request per campaign** (any status counts, incl. EXPIRED/CANCELLED — the trade-off for opening it to FREE without unbounded retries); PRO unlimited. Beyond quota → **402** `pro_required` paywall envelope. Idempotent — re-requesting returns the existing row at 200 with no new charge |
 | GET | `/tg/santa/campaigns/:id/hints` | Participant | View sent hints |
 | GET | `/tg/santa/campaigns/:id/inbound/hint` | Giver | View received hints from recipient |
 | POST | `/tg/santa/campaigns/:id/inbound/hint/fulfill` | Giver | Mark hint as fulfilled |
@@ -664,6 +714,25 @@ Requires `secret_reservation_unlock` add-on.
 | GET | `/tg/search` | Global search across the user's accessible scope (own + connected foreign wishlists). Query params: `q` (2-80 chars, trimmed/lowercased server-side), `types` (csv of `item,wishlist,category,reservation,user,event,setting,anti_gift,faq,action`; omitted = all), `limit` (1-20, per-group). Returns `{ query, normalizedQuery, groups: [{type, title, total, items, hasMore}], partial, failedGroups, isPro }`. Rate-limit `search` (30/min/actor). **Raw query is never logged**: telemetry receives only `queryLength` + a SHA-1 prefix hash of the normalized form. PRO-gated result types (reservations / events / anti-gift / secret reservations) collapse to a single `pro_locked` aggregate count for Free users — no titles, owners, or IDs leak. Secret reservations are only ever surfaced to their reserver. See `docs/design-system/mockups/proposed/global-search.html` for the visual contract. |
 | POST | `/tg/access/wishlist-opened` | Fire-and-forget recorder for the `ForeignWishlistAccess` table (feeds the search scope). Body: `{ wishlistId, source? }` where source is one of `share_link / curated_selection / subscription / reservation / profile / santa / direct_open / unknown`. Returns 200 with `{ ok, reason }`; never throws, never used for permission checks (live access is re-validated at search time). Rate-limit `access.record` (60 / 5 min / actor). |
 
+### A/B Experiments (since 2026-05-21)
+
+Source: `apps/api/src/routes/experiments.routes.ts` + `services/experiments.service.ts`. The Mini App side of the `useExperiment` hook. Bucketing, env-flag reading, and persistence live in the service; the route is thin.
+
+| Method | Path | Who | Description |
+|--------|------|-----|-------------|
+| GET | `/tg/experiments/:key` | Auth user | Resolve this user's sticky variant for one experiment. First exposure persists the assignment and emits `experiment.assigned`; later calls are sticky. **400** `INVALID_EXPERIMENT_KEY` for an unknown/malformed key. Behind the gentle `research.read` limiter (the first-exposure insert is idempotent, not a user mutation), so it carries no `protectTgRoute` chain |
+
+### Research Surveys (since 2026-05-21)
+
+Source: `apps/api/src/routes/research-survey.routes.ts` + `services/research-survey.ts`. In-app PMF/research surveys delivered by invite (`survey-pmf-v1`). Survey rows never store Telegram IDs — handlers materialize the `User` row and use `User.id` (cuid) as the survey-side `userId`. **PII discipline:** error responses never echo the `optionIds` / `answerText` the user tried to send, nor segment metadata not already on the invite (anti-enumeration). State-changing routes carry `createRateLimiter('research.write')` + idempotency (`/complete` is `critical: true`).
+
+| Method | Path | Who | Description |
+|--------|------|-----|-------------|
+| GET | `/tg/research/surveys/by-invite/:inviteId` | Auth user (invitee) | Load survey + questions + progress for an invite. Marks SENT/PENDING → OPENED and emits `survey.opened`. Response: `{ invite: { id, surveyId, locale, status }, survey: { slug, version, questions: [{ id, type, maxSelections, options, optional }], required }, progress, response: { completedAt, rewardKind } \| null }`. **400** `INVITE_ID_REQUIRED`. **404** `INVITE_NOT_FOUND`. **403** `INVITE_FORBIDDEN`. **410** `INVITE_TERMINAL` / `SURVEY_CLOSED` |
+| POST | `/tg/research/surveys/:surveyId/answer` | Auth user (invitee) | Submit one answer. Body: `{ inviteId, questionId, selectedOptionIds?, answerText? }`. Emits `survey.started` (first answer) + `survey.question_answered`. Response: `{ ok, responseId, progress }`. **400** `BAD_REQUEST` / `VALIDATION`. **422** `CARDINALITY` (too many selections). **403** `INVITE_FORBIDDEN`/`INVITE_WRONG_SURVEY`. **410** terminal/closed |
+| POST | `/tg/research/surveys/:surveyId/complete` | Auth user (invitee) | Finalize the survey + grant reward. Body: `{ inviteId }`. Emits `survey.completed` (once). Response: `{ ok, rewardKind, rewardGrantedAt, alreadyCompleted }`. **422** `INCOMPLETE` (with `missing[]`). Idempotency `critical: true` |
+| POST | `/tg/research/surveys/:surveyId/dismiss` | Auth user (invitee) | Dismiss the survey invite. Body: `{ inviteId }`. Emits `survey.dismissed`. Response: `{ ok: true }` |
+
 ---
 
 ## Internal Routes (`/internal/*`)
@@ -672,7 +741,8 @@ Requires `X-INTERNAL-KEY` header equal to `BOT_TOKEN`. Used by the bot process f
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/internal/import-url` | Parse URL and create item in SYSTEM_DRAFTS for a given `userId`. Body: `{ userId, url, note?, source? }`. **402** if not PRO or Drafts >= 50. Rate-limited: 30 req/min |
+| POST | `/internal/import-url` | Parse URL and create item in SYSTEM_DRAFTS for a given `userId`. Body: `{ userId, url, note?, source? }`. Same credit model as `POST /tg/import-url`: PRO unlimited, FREE on a monthly quota + paid credits; the unified 402 paywall envelope on miss, Drafts cap (≥50) → 402 `plan_limit_reached`. Rate-limited: 30 req/min |
+| POST | `/internal/hints/credit` | Charge a *delivered* hint against the sender's FREE monthly hint quota (or a `hints_pack_*` credit). Called by the bot the moment a hint flips SENT → DELIVERED. Body: `{ hintId }`. Idempotent on `hintId` (`HintQuotaCharge.hintId` UNIQUE) — double-fire / retry is a safe no-op. Only DELIVERED hints charge; PRO never decrements. **404** if hint not found. Response is the `consumeHintCharge` outcome |
 | GET | `/internal/support/tickets/:ticketCode` | Lookup support ticket with full message history, user info, and recent context for incident investigation |
 
 **Maintenance Recovery:**
@@ -714,6 +784,14 @@ Requires `X-ADMIN-KEY` header. Used by the Next.js admin panel pages. Routes ope
 | Path | Description |
 |------|-------------|
 | GET `/uploads/:filename` | Serve uploaded files (photos, avatars). `Cache-Control: max-age=30d, immutable` |
+
+### CF Worker image proxy (not an Express route)
+
+Third-party item images are proxied through a **Cloudflare Worker**, not the API server — so the third-party host never sees the viewer's IP / UA (closes audit finding M2, commit 6e36e20). Source lives outside this app at `infra/cloudflare/image-proxy-worker/`.
+
+- Routes `wishlistik.ru/cdn-img/*` and `www.wishlistik.ru/cdn-img/*`.
+- SSRF guards: scheme allowlist (`http`/`https`), private-IP rejection. Content-Type allowlist (`image/{jpeg,png,webp,gif,svg+xml,avif,heic,heif}`). Strips upstream `Set-Cookie` / `Server` / `X-Powered-By`.
+- The Referer-leak half of M2 is handled separately by `<meta name="referrer" content="no-referrer">` in `app/miniapp/layout.tsx`.
 
 ---
 

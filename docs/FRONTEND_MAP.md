@@ -1,10 +1,22 @@
 # FRONTEND_MAP.md — Frontend Architecture
 
-> Date: 2026-05-20. Verified from source code.
+> Date: 2026-05-29. Verified from source code.
 
 ---
 
 ## 1. File / Folder Structure
+
+> **F0–F7 decomposition (May 2026).** `MiniApp.tsx` is no longer a single
+> self-contained monolith. It is now a **composition root + first-paint
+> shell** (~still the largest file, but ~7k lines lighter): it owns the
+> `Screen` state machine, bootstrap/auth, the home + wishlist + item-detail
+> + onboarding hot path, and all cross-cluster orchestration — while the
+> cold-path screen clusters, the cluster-local state, and the pure helpers
+> have been pulled out into `screens/`, `hooks/`, and `lib/`. Cold-path
+> clusters are loaded with `next/dynamic` (`ssr: false`) behind a `<Skeleton>`
+> fallback, so they no longer ship in the first-paint bundle. The
+> `monolith-guards.test.ts` suite asserts these stay dynamic — a future
+> static import would silently destroy the perf win.
 
 ```
 apps/web/
@@ -18,8 +30,75 @@ apps/web/
     miniapp/
       layout.tsx                 - Mini App layout (viewport meta, Telegram script)
       page.tsx                   - Mini App page entry (renders <MiniApp />)
-      MiniApp.tsx                - THE ENTIRE MINI APP (~30,000+ lines, single component)
-      TelegramWebApp.tsx         - Telegram WebApp type declarations / helper
+      MiniApp.tsx                - Composition root + first-paint shell: Screen state
+                                   machine, bootstrap/auth, home/wishlist/item-detail/
+                                   onboarding hot path, cross-cluster orchestration,
+                                   lazy-import declarations for the cold-path clusters
+      idempotency.ts             - Idempotency-Key helpers for tgFetch (action keys, hashing)
+      sentry.ts                  - Sentry/GlitchTip init + captureException
+      startParam.ts              - Deep-link start_param parsers (reservation reminder,
+                                   event reminder, survey invite, item-open, id sniff)
+      _shared/
+        closure-types.ts         - Shared DTO / ctx-prop-bag types crossing the
+                                   MiniApp.tsx <-> cluster-Root boundary
+      lib/                       - Pure, framework-light helpers (testable w/o React)
+        miniapp-constants.ts     - Module-level constants (budget presets, PRO prices,
+                                   redesign flags, don't-gift presets, service start-params)
+        wishlist-utils.ts        - Pure wishlist/item utilities (writable targets, category
+                                   limits, guestRecommendedScore, card mode, actorHash, ...)
+        priority.ts              - Priority emoji/color/bg/gradient/glow maps + prioEmoji()
+        format-price.ts          - Price/time formatters (fmtPrice, smart-res timer, retry-after)
+        santa-alias.ts           - Secret Santa alias corpus + locale-aware renderer
+        emoji.ts                 - Emoji catalog + getEmoji/extractFirstEmoji helpers
+        paywall.ts               - parsePaywallError / paywallContextFromError
+        experiments.ts           - useExperiment() A/B hook (server-assigned sticky bucket)
+        postReservationCta.ts    - E11 post-reservation account-claim CTA gate (pure)
+        reservePrefill.ts        - E15 display-name prefill chain for the reserve sheet
+        attribution.ts           - fireAttributionBeacon (guest.converted_to_user etc.)
+        referralFailReason.ts    - inferReferralLoadFailReason for analytics tagging
+        chunkRetry.ts            - withChunkRetry() wrapper: retry dynamic import on ChunkLoadError
+        proxyImage.ts            - proxyImageUrl() — CF Worker image proxy helper
+        isSafeUrl.ts             - safeUserUrl() — URL-scheme allowlist for user content
+        searchApi.ts             - Global-search DTOs + fetchSearch / recordWishlistOpen / fetchAccessView
+        searchRecent.ts          - Recent-search local history helpers
+      hooks/                     - Extracted cluster-local state (F3/F7). Each returns the
+                                   same names that lived inline; destructured at the top of
+                                   MiniAppInner so consumer call sites stay byte-identical.
+        useSantaState.ts         - Secret Santa cluster state (+ ChatMessage/Poll/... types)
+        useGiftNotesState.ts     - Gift Notes cluster state
+        useGroupGiftState.ts     - Group Gift cluster state (+ GroupGiftData type)
+        useGuestViewState.ts     - Guest View cluster state
+        useProfileState.ts       - Profile cluster state
+        usePublicProfileState.ts - Public-profile cluster state
+        useReferralState.ts      - Referral cluster state
+        useSettingsState.ts      - Settings cluster state
+        useShowcaseState.ts      - Showcase cluster state (+ ShowcaseData type)
+      components/                - Small shared widgets (ProBadge, UserAvatar, SantaAvatar,
+                                   SantaHatOverlay, SnowflakeOverlay, Import/Hint quota counters)
+      screens/                   - Extracted screen clusters + cold-path standalone screens
+        WishlistCardV21.tsx      - v2.1 wishlist card (used on home)
+        SearchScreen.tsx         - Global search surface (lazy)
+        AppearanceSettings.tsx   - Theme/accent picker (lazy)
+        FAQScreen.tsx            - FAQ accordion (lazy)
+        ChangelogScreen.tsx      - Release notes (lazy)
+        LegalMenuScreen.tsx      - Legal docs list (lazy)
+        LegalDocViewerScreen.tsx - Single legal doc viewer (lazy)
+        GiftNotesOnboardingContent.tsx - Gift Notes 4-step onboarding (lazy)
+        data/                    - Static content rolled into lazy chunks
+          release-notes.ts       - Full RELEASE_NOTES array
+          release-notes-latest.ts- LATEST_RELEASE_ID only (kept in main chunk)
+          legal-docs.ts          - LEGAL_DOCS locale data
+        santa/SantaRoot.tsx      - Secret Santa cluster (9 screens, ~3.3k LOC) (lazy)
+        profile/ProfileRoot.tsx  - Profile screen (~1.96k LOC) (lazy)
+        guest/GuestViewRoot.tsx  - Guest View cluster (guest-view + guest-item-detail) (lazy)
+        group-gift/GroupGiftRoot.tsx - Group Gift cluster (5 screens) (lazy)
+        showcase/ShowcaseRoot.tsx- Showcase cluster (editor + preview) (lazy)
+        settings/SettingsRoot.tsx- Settings screen (lazy)
+        gift-notes/GiftNotesRoot.tsx - Gift Notes cluster (3 screens + 2 sheets) (lazy)
+        referral/ReferralRoot.tsx- Referral cluster (referral + referral-history) (lazy)
+        public-profile/PublicProfileRoot.tsx - Public-profile screen (lazy)
+        calendar/                - Events Calendar v2.1 sub-app (CalendarRoot + 7 screens) (lazy)
+        survey/                  - Research/PMF survey (SurveyScreen + api/copy/logic/types) (lazy)
     admin/
       page.tsx                   - Admin: wishlist list
       new/page.tsx               - Admin: create wishlist
@@ -35,13 +114,34 @@ packages/shared/src/
   index.ts                       - Package exports
 ```
 
+### Cluster "Root" pattern (F4)
+
+Each cold-path `*Root.tsx` is a lazy-loaded chunk that renders one subsystem's
+screens. **State still lives in `MiniAppInner`** (via the matching `use*State`
+hook), and the Root receives those refs through a typed `ctx` prop bag
+(`_shared/closure-types.ts`) rather than re-instantiating its own state. This
+keeps the orchestration single-sourced in the shell while moving the bulk JSX
+(and its transitive data/i18n) out of the first-paint bundle. Some sheets a
+cluster drives (e.g. Profile's edit-profile / change-avatar, Gift Notes'
+onboarding dispatcher) stay in `MiniApp.tsx` as global overlays sharing the
+same hook instance.
+
 ---
 
 ## 2. Screen State Machine
 
-`MiniApp.tsx` manages navigation exclusively through a `useState<Screen>` hook. There is no routing library.
+`MiniApp.tsx` manages navigation exclusively through a `useState<Screen>` hook
+(declared in `MiniApp.tsx`; cold-path screens render via their lazy `*Root`
+clusters). There is no routing library.
 
 ### Screen Type Union (61 screens)
+
+> Count verified against the `Screen` union in `MiniApp.tsx` — 61 distinct
+> members. The May-20 doc cited "61" but enumerated only 59; the two
+> previously-undocumented members (`search`, `research-survey`) are now
+> listed below, bringing the prose in line with the actual union. The
+> decomposition did **not** add or remove screens — it only relocated their
+> implementations into cluster files.
 
 ```typescript
 type Screen =
@@ -82,8 +182,18 @@ type Screen =
   // Settings extras (4)
   | 'faq' | 'changelog' | 'legal' | 'legal-doc'
   // Calendar (1) — Events Calendar v2.1 (full feature, shipped 2026-04-28)
-  | 'calendar';
+  | 'calendar'
+  // Search (1) — global search surface
+  | 'search'
+  // Research (1) — PMF / discovery survey
+  | 'research-survey';
 ```
+
+> **Lazy boundary.** Screens marked "(lazy)" in §1 are rendered by a
+> `next/dynamic` cluster, not inline JSX in `MiniApp.tsx`. Switching to such a
+> screen via `setScreen(...)` triggers the chunk fetch; the `<Skeleton>`
+> fallback shows during the fetch, and `withChunkRetry` retries once on a
+> transient `ChunkLoadError` before bubbling to the error boundary.
 
 Navigation is done by calling `setScreen(...)` together with supporting state (`setSelectedWishlist(...)`, `setSelectedItem(...)`, etc.). There are no URL changes.
 
@@ -244,7 +354,19 @@ Additional screens accessible from the settings area.
 
 | # | Screen | Description |
 |---|--------|-------------|
-| 59 | `calendar` | **Events Calendar v2.1** — full feature: occasions, holidays import, friend-birthdays import, per-occasion reminders, in-app inbox, today-context banner, year-recap, expandable idea cards with photo upload, custom-emoji + date picker (day/month/year sheets), 4-step onboarding (server-persisted via `User.calendarOnboardingSeenAt`). Backend wired to `/tg/calendar/*` and `/tg/gift-occasions/*` routes |
+| 59 | `calendar` | **Events Calendar v2.1** — full feature: occasions, holidays import, friend-birthdays import, per-occasion reminders, in-app inbox, today-context banner, year-recap, expandable idea cards with photo upload, custom-emoji + date picker (day/month/year sheets), 4-step onboarding (server-persisted via `User.calendarOnboardingSeenAt`). Backend wired to `/tg/calendar/*` and `/tg/gift-occasions/*` routes. Lazy cluster: `screens/calendar/CalendarRoot.tsx` |
+
+#### Search (1)
+
+| # | Screen | Description |
+|---|--------|-------------|
+| 60 | `search` | **Global search** — single search box over the user's own wishlists, wishes, reservations, events, and anti-gift entries. Grouped results by type, recent-search history (`lib/searchRecent`), per-result access state (`available` / `restricted` / `expired` / `pro_required`). Free users who match PRO-only result types hit a `'search'`-context paywall (distinct context so conversion analytics attribute by entry source). Entered via the 🔍 icon on the home header; back-navigation returns to `searchOriginScreen`. Lazy: `screens/SearchScreen.tsx`; API helpers in `lib/searchApi.ts` (`fetchSearch`, `recordWishlistOpen`, `fetchAccessView`) |
+
+#### Research (1)
+
+| # | Screen | Description |
+|---|--------|-------------|
+| 61 | `research-survey` | **PMF / discovery survey** — invite-driven survey flow opened from a `survey invite` deep-link (`parseSurveyInvitePayload` in `startParam.ts`). Loads by invite id, renders one question at a time (single / multi / NPS / open types), saves each answer on "Next" so a mid-flow close is preserved, supports an optional final open question, "Not now" dismiss with confirm sheet, and a completion view with the stored reward. API is source of truth (reload re-fetches progress). Lazy: `screens/survey/SurveyScreen.tsx`, wired to `/tg/research/surveys/*` |
 
 ---
 
@@ -358,6 +480,10 @@ The Wave 4 sweep (April–May 2026) extracted 5 additional primitives into `pack
 - `TextField` — token-driven text input with label / hint / error states
 
 In the same wave, every `btnPrimary` / `btnGhost` / `btnSecondary` spread-style button was migrated to `<Button>` from `@wishlist/ui`, and the legacy `C` color constants were swept across remaining screens to CSS custom properties (~330 sites). Result: `pnpm ui:audit` raw-value count fell monotonically across the wave.
+
+### Skeleton primitive (F1 decomposition)
+
+`Skeleton` now lives in `@wishlist/ui` (exported from `packages/ui/src/index.ts`, with `SkeletonProps` / `SkeletonVariant`). It is the loading fallback for every lazy `next/dynamic` cluster (variants `list`, `form`, `settings`, `calendar`, ...), so the cold-path chunk fetch shows a shaped placeholder instead of a flash-of-empty.
 
 ### Pro Lifetime tile (paywall + Settings, since 2026-05-09)
 
@@ -523,6 +649,65 @@ setSelectedWishlist(wl);
 ```
 No URL changes, no browser history management.
 
+### Lazy cluster loading (F1/F4)
+
+Cold-path screen clusters are declared at the top of `MiniApp.tsx` with
+`next/dynamic` + `ssr: false` and a `<Skeleton variant="...">` fallback, e.g.:
+
+```typescript
+const SantaRoot = dynamic(
+  withChunkRetry(() => import('./screens/santa/SantaRoot').then(m => ({ default: m.SantaRoot }))),
+  { ssr: false, loading: () => <Skeleton variant="settings" /> },
+);
+```
+
+`Skeleton` is a canonical-ish `@wishlist/ui` primitive (variants: `list`,
+`form`, `settings`, `calendar`, ...). The cluster's state lives in
+`MiniAppInner` via its `use*State` hook and is forwarded through a typed `ctx`
+prop bag.
+
+### Chunk-load retry + stale-HTML reload
+
+`withChunkRetry()` (`lib/chunkRetry.ts`) wraps every dynamic importer and
+retries the `import()` once on a transient `ChunkLoadError` (CF edge miss,
+mobile blip, in-flight deploy rolling a chunk hash) before letting the error
+bubble to `MiniAppErrorBoundary`. Separately, a cached-HTML pointing at a
+chunk URL the new image no longer has (Telegram WebView caching HTML across
+sessions) triggers an auto-reload — paired with the server-side persistent
+`/opt/wishlist/web-chunks` mount that keeps old chunks resolvable.
+
+### A/B experiments (`useExperiment`)
+
+`lib/experiments.ts` exposes `useExperiment(tgFetch, key, { ready })`. The
+variant (`'control' | 'treatment'`) is decided **server-side** (sticky bucket
+by `User.id`); the hook fetches it from `/tg/experiments/:key`. SSR/build-safe:
+first render is always `control` with `isReady: false`; the network call runs
+in a client-only effect. The `ready` gate defers the fetch until Telegram
+`initData` is loaded — without it the first request goes out unauthenticated,
+401s, and pins the user to `control` for the session (the `tgReady` race fix).
+A successful resolution is memoized per session; transient failures are not
+cached so a later mount can retry.
+
+### E11 post-reservation account-claim CTA
+
+After a successful guest reservation, treatment-bucket pure-guest users (zero
+own wishlists) may see a Sheet inviting them to create their own wishlist —
+the most viral moment in the loop. All gating is pure and testable in
+`lib/postReservationCta.ts` (`shouldShowE11Cta`): ordered gates for
+session-once, wishlists-loaded, secret-reservation, owner-as-guest,
+experiment-variant, and a 30-day localStorage cooldown, plus a god-mode
+force-show bypass for operator testing. Gated behind the
+`e11-post-reserve-cta` experiment (env `EXP_E11_POST_RESERVE_CTA_*`), entry
+point `post_reservation_claim`.
+
+### Reservation display-name prefill (E15)
+
+The public-reserve Sheet's name input is prefilled via
+`resolveReservePrefill` (`lib/reservePrefill.ts`) with a priority chain:
+profile `displayName` → Telegram first+last → Telegram first → empty. Capped at
+`MAX_DISPLAY_NAME_LEN` (64), code-point-safe, matching the API's
+`reservations.routes.ts` Zod bound.
+
 ### All Styles Inline
 
 No CSS modules, no Tailwind classes inside `MiniApp.tsx`. Every element uses `style={{ ... }}` with values from `C` or the pre-built `btnPrimary` / `inputStyle` / etc. objects.
@@ -598,23 +783,34 @@ The root container sets `dir={isRTL(locale) ? 'rtl' : 'ltr'}` to flip the entire
 
 ## 9. Key State Variable Categories
 
-The main component has ~300 `useState` calls. Major categories:
+`MiniAppInner` still owns the full state tree, but the F3/F7 waves moved the
+cold-path cluster state out into dedicated `hooks/use*State.ts` hooks. Each
+hook returns the same names the inline `useState` calls used and is
+destructured at the top of `MiniAppInner`, so consumer call sites are
+byte-identical — the state is still single-sourced in the shell and forwarded
+to the lazy `*Root` clusters via the `ctx` prop bag. The table below maps
+categories to where they now live:
 
-| Category | Examples | Approx. count |
-|----------|----------|---------------|
-| Screen / navigation | `screen`, `screenHistory`, `previousScreen` | ~5 |
-| Wishlist data | `wishlists`, `currentWl`, `items`, `archiveItems`, `draftsItems` | ~15 |
-| Item editing | `editingItem`, `viewingItem`, `editForm*` fields | ~20 |
-| Guest/reservation | `guestWl`, `guestItems`, `reservations`, `reservingItem`, `reservationPro`, `resTab`, `resHistory`, `resSort`, `resStatusFilter`, `resOwnerFilter`, `resHistoryFilter` | ~25 |
-| Comments | `comments`, `commentText`, `commentRole` | ~5 |
-| PRO / billing | `upsellSheet`, `planLimits`, `billingLoading` | ~8 |
-| Onboarding v2 | `onboardingStatus`, `onboardingTryUrl`, `onboardingCatalog*` | ~15 |
-| Secret Santa | `santaCampaigns`, `currentSantaCampaign`, `santaChat*`, `santaExcl*`, `santaPolls*` | ~30 |
-| Gift Notes | `gnOccasions`, `gnViewingOccasion`, `gnForm*`, `gnIdea*` | ~15 |
-| Profile / settings | `profileData`, `settingsData`, `displayName`, `avatarUrl` | ~10 |
-| God Mode | `godStats`, `retentionStats`, `godMode` | ~5 |
-| UI state | `toasts`, `bottomSheet*`, `searchQuery`, `dragState` | ~20 |
-| Subscriptions | `subscriptions`, `subscriptionsMeta` | ~5 |
+| Category | Examples | Approx. count | Owned by |
+|----------|----------|---------------|----------|
+| Screen / navigation | `screen`, `screenHistory`, `previousScreen`, `searchOriginScreen` | ~6 | `MiniApp.tsx` |
+| Wishlist data | `wishlists`, `currentWl`, `items`, `archiveItems`, `draftsItems` | ~15 | `MiniApp.tsx` |
+| Item editing | `editingItem`, `viewingItem`, `editForm*` fields | ~20 | `MiniApp.tsx` |
+| Guest/reservation | `guestWl`, `guestItems`, `reservations`, `reservingItem`, `reservationPro`, `resTab`, `resHistory`, `resSort`, `resStatusFilter`, `resOwnerFilter`, `resHistoryFilter` | ~25 | `useGuestViewState` + `MiniApp.tsx` |
+| Comments | `comments`, `commentText`, `commentRole` | ~5 | `MiniApp.tsx` |
+| PRO / billing | `upsellSheet`, `planLimits`, `billingLoading` | ~8 | `MiniApp.tsx` |
+| Onboarding v2 | `onboardingStatus`, `onboardingTryUrl`, `onboardingCatalog*` | ~15 | `MiniApp.tsx` |
+| Secret Santa | `santaCampaigns`, `currentSantaCampaign`, `santaChat*`, `santaExcl*`, `santaPolls*` | ~30 | `useSantaState` |
+| Gift Notes | `gnOccasions`, `gnViewingOccasion`, `gnForm*`, `gnIdea*` | ~15 | `useGiftNotesState` |
+| Group Gift | `groupGiftData`, group-gift create/join/chat cells | ~10 | `useGroupGiftState` |
+| Showcase | `showcaseData`, editor cells | ~7 | `useShowcaseState` |
+| Profile | `profileData`, `displayName`, `avatarUrl`, edit-form + avatar-upload cluster | ~10 | `useProfileState` |
+| Public profile | `publicProfileUsername`, data/loading/error/subscribed cells | ~6 | `usePublicProfileState` |
+| Settings | `settingsData`, `cardDisplayMode`, `settingsLoading` | ~5 | `useSettingsState` |
+| Referral | `referralMe`, `referralHistory`, rules-config + share-sheet cells | ~8 | `useReferralState` |
+| God Mode | `godStats`, `retentionStats`, `godMode` | ~5 | `MiniApp.tsx` |
+| UI state | `toasts`, `bottomSheet*`, `searchQuery`, `dragState` | ~20 | `MiniApp.tsx` |
+| Subscriptions | `subscriptions`, `subscriptionsMeta` | ~5 | `MiniApp.tsx` |
 
 ---
 
