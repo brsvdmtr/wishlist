@@ -31,7 +31,7 @@
 
 'use client';
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Banner, Button, Card, Chip } from '@wishlist/ui';
 import { t, localeToBCP47, type Locale } from '@wishlist/shared';
 import { UserAvatar } from '../../components/UserAvatar';
@@ -121,6 +121,28 @@ export function GroupGiftRoot(props: GroupGiftRootProps) {
     ggMessagesEndRef,
     ggAccess,
   } = ctx;
+
+  // E24 — group-gift-paywall IMPRESSION (denominator for revenue/impression).
+  // Emitted when the paywall screen is shown, REGARDLESS of entry path: the
+  // guest-item-detail CTA AND the stale-client 402 create-backstop redirect
+  // (`setScreen('group-gift-paywall')` lower in this file) both land here, so
+  // the metric the experiment is named after isn't under-counted on either
+  // path. Once per screen-entry — the ref re-arms when we leave the paywall,
+  // so a later re-open emits again. Tagged with the sticky price bucket so the
+  // 79/39 revenue split attributes to the right arm.
+  const ggPaywallImpressionRef = useRef(false);
+  useEffect(() => {
+    if (screen !== 'group-gift-paywall') {
+      ggPaywallImpressionRef.current = false;
+      return;
+    }
+    if (ggPaywallImpressionRef.current) return;
+    ggPaywallImpressionRef.current = true;
+    trackEvent('group_gift.unlock_paywall_variant', {
+      variant: ggAccess.priceVariant ?? 'control',
+      priceXtr: ggAccess.priceXtr,
+    });
+  }, [screen, ggAccess.priceVariant, ggAccess.priceXtr, trackEvent]);
 
   return (
     <>

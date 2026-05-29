@@ -212,6 +212,15 @@ describe('PRODUCT_EVENTS — fixture snapshot', () => {
           ],
         },
         {
+          "action": "unlock_paywall_variant",
+          "domain": "group_gift",
+          "name": "group_gift.unlock_paywall_variant",
+          "pii": "none",
+          "sources": [
+            "client",
+          ],
+        },
+        {
           "action": "clicked",
           "domain": "guest_banner",
           "name": "guest_banner.clicked",

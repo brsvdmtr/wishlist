@@ -118,7 +118,6 @@ import {
   PRO_PLAN_CODE,
   GIFT_NOTES_PRICE_XTR,
   GIFT_NOTES_SKU,
-  GROUP_GIFT_PRICE_XTR,
   GROUP_GIFT_SKU,
   SECRET_RESERVATION_PRICE_XTR,
   SECRET_RESERVATION_SKU,
@@ -1012,15 +1011,14 @@ tgRouter.use(hintsRouter);
 //
 // `mapGroupGift` and `groupGiftInclude` were migrated WITH this router —
 // they have zero callers outside the group-gift handler block.
-// `GROUP_GIFT_PRICE_XTR` STAYS in index.ts (also consumed by ONE_TIME_SKUS
-// at line ~511 and the entitlement function at lines ~647–650); it is
-// passed through as a dep so the router uses the same authoritative value.
+// The unlock price is no longer threaded as a dep: it is bucket-aware (E24
+// `group-gift-price` experiment) and resolved per-user inside the router via
+// services/group-gift-pricing.ts.
 const groupGiftsRouter = registerGroupGiftsRouter({
   getOrCreateTgUser,
   getEffectiveEntitlements,
   tgActorHash,
   trackEvent,
-  GROUP_GIFT_PRICE_XTR,
 });
 tgRouter.use(groupGiftsRouter);
 

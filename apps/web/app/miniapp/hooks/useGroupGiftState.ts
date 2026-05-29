@@ -44,7 +44,10 @@ export type GroupGiftMessage = {
   senderId: string; senderName: string; senderAvatarUrl: string | null; isSelf: boolean;
 };
 
-export type GgAccess = { unlocked: boolean; priceXtr: number };
+// `priceVariant` carries the E24 `group-gift-price` experiment bucket for the
+// user (control 79 / treatment 39). The Mini App tags its paywall-impression
+// event with it; absent (older payloads / SSR default) → treated as control.
+export type GgAccess = { unlocked: boolean; priceXtr: number; priceVariant?: 'control' | 'treatment' };
 
 /**
  * One hook for the whole Group Gift cluster state. Returns the inline
@@ -83,8 +86,12 @@ export function useGroupGiftState() {
   const ggMessagesEndRef = useRef<HTMLDivElement>(null);
 
   // Paywall entitlement for the Group Gift feature itself (gated by Stars
-  // purchase). `priceXtr` mirrors the server-side env default; refreshed
-  // via /tg/billing/group-gift/sync on settings tile open.
+  // purchase). The `79` here is only the SSR / pre-bootstrap default and must
+  // mirror the CONTROL price (`GROUP_GIFT_PRICE_XTR` in apps/api); the real,
+  // bucket-aware price (E24) arrives from the `GET /tg/wishlists` bootstrap
+  // (`groupGift.priceXtr` + `priceVariant`) and overwrites this before the
+  // paywall screen is ever shown. If "ship the winner" ever changes the
+  // control price, update this literal too.
   const [ggAccess, setGgAccess] = useState<GgAccess>({ unlocked: false, priceXtr: 79 });
 
   return {

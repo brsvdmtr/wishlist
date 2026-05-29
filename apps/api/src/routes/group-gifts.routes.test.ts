@@ -11,7 +11,15 @@ vi.mock('@wishlist/db', () => ({
   }),
 }));
 
+// E24 — bucket-aware price resolver; stub so the 402 backstop is deterministic.
+vi.mock('../services/group-gift-pricing', () => ({
+  resolveGroupGiftUnlockPrice: vi.fn(async () => ({
+    priceXtr: 39, variant: 'treatment', controlPriceXtr: 79, testPriceXtr: 39,
+  })),
+}));
+
 import { registerGroupGiftsRouter } from './group-gifts.routes';
+import { resolveGroupGiftUnlockPrice } from '../services/group-gift-pricing';
 
 function buildDeps() {
   return new Proxy({}, {
@@ -52,5 +60,35 @@ describe('group-gifts — factory + boot', () => {
   it('POST without body still routes (404 on path, not crash)', async () => {
     const res = await request(makeApp()).post('/group-gifts/x').send({});
     expect([400, 403, 404, 500]).toContain(res.status);
+  });
+});
+
+describe('group-gifts — E24 paywall backstop quotes the bucket price', () => {
+  function gateDeps() {
+    return {
+      getOrCreateTgUser: vi.fn(async () => ({ id: 'u1', godMode: false })),
+      getEffectiveEntitlements: vi.fn(async () => ({ hasGroupGift: false })),
+      tgActorHash: vi.fn(() => 'hash'),
+      trackEvent: vi.fn(),
+    } as unknown as Parameters<typeof registerGroupGiftsRouter>[0];
+  }
+
+  it('a non-entitled user creating a group gift gets 402 with the RESOLVED priceXtr', async () => {
+    vi.mocked(resolveGroupGiftUnlockPrice).mockResolvedValue({
+      priceXtr: 39, variant: 'treatment', controlPriceXtr: 79, testPriceXtr: 39,
+    });
+    const deps = gateDeps();
+    const res = await request(makeApp(deps))
+      .post('/items/item-1/group-gift')
+      .send({ targetAmount: 100 });
+
+    expect(res.status).toBe(402);
+    expect(res.body.error).toBe('addon_required');
+    expect(res.body.skuCode).toBe('group_gift_unlock');
+    expect(res.body.priceXtr).toBe(39); // bucket price, not the static 79
+    expect(resolveGroupGiftUnlockPrice).toHaveBeenCalledWith('u1');
+    expect(deps.trackEvent).toHaveBeenCalledWith(
+      'feature_gate_hit_group_gift', 'u1', expect.objectContaining({ priceXtr: 39, bucket: 'treatment' }),
+    );
   });
 });

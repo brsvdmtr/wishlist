@@ -56,6 +56,7 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { zodError } from '../lib/http';
 import { getRequestLocale } from '../lib/locale';
 import { createTgInvoiceLink } from '../telegram/invoiceLink';
+import { resolveGroupGiftUnlockPrice } from '../services/group-gift-pricing';
 import { t, LIFETIME_BILLING_PERIOD } from '@wishlist/shared';
 import logger from '../logger';
 
@@ -497,24 +498,40 @@ export function registerBillingRouter(deps: BillingRouterDeps): Router {
 
       const sessionId = crypto.randomUUID();
       // Payload format: addon:<skuCode>:<telegramId>:<targetId|_>:<sessionId>
+      // NOTE: the payload intentionally does NOT carry the price — the bot grants
+      // the add-on by SKU code, so a bucket-varying price never changes the grant
+      // (existing purchase state stays intact; Purchase.starsPrice records the
+      // amount actually paid). See apps/bot/src/payments.ts:applyAddonPayment.
       const payload = `addon:${skuCode}:${req.tgUser!.id}:${targetId ?? '_'}:${sessionId}`;
       const locale = getRequestLocale(req);
+
+      // E24 — Group Gift unlock price is bucket-aware (control 79 / treatment
+      // 39). Resolve the STICKY bucket price here so the invoice charges exactly
+      // what the paywall showed the same user. Every other SKU keeps its
+      // catalogue price (`sku.price`) and carries no bucket.
+      let amount = sku.price;
+      let bucket: string | undefined;
+      if (skuCode === 'group_gift_unlock') {
+        const ggPrice = await resolveGroupGiftUnlockPrice(user.id);
+        amount = ggPrice.priceXtr;
+        bucket = ggPrice.variant;
+      }
 
       const tg = await createTgInvoiceLink(botToken, {
         title: t(`addon_title_${skuCode}` as any, locale, {}),
         description: t(`addon_desc_${skuCode}` as any, locale, {}),
         payload,
         currency: 'XTR',
-        prices: [{ label: t('api_invoice_label', locale), amount: sku.price }],
+        prices: [{ label: t('api_invoice_label', locale), amount }],
       });
       if (!tg.ok) {
         if (tg.retryable) {
           logger.warn({ reason: tg.description, skuCode }, 'billing addon createInvoiceLink network failure');
-          trackEvent('addon_checkout_failed', user.id, { skuCode, reason: 'tg_network_timeout' });
+          trackEvent('addon_checkout_failed', user.id, { skuCode, reason: 'tg_network_timeout', ...(bucket ? { bucket } : {}) });
           return res.status(503).json({ error: 'telegram_unavailable' });
         }
         logger.error({ description: tg.description, skuCode }, 'billing addon createInvoiceLink failed');
-        trackEvent('addon_checkout_failed', user.id, { skuCode, reason: tg.description });
+        trackEvent('addon_checkout_failed', user.id, { skuCode, reason: tg.description, ...(bucket ? { bucket } : {}) });
         return res.status(502).json({ error: 'Failed to create invoice' });
       }
 
@@ -524,13 +541,13 @@ export function registerBillingRouter(deps: BillingRouterDeps): Router {
           userId: user.id,
           telegramPaymentChargeId: `addon_checkout_${sessionId}`,
           invoicePayload: payload,
-          totalAmount: sku.price,
+          totalAmount: amount,
           currency: 'XTR',
           eventType: 'addon_invoice_created',
         },
       });
 
-      trackEvent('addon_checkout_started', user.id, { skuCode, targetId });
+      trackEvent('addon_checkout_started', user.id, { skuCode, targetId, ...(bucket ? { bucket } : {}) });
       return res.json({ invoiceUrl: tg.url, sessionId });
     }),
   );

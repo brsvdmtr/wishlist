@@ -25,8 +25,12 @@
 //   - getEffectiveEntitlements    — universal (32 callers).
 //   - tgActorHash                 — universal.
 //   - trackEvent                  — universal.
-//   - GROUP_GIFT_PRICE_XTR        — also used by ONE_TIME_SKUS (511) and the
-//                                    entitlement function (647–650).
+//
+// The Group Gift unlock price is NO LONGER a dep: it is bucket-aware (E24
+// `group-gift-price` experiment) and resolved per-user via the sticky
+// resolveGroupGiftUnlockPrice (services/group-gift-pricing.ts), so the 402
+// backstop price matches what the Mini App paywall showed and the invoice
+// will charge.
 //
 // Cross-domain coupling (intentionally byte-identical, NOT refactored here):
 //   - POST /items/:id/group-gift mutates Item (status='RESERVED',
@@ -49,6 +53,7 @@ import { zodError } from '../lib/http';
 import { sendTgNotification } from '../telegram/botApi';
 import { escapeTgHtml } from '../telegram/html';
 import { makeAddonRequired, sendPaywall } from '../services/paywall';
+import { resolveGroupGiftUnlockPrice } from '../services/group-gift-pricing';
 
 // Shape of the Telegram initData user object — duplicated from index.ts to
 // avoid coupling routes/* to a non-exported local type. Structurally
@@ -78,7 +83,6 @@ export type GroupGiftsRouterDeps = {
   getEffectiveEntitlements: (userId: string, godMode?: boolean) => Promise<GroupGiftsEntitlements>;
   tgActorHash: (telegramId: number) => string;
   trackEvent: (event: string, userId?: string, props?: Record<string, unknown>) => void;
-  GROUP_GIFT_PRICE_XTR: number;
 };
 
 /** Map a GroupGift to the API response shape (role-dependent). */
@@ -165,7 +169,6 @@ export function registerGroupGiftsRouter(deps: GroupGiftsRouterDeps): Router {
     getEffectiveEntitlements,
     tgActorHash,
     trackEvent,
-    GROUP_GIFT_PRICE_XTR,
   } = deps;
 
   const groupGiftsRouter = Router();
@@ -192,11 +195,14 @@ export function registerGroupGiftsRouter(deps: GroupGiftsRouterDeps): Router {
       const ent = await getEffectiveEntitlements(user.id, user.godMode);
 
       // Check group gift access — purchasable add-on → 402 with addon_required.
+      // E24: the unlock price is bucket-aware and sticky, so this backstop quotes
+      // the same price the Mini App paywall showed (and the invoice will charge).
       if (!ent.hasGroupGift) {
-        trackEvent('feature_gate_hit_group_gift', user.id);
+        const { priceXtr, variant } = await resolveGroupGiftUnlockPrice(user.id);
+        trackEvent('feature_gate_hit_group_gift', user.id, { priceXtr, bucket: variant });
         return sendPaywall(res, 402, makeAddonRequired('group_gift', {
           skuCode: 'group_gift_unlock',
-          priceXtr: GROUP_GIFT_PRICE_XTR,
+          priceXtr,
         }));
       }
 
