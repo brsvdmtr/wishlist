@@ -745,10 +745,25 @@ export function registerAdminRouter(deps: AdminRouterDeps): Router {
   // payment identifiers or user PII. Mutations (the safe relink backfill) are
   // intentionally CLI-only (`pnpm billing:reconcile -- --apply`); a GET must
   // stay side-effect-free. Full runbook: docs/ops/billing-reconciliation.md.
+  //   • idempotency: n/a (read-only GET)
+  //   • rate limit: admin-gated (X-ADMIN-KEY) + bounded by DEFAULT_MAX_SCAN_ROWS
+  //     (the service refuses oversized in-memory scans) — no dedicated category
+  //   • analytics: admin.billing_reconcile_viewed (counts only, no PII)
   privateRouter.get(
     '/admin/billing/reconcile',
     asyncHandler(async (_req, res) => {
       const report = await reconcileBilling(prisma);
+      trackAnalyticsEvent({
+        event: 'admin.billing_reconcile_viewed',
+        props: {
+          findings: report.findings.length,
+          high: report.bySeverity.high,
+          medium: report.bySeverity.medium,
+          low: report.bySeverity.low,
+          scanned:
+            report.scanned.paymentEvents + report.scanned.subscriptions + report.scanned.purchases,
+        },
+      });
       return res.json(report);
     }),
   );

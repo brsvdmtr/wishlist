@@ -69,6 +69,10 @@ const REMINDER_EVENT_PREFIX = 'reminder_sent_';
 // manual, …) is a free grant with starsPrice 0 and legitimately has none.
 export const PAID_SUBSCRIPTION_SOURCE = 'telegram_stars';
 const LIFETIME_BILLING_PERIOD = 'lifetime';
+// Purchase statuses that are legitimately terminal (not "stuck"). Today the bot
+// only ever writes 'completed'; refunded/cancelled are reserved so a future
+// refund flow doesn't turn every refund into a non_completed_purchase finding.
+const PURCHASE_TERMINAL_STATUSES = new Set(['completed', 'refunded', 'cancelled']);
 
 export type PaymentEventClass =
   | 'subscription_payment'
@@ -83,14 +87,24 @@ export function classifyPaymentEvent(eventType: string): PaymentEventClass {
   }
   if (eventType === ADDON_PAYMENT_EVENT_TYPE) return 'addon_payment';
   if (eventType === LIFETIME_GUARD_EVENT_TYPE) return 'lifetime_guard';
-  return 'non_payment'; // invoice_created*, gift_notes_invoice_created, reminder_sent_*, unknown
+  // Explicitly-recognised non-payment markers: checkout-session stubs and
+  // renewal-reminder dedup rows (reminder_sent_<milestone>). Listing them
+  // (rather than relying only on the catch-all) makes the contract intentional
+  // and keeps the prefix constant live. Anything else unrecognised also falls
+  // through to non_payment — the safe default: never counted as money.
+  if ((NON_PAYMENT_EVENT_TYPES as readonly string[]).includes(eventType)) return 'non_payment';
+  if (eventType.startsWith(REMINDER_EVENT_PREFIX)) return 'non_payment';
+  return 'non_payment';
 }
 
 /**
  * One-way, non-reversible token for a Telegram charge id. Lets the report
  * correlate findings that share a charge id without ever printing the raw id.
  * 'charge' is a domain-separation prefix, not a secret (charge ids are already
- * high-entropy random strings from Telegram).
+ * high-entropy random strings from Telegram). The 64-bit width is for HUMAN
+ * CORRELATION only, not a security boundary — a (vanishingly unlikely)
+ * collision would at worst visually group two unrelated findings; it never
+ * affects detection, which always works off the raw ids in the DB.
  */
 export function hashChargeId(rawChargeId: string): string {
   return crypto.createHash('sha256').update(`charge|${rawChargeId}`).digest('hex').slice(0, 16);
@@ -157,11 +171,18 @@ export interface ReconciliationReport {
   ok: boolean;
 }
 
+// Upper bound on rows pulled into memory in one pass. reconcileBilling can run
+// in-process (GET /admin/billing/reconcile), so it refuses rather than risk
+// OOMing the API. Above this, the streamed path noted in the ops doc is needed.
+export const DEFAULT_MAX_SCAN_ROWS = 200_000;
+
 export interface ReconcileOptions {
   /** Injectable clock for deterministic stale-subscription tests. */
   now?: Date;
   /** Override the known-SKU set (defaults to the live ONE_TIME_SKUS catalogue). */
   knownSkuCodes?: Set<string>;
+  /** Abort if the three tables together exceed this many rows (default DEFAULT_MAX_SCAN_ROWS). */
+  maxScanRows?: number;
 }
 
 // Field selections — deliberately omit invoicePayload / rawPayload so PII is
@@ -246,6 +267,20 @@ export async function reconcileBilling(
 ): Promise<ReconciliationReport> {
   const now = opts.now ?? new Date();
   const knownSkuCodes = opts.knownSkuCodes ?? new Set<string>(Object.keys(ONE_TIME_SKUS));
+  const maxScanRows = opts.maxScanRows ?? DEFAULT_MAX_SCAN_ROWS;
+
+  // Cheap precheck before the in-memory load — refuse oversized scans so the
+  // in-process admin endpoint can't OOM the API process.
+  const [peCount, subCount, purCount] = await Promise.all([
+    prisma.paymentEvent.count(),
+    prisma.subscription.count(),
+    prisma.purchase.count(),
+  ]);
+  if (peCount + subCount + purCount > maxScanRows) {
+    throw new Error(
+      `billing reconciliation aborted: ${peCount + subCount + purCount} rows (pre-load count, advisory) exceed the in-memory ceiling (${maxScanRows}). Use a streamed reconciliation — see docs/ops/billing-reconciliation.md.`,
+    );
+  }
 
   const [events, subs, purchases] = await Promise.all([
     prisma.paymentEvent.findMany({ select: PAYMENT_EVENT_SELECT }) as Promise<PaymentEventRow[]>,
@@ -262,16 +297,24 @@ export async function reconcileBilling(
   const purchaseByCharge = new Map<string, PurchaseRow>(
     purchases.map((p) => [p.telegramChargeId, p]),
   );
-  const eventsBySubId = new Map<string, PaymentEventRow[]>();
-  const subscriptionPaymentUserIds = new Set<string>();
+  // Linked REAL payments per sub — indexed ONLY from subscription_payment
+  // events. reminder_sent_* markers are written with subscriptionId set too
+  // (schedulers/pro-renewal.ts), so indexing every linked event would let a
+  // reminder masquerade as a payment trail and hide a genuinely unpaid sub.
+  // subscriptionPaymentChargeIds tracks those same payments' charge ids so the
+  // "paid sub with no payment" check still recognises a payment whose link was
+  // nulled (onDelete:SetNull) — that orphaned link is already reported as
+  // payment_event_without_subscription, so we must not ALSO cry "no payment
+  // trail" for the same sub.
+  const subPaymentEventsBySubId = new Map<string, PaymentEventRow[]>();
+  const subscriptionPaymentChargeIds = new Set<string>();
   for (const e of events) {
+    if (classifyPaymentEvent(e.eventType) !== 'subscription_payment') continue;
+    subscriptionPaymentChargeIds.add(e.telegramPaymentChargeId);
     if (e.subscriptionId) {
-      const list = eventsBySubId.get(e.subscriptionId) ?? [];
+      const list = subPaymentEventsBySubId.get(e.subscriptionId) ?? [];
       list.push(e);
-      eventsBySubId.set(e.subscriptionId, list);
-    }
-    if (classifyPaymentEvent(e.eventType) === 'subscription_payment') {
-      subscriptionPaymentUserIds.add(e.userId);
+      subPaymentEventsBySubId.set(e.subscriptionId, list);
     }
   }
 
@@ -366,9 +409,15 @@ export async function reconcileBilling(
   // ─── Bucket 2: paid Subscription with no PaymentEvent ─────────────────────
   for (const s of subs) {
     if (s.source !== PAID_SUBSCRIPTION_SOURCE) continue; // free grants are fine
-    const linked = eventsBySubId.get(s.id);
-    const hasUserPayment = subscriptionPaymentUserIds.has(s.userId);
-    if ((!linked || linked.length === 0) && !hasUserPayment) {
+    const linkedPayments = subPaymentEventsBySubId.get(s.id);
+    // A payment "belongs to" this sub if a subscription-payment event links by
+    // id OR shares the sub's own charge id (covers a real payment whose link
+    // was nulled). Scoped to THIS sub's charge id — NOT "any payment by this
+    // user" — so an unrelated orphaned payment for the same user cannot mask a
+    // genuinely unpaid sub.
+    const hasMatchingPayment =
+      !!s.telegramChargeId && subscriptionPaymentChargeIds.has(s.telegramChargeId);
+    if ((!linkedPayments || linkedPayments.length === 0) && !hasMatchingPayment) {
       push({
         kind: 'subscription_without_payment_event',
         subscriptionId: s.id,
@@ -384,8 +433,13 @@ export async function reconcileBilling(
   }
 
   // ─── Bucket 3: duplicate charge ids ───────────────────────────────────────
-  // providerPaymentChargeId is NOT unique — the same provider charge on >1
-  // PaymentEvent means two telegram charge ids map to one real payment.
+  // Each Telegram Stars payment carries a DISTINCT provider_payment_charge_id
+  // (renewals, yearly stacking, and post-lifetime audit charges each get their
+  // own — verified on prod: zero dup-provider findings across live payments),
+  // so the same providerPaymentChargeId on >1 PaymentEvent is never legitimate:
+  // two telegram charge ids mapping to one real payment = double-record /
+  // double-grant risk. Non-payment markers carry a null provider id and are
+  // skipped by groupNonNull. Same- OR cross-user duplication is anomalous.
   groupNonNull(events, (e) => e.providerPaymentChargeId).forEach((group) => {
     if (group.length < 2) return;
     for (const e of group) {
@@ -402,7 +456,11 @@ export async function reconcileBilling(
       });
     }
   });
-  // Subscription.telegramChargeId is NOT unique — a value on >1 sub is suspect.
+  // Subscription.telegramChargeId is NOT unique. @@unique([userId, planCode])
+  // means one PRO sub per user (its charge id is overwritten on each renewal),
+  // so the same charge id on ≥2 subs can only be a CROSS-user collision (one
+  // Telegram payment attributed to two subscriptions) — rare, but always a real
+  // anomaly, never a renewal artifact.
   groupNonNull(subs, (s) => s.telegramChargeId).forEach((group) => {
     if (group.length < 2) return;
     for (const s of group) {
@@ -434,7 +492,7 @@ export async function reconcileBilling(
         detail: 'Purchase for an unrecognised SKU — money taken, no entitlement granted.',
       });
     }
-    if (p.status !== 'completed') {
+    if (!PURCHASE_TERMINAL_STATUSES.has(p.status)) {
       push({
         kind: 'non_completed_purchase',
         purchaseId: p.id,
@@ -445,7 +503,7 @@ export async function reconcileBilling(
         amount: p.starsPrice,
         currency: 'XTR',
         occurredAt: p.createdAt.toISOString(),
-        detail: `Purchase left in non-completed status '${p.status}'.`,
+        detail: `Purchase stuck in non-terminal status '${p.status}'.`,
       });
     }
   }
@@ -515,15 +573,22 @@ export interface ApplyResult {
 /**
  * The ONLY mutation this tool performs. Re-queries the DB (never trusts a stale
  * report) for subscription-payment PaymentEvents whose subscriptionId is null,
- * and relinks each to its owner's PRO Subscription — but only when the match is
- * unambiguous (exactly one candidate sub, and its charge id matches when set).
- * Idempotent: a second run finds nothing to fix. Everything else (dangling
- * links, duplicates, refunds, re-grants) is left to a human.
+ * and relinks each to the PRO Subscription whose telegramChargeId EXACTLY
+ * equals the event's charge id — the only provably-correct match. (A "user's
+ * single PRO sub" fallback would mislink an old/foreign payment to a
+ * since-replaced sub after a delete→recreate, so it is deliberately NOT used.)
+ * The relink is a conditional updateMany guarded on subscriptionId:null, so it
+ * is atomic against a concurrent webhook and idempotent under contention.
+ * Everything else (dangling links, duplicates, refunds, re-grants, and orphans
+ * with no charge-id match) is left to a human.
  */
 export async function applySafeFixes(prisma: PrismaClient): Promise<ApplyResult> {
   const relinkedPaymentEvents: ApplyResult['relinkedPaymentEvents'] = [];
   const skipped: ApplyResult['skipped'] = [];
 
+  // This loads only ORPHANED subscription-payment events (subscriptionId null)
+  // — the anomaly set, not a full table — so it is inherently bounded and needs
+  // no scan ceiling: a healthy ledger returns ~zero rows here.
   const orphans = await prisma.paymentEvent.findMany({
     where: {
       subscriptionId: null,
@@ -533,32 +598,31 @@ export async function applySafeFixes(prisma: PrismaClient): Promise<ApplyResult>
   });
 
   for (const e of orphans) {
-    const candidates = await prisma.subscription.findMany({
-      where: { userId: e.userId, planCode: 'PRO' },
-      select: { id: true, telegramChargeId: true },
+    // Only a PRO sub whose charge id EXACTLY matches is a provably-correct
+    // target. No "single PRO sub" fallback — see the doc comment above.
+    const match = await prisma.subscription.findFirst({
+      where: { userId: e.userId, planCode: 'PRO', telegramChargeId: e.telegramPaymentChargeId },
+      select: { id: true },
     });
 
-    // Prefer the sub whose telegramChargeId matches this charge id exactly.
-    const exact = candidates.filter((s) => s.telegramChargeId === e.telegramPaymentChargeId);
-    const target =
-      exact.length === 1 ? exact[0] : candidates.length === 1 ? candidates[0] : null;
-
-    if (!target) {
-      skipped.push({
-        paymentEventId: e.id,
-        reason:
-          candidates.length === 0
-            ? 'no PRO subscription for user'
-            : 'ambiguous: multiple candidate subscriptions',
-      });
+    if (!match) {
+      skipped.push({ paymentEventId: e.id, reason: 'no PRO subscription with a matching charge id' });
       continue;
     }
 
-    await prisma.paymentEvent.update({
-      where: { id: e.id },
-      data: { subscriptionId: target.id },
+    // Conditional + atomic: the `subscriptionId: null` guard means a webhook
+    // that linked this event between our read and write turns the update into a
+    // no-op (count 0) instead of clobbering the bot's correct link — and keeps
+    // a concurrent second --apply idempotent.
+    const { count } = await prisma.paymentEvent.updateMany({
+      where: { id: e.id, subscriptionId: null },
+      data: { subscriptionId: match.id },
     });
-    relinkedPaymentEvents.push({ paymentEventId: e.id, subscriptionId: target.id });
+    if (count === 0) {
+      skipped.push({ paymentEventId: e.id, reason: 'raced: linked by another writer before update' });
+      continue;
+    }
+    relinkedPaymentEvents.push({ paymentEventId: e.id, subscriptionId: match.id });
   }
 
   return { relinkedPaymentEvents, skipped };

@@ -161,13 +161,18 @@ Refunds use Telegram's `refundStarPayment` (bot-side) — **not automated here**
 `--apply` performs exactly **one** mutation, the only provably-correct repair:
 
 > Relink a subscription-payment `PaymentEvent` whose `subscriptionId` is
-> `null` to its owner's PRO `Subscription` — **only** when the match is
-> unambiguous (the sub's `telegramChargeId` equals the event's charge id, or
-> the user has exactly one PRO subscription).
+> `null` to the PRO `Subscription` whose `telegramChargeId` **exactly equals**
+> the event's charge id.
 
-It re-queries the DB live (never trusts a stale report), is **idempotent** (a
-second run relinks nothing), and **skips** anything ambiguous (multiple
-candidate subs) or unfixable (dangling link, no sub) — reporting each skip.
+Exact charge-id match is the *only* provably-correct target. There is
+deliberately **no** "relink to the user's single PRO sub" fallback — that would
+mislink an old or foreign payment to a since-replaced subscription (e.g. after
+a delete→recreate). It re-queries the DB live (never trusts a stale report) and
+the relink is a **conditional, atomic** `updateMany` guarded on
+`subscriptionId IS NULL`, so it is **idempotent** and safe against a concurrent
+payment webhook (a racing link makes the update a no-op, never a clobber). It
+**skips** anything without an exact charge match — reporting each skip with a
+reason.
 
 Everything else — refunds, re-grants, backfilling missing rows, `EXPIRED`
 transitions — stays **manual**. The tool will never move money or change an
@@ -192,9 +197,13 @@ the raw payment identifiers live only in the DB. (Per the project's
 ## Scale note
 
 The reconciler loads the three tables into memory and computes discrepancies
-in JS — simple and exhaustive at the current scale (low thousands of rows). If
-`PaymentEvent` ever exceeds ~100k rows, move the grouping/orphan checks to
-streamed SQL aggregation.
+in JS — simple and exhaustive at the current scale (low thousands of rows). A
+cheap `count()` precheck **refuses** to run once the three tables together
+exceed `DEFAULT_MAX_SCAN_ROWS` (200 000), so the in-process
+`GET /admin/billing/reconcile` can never OOM the API; above that threshold the
+grouping/orphan checks must move to streamed SQL aggregation. The CLI shares
+the same guard (override per-call via the `maxScanRows` option if you ever need
+to force a larger in-memory pass locally).
 
 <a id="future-live-telegram-ledger"></a>
 ## Future: live Telegram ledger

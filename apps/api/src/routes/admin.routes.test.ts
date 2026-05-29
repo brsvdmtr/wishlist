@@ -13,6 +13,9 @@ const shared = vi.hoisted(() => ({
   referralAttribution: { findUnique: vi.fn(), update: vi.fn() },
   promoCampaign: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn() },
   promoRedemption: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+  paymentEvent: { count: vi.fn(), findMany: vi.fn() },
+  subscription: { count: vi.fn(), findMany: vi.fn() },
+  purchase: { count: vi.fn(), findMany: vi.fn() },
 }));
 
 vi.mock('@wishlist/db', () => ({
@@ -23,10 +26,14 @@ vi.mock('@wishlist/db', () => ({
     referralAttribution: shared.referralAttribution,
     promoCampaign: shared.promoCampaign,
     promoRedemption: shared.promoRedemption,
+    paymentEvent: shared.paymentEvent,
+    subscription: shared.subscription,
+    purchase: shared.purchase,
   },
 }));
 
 import { registerAdminRouter } from './admin.routes';
+import { ANALYTICS_EVENTS } from '@wishlist/shared';
 
 function buildDeps() {
   return {
@@ -117,5 +124,41 @@ describe('admin POST /wishlists', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.wishlist).toMatchObject({ id: 'w1', title: 'Birthday' });
+  });
+});
+
+describe('GET /admin/billing/reconcile', () => {
+  it('401 without X-ADMIN-KEY (admin-gated)', async () => {
+    const res = await request(makeApp('secret')).get('/admin/billing/reconcile');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns the reconciliation report (200) and audits the run via analytics', async () => {
+    process.env.ADMIN_KEY = 'secret';
+    shared.paymentEvent.count.mockResolvedValue(0);
+    shared.subscription.count.mockResolvedValue(0);
+    shared.purchase.count.mockResolvedValue(0);
+    shared.paymentEvent.findMany.mockResolvedValue([]);
+    shared.subscription.findMany.mockResolvedValue([]);
+    shared.purchase.findMany.mockResolvedValue([]);
+    const trackSpy = vi.fn();
+    const deps = { ...buildDeps(), trackAnalyticsEvent: trackSpy };
+    const app = express();
+    app.use(express.json());
+    app.use(registerAdminRouter(deps));
+
+    const res = await request(app).get('/admin/billing/reconcile').set('X-ADMIN-KEY', 'secret');
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.scanned).toEqual({ paymentEvents: 0, subscriptions: 0, purchases: 0 });
+    expect(trackSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'admin.billing_reconcile_viewed' }),
+    );
+  });
+
+  it('emits a REGISTERED analytics event (so trackAnalyticsEvent does not silently drop it)', () => {
+    // Guards the round-2 bug where the audit event was emitted but absent from
+    // the allowlist, making trackAnalyticsEvent a no-op.
+    expect(ANALYTICS_EVENTS).toContain('admin.billing_reconcile_viewed');
   });
 });

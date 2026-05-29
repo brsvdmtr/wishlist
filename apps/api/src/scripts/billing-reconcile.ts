@@ -39,8 +39,19 @@ function loadLocalEnv(): void {
 
 type Cli = { apply: boolean; json: boolean; strict: boolean; help: boolean };
 
+const KNOWN_FLAGS = new Set(['--apply', '--dry-run', '--json', '--strict', '--help', '-h']);
+
 function parseArgs(argv: string[]): Cli {
-  const flags = new Set(argv.filter((a) => a.startsWith('--')));
+  const flags = new Set(argv.filter((a) => a.startsWith('-')));
+  // Warn (don't fail) on typos — the safe default is dry-run, so an unknown
+  // flag can never silently mutate, but a typo'd `--apply` quietly no-op'ing
+  // would confuse an operator.
+  for (const f of flags) {
+    if (!KNOWN_FLAGS.has(f)) {
+      // eslint-disable-next-line no-console
+      console.error(`⚠ unknown flag '${f}' ignored — run with --help for usage. Proceeding in safe dry-run.`);
+    }
+  }
   return {
     // --apply is the ONLY way to mutate. --dry-run is accepted but redundant
     // (read-only is the default); --apply always wins if both are present.
@@ -149,15 +160,26 @@ async function main(): Promise<number> {
           console.log(`     skip pe=${s.paymentEventId}: ${s.reason}`),
         );
       }
-      // Re-run so the printed report reflects post-fix state.
-      const after = await reconcileBilling(prisma);
+      // Re-run so the printed report reflects post-fix state. The mutation has
+      // ALREADY succeeded and been reported above, so a failure of this
+      // read-only post-pass must NOT mask that — print what we have and exit 0
+      // rather than surfacing a misleading hard failure (exit 1).
+      let after: ReconciliationReport | null = null;
+      try {
+        after = await reconcileBilling(prisma);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `⚠ relink succeeded, but the post-apply report failed: ${err instanceof Error ? err.message : err}`,
+        );
+      }
       if (cli.json) {
         // eslint-disable-next-line no-console
         console.log(JSON.stringify({ before: report, applied, after }, null, 2));
-      } else {
+      } else if (after) {
         printHuman(after);
       }
-      return exitCode(after, cli.strict);
+      return after ? exitCode(after, cli.strict) : 0;
     }
 
     if (cli.json) {

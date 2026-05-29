@@ -141,6 +141,11 @@ export const ANALYTICS_EVENTS = [
   'referral.celebration_viewed',
   'referral.celebration_cta_clicked',
 
+  // ===== Admin / ops =====
+  // Emitted by GET /admin/billing/reconcile (counts only, no PII) so an
+  // operator running a reconciliation leaves an audit trail.
+  'admin.billing_reconcile_viewed',
+
   // ===== Birthday Reminders =====
   // Settings (writes from Mini App)
   'birthday.settings_opened',

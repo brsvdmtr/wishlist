@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest';
 import type { PrismaClient } from '@wishlist/db';
 import {
   reconcileBilling,
+  applySafeFixes,
   classifyPaymentEvent,
   hashChargeId,
   FINDING_SEVERITY,
@@ -62,38 +63,43 @@ function purchase(over: Partial<Record<string, unknown>> = {}) {
   };
 }
 
-// Fake Prisma: findMany returns fixtures; ANY other access throws, which is how
-// we PROVE detection is read-only (self-check: "dry-run doesn't change data").
-function fakereconcileBilling(rows: {
-  events?: unknown[];
-  subs?: unknown[];
-  purchases?: unknown[];
-}) {
-  const mutationTrap = (model: string) =>
+// Fake Prisma: findMany returns fixtures and count returns their length; ANY
+// model-level mutation (update/create/delete) OR top-level client call
+// ($transaction/$queryRaw/$executeRaw) throws — which is how we PROVE detection
+// is read-only (self-check: "dry-run doesn't change data"). Read-only against a
+// REAL client is additionally proven by the row-content snapshot in the
+// integration suite.
+function makeFakePrisma(rows: { events?: unknown[]; subs?: unknown[]; purchases?: unknown[] }) {
+  const readOnlyModel = (data: unknown[]) =>
     new Proxy(
-      { findMany: async () => [] as unknown[] },
+      {},
       {
-        get(target, prop) {
-          if (prop === 'findMany') {
-            if (model === 'paymentEvent') return async () => rows.events ?? [];
-            if (model === 'subscription') return async () => rows.subs ?? [];
-            if (model === 'purchase') return async () => rows.purchases ?? [];
-            return async () => [];
-          }
-          throw new Error(`reconcileBilling must be read-only — called ${model}.${String(prop)}()`);
+        get(_t, prop) {
+          if (prop === 'findMany') return async () => data;
+          if (prop === 'count') return async () => data.length;
+          throw new Error(`reconcileBilling must be read-only — called .${String(prop)}()`);
         },
       },
     );
-  return {
-    paymentEvent: mutationTrap('paymentEvent'),
-    subscription: mutationTrap('subscription'),
-    purchase: mutationTrap('purchase'),
-  } as unknown as PrismaClient;
+  const client = {
+    paymentEvent: readOnlyModel(rows.events ?? []),
+    subscription: readOnlyModel(rows.subs ?? []),
+    purchase: readOnlyModel(rows.purchases ?? []),
+  };
+  return new Proxy(client, {
+    get(target, prop) {
+      if (prop in target) return (target as Record<string, unknown>)[prop as string];
+      if (typeof prop === 'string' && prop.startsWith('$')) {
+        throw new Error(`reconcileBilling must be read-only — called prisma.${prop}()`);
+      }
+      return undefined;
+    },
+  }) as unknown as PrismaClient;
 }
 
 const KNOWN_SKUS = new Set(['extra_wishlist_slot', 'hints_pack_5']);
-const run = (rows: Parameters<typeof fakereconcileBilling>[0]) =>
-  reconcileBilling(fakereconcileBilling(rows), { now: T0, knownSkuCodes: KNOWN_SKUS });
+const run = (rows: Parameters<typeof makeFakePrisma>[0]) =>
+  reconcileBilling(makeFakePrisma(rows), { now: T0, knownSkuCodes: KNOWN_SKUS });
 
 const kindsOf = (findings: { kind: ReconciliationFindingKind }[]) => findings.map((f) => f.kind);
 
@@ -110,7 +116,9 @@ describe('classifyPaymentEvent', () => {
     expect(classifyPaymentEvent('invoice_created')).toBe('non_payment');
     expect(classifyPaymentEvent('addon_invoice_created')).toBe('non_payment');
     expect(classifyPaymentEvent('gift_notes_invoice_created')).toBe('non_payment');
-    expect(classifyPaymentEvent('reminder_sent_T7')).toBe('non_payment');
+    // Real reminder eventTypes written by schedulers/pro-renewal.ts.
+    expect(classifyPaymentEvent('reminder_sent_7d')).toBe('non_payment');
+    expect(classifyPaymentEvent('reminder_sent_1d')).toBe('non_payment');
     expect(classifyPaymentEvent('totally_unknown')).toBe('non_payment');
   });
 });
@@ -196,6 +204,15 @@ describe('reconcileBilling — bucket 1 (orphan payments)', () => {
     });
     expect(kindsOf(report.findings)).toContain('charge_id_user_mismatch');
   });
+
+  it('flags an add-on charge whose PaymentEvent.userId differs from its Purchase owner', async () => {
+    const cid = 'cid_addon_mismatch';
+    const report = await run({
+      events: [event({ eventType: 'addon_payment_success', userId: 'u_attacker', telegramPaymentChargeId: cid })],
+      purchases: [purchase({ userId: 'u_owner', telegramChargeId: cid })],
+    });
+    expect(kindsOf(report.findings)).toContain('charge_id_user_mismatch');
+  });
 });
 
 // ─── bucket 2: Subscription without PaymentEvent ─────────────────────────────
@@ -220,6 +237,17 @@ describe('reconcileBilling — bucket 3 (duplicate charge ids, self-check #3)', 
     });
     const dups = report.findings.filter((x) => x.kind === 'duplicate_provider_charge_id');
     expect(dups).toHaveLength(2);
+  });
+
+  it('finds a providerPaymentChargeId shared across DIFFERENT users (cross-user double-record)', async () => {
+    const report = await run({
+      events: [
+        event({ subscriptionId: 'sU1', userId: 'u1', providerPaymentChargeId: 'dup_x' }),
+        event({ subscriptionId: 'sU2', userId: 'u2', providerPaymentChargeId: 'dup_x' }),
+      ],
+      subs: [sub({ id: 'sU1', userId: 'u1' }), sub({ id: 'sU2', userId: 'u2' })],
+    });
+    expect(report.findings.filter((x) => x.kind === 'duplicate_provider_charge_id')).toHaveLength(2);
   });
 
   it('finds a Subscription.telegramChargeId shared across two subscriptions', async () => {
@@ -248,9 +276,16 @@ describe('reconcileBilling — bucket 4 (failed / partial)', () => {
     expect(kindsOf(report.findings)).toContain('unknown_sku_purchase');
   });
 
-  it('flags a non-completed purchase', async () => {
+  it('flags a purchase stuck in a non-terminal status', async () => {
     const report = await run({ purchases: [purchase({ status: 'pending' })] });
     expect(kindsOf(report.findings)).toContain('non_completed_purchase');
+  });
+
+  it('does NOT flag a legitimately-terminal refunded/cancelled purchase', async () => {
+    const refunded = await run({ purchases: [purchase({ status: 'refunded' })] });
+    expect(kindsOf(refunded.findings)).not.toContain('non_completed_purchase');
+    const cancelled = await run({ purchases: [purchase({ status: 'cancelled' })] });
+    expect(kindsOf(cancelled.findings)).not.toContain('non_completed_purchase');
   });
 
   it('flags an ACTIVE subscription whose period already ended (expiry-sweep gap)', async () => {
@@ -273,7 +308,7 @@ describe('reconcileBilling — report shape & PII contract', () => {
   it('tallies counts and severities consistently', async () => {
     const report = await run({
       events: [event({ eventType: 'payment_success', subscriptionId: null })],
-      purchases: [purchase({ status: 'refunded' })],
+      purchases: [purchase({ status: 'pending' })],
     });
     const total = Object.values(report.counts).reduce((a, b) => a + b, 0);
     expect(total).toBe(report.findings.length);
@@ -298,5 +333,118 @@ describe('reconcileBilling — report shape & PII contract', () => {
     expect(json).not.toContain('invoicePayload');
     expect(json).not.toContain('rawPayload');
     expect(json).not.toMatch(/"email"|"telegramId"/);
+  });
+});
+
+// ─── false-positive guards & edge cases (regressions from review round 1) ────
+describe('reconcileBilling — no false positives on legitimate renewals', () => {
+  it('a single sub with many distinct-charge renewal events is completely clean', async () => {
+    // Refutes the review concern that renewals (N events on 1 sub) trip
+    // duplicate_provider / duplicate_subscription / missing-payment.
+    const report = await run({
+      events: [
+        event({ subscriptionId: 's_ren', userId: 'u_ren', telegramPaymentChargeId: 'c1', providerPaymentChargeId: 'p1', eventType: 'payment_success' }),
+        event({ subscriptionId: 's_ren', userId: 'u_ren', telegramPaymentChargeId: 'c2', providerPaymentChargeId: 'p2', eventType: 'payment_success' }),
+        event({ subscriptionId: 's_ren', userId: 'u_ren', telegramPaymentChargeId: 'c3', providerPaymentChargeId: 'p3', eventType: 'payment_success_yearly' }),
+      ],
+      subs: [sub({ id: 's_ren', userId: 'u_ren', telegramChargeId: 'c3' })],
+    });
+    expect(report.ok).toBe(true);
+  });
+});
+
+describe('reconcileBilling — bucket 2 precision (orphaned link vs genuinely unpaid)', () => {
+  it('does NOT also cry "no payment trail" when the sub has a charge-id-matching but unlinked payment', async () => {
+    const report = await run({
+      events: [event({ userId: 'u_b', telegramPaymentChargeId: 'cB', subscriptionId: null, eventType: 'payment_success' })],
+      subs: [sub({ id: 's_b', userId: 'u_b', telegramChargeId: 'cB' })],
+    });
+    expect(kindsOf(report.findings)).toContain('payment_event_without_subscription'); // the broken link
+    expect(kindsOf(report.findings)).not.toContain('subscription_without_payment_event'); // payment DOES exist for this sub
+  });
+
+  it('STILL flags a genuinely unpaid stars sub even when an UNRELATED orphan payment exists for the same user', async () => {
+    // The old per-user heuristic masked this; the per-sub charge-id match fixes it.
+    const report = await run({
+      events: [event({ userId: 'u_c', telegramPaymentChargeId: 'c_other', subscriptionId: null, eventType: 'payment_success' })],
+      subs: [sub({ id: 's_c', userId: 'u_c', telegramChargeId: 'c_mine', source: 'telegram_stars' })],
+    });
+    expect(report.findings.some((f) => f.kind === 'subscription_without_payment_event' && f.subscriptionId === 's_c')).toBe(true);
+  });
+
+  it('STILL flags an unpaid stars sub whose only LINKED event is a reminder marker (not a payment)', async () => {
+    // reminder_sent_* events carry subscriptionId (schedulers/pro-renewal.ts) —
+    // they must NOT be mistaken for a payment trail.
+    const report = await run({
+      events: [event({ userId: 'u_r', subscriptionId: 's_r', eventType: 'reminder_sent_7d', telegramPaymentChargeId: 'reminder-id' })],
+      subs: [sub({ id: 's_r', userId: 'u_r', telegramChargeId: 'c_paid', source: 'telegram_stars' })],
+    });
+    expect(report.findings.some((f) => f.kind === 'subscription_without_payment_event' && f.subscriptionId === 's_r')).toBe(true);
+  });
+});
+
+describe('reconcileBilling — duplicate_provider_charge_id falsy-skip contract', () => {
+  it('does not flag events that merely share an empty-string or null providerPaymentChargeId', async () => {
+    const report = await run({
+      events: [
+        event({ subscriptionId: 's1', providerPaymentChargeId: '' }),
+        event({ subscriptionId: 's1', providerPaymentChargeId: '' }),
+        event({ subscriptionId: 's1', providerPaymentChargeId: null }),
+      ],
+      subs: [sub({ id: 's1' })],
+    });
+    expect(kindsOf(report.findings)).not.toContain('duplicate_provider_charge_id');
+  });
+});
+
+describe('reconcileBilling — scan ceiling', () => {
+  it('throws when total rows exceed maxScanRows (protects the in-process admin endpoint)', async () => {
+    await expect(
+      reconcileBilling(makeFakePrisma({ events: [event(), event()] }), { now: T0, knownSkuCodes: KNOWN_SKUS, maxScanRows: 1 }),
+    ).rejects.toThrow(/exceed the in-memory ceiling/);
+  });
+});
+
+// applySafeFixes branch coverage with a tiny purpose-built fake (the integration
+// suite covers the real-DB happy path + idempotency; these lock the branches a
+// single-threaded DB test can't easily force — notably the count===0 race skip).
+describe('applySafeFixes — branch coverage', () => {
+  it('relinks when the guarded updateMany reports count 1', async () => {
+    const fake = {
+      paymentEvent: {
+        findMany: async () => [{ id: 'pe_ok', userId: 'u', telegramPaymentChargeId: 'cR' }],
+        updateMany: async () => ({ count: 1 }),
+      },
+      subscription: { findFirst: async () => ({ id: 'sub_match' }) },
+    } as unknown as PrismaClient;
+    const res = await applySafeFixes(fake);
+    expect(res.relinkedPaymentEvents).toEqual([{ paymentEventId: 'pe_ok', subscriptionId: 'sub_match' }]);
+    expect(res.skipped).toEqual([]);
+  });
+
+  it('skips with a "raced" reason when the guarded updateMany matches 0 rows', async () => {
+    // Simulates a concurrent writer linking the orphan between our read and the
+    // guarded write: findFirst matches, but updateMany (where subscriptionId
+    // null) reports count 0 → must skip, never double-link.
+    const fake = {
+      paymentEvent: {
+        findMany: async () => [{ id: 'pe_race', userId: 'u', telegramPaymentChargeId: 'cR' }],
+        updateMany: async () => ({ count: 0 }),
+      },
+      subscription: { findFirst: async () => ({ id: 'sub_match' }) },
+    } as unknown as PrismaClient;
+    const res = await applySafeFixes(fake);
+    expect(res.relinkedPaymentEvents).toEqual([]);
+    expect(res.skipped).toContainEqual({ paymentEventId: 'pe_race', reason: 'raced: linked by another writer before update' });
+  });
+
+  it('skips with "no matching charge id" when no PRO sub charge id matches', async () => {
+    const fake = {
+      paymentEvent: { findMany: async () => [{ id: 'pe_nomatch', userId: 'u', telegramPaymentChargeId: 'cX' }] },
+      subscription: { findFirst: async () => null },
+    } as unknown as PrismaClient;
+    const res = await applySafeFixes(fake);
+    expect(res.relinkedPaymentEvents).toEqual([]);
+    expect(res.skipped).toContainEqual({ paymentEventId: 'pe_nomatch', reason: 'no PRO subscription with a matching charge id' });
   });
 });

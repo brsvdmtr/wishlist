@@ -97,16 +97,55 @@ suite('billing reconciliation — real Postgres', () => {
     expect(missing.some((f) => f.userId === freeUser.id)).toBe(false);
   });
 
-  it('reconcileBilling is read-only — row counts are unchanged after a run', async () => {
+  it('reconcileBilling is read-only — row CONTENTS are unchanged after a run', async () => {
     const u = await makeUser();
     await makeProSub(u.id, { source: 'telegram_stars' }); // intentionally an anomaly
     await makeEvent(u.id, { subscriptionId: null, eventType: 'payment_success' }); // intentionally an orphan
+    await db.purchase.create({
+      data: { userId: u.id, skuCode: 'legacy_unknown_sku', starsPrice: 50, telegramChargeId: `${PREFIX}-pur-ro`, invoicePayload: 'addon:legacy:1:_:x', status: 'completed' },
+    }); // unknown-SKU anomaly
 
-    const before = await Promise.all([db.paymentEvent.count(), db.subscription.count(), db.purchase.count()]);
+    // Snapshot the actual mutable columns, not just counts — an in-place UPDATE
+    // would leave row counts identical, so counts alone can't prove read-only.
+    const snapshot = async () => ({
+      events: await db.paymentEvent.findMany({
+        where: { user: { telegramId: { startsWith: PREFIX } } },
+        select: { id: true, subscriptionId: true },
+        orderBy: { id: 'asc' },
+      }),
+      subs: await db.subscription.findMany({
+        where: { user: { telegramId: { startsWith: PREFIX } } },
+        select: { id: true, status: true, telegramChargeId: true },
+        orderBy: { id: 'asc' },
+      }),
+      purchases: await db.purchase.findMany({
+        where: { user: { telegramId: { startsWith: PREFIX } } },
+        select: { id: true, status: true },
+        orderBy: { id: 'asc' },
+      }),
+    });
+    const before = await snapshot();
     const report = await reconcileBilling(db, { now: new Date('2026-05-15T00:00:00Z') });
     expect(report.ok).toBe(false); // it DID find the anomalies
-    const after = await Promise.all([db.paymentEvent.count(), db.subscription.count(), db.purchase.count()]);
-    expect(after).toEqual(before); // …but changed nothing
+    expect(await snapshot()).toEqual(before); // …but mutated nothing
+  });
+
+  it('the live report leaks no raw charge id, provider id, invoice payload, or telegram id (PII)', async () => {
+    const u = await makeUser();
+    await makeProSub(u.id, { telegramChargeId: 'RAWTC_int' });
+    await makeEvent(u.id, {
+      subscriptionId: null, // orphan → guarantees a finding to inspect
+      telegramPaymentChargeId: 'RAWTC_int',
+      providerPaymentChargeId: 'RAWPP_int',
+      invoicePayload: `pro_monthly:${u.telegramId}:secretpayload`,
+    });
+    const report = await reconcileBilling(db, { now: new Date('2026-05-15T00:00:00Z') });
+    const json = JSON.stringify(report);
+    expect(report.findings.length).toBeGreaterThan(0); // there IS content to leak-check
+    expect(json).not.toContain('RAWTC_int');
+    expect(json).not.toContain('RAWPP_int');
+    expect(json).not.toContain('secretpayload');
+    expect(json).not.toContain(String(u.telegramId));
   });
 
   it('applySafeFixes relinks an unambiguous orphan and is idempotent', async () => {
@@ -135,9 +174,28 @@ suite('billing reconciliation — real Postgres', () => {
 
     const res = await applySafeFixes(db);
     expect(res.relinkedPaymentEvents.some((r) => r.paymentEventId === orphan.id)).toBe(false);
-    expect(res.skipped).toContainEqual({ paymentEventId: orphan.id, reason: 'no PRO subscription for user' });
+    expect(res.skipped).toContainEqual({ paymentEventId: orphan.id, reason: 'no PRO subscription with a matching charge id' });
 
     const reloaded = await db.paymentEvent.findUnique({ where: { id: orphan.id } });
     expect(reloaded?.subscriptionId).toBeNull(); // untouched
+  });
+
+  it('applySafeFixes refuses to guess when the user PRO sub charge id differs from the orphan', async () => {
+    // The old "user's single PRO sub" fallback would have mislinked this; the
+    // exact-charge-match rule must skip it (e.g. orphan is an old payment, the
+    // sub was since replaced via delete→recreate with a new charge id).
+    const u = await makeUser();
+    await makeProSub(u.id, { telegramChargeId: 'sub-charge-X' });
+    const orphan = await makeEvent(u.id, {
+      subscriptionId: null,
+      eventType: 'payment_success',
+      telegramPaymentChargeId: 'orphan-charge-Y', // does NOT match the sub
+    });
+
+    const res = await applySafeFixes(db);
+    expect(res.relinkedPaymentEvents.some((r) => r.paymentEventId === orphan.id)).toBe(false);
+    expect(res.skipped).toContainEqual({ paymentEventId: orphan.id, reason: 'no PRO subscription with a matching charge id' });
+    const reloaded = await db.paymentEvent.findUnique({ where: { id: orphan.id } });
+    expect(reloaded?.subscriptionId).toBeNull(); // untouched — not mis-linked
   });
 });
