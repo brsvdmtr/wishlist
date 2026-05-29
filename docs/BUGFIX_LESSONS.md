@@ -5,6 +5,95 @@ New entries go at the top.
 
 ---
 
+## 2026-05-29 — "Режим бога не отключается" — security fix removed the off-switch instead of decoupling it
+
+### Symptom
+
+Operator (service owner, the only account in `GOD_MODE_TELEGRAM_IDS`)
+reported god mode could not be turned off. The profile screen showed a
+god-mode block with the dashboards permanently visible and Pro features
+permanently unlocked, with no working toggle — only a static "env" pill.
+
+### Root cause
+
+Commit `c8564a8` (2026-05-28, *"fix(security): env-only god-mode"*) was
+a correct security fix for a real hole — the old `User.godMode` DB flag
+persisted across env-allowlist changes, so an operator removed from
+`GOD_MODE_TELEGRAM_IDS` kept god access until a manual DB `UPDATE`. The
+fix made god-mode purely env-derived (`isGodModeTelegramId(telegramId)`).
+
+But it **conflated two orthogonal concepts** and deleted one of them:
+
+- **Eligibility** — *may this account use god mode at all?* Correctly
+  env-derived. ✅
+- **Active state** — *does this eligible operator currently want god ON?*
+  This was the operator's own dogfooding switch (flip OFF → experience
+  the app as a normal user: real paywalls/quotas; flip ON → full access).
+  The fix removed the toggle endpoint + UI entirely, hard-wiring active
+  state to equal eligibility. For an allowlisted operator that means
+  **permanently ON, no off-switch** — the reported bug.
+
+### Lesson
+
+- **A security fix that removes a capability is not the same as one that
+  secures it.** The hole was "stored state can outlive its grant." The
+  minimal fix is to make the *grant* the hard gate while keeping the
+  operator's *preference* — not to delete the preference. The correct
+  shape is `effective = envEligibility AND storedPreference`, where the
+  stored preference can only ever **suppress** (never grant). That closes
+  the hole (env revocation wins regardless of stored state) **and** keeps
+  the feature.
+- **When you collapse two concepts into one because they happen to be
+  equal in the common case, you delete a capability silently.** Pre-fix,
+  `canGodMode` (eligibility) and `godMode` (active) were distinct; the fix
+  made `godMode === canGodMode`. The regression only bites the rare
+  account where the two were meant to differ — the operator dogfooding.
+- **"Env-derived, no DB" is appealing for security but loses per-user
+  intent.** The resolution: keep env as the *gate*, add a per-user bit
+  ANDed under it. The bit is harmless for non-eligible users (ANDed with
+  a false env) and meaningful only for the allowlisted operator.
+
+### Rule
+
+- **Effective god-mode = `isGodModeTelegramId(telegramId) AND godModeActive`,
+  computed via `services/telegram-auth.ts isGodModeActive` at every
+  privilege-granting read** (current-user via `getOrCreateTgUser`,
+  entitlement auto-resolve, and foreign-owner reads in `reservations`/
+  `public`). Never grant god from a stored flag alone; never gate solely
+  on the env without the operator's toggle.
+- **The toggle endpoint may only flip `godModeActive` and must 403 callers
+  not in the allowlist** — it can never grant god to a non-operator.
+- **Operator-only by construction:** `godModeActive` is inert for everyone
+  not in `GOD_MODE_TELEGRAM_IDS` (ANDed with a false env predicate), so the
+  capability is structurally limited to the owner's account.
+
+### Better code
+
+```ts
+// services/telegram-auth.ts — single predicate, used everywhere
+export function isGodModeActive(
+  telegramId: string | null | undefined,
+  godModeActive: boolean | null | undefined,
+): boolean {
+  // env allowlist = hard GRANT gate; godModeActive can only SUPPRESS.
+  return isGodModeTelegramId(telegramId) && godModeActive !== false;
+}
+
+// POST /tg/me/god-mode — operator's own switch, never a grant vector
+if (!isGodModeTelegramId(user.telegramId)) return res.status(403).json({ error: 'Forbidden' });
+const nextActive = !user.godModeActive;
+await prisma.user.update({ where: { id: user.id }, data: { godModeActive: nextActive }, select: { id: true } });
+return res.json({ godMode: isGodModeActive(user.telegramId, nextActive) });
+```
+
+Regression tests: `services/telegram-auth.test.ts` (`isGodModeActive` —
+eligible+off → suppressed, ineligible+on → still no god, env revocation
+overrides stored on), `services/entitlement.test.ts` (operator with
+toggle off drops to normal-user entitlements), `routes/me.routes.test.ts`
+(toggle off/on → 200; non-allowlisted → 403).
+
+---
+
 ## 2026-05-28 — Settings screen "froze" for Wish_Support post-referral-flip — actually a transient `ChunkLoadError`
 
 ### Symptom

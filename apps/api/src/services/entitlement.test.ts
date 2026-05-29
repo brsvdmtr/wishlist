@@ -606,6 +606,23 @@ describe('getEffectiveEntitlements — add-on aggregation', () => {
     }
   });
 
+  it('regression: operator with toggle OFF (godModeActive=false) drops to normal-user entitlements even though telegramId is in the allowlist', async () => {
+    // The 2026-05-29 fix: effective god = env eligibility AND the operator's
+    // own godModeActive toggle. An allowlisted operator who turned god off
+    // must NOT get isPro via god_mode — they dogfood as a normal user.
+    const prev = process.env.GOD_MODE_TELEGRAM_IDS;
+    process.env.GOD_MODE_TELEGRAM_IDS = '777';
+    try {
+      shared.userFindUnique.mockResolvedValueOnce({ telegramId: '777', godModeActive: false });
+      const r = await getEffectiveEntitlements('u1');
+      expect(r.proSource).not.toBe('god_mode');
+      expect(r.isPro).toBe(false);
+    } finally {
+      if (prev === undefined) delete process.env.GOD_MODE_TELEGRAM_IDS;
+      else process.env.GOD_MODE_TELEGRAM_IDS = prev;
+    }
+  });
+
   it('falls back to NO god-mode when telegramId is NOT in env allowlist (stale DB flag is ignored)', async () => {
     // Regression: pre-2026-05-28 a user with User.godMode=true in DB but no
     // longer in the env list still got isPro=true via god_mode. Env is now

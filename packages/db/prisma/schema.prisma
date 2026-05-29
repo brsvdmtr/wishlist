@@ -178,7 +178,19 @@ model User {
   lastName       String?
   username       String?
   isPremium      Boolean  @default(false)
+  // DEPRECATED (2026-05-28): legacy god-mode persistence. No longer read on
+  // any privilege-granting path — effective god access is env-derived from
+  // GOD_MODE_TELEGRAM_IDS (see services/telegram-auth.ts isGodModeTelegramId).
+  // Inert; a follow-up migration drops it. Do NOT reintroduce reads.
   godMode        Boolean  @default(false)
+  // Operator's own on/off switch for god-mode, restored 2026-05-29 after the
+  // 28.05 env-only change removed the toggle entirely (leaving god permanently
+  // ON for allowlisted operators). Effective god = isGodModeTelegramId(tid)
+  // AND godModeActive — so this can only ever SUPPRESS god for an eligible
+  // operator, never GRANT it to anyone outside GOD_MODE_TELEGRAM_IDS. Default
+  // true so allowlisted operators keep god ON until they choose to dogfood as
+  // a normal user. Inert for non-allowlisted users (ANDed with a false env).
+  godModeActive  Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

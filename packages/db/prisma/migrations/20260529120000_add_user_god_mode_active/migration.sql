@@ -1,0 +1,20 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- User.godModeActive — operator's own god-mode on/off switch
+--
+-- Restores the god-mode toggle removed on 2026-05-28 (commit c8564a8), which
+-- made god-mode purely env-derived from GOD_MODE_TELEGRAM_IDS and left allow-
+-- listed operators with god permanently ON and no way to turn it off.
+--
+-- Effective god access is now `isGodModeTelegramId(telegramId) AND godModeActive`:
+--   • The env allowlist remains the sole GRANT gate (28.05 security fix intact).
+--   • godModeActive can only SUPPRESS god for an already-eligible operator —
+--     never grant it to anyone outside the allowlist.
+--
+-- DEFAULT true: allowlisted operators keep god ON across the deploy (no surprise
+-- regression to normal-user limits); the value is inert for the ~all users not
+-- in the env allowlist (ANDed with a false env predicate).
+--
+-- Constant DEFAULT → Postgres treats this as a metadata-only change (no full
+-- table rewrite), safe on the large User table.
+-- ═══════════════════════════════════════════════════════════════════════════
+ALTER TABLE "User" ADD COLUMN "godModeActive" BOOLEAN NOT NULL DEFAULT true;

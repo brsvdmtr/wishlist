@@ -690,10 +690,13 @@ protectTgRoute('POST',   '/me/showcase/cover',                   idem('POST /tg/
 protectTgRoute('DELETE', '/me/showcase/cover',                   idem('DELETE /tg/me/showcase/cover', { category: 'profile.update' }));
 protectTgRoute('PATCH',  '/me/settings',                         idem('PATCH /tg/me/settings', { category: 'profile.update' }));
 
-// 'Don't Gift' settings (Wave-2 P4) — Pro/dev-gated user settings, same
-// `profile.update` idem category as the rest of the block. The companion
-// god-mode toggle (POST /me/god-mode) was removed 2026-05-28: god-mode is
-// now pure env-derived from GOD_MODE_TELEGRAM_IDS (see services/telegram-auth.ts).
+// God-mode toggle + 'Don't Gift' settings (Wave-2 P4) — Pro/dev-gated user
+// settings, same `profile.update` idem category as the rest of the block. The
+// god-mode toggle (POST /me/god-mode) was restored 2026-05-29: it flips the
+// operator's own `godModeActive` preference, which is ANDed with the
+// GOD_MODE_TELEGRAM_IDS allowlist (see services/telegram-auth.ts isGodModeActive)
+// — env stays the sole grant gate; the toggle can only suppress for an operator.
+protectTgRoute('POST',   '/me/god-mode',                         idem('POST /tg/me/god-mode', { category: 'profile.update' }));
 protectTgRoute('PUT',    '/me/dont-gift',                        idem('PUT /tg/me/dont-gift', { category: 'profile.update' }));
 
 // ── Birthday Reminders (state-changing routes) ───────────────────────────────

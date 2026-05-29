@@ -36,7 +36,7 @@ import {
 
 import { resolveFreeImports } from './import-credits';
 import { getFreeHintsState } from './hint-credits';
-import { isGodModeTelegramId } from './telegram-auth';
+import { isGodModeActive } from './telegram-auth';
 
 // ─── Plan & Entitlement System ──────────────────────────────────────────────
 export const PLANS = {
@@ -255,13 +255,15 @@ export async function getUserEntitlement(userId: string, godMode = false): Promi
 }
 
 /** Unified effective entitlement resolver — single source of truth for all limit checks.
- *  When godMode is omitted, auto-resolves from the GOD_MODE_TELEGRAM_IDS env
- *  allowlist (NOT the deprecated User.godMode DB column — see telegram-auth.ts). */
+ *  When godMode is omitted, auto-resolves to env eligibility (GOD_MODE_TELEGRAM_IDS)
+ *  AND the operator's own `godModeActive` toggle — NOT the deprecated User.godMode
+ *  DB column (see telegram-auth.ts isGodModeActive). Mirrors getOrCreateTgUser so an
+ *  operator who toggled god off drops to normal-user limits everywhere. */
 export async function getEffectiveEntitlements(userId: string, godMode?: boolean) {
   let resolvedGodMode = godMode;
   if (resolvedGodMode === undefined) {
-    const u = await prisma.user.findUnique({ where: { id: userId }, select: { telegramId: true } });
-    resolvedGodMode = isGodModeTelegramId(u?.telegramId);
+    const u = await prisma.user.findUnique({ where: { id: userId }, select: { telegramId: true, godModeActive: true } });
+    resolvedGodMode = isGodModeActive(u?.telegramId, u?.godModeActive);
   }
   const [base, addOns, credits, freeHints] = await Promise.all([
     getUserEntitlement(userId, resolvedGodMode),

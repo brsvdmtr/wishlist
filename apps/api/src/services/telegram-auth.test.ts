@@ -34,6 +34,7 @@ import {
   getOrCreateTgUser,
   resolveTgUserId,
   isGodModeTelegramId,
+  isGodModeActive,
   INIT_DATA_MAX_AGE_SECONDS,
   INIT_DATA_CLOCK_SKEW_SECONDS,
   clampMaxAgeSeconds,
@@ -369,5 +370,53 @@ describe('isGodModeTelegramId', () => {
     // revocation by emptying the allowlist; god access is gone immediately.
     process.env.GOD_MODE_TELEGRAM_IDS = '';
     expect(isGodModeTelegramId('42')).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// isGodModeActive — effective god = env eligibility AND the operator's own
+// godModeActive toggle. Restored 2026-05-29 to fix "режим бога не отключается"
+// (the 28.05 env-only change left allowlisted operators with no off-switch).
+// The toggle can only SUPPRESS for an eligible operator; it can NEVER grant
+// god to a non-allowlisted account.
+// ─────────────────────────────────────────────────────────────────────────
+describe('isGodModeActive', () => {
+  beforeEach(() => { delete process.env.GOD_MODE_TELEGRAM_IDS; });
+
+  it('eligible + toggle ON → god active (full access)', () => {
+    process.env.GOD_MODE_TELEGRAM_IDS = '42';
+    expect(isGodModeActive('42', true)).toBe(true);
+  });
+
+  it('regression: eligible + toggle OFF → god suppressed (the off-switch works)', () => {
+    // This is the exact bug being fixed: an allowlisted operator must be able
+    // to turn god mode off and become a normal user.
+    process.env.GOD_MODE_TELEGRAM_IDS = '42';
+    expect(isGodModeActive('42', false)).toBe(false);
+  });
+
+  it('security: NOT eligible + toggle ON → still no god (env is the sole grant gate)', () => {
+    // A stored godModeActive=true can never grant god to a telegramId that is
+    // not in GOD_MODE_TELEGRAM_IDS — preserves the 28.05 security property.
+    process.env.GOD_MODE_TELEGRAM_IDS = '42';
+    expect(isGodModeActive('999', true)).toBe(false);
+  });
+
+  it('security: env revocation overrides a stored ON toggle immediately', () => {
+    process.env.GOD_MODE_TELEGRAM_IDS = '';
+    expect(isGodModeActive('42', true)).toBe(false);
+  });
+
+  it('treats absent/undefined godModeActive as ON for an eligible operator (matches column default true)', () => {
+    process.env.GOD_MODE_TELEGRAM_IDS = '42';
+    expect(isGodModeActive('42', undefined)).toBe(true);
+    expect(isGodModeActive('42', null)).toBe(true);
+  });
+
+  it('null/empty telegramId is never god regardless of toggle', () => {
+    process.env.GOD_MODE_TELEGRAM_IDS = '42';
+    expect(isGodModeActive(null, true)).toBe(false);
+    expect(isGodModeActive(undefined, true)).toBe(false);
+    expect(isGodModeActive('', true)).toBe(false);
   });
 });

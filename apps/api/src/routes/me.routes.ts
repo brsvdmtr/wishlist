@@ -28,6 +28,7 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { zodError } from '../lib/http';
 import { getRequestLocale } from '../lib/locale';
 import { HIDDEN_FROM_INVENTORY_SKUS } from '../services/entitlement';
+import { isGodModeTelegramId, isGodModeActive } from '../services/telegram-auth';
 import logger from '../logger';
 import { getOrCreateProfile } from '../profile.js';
 import { upload } from '../uploads/upload.config';
@@ -52,6 +53,9 @@ type TelegramUserShape = {
 type MeUser = {
   id: string;
   godMode: boolean;
+  // Raw operator on/off preference (ANDed with the env allowlist to produce
+  // `godMode`). Read by the POST /me/god-mode toggle to flip it.
+  godModeActive: boolean;
   telegramId: string | null;
   themePreference: string | null;
   accentPreference: string | null;
@@ -1345,17 +1349,37 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
     }),
   );
   
-  // POST /tg/me/god-mode — REMOVED 2026-05-28.
+  // POST /tg/me/god-mode — operator's own god-mode on/off toggle.
   //
-  // God-mode is now exclusively derived from the GOD_MODE_TELEGRAM_IDS env
-  // allowlist (see services/telegram-auth.ts isGodModeTelegramId). The toggle
-  // endpoint was the only writer of User.godMode; with godMode env-derived
-  // the toggle has no effect and the endpoint is gone. The Mini App's
-  // "God mode: on/off" switch is correspondingly removed.
+  // Restored 2026-05-29. The 28.05 env-only change (commit c8564a8) removed
+  // this endpoint, leaving allowlisted operators with god permanently ON and
+  // no off-switch (the reported "режим бога не отключается" bug). God access
+  // stays env-gated: this endpoint ONLY flips the operator's own
+  // `godModeActive` preference, which is ANDed with the GOD_MODE_TELEGRAM_IDS
+  // allowlist (services/telegram-auth.ts isGodModeActive). A caller not in the
+  // allowlist gets 403 — the toggle can never grant god to a non-operator
+  // account, preserving the 28.05 security property.
   //
-  // The route registration in index.ts:688 is also removed, so a stale
-  // client hitting POST /tg/me/god-mode receives a 404 instead of a 200
-  // with a stale flag.
+  // Blind toggle (mirrors the Santa test-mode admin toggle): the idempotency
+  // middleware dedupes a retried single tap; two distinct taps flip back, as a
+  // toggle should. Writes `godModeActive`, NOT the deprecated `godMode` column.
+  meRouter.post(
+    '/me/god-mode',
+    asyncHandler(async (req, res) => {
+      const user = await getOrCreateTgUser(req.tgUser!);
+      if (!isGodModeTelegramId(user.telegramId)) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+      const nextActive = !user.godModeActive;
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { godModeActive: nextActive },
+        select: { id: true },
+      });
+      // Caller passed the env gate, so effective god === the new toggle state.
+      return res.json({ godMode: isGodModeActive(user.telegramId, nextActive) });
+    }),
+  );
 
   // ─── God-stats ─────────────────────────────────────────────────────
   // GET /tg/me/god-stats — internal analytics dashboard (god mode users only)

@@ -2,7 +2,7 @@
 // handlers covering /me/* endpoints). Deep per-endpoint coverage is a
 // follow-up; this file pins the factory shape and basic gating.
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 
@@ -18,9 +18,12 @@ vi.mock('@wishlist/db', () => ({
 
 import { registerMeRouter } from './me.routes';
 
-function buildDeps() {
+type TestUser = { id: string; godMode: boolean; godModeActive: boolean; telegramId: string | null; themePreference: string | null; accentPreference: string | null };
+
+function buildDeps(userOverride: Partial<TestUser> = {}) {
+  const user: TestUser = { id: 'u-test', godMode: false, godModeActive: false, telegramId: '123', themePreference: null, accentPreference: null, ...userOverride };
   return {
-    getOrCreateTgUser: vi.fn(async () => ({ id: 'u-test', godMode: false, telegramId: '123', themePreference: null, accentPreference: null })),
+    getOrCreateTgUser: vi.fn(async () => user),
     getEffectiveEntitlements: vi.fn(async () => ({
       isPro: false, addOns: [], plan: { code: 'FREE', items: 20, participants: 10, features: [] },
       effectiveWishlistLimit: 2, effectiveSubscriptionLimit: 2,
@@ -49,14 +52,14 @@ function buildDeps() {
   } as Parameters<typeof registerMeRouter>[0];
 }
 
-function makeApp() {
+function makeApp(userOverride: Partial<TestUser> = {}) {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
     (req as unknown as { tgUser: unknown }).tgUser = { id: 42, first_name: 'T' };
     next();
   });
-  app.use(registerMeRouter(buildDeps()));
+  app.use(registerMeRouter(buildDeps(userOverride)));
   return app;
 }
 
@@ -73,6 +76,44 @@ describe('routes/me — factory shape', () => {
 
   it('me deps factory accepts the deps contract shape (compile + runtime)', () => {
     expect(() => registerMeRouter(buildDeps())).not.toThrow();
+  });
+});
+
+// POST /me/god-mode — operator's own god-mode toggle (restored 2026-05-29).
+// Flips godModeActive; gated to GOD_MODE_TELEGRAM_IDS so only the owner's
+// account can use it. The gate calls the REAL isGodModeTelegramId, so these
+// tests drive it via process.env.GOD_MODE_TELEGRAM_IDS.
+describe('POST /me/god-mode — operator toggle', () => {
+  const prevEnv = process.env.GOD_MODE_TELEGRAM_IDS;
+  afterEach(() => {
+    if (prevEnv === undefined) delete process.env.GOD_MODE_TELEGRAM_IDS;
+    else process.env.GOD_MODE_TELEGRAM_IDS = prevEnv;
+  });
+
+  it('eligible operator with toggle ON → turns god OFF (200, godMode:false)', async () => {
+    process.env.GOD_MODE_TELEGRAM_IDS = '123';
+    const res = await request(makeApp({ telegramId: '123', godModeActive: true })).post('/me/god-mode');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ godMode: false });
+  });
+
+  it('eligible operator with toggle OFF → turns god ON (200, godMode:true)', async () => {
+    process.env.GOD_MODE_TELEGRAM_IDS = '123';
+    const res = await request(makeApp({ telegramId: '123', godModeActive: false })).post('/me/god-mode');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ godMode: true });
+  });
+
+  it('security: non-allowlisted user gets 403 (toggle can never grant god)', async () => {
+    process.env.GOD_MODE_TELEGRAM_IDS = '42'; // 123 is NOT in the allowlist
+    const res = await request(makeApp({ telegramId: '123', godModeActive: false })).post('/me/god-mode');
+    expect(res.status).toBe(403);
+  });
+
+  it('security: empty allowlist → even a would-be operator gets 403', async () => {
+    process.env.GOD_MODE_TELEGRAM_IDS = '';
+    const res = await request(makeApp({ telegramId: '123', godModeActive: true })).post('/me/god-mode');
+    expect(res.status).toBe(403);
   });
 });
 

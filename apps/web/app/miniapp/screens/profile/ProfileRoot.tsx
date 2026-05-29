@@ -1136,12 +1136,16 @@ export function ProfileRoot(props: ProfileRootProps) {
                 </div>
               </div>
 
-              {/* God mode status — env-controlled (was a toggle pre-2026-05-28).
-                  The toggle endpoint was removed when god-mode became pure
-                  env-derived from GOD_MODE_TELEGRAM_IDS; this block now shows
-                  the current state as a read-only indicator. The Santa test
-                  mode toggle inside this block is a separate flag and remains
-                  interactive. */}
+              {/* God mode toggle — operator-only (gated by `canGodMode`, the
+                  GOD_MODE_TELEGRAM_IDS env allowlist). Restored 2026-05-29
+                  after the 28.05 env-only change removed it. Flipping it POSTs
+                  /tg/me/god-mode, which toggles the operator's own
+                  `godModeActive` (ANDed server-side with env eligibility), so
+                  OFF drops the operator to a normal user (no dashboards, no
+                  Pro) and ON restores full access. The env list stays the sole
+                  grant gate — this switch can only suppress for an eligible
+                  operator. The Santa test-mode + Locale-debug toggles inside
+                  are separate flags. */}
               {canGodMode && (
                 <div style={{
                   marginBottom: 16, padding: 16, borderRadius: 12,
@@ -1157,13 +1161,47 @@ export function ProfileRoot(props: ProfileRootProps) {
                         {godMode ? t('settings_god_active', locale) : t('settings_god_inactive', locale)}
                       </div>
                     </div>
-                    <div style={{
-                      padding: '4px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600,
-                      background: godMode ? '#ff9900' : C.surface,
-                      color: godMode ? '#fff' : C.textMuted,
-                    }}>
-                      env
-                    </div>
+                    <button
+                      onClick={async () => {
+                        if (godModeLoading) return;
+                        setGodModeLoading(true);
+                        try {
+                          const res = await tgFetch('/tg/me/god-mode', { method: 'POST', idempotency: { action: 'me.god-mode' } });
+                          if (res.ok) {
+                            const data = await res.json() as { godMode: boolean };
+                            setGodMode(data.godMode);
+                            try { tgRef.current?.WebApp?.HapticFeedback?.impactOccurred?.('medium'); } catch {}
+                            // /tg/wishlists carries the full entitlement picture
+                            // (plan, subscription, Pro, godMode) computed from the
+                            // new effective god-mode, so this reload flips both the
+                            // dashboards and Pro state to match the toggle.
+                            loadWishlists().catch(() => {});
+                            loadSantaSeason().catch(() => {});
+                          } else {
+                            pushToast(t('toast_god_toggle_error', locale), 'error');
+                          }
+                        } catch {
+                          pushToast(t('error_network', locale), 'error');
+                        } finally {
+                          setGodModeLoading(false);
+                        }
+                      }}
+                      disabled={godModeLoading}
+                      style={{
+                        width: 50, height: 28, borderRadius: 14, border: 'none', cursor: 'pointer',
+                        background: godMode ? '#ff9900' : C.surface,
+                        position: 'relative', transition: 'background 0.2s',
+                        opacity: godModeLoading ? 0.5 : 1,
+                      }}
+                    >
+                      <div style={{
+                        width: 22, height: 22, borderRadius: 11,
+                        background: '#fff', position: 'absolute', top: 3,
+                        left: godMode ? 25 : 3,
+                        transition: 'left 0.2s',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                      }} />
+                    </button>
                   </div>
 
                   {/* Santa test mode — visible only when godMode is active */}

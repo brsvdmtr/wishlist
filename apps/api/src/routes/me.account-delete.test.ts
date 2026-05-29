@@ -66,7 +66,7 @@ import { registerMeRouter } from './me.routes';
 
 function buildDeps() {
   return {
-    getOrCreateTgUser: vi.fn(async () => ({ id: 'u-account', godMode: false, telegramId: '42', themePreference: null, accentPreference: null })),
+    getOrCreateTgUser: vi.fn(async () => ({ id: 'u-account', godMode: false, godModeActive: false, telegramId: '42', themePreference: null, accentPreference: null })),
     getEffectiveEntitlements: vi.fn(async () => ({
       isPro: false, addOns: [], plan: { code: 'FREE', items: 20, participants: 10, features: [] },
       effectiveWishlistLimit: 2, effectiveSubscriptionLimit: 2,

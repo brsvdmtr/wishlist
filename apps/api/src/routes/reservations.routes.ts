@@ -53,7 +53,7 @@ import { sendTgBotMessage } from '../telegram/botApi';
 import { buildOpenWishKeyboard } from '../notifications/openWishKeyboard';
 import { isCrossUserReservation } from '../notifications/crossUserReservation';
 import { escapeTgHtml } from '../telegram/html';
-import { isGodModeTelegramId } from '../services/telegram-auth';
+import { isGodModeActive } from '../services/telegram-auth';
 import { profileToLanguageSettings, resolveUserFirstName } from '../services/locale';
 import { recordForeignWishlistAccess } from '../services/foreign-wishlist-access';
 import { makeAddonRequired, makePlanLimitReached, makeProRequired, sendPaywall } from '../services/paywall';
@@ -1212,11 +1212,13 @@ export function registerReservationsRouter(deps: ReservationsRouterDeps): Router
         let smartRes = false;
         let smartResExpiresAt: Date | null = null;
         if (wishlist) {
-          // Foreign user god-mode is computed from the env allowlist via the
-          // owner's telegramId; the DB `godMode` column is deprecated (see
-          // services/telegram-auth.ts isGodModeTelegramId).
-          const ownerUser = await tx.user.findUnique({ where: { id: wishlist.ownerId }, select: { telegramId: true } });
-          const ownerGodMode = isGodModeTelegramId(ownerUser?.telegramId);
+          // Foreign user god-mode = owner's env eligibility AND the owner's own
+          // `godModeActive` toggle, so an operator dogfooding as a normal user
+          // also sees their wishlist behave with normal-user limits for guests
+          // (see services/telegram-auth.ts isGodModeActive). The DB `godMode`
+          // column is deprecated and not read.
+          const ownerUser = await tx.user.findUnique({ where: { id: wishlist.ownerId }, select: { telegramId: true, godModeActive: true } });
+          const ownerGodMode = isGodModeActive(ownerUser?.telegramId, ownerUser?.godModeActive);
           const ownerEnt = await getEffectiveEntitlements(wishlist.ownerId, ownerGodMode);
           const activeReservations = await tx.item.findMany({
             where: { wishlistId: item.wishlistId, status: 'RESERVED' },

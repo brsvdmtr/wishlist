@@ -157,6 +157,30 @@ export function isGodModeTelegramId(telegramId: string | null | undefined): bool
   return allowlist.includes(telegramId);
 }
 
+/**
+ * Effective god-mode = env eligibility AND the operator's own on/off toggle.
+ * This is the SOLE predicate any privilege-granting path should use when it
+ * has the user's `godModeActive` available.
+ *
+ * `isGodModeTelegramId` (the GOD_MODE_TELEGRAM_IDS allowlist) is the hard
+ * GRANT gate: removing a telegramId from the env revokes access on the next
+ * request regardless of `godModeActive`. `godModeActive` (User column, default
+ * true — restored 2026-05-29) is the operator's own switch; it can only
+ * SUPPRESS god for an already-eligible account, letting the service owner
+ * dogfood the app as a normal user. It can NEVER grant god to a non-allowlisted
+ * account.
+ *
+ * `godModeActive` is treated as on when absent/undefined (matches the column
+ * default) so a not-yet-selected field can't accidentally disable an eligible
+ * operator — but callers that gate privileges should select it explicitly.
+ */
+export function isGodModeActive(
+  telegramId: string | null | undefined,
+  godModeActive: boolean | null | undefined,
+): boolean {
+  return isGodModeTelegramId(telegramId) && godModeActive !== false;
+}
+
 export async function getOrCreateTgUser(tgUser: TelegramUser) {
   // Capture every Telegram-supplied identity field on every authenticated
   // request. These are non-auth fields (no security decision relies on
@@ -206,12 +230,13 @@ export async function getOrCreateTgUser(tgUser: TelegramUser) {
       props: { source: 'telegram', isPremium },
     });
   }
-  // Override the DB-stored `godMode` flag with the env-derived predicate.
-  // The DB column persists across env-allowlist changes, which let removed
-  // operators retain god access until a manual UPDATE. Computing from env
-  // every request closes that window: revoke = update env, restart, done.
-  // The column itself is deprecated and removed by a follow-up migration.
-  return { ...user, godMode: isGodModeTelegramId(user.telegramId) };
+  // Compute effective god-mode = env eligibility AND the operator's own
+  // toggle (`godModeActive`). The env allowlist stays the hard grant gate
+  // (revoke = update env, restart, done — closes the stale-DB-flag window the
+  // legacy `godMode` column had); the toggle only lets an eligible operator
+  // suppress god to experience the app as a normal user. The deprecated
+  // `godMode` column is NOT read here.
+  return { ...user, godMode: isGodModeActive(user.telegramId, user.godModeActive) };
 }
 
 /**
