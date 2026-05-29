@@ -148,7 +148,7 @@
 
 <h1>E13 · Passive guest-view banner — «Создать свой вишлист»</h1>
 <p class="lede">Мягкий, не блокирующий banner в&nbsp;конце списка чужого вишлиста: гость посмотрел желания, почувствовал ценность — и&nbsp;внизу спокойное предложение завести свой. Это «всегда-на» канал G→O: per-guest lift скромный, но&nbsp;reach большой (все гости). Принципиально <b>мягче E11</b> — никакого modal, никакого перехвата reserve-flow, легко закрыть.</p>
-<p class="meta">Status: <b>DRAFT</b> · Frame: <b>proposed/</b> · Источник: <code>docs/research/06-experiment-backlog.md § E13</code> · Surface: <code>screens/guest/GuestViewRoot.tsx</code> (<code>screen === 'guest-view'</code>) · Primitive: <code>&lt;Banner tone="info"&gt;</code> из <code>@wishlist/ui</code> · Sibling: <code>e11-post-reservation-cta.html</code></p>
+<p class="meta">Status: <b>SHIPPED ✓</b> (approved 2026-05-30, Dmitry) · Frame: <b>approved/</b> · Commits: <code>be3d8bb</code> + <code>ce092d6</code> · Источник: <code>docs/research/06-experiment-backlog.md § E13</code> · Surface: <code>screens/guest/GuestViewRoot.tsx</code> (<code>screen === 'guest-view'</code>) · Primitive: <code>&lt;Banner tone="info"&gt;</code> из <code>@wishlist/ui</code> · Sibling: <code>e11-post-reservation-cta.html</code></p>
 
 <h2>Четыре состояния</h2>
 <div class="grid">
@@ -376,7 +376,7 @@
 <span class="k">export const</span> E13_WINDOW_DAYS = 7;
 <span class="k">export const</span> E13_MAX_PER_WINDOW = 3;   <span class="c">// ← N (tunable)</span>
 <span class="k">export const</span> E13_EXPERIMENT_KEY = <span class="s">'e13-guest-banner'</span>;
-<span class="k">export const</span> E13_ONBOARDING_ENTRY_POINT = <span class="s">'guest_banner_claim'</span>;
+<span class="k">export const</span> E13_ONBOARDING_ENTRY_POINT = <span class="s">'guest_view_banner'</span>;
 
 <span class="k">export function</span> shouldShowGuestBanner(i: E13GateInput): E13Decision {
   <span class="k">if</span> (i.sessionFlag)            <span class="k">return</span> { show: <span class="k">false</span>, reason: <span class="s">'session_shown'</span> };
@@ -406,7 +406,7 @@
     </tr>
     <tr>
       <td><code>guest_banner.clicked</code></td>
-      <td>Тап «Создать свой вишлист». Props те&nbsp;же + <code>destination: 'onboarding-entry'</code>. Сразу после — <code>startOnboarding('guest_banner_claim')</code> (self-check #4).</td>
+      <td>Тап «Создать свой вишлист». Props те&nbsp;же + <code>destination: 'onboarding-entry'</code>. Сразу после — <code>startOnboarding('guest_view_banner')</code> (self-check #4).</td>
     </tr>
     <tr>
       <td><code>guest_banner.dismissed</code></td>
@@ -418,15 +418,15 @@
     <li><code>trackEvent(event, props)</code> → буфер → <code>POST /tg/telemetry</code> → <code>AnalyticsEvent</code> (как&nbsp;везде; <code>MiniApp.tsx:4759</code>).</li>
     <li>Серверный allowlist в&nbsp;<code>routes/telemetry.routes.ts</code> фильтрует по&nbsp;prefix/exact — нужно <b>добавить prefix <code>guest_banner.</code></b> (как&nbsp;уже&nbsp;есть <code>guest_owner_cta.</code> для&nbsp;E11), иначе события дропнутся.</li>
   </ul>
-  <div class="invariant"><b>Funnel.</b> <code>guest_banner.shown</code> → <code>guest_banner.clicked</code> → <code>onboarding_create_wishlist_success</code> (<code>source: 'guest_banner_claim'</code>) → <code>guest.converted_to_user</code> (уже&nbsp;wired server-side). Conversion = <code>clicked / shown</code> и&nbsp;<code>created / shown</code>. Один dashboard рядом с&nbsp;E11 — сравниваем passive&nbsp;vs post-reserve канал.</div>
+  <div class="invariant"><b>Funnel.</b> <code>guest_banner.shown</code> → <code>guest_banner.clicked</code> → <code>onboarding_started</code> (<code>entry_point: 'guest_view_banner'</code> — это join-ключ, НЕ&nbsp;<code>wishlist.created.source</code>, который всегда <code>'miniapp'</code>) → <code>guest.converted_to_user</code> (уже&nbsp;wired server-side). Conversion = <code>clicked / shown</code> и&nbsp;<code>created / shown</code>. Один dashboard рядом с&nbsp;E11 — сравниваем passive&nbsp;vs post-reserve канал.</div>
 </div>
 
 <h2>Поведение «Создать свой вишлист»</h2>
 <div class="spec">
   <ul>
     <li>Fires <code>guest_banner.clicked</code>.</li>
-    <li><code>startOnboarding('guest_banner_claim')</code> — новый <code>entryPoint</code> в&nbsp;существующем onboarding-flow (рядом с&nbsp;E11-овским <code>'post_reservation_claim'</code>). Никакого нового экрана не&nbsp;рисуем — переиспользуем onboarding.</li>
-    <li>После успеха — <code>onboarding_create_wishlist_success</code> с&nbsp;<code>source: 'guest_banner_claim'</code> (новое значение enum).</li>
+    <li><code>startOnboarding('guest_view_banner')</code> — новый <code>entryPoint</code> в&nbsp;существующем onboarding-flow (рядом с&nbsp;E11-овским <code>'post_reservation_claim'</code>). Никакого нового экрана не&nbsp;рисуем — переиспользуем onboarding.</li>
+    <li>Старт онбординга шлёт <code>onboarding_started</code> с&nbsp;<code>entry_point: 'guest_view_banner'</code> (новое значение union <code>EntryPoint</code>).</li>
     <li>Текущий guest-view не&nbsp;разрушаем деструктивно: юзер уходит в&nbsp;свой onboarding; вернётся к&nbsp;Машиному списку по&nbsp;share-link, если&nbsp;надо.</li>
   </ul>
   <div class="warn"><b>Не deeplink-возврат.</b> Как&nbsp;и&nbsp;в&nbsp;E11 — после создания вишлиста оставляем юзера в&nbsp;его новом «my-wishlists», а&nbsp;не&nbsp;тащим обратно в&nbsp;чужой список. Activation-момент «теперь ты owner» важнее.</div>
@@ -438,7 +438,7 @@
     <tr><td>1. Guest видит banner</td><td>Frame&nbsp;1 — banner в&nbsp;конце guest-view. Гейт <code>screen==='guest-view' && wishlistCount===0</code>.</td></tr>
     <tr><td>2. Owner не видит banner</td><td>Frame&nbsp;4 — <code>wishlistCount &gt; 0</code> → <code>owner_as_guest</code> skip, событие не&nbsp;летит.</td></tr>
     <tr><td>3. Banner не перекрывает reserve CTA</td><td>Frame&nbsp;2 — reserve-CTA на&nbsp;<code>guest-item-detail</code>, banner на&nbsp;<code>guest-view</code>; разные экраны + inline (не&nbsp;overlay). Invariant выше.</td></tr>
-    <tr><td>4. Click → own wishlist creation</td><td>§ Поведение — <code>startOnboarding('guest_banner_claim')</code> после <code>clicked</code>.</td></tr>
+    <tr><td>4. Click → own wishlist creation</td><td>§ Поведение — <code>startOnboarding('guest_view_banner')</code> после <code>clicked</code>.</td></tr>
     <tr><td>5. Frequency cap работает</td><td>§ Freq-cap — N=3&nbsp;/&nbsp;7д (impression-cap) + session-flag + 7д dismiss-mute. Frame&nbsp;3 (dismiss) + Frame&nbsp;4 (cap reached).</td></tr>
   </table>
 </div>
@@ -446,28 +446,29 @@
 <h2>Файлы / точки правки</h2>
 <div class="spec">
   <table>
-    <tr><td><code>lib/guestBannerCta.ts</code> <i>new</i></td><td>Pure-logic: <code>shouldShowGuestBanner</code> + <code>read/recordShown</code> + <code>read/recordDismissed</code>. Зеркало <code>postReservationCta.ts</code>.</td></tr>
-    <tr><td><code>lib/guestBannerCta.test.ts</code> <i>new</i></td><td>Unit-тесты на&nbsp;все 8&nbsp;gating-условий + прунинг окна + dismiss-mute.</td></tr>
-    <tr><td><code>screens/guest/GuestViewRoot.tsx</code></td><td>Рендер <code>&lt;Banner tone="info"&gt;</code> в&nbsp;конце <code>guest-view</code> блока (после items, до&nbsp;нижнего padding). IntersectionObserver one-shot <code>shown</code> (паттерн birthday-banner, стр.&nbsp;853).</td></tr>
-    <tr><td><code>MiniApp.tsx</code> state</td><td><code>e13ShownThisSession</code> ref + проброс <code>wishlistsLoaded</code>/<code>wishlistCount</code>/<code>variant</code>/<code>birthdayBannerActive</code> в&nbsp;<code>GuestViewRoot</code> ctx. Без&nbsp;новой бизнес-логики в&nbsp;index/MiniApp.</td></tr>
-    <tr><td><code>routes/telemetry.routes.ts</code></td><td>Добавить prefix <code>guest_banner.</code> в&nbsp;allowlist.</td></tr>
-    <tr><td><code>routes/experiments.routes.ts</code> + <code>.env</code></td><td><code>e13-guest-banner</code> в&nbsp;activeExperiments; <code>EXP_E13_GUEST_BANNER_ENABLED</code> / <code>_ROLLOUT</code>.</td></tr>
-    <tr><td>onboarding entry enum</td><td>Добавить <code>'guest_banner_claim'</code> рядом с&nbsp;<code>'post_reservation_claim'</code>.</td></tr>
-    <tr><td>i18n (RU/EN/ES)</td><td>3 строки: title, desc, CTA. RU-first.</td></tr>
-    <tr><td><code>docs/BUGFIX_LESSONS.md</code> / тесты</td><td>Не&nbsp;bugfix, но&nbsp;happy-path + error-path тесты для&nbsp;helper'а обязательны (testing iron rules).</td></tr>
+    <tr><td><code>lib/guestBannerCta.ts</code> <i>new</i></td><td>Pure-logic <code>shouldShowGuestBanner</code> + <code>countShownInWindow</code>/<code>reportedShownCount</code> + LS-хелперы (shown-timestamps, dismiss). Зеркало <code>postReservationCta.ts</code>.</td></tr>
+    <tr><td><code>lib/guestBannerCta.test.ts</code> <i>new</i></td><td>33 unit-теста: gating-условия, прунинг окна, dismiss-mute, <code>SHOWN_TS_CAP</code>, quota-error, <code>reportedShownCount</code>/cap consistency.</td></tr>
+    <tr><td><code>screens/guest/GuestViewBanner.tsx</code> <i>new</i></td><td>Presentational: <code>&lt;Banner tone="info"&gt;</code> + <code>&lt;Button&gt;</code> + IntersectionObserver one-shot <code>shown</code> (+ fallback). <code>.test.tsx</code> — 8 тестов.</td></tr>
+    <tr><td><code>screens/guest/GuestViewRoot.tsx</code></td><td>Рендер <code>&lt;GuestViewBanner&gt;</code> в&nbsp;конце <code>guest-view</code> блока; <code>e13Decision</code> мемоизирован.</td></tr>
+    <tr><td><code>MiniApp.tsx</code></td><td><code>e13Variant</code> hook (ready-гейт только для&nbsp;true-гостей на&nbsp;guest-экране) + <code>e13SessionShownRef</code>/<code>e13DismissedThisSession</code> <b>в&nbsp;родителе</b> (переживают ре-маунт) + проброс через ctx.</td></tr>
+    <tr><td><code>packages/shared/src/analyticsEvents.ts</code></td><td>3 события <code>guest_banner.*</code> в&nbsp;PRODUCT_EVENTS (<code>sources:['client']</code>) — единственное изменение allowlist; prefix в&nbsp;<code>telemetry.routes.ts</code> НЕ&nbsp;нужен. + snapshot-тест.</td></tr>
+    <tr><td><code>routes/onboarding.routes.ts</code></td><td><code>'guest_view_banner'</code> в&nbsp;union <code>EntryPoint</code>.</td></tr>
+    <tr><td><code>docker-compose.prod.yml</code> + <code>.env</code></td><td><code>EXP_E13_GUEST_BANNER_ENABLED/ROLLOUT</code>: пара в&nbsp;<code>environment:</code> api (env идёт явным списком, НЕ&nbsp;<code>env_file</code>!) + значения в&nbsp;<code>.env</code> (<code>true</code>/<code>100</code>).</td></tr>
+    <tr><td><code>i18n.ts</code> (6 локалей)</td><td>3 ключа <code>e13_banner_title/desc/cta</code> (ru/en/zh-CN/hi/es/ar). RU-first.</td></tr>
   </table>
   <div class="invariant"><b>Design-system compliance.</b> Ноль новых примитивов: используем существующий <code>&lt;Banner&gt;</code> (canonical <code>info</code>) + <code>&lt;Button&gt;</code> из&nbsp;<code>@wishlist/ui</code>, токены из&nbsp;<code>@wishlist/ui-tokens</code>. Нет&nbsp;raw hex / inline-magic. Не&nbsp;требует <code>DESIGN_DECISIONS.md</code>-записи (нового примитива нет).</div>
 </div>
 
-<h2>Открытые вопросы (решить до имплементации)</h2>
+<h2>Решения (утверждено Dmitry, 2026-05-30)</h2>
 <div class="spec">
   <ul>
-    <li><b>Размещение: низ списка vs верх?</b> Backlog § E13.4 говорил «слайдер-banner <i>сверху</i> guest-view». В&nbsp;мокапе предлагаю <b>низ списка</b> — мягче (гость сперва видит ценность всех желаний), нулевой clutter с&nbsp;birthday-banner наверху, ниже bounce-риск. Верх = больше reach, но&nbsp;агрессивнее. <i>Default — низ; легко поднять наверх.</i></li>
-    <li><b>N = ?</b> Предлагаю <b>3 показа / 7 дней</b> + session-flag + 7д dismiss-mute. Альтернативы: N=1 (как&nbsp;«once per 7d»), N=5. <i>Default — 3.</i></li>
-    <li><b>A/B или сразу 100%?</b> Спека просит 50/50, чтобы&nbsp;замерить guardrail (bounce). Но&nbsp;можно катить 100% сразу (быстрее, без&nbsp;guardrail). <i>Default — A/B 50% через <code>useExperiment</code>, как&nbsp;E11.</i></li>
-    <li><b>Tone: <code>info</code> (мягкий glass) vs <code>promo</code> (градиент).</b> Выбрал <code>info</code> — задача явно про&nbsp;мягкость. <code>promo</code> = громче, как&nbsp;louder A/B-вариант копи позже. <i>Default — info.</i></li>
-    <li><b>Сосуществование с E11.</b> Они&nbsp;на&nbsp;разных моментах (passive list vs post-reserve sheet) и&nbsp;разных событиях — могут жить вместе. Если оба в&nbsp;treatment у&nbsp;одного юзера — увидит и&nbsp;то, и&nbsp;то, но&nbsp;в&nbsp;разных точках, без&nbsp;двойного modal. ОК.</li>
+    <li><b>Размещение — низ списка.</b> Мягче (гость сперва видит ценность всех желаний), нулевой clutter с&nbsp;birthday-banner, ниже bounce-риск. (Backlog § E13.4 предлагал «сверху» — отклонено в&nbsp;пользу мягкости.)</li>
+    <li><b>N = 3 показа / 7 дней</b> + once-per-session + 7д hard-mute на&nbsp;явный ×.</li>
+    <li><b>Сразу 100%</b> (не&nbsp;A/B 50/50) через <code>EXP_E13_GUEST_BANNER_ENABLED=true</code> / <code>ROLLOUT=100</code>. Платформенный 5% global holdout всё&nbsp;равно даёт control → фактический reach ~95%. Kill-switch: <code>ENABLED=false</code> + <code>--force-recreate api</code>, без&nbsp;редеплоя.</li>
+    <li><b>Tone — <code>info</code></b> (мягкий glass), не&nbsp;<code>promo</code>.</li>
+    <li><b>Сосуществование с&nbsp;E11</b> — ОК: разные моменты (passive list vs post-reserve sheet), разные события, без&nbsp;двойного modal.</li>
   </ul>
+  <div class="invariant"><b>Shipped</b> на&nbsp;commits <code>be3d8bb</code> (фича) + <code>ce092d6</code> (compose env wiring). 4&nbsp;раунда код-ревью (9→8→9→9, production-ready); MAJOR раунда&nbsp;2 — session-guard вынесен в&nbsp;родителя. Все&nbsp;5&nbsp;самопроверок зелёные.</div>
 </div>
 
 </body>

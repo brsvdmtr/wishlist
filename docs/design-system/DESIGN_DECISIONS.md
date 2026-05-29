@@ -32,6 +32,55 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-05-30 — E13 passive guest-view "create your own wishlist" banner approved + shipped
+
+**Type:** approval
+
+**Decision.** The E13 passive guest-view banner mockup
+([`e13-guest-view-banner.html`](./mockups/approved/e13-guest-view-banner.html))
+moves `proposed/` → `approved/`. Implementation composes existing canonical
+primitives only — `Banner` (`tone="info"`, ✨ icon, `onClose` ×) + `Button`
+(`primary`) — with spacing/colour from `@wishlist/ui-tokens`. No new primitive,
+no new token. Rendered inline at the END of the guest-view list
+(`screens/guest/GuestViewRoot.tsx`), so it structurally cannot overlap the
+reserve CTA (which lives on the separate `guest-item-detail` screen). Shipped at
+commits `be3d8bb` (feature) + `ce092d6` (compose env wiring).
+
+**Context / why.** E13 is the "always-on" passive sibling of E11 (ICE 378,
+[`06-experiment-backlog.md § E13`](../research/06-experiment-backlog.md)): high
+reach, low per-guest lift, must not nag or interfere with the reservation flow.
+Drafted, reviewed (4 rounds, 9→8→9→9 — round 2 caught a real bug: the
+once-per-session guard had to move out of the lazy `GuestViewRoot` into the
+parent), and explicitly approved 2026-05-30. Approved decisions:
+- **Placement:** bottom-of-list (softer than the backlog's "top"; lower bounce
+  risk, no clutter with the birthday banner).
+- **Rollout:** 100% via the experiment kill-switch (NOT a 50/50 A/B) —
+  `EXP_E13_GUEST_BANNER_ENABLED=true` / `_ROLLOUT=100`. The platform-wide 5%
+  global holdout still resolves to control, so effective reach is ~95%.
+  `ENABLED=false` disables without a redeploy.
+- **Tone:** canonical `info` glass (not the louder provisional `promo`).
+- **Frequency cap:** ≤3 passive impressions / 7 days + once-per-session + a
+  separate 7-day mute on explicit dismiss.
+- **Events:** `guest_banner.shown/clicked/dismissed` registered in
+  `packages/shared/src/analyticsEvents.ts` (PRODUCT_EVENTS, `sources:['client']`)
+  — the only allowlist change needed; no `telemetry.routes.ts` prefix.
+- **Onboarding entry point:** `guest_view_banner` (downstream funnel join key is
+  `onboarding_started.entry_point`, NOT `wishlist.created.source`).
+
+**Supersedes.** Nothing — new surface. The backlog's original `g2o.banner_*`
+event names are superseded by `guest_banner.*`.
+
+**Impact.**
+- Component registry: no new rows — all primitives already canonical.
+- Migration work: none. New code path only.
+- Ops note: per-experiment env vars must be declared explicitly in
+  `docker-compose.prod.yml` (the api service uses an `environment:` list, not
+  `env_file`); the `EXP_E13_GUEST_BANNER_*` pair was added next to `EXP_E11_*`.
+
+**Approved by.** Dmitry.
+
+---
+
 ## 2026-05-27 — E11 post-reservation account-claim CTA Sheet approved
 
 **Type:** approval
