@@ -19,6 +19,7 @@ vi.mock('../../src/services/analytics', () => ({
 import { getTestPrisma, disconnectTestPrisma } from '../setup-pg';
 import {
   getExperimentAssignment,
+  peekExperimentVariant,
   type ExperimentConfig,
 } from '../../src/services/experiments.service';
 
@@ -145,5 +146,57 @@ suite('getExperimentAssignment — real Postgres', () => {
     });
     expect(rows).toHaveLength(2);
     expect(analytics.trackProductEvent).toHaveBeenCalledTimes(2);
+  });
+
+  // ── peekExperimentVariant — the read-only resolver behind the
+  //    growth-first-limits entitlement path. Shares the parent suite's users +
+  //    lifecycle; the parent beforeEach wipes assignment rows before each test,
+  //    so each test seeds exactly the row it needs. This covers what the
+  //    mock-Prisma unit test cannot: a genuinely absent row read from the real
+  //    engine, and the read-only invariant (no row written, no exposure event)
+  //    verified against a live DB.
+  describe('peekExperimentVariant — read-only read path (real Postgres)', () => {
+    const KEY = 'int-peek';
+    const ENABLED: ExperimentConfig = { enabled: true, rolloutPercent: 100 };
+    const DISABLED: ExperimentConfig = { enabled: false, rolloutPercent: 100 };
+
+    it('no persisted row → control (real absent-row read, not a mock null)', async () => {
+      expect(await peekExperimentVariant(userIds[0]!, KEY, ENABLED)).toBe('control');
+    });
+
+    it('persisted treatment → treatment; persisted control → control', async () => {
+      const db = getTestPrisma();
+      await db.experimentAssignment.create({
+        data: { userId: userIds[0]!, experimentKey: KEY, variant: 'treatment', holdout: false },
+      });
+      await db.experimentAssignment.create({
+        data: { userId: userIds[1]!, experimentKey: KEY, variant: 'control', holdout: false },
+      });
+      expect(await peekExperimentVariant(userIds[0]!, KEY, ENABLED)).toBe('treatment');
+      expect(await peekExperimentVariant(userIds[1]!, KEY, ENABLED)).toBe('control');
+    });
+
+    it('holdout row (variant control) → control', async () => {
+      await getTestPrisma().experimentAssignment.create({
+        data: { userId: userIds[2]!, experimentKey: KEY, variant: 'control', holdout: true },
+      });
+      expect(await peekExperimentVariant(userIds[2]!, KEY, ENABLED)).toBe('control');
+    });
+
+    it('kill switch: disabled overrides a persisted treatment row → control', async () => {
+      await getTestPrisma().experimentAssignment.create({
+        data: { userId: userIds[3]!, experimentKey: KEY, variant: 'treatment', holdout: false },
+      });
+      expect(await peekExperimentVariant(userIds[3]!, KEY, DISABLED)).toBe('control');
+    });
+
+    it('is read-only: writes no row for an unenrolled user and emits no exposure event', async () => {
+      const db = getTestPrisma();
+      const before = await db.experimentAssignment.count({ where: { experimentKey: KEY } });
+      await peekExperimentVariant(userIds[4]!, KEY, ENABLED); // unenrolled — must not enroll
+      const after = await db.experimentAssignment.count({ where: { experimentKey: KEY } });
+      expect(after).toBe(before);
+      expect(analytics.trackProductEvent).not.toHaveBeenCalled();
+    });
   });
 });

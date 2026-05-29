@@ -210,3 +210,40 @@ export async function getExperimentAssignment(
 
   return { key, variant: resolved.variant, holdout: resolved.holdout, active: true };
 }
+
+/**
+ * Read-only variant lookup — the counterpart to getExperimentAssignment that
+ * NEVER writes and NEVER emits `experiment.assigned`.
+ *
+ * Use this anywhere a user's variant must be read without enrolling them or
+ * firing an exposure event — most importantly inside server-side resolvers
+ * (entitlement / limits) that also run from schedulers and bot callbacks. A
+ * cron job resolving a user's limits must not assign that user to an
+ * experiment or count them as exposed; enrolment stays the sole job of
+ * getExperimentAssignment via the user-initiated GET /tg/experiments/:key
+ * (the Mini App's `useExperiment` hook).
+ *
+ * Semantics — agreeing with getExperimentAssignment for any *committed*
+ * enrolment state (the no-row case below is a deliberate, documented divergence,
+ * not a disagreement: peek must never enroll or expose an unseen user):
+ *   - disabled experiment  → 'control' (kill switch; ZERO DB calls when off —
+ *     the common case, so the read path stays free until launch),
+ *   - persisted assignment → its stored variant (sticky; holdout rows store
+ *     'control', so a holdout user reads 'control'),
+ *   - no row yet           → 'control' (NOT pure-bucketed: getExperimentAssignment
+ *     would bucket + persist such a user, but peek must not — an unenrolled user
+ *     has not been exposed, so they keep current behaviour).
+ *
+ * Deterministic: for a fixed env + DB state it always returns the same value.
+ */
+export async function peekExperimentVariant(
+  userId: string,
+  key: string,
+  config: ExperimentConfig,
+): Promise<ExperimentVariant> {
+  if (!config.enabled) return 'control';
+  const existing = await prisma.experimentAssignment.findUnique({
+    where: { userId_experimentKey: { userId, experimentKey: key } },
+  });
+  return existing ? toVariant(existing.variant) : 'control';
+}

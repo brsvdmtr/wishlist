@@ -3,12 +3,21 @@
 // (getExperimentAssignment) is exercised against real Postgres in
 // test/integration/experiments.test.ts.
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-// The module imports prisma + analytics at load; the pure functions never
-// touch them, so a hollow mock keeps this suite hermetic and DB-free.
-vi.mock('@wishlist/db', () => ({ prisma: {}, Prisma: {} }));
-vi.mock('./analytics', () => ({ trackProductEvent: vi.fn() }));
+// The pure functions never touch prisma/analytics. peekExperimentVariant reads
+// experimentAssignment.findUnique (only when the experiment is enabled) and must
+// NEVER write or emit an exposure event — both are asserted below via the
+// hoisted spies.
+const shared = vi.hoisted(() => ({
+  assignmentFindUnique: vi.fn(),
+  trackProductEvent: vi.fn(),
+}));
+vi.mock('@wishlist/db', () => ({
+  prisma: { experimentAssignment: { findUnique: shared.assignmentFindUnique } },
+  Prisma: {},
+}));
+vi.mock('./analytics', () => ({ trackProductEvent: shared.trackProductEvent }));
 
 import {
   HOLDOUT_PERCENT,
@@ -18,6 +27,7 @@ import {
   isValidExperimentKey,
   experimentEnvName,
   readExperimentConfig,
+  peekExperimentVariant,
 } from './experiments.service';
 
 function userIds(n: number): string[] {
@@ -182,5 +192,64 @@ describe('readExperimentConfig — env flags', () => {
     expect(readExperimentConfig('demo', { EXP_DEMO_ROLLOUT: '-20' }).rolloutPercent).toBe(0);
     expect(readExperimentConfig('demo', { EXP_DEMO_ROLLOUT: 'abc' }).rolloutPercent).toBe(0);
     expect(readExperimentConfig('demo', { EXP_DEMO_ROLLOUT: '33' }).rolloutPercent).toBe(33);
+  });
+});
+
+describe('peekExperimentVariant — read-only resolver (no write, no exposure)', () => {
+  const ENABLED = { enabled: true, rolloutPercent: 100 };
+  const DISABLED = { enabled: false, rolloutPercent: 100 };
+
+  beforeEach(() => {
+    shared.assignmentFindUnique.mockReset();
+    shared.assignmentFindUnique.mockResolvedValue(null);
+    shared.trackProductEvent.mockReset();
+  });
+
+  it('disabled experiment → control, ledger never queried (kill switch, zero DB)', async () => {
+    expect(await peekExperimentVariant('u1', 'k', DISABLED)).toBe('control');
+    expect(shared.assignmentFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('enabled + persisted treatment row → treatment', async () => {
+    shared.assignmentFindUnique.mockResolvedValue({ variant: 'treatment', holdout: false });
+    expect(await peekExperimentVariant('u2', 'k', ENABLED)).toBe('treatment');
+  });
+
+  it('enabled + persisted control row → control', async () => {
+    shared.assignmentFindUnique.mockResolvedValue({ variant: 'control', holdout: false });
+    expect(await peekExperimentVariant('u3', 'k', ENABLED)).toBe('control');
+  });
+
+  it('enabled + holdout row (variant control) → control', async () => {
+    shared.assignmentFindUnique.mockResolvedValue({ variant: 'control', holdout: true });
+    expect(await peekExperimentVariant('u4', 'k', ENABLED)).toBe('control');
+  });
+
+  it('enabled + no row (unenrolled) → control — never pure-buckets an unexposed user', async () => {
+    shared.assignmentFindUnique.mockResolvedValue(null);
+    expect(await peekExperimentVariant('u5', 'k', ENABLED)).toBe('control');
+  });
+
+  it('only reads, by the (user, experiment) unique key — and never emits an exposure event', async () => {
+    shared.assignmentFindUnique.mockResolvedValue({ variant: 'treatment', holdout: false });
+    await peekExperimentVariant('u6', 'my-exp', ENABLED);
+    expect(shared.assignmentFindUnique).toHaveBeenCalledTimes(1);
+    expect(shared.assignmentFindUnique).toHaveBeenCalledWith({
+      where: { userId_experimentKey: { userId: 'u6', experimentKey: 'my-exp' } },
+    });
+    // The whole point of peek vs getExperimentAssignment: no `experiment.assigned`.
+    expect(shared.trackProductEvent).not.toHaveBeenCalled();
+  });
+
+  it('garbage stored variant defensively resolves to control', async () => {
+    shared.assignmentFindUnique.mockResolvedValue({ variant: 'banana', holdout: false });
+    expect(await peekExperimentVariant('u7', 'k', ENABLED)).toBe('control');
+  });
+
+  it('deterministic — same (user, key, config, ledger) yields the same variant', async () => {
+    shared.assignmentFindUnique.mockResolvedValue({ variant: 'treatment', holdout: false });
+    expect(await peekExperimentVariant('u8', 'k', ENABLED)).toBe(
+      await peekExperimentVariant('u8', 'k', ENABLED),
+    );
   });
 });

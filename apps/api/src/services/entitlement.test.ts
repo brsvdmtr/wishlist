@@ -5,7 +5,7 @@
 // that every limit check downstream depends on. A regression here can
 // silently grant or deny features to thousands of users.
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 const shared = vi.hoisted(() => ({
   subFindFirst: vi.fn(),
@@ -15,7 +15,9 @@ const shared = vi.hoisted(() => ({
   creditsFindUnique: vi.fn(),
   wishlistFindMany: vi.fn(),
   hintChargeCount: vi.fn(),
+  experimentAssignmentFindUnique: vi.fn(),
   trackEvent: vi.fn(),
+  trackProductEvent: vi.fn(),
 }));
 
 vi.mock('@wishlist/db', () => ({
@@ -27,11 +29,18 @@ vi.mock('@wishlist/db', () => ({
     userCredits: { findUnique: shared.creditsFindUnique },
     wishlist: { findMany: shared.wishlistFindMany },
     hintQuotaCharge: { count: shared.hintChargeCount },
+    // Read-only ledger lookup behind the growth-first-limits resolver
+    // (peekExperimentVariant). Only consulted when the experiment is enabled.
+    experimentAssignment: { findUnique: shared.experimentAssignmentFindUnique },
   },
+  // experiments.service.ts (pulled in via limits-experiment) imports `Prisma`;
+  // it is only dereferenced inside getExperimentAssignment's catch, never here.
+  Prisma: {},
 }));
 
 vi.mock('./analytics', () => ({
   trackEvent: shared.trackEvent,
+  trackProductEvent: shared.trackProductEvent,
 }));
 
 import { PRO_LIFETIME_PERIOD_END_ISO } from '@wishlist/shared';
@@ -56,6 +65,7 @@ import {
   isWishlistWritable,
   requireGiftNotes,
 } from './entitlement';
+import { GROWTH_FIRST_FREE_PLAN } from './limits-experiment';
 
 beforeEach(() => {
   for (const v of Object.values(shared)) (v as ReturnType<typeof vi.fn>).mockReset?.();
@@ -66,6 +76,13 @@ beforeEach(() => {
   shared.creditsFindUnique.mockResolvedValue(null);
   shared.wishlistFindMany.mockResolvedValue([]);
   shared.hintChargeCount.mockResolvedValue(0);
+  // Default: no persisted assignment. With the experiment disabled (no env), the
+  // resolver short-circuits before ever reading this — see the kill-switch test.
+  shared.experimentAssignmentFindUnique.mockResolvedValue(null);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 // Relative-date helper so the resolver's `currentPeriodEnd: { gt: new Date() }`
@@ -337,7 +354,9 @@ describe('Pure feature predicates', () => {
 describe('getUserEntitlement', () => {
   it('returns FREE plan when nothing matches', async () => {
     const result = await getUserEntitlement('u1');
-    expect(result.plan).toBe(PLANS.FREE);
+    // Resolver returns a widened PlanLimits copy (value-equal to PLANS.FREE),
+    // not the frozen PLANS.FREE reference — assert by value, not identity.
+    expect(result.plan).toEqual(PLANS.FREE);
     expect(result.isPro).toBe(false);
     expect(result.proSource).toBeNull();
     expect(result.subscription).toBeNull();
@@ -708,5 +727,130 @@ describe('requireGiftNotes', () => {
       fakeRes(),
     );
     expect(shared.trackEvent).toHaveBeenCalledWith('feature_gate_hit_gift_notes');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Growth-first-limits experiment — PREPARED, OFF BY DEFAULT.
+//
+// Asserts the entitlement resolver wires Variant B in correctly. Self-checks:
+//   #1 variants A/B return different limits
+//   #2 users outside the experiment (disabled / control / holdout / unenrolled)
+//      are unaffected — production limits, byte-identical
+//   #3 the resolver is deterministic
+// (#4, readout SQL, lives in docs/research/growth-first-ab-plan.md. The pure
+//  Variant-B values + read-only resolution are unit-tested in
+//  limits-experiment.test.ts; here we test the resolver's *use* of them, and
+//  that PRO / promo / godMode are never touched by the experiment.)
+// ─────────────────────────────────────────────────────────────────────────────
+describe('getUserEntitlement — growth-first-limits experiment', () => {
+  // Enable the kill switch via env (the resolver reads process.env at call time).
+  // peek ignores rollout (it reads the persisted row), so the value is cosmetic.
+  const enable = (rollout = 100) => {
+    vi.stubEnv('EXP_GROWTH_FIRST_LIMITS_ENABLED', 'true');
+    vi.stubEnv('EXP_GROWTH_FIRST_LIMITS_ROLLOUT', String(rollout));
+  };
+
+  it('disabled by default → FREE user gets production limits, ledger never read (self-check #2)', async () => {
+    const result = await getUserEntitlement('u-free');
+    expect(result.plan).toEqual(PLANS.FREE);
+    // Experiment off ⇒ zero DB overhead: the assignment ledger is not consulted.
+    expect(shared.experimentAssignmentFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('enabled + user enrolled treatment → growth-first FREE plan (self-check #1)', async () => {
+    enable();
+    shared.experimentAssignmentFindUnique.mockResolvedValue({ variant: 'treatment', holdout: false });
+    const result = await getUserEntitlement('u-treat');
+    expect(result.plan).toEqual(GROWTH_FIRST_FREE_PLAN);
+    // Strictly more generous than production FREE on the changed levers…
+    expect(result.plan.wishlists).toBe(3);
+    expect(result.plan.items).toBe(30);
+    expect(result.plan.subscriptions).toBe(5);
+    expect(result.plan.categoriesPerWishlist).toBe(3);
+    // …participants is intentionally unchanged (already 10 in production)…
+    expect(result.plan.participants).toBe(PLANS.FREE.participants);
+    // …and overall it differs from the production FREE plan.
+    expect(result.plan).not.toEqual(PLANS.FREE);
+  });
+
+  it('enabled but user not yet enrolled (no row) → production FREE (self-check #2)', async () => {
+    enable();
+    shared.experimentAssignmentFindUnique.mockResolvedValue(null);
+    const result = await getUserEntitlement('u-unenrolled');
+    expect(result.plan).toEqual(PLANS.FREE);
+  });
+
+  it('enabled + holdout row (variant control) → production FREE (self-check #2)', async () => {
+    enable();
+    shared.experimentAssignmentFindUnique.mockResolvedValue({ variant: 'control', holdout: true });
+    const result = await getUserEntitlement('u-holdout');
+    expect(result.plan).toEqual(PLANS.FREE);
+  });
+
+  it('kill switch: ENABLED unset overrides a persisted treatment row → production FREE (self-check #2)', async () => {
+    // The ledger says treatment, but the experiment is disabled → control wins,
+    // and the ledger is not even consulted (the kill switch short-circuits).
+    shared.experimentAssignmentFindUnique.mockResolvedValue({ variant: 'treatment', holdout: false });
+    const result = await getUserEntitlement('u-killed');
+    expect(result.plan).toEqual(PLANS.FREE);
+    expect(shared.experimentAssignmentFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('treatment never changes PRO limits — an active subscription is unaffected, ledger not read', async () => {
+    enable();
+    shared.experimentAssignmentFindUnique.mockResolvedValue({ variant: 'treatment', holdout: false });
+    shared.subFindFirst.mockResolvedValueOnce({
+      id: 'sub1', status: 'ACTIVE', currentPeriodEnd: futureDate(),
+      cancelledAt: null, cancelAtPeriodEnd: false, billingPeriod: 'monthly',
+    });
+    const result = await getUserEntitlement('u-pro');
+    expect(result.isPro).toBe(true);
+    expect(result.plan).toEqual(PLANS.PRO);
+    // PRO short-circuits before the FREE branch → no experiment lookup at all.
+    expect(shared.experimentAssignmentFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('treatment never changes PRO limits — godMode is unaffected', async () => {
+    enable();
+    shared.experimentAssignmentFindUnique.mockResolvedValue({ variant: 'treatment', holdout: false });
+    const result = await getUserEntitlement('u-god', true);
+    expect(result.isPro).toBe(true);
+    expect(result.plan).toEqual(PLANS.PRO);
+    expect(shared.experimentAssignmentFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('deterministic — same user + state yields the same plan across calls (self-check #3)', async () => {
+    enable();
+    shared.experimentAssignmentFindUnique.mockResolvedValue({ variant: 'treatment', holdout: false });
+    const a = await getUserEntitlement('u-det');
+    const b = await getUserEntitlement('u-det');
+    expect(a.plan).toEqual(b.plan);
+    expect(a.plan).toEqual(GROWTH_FIRST_FREE_PLAN);
+  });
+});
+
+describe('getEffectiveEntitlements — growth-first-limits inheritance', () => {
+  it('treatment lifts effective wishlist/subscription limits; control stays production (self-checks #1, #2)', async () => {
+    // CONTROL (experiment off): production base limits flow through.
+    const control = await getEffectiveEntitlements('u-eff-control', false);
+    expect(control.plan).toEqual(PLANS.FREE);
+    expect(control.effectiveWishlistLimit).toBe(PLANS.FREE.wishlists);        // 2
+    expect(control.effectiveSubscriptionLimit).toBe(PLANS.FREE.subscriptions); // 2
+
+    // TREATMENT: the growth-first base flows into the effective limits.
+    vi.stubEnv('EXP_GROWTH_FIRST_LIMITS_ENABLED', 'true');
+    vi.stubEnv('EXP_GROWTH_FIRST_LIMITS_ROLLOUT', '100');
+    shared.experimentAssignmentFindUnique.mockResolvedValue({ variant: 'treatment', holdout: false });
+    const treat = await getEffectiveEntitlements('u-eff-treat', false);
+    expect(treat.plan).toEqual(GROWTH_FIRST_FREE_PLAN);
+    expect(treat.effectiveWishlistLimit).toBe(3);
+    expect(treat.effectiveSubscriptionLimit).toBe(5);
+
+    // Phase-1: import/hint DISPLAYED quotas stay at production values — they are
+    // declared-but-deferred levers (see growth-first-ab-plan.md § Launch wiring),
+    // so display can never diverge from enforcement while the experiment is live.
+    expect(treat.freeImportsLimit).toBe(control.freeImportsLimit);
+    expect(treat.freeHintsLimit).toBe(control.freeHintsLimit);
   });
 });

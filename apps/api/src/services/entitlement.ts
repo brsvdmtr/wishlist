@@ -37,6 +37,7 @@ import {
 import { resolveFreeImports } from './import-credits';
 import { getFreeHintsState } from './hint-credits';
 import { isGodModeActive } from './telegram-auth';
+import { resolveGrowthFirstVariant, growthFirstFreePlanForVariant } from './limits-experiment';
 
 // ─── Plan & Entitlement System ──────────────────────────────────────────────
 export const PLANS = {
@@ -82,6 +83,32 @@ export const HIDDEN_FROM_INVENTORY_SKUS = new Set<string>([
 
 export type PlanCode = keyof typeof PLANS;
 export type PlanInfo = (typeof PLANS)[PlanCode];
+
+/**
+ * Resolved, widened plan limits as returned by the entitlement resolver.
+ * Distinct from `PlanInfo` (the `as const` *literal* shape of PLANS): a user's
+ * effective plan may be the production plan OR an experiment variant
+ * (growth-first-limits), so the resolver returns this mutable-number shape
+ * rather than the frozen literal. Production values are byte-identical to PLANS.
+ */
+export interface PlanLimits {
+  code: PlanCode;
+  wishlists: number;
+  items: number;
+  participants: number;
+  subscriptions: number;
+  categoriesPerWishlist: number;
+  features: string[];
+}
+
+/** Production plan limits, widened to PlanLimits. Byte-identical to PLANS — the
+ *  growth-first experiment NEVER mutates these; for `treatment` users it
+ *  substitutes a different PlanLimits object (services/limits-experiment.ts),
+ *  leaving production (control / holdout / disabled) on exactly these values. */
+const PLAN_LIMITS: Record<PlanCode, PlanLimits> = {
+  FREE: { ...PLANS.FREE, features: [...PLANS.FREE.features] },
+  PRO: { ...PLANS.PRO, features: [...PLANS.PRO.features] },
+};
 
 export const PRO_PRICE_XTR = parseInt(process.env.PRO_PRICE_XTR ?? '100', 10);
 export const PRO_YEARLY_PRICE_XTR = parseInt(process.env.PRO_YEARLY_PRICE_XTR ?? '800', 10);
@@ -188,7 +215,7 @@ export const ADDON_CAPS = {
 export type PromoProInfo = { id: string; expiresAt: string | null; campaignCode: string } | null;
 
 export async function getUserEntitlement(userId: string, godMode = false): Promise<{
-  plan: PlanInfo;
+  plan: PlanLimits;
   isPro: boolean;
   proSource: 'subscription' | 'promo' | 'god_mode' | null;
   subscription: { id: string; status: string; periodEnd: string; cancelledAt: string | null; cancelAtPeriodEnd: boolean; billingPeriod: string | null } | null;
@@ -220,7 +247,7 @@ export async function getUserEntitlement(userId: string, godMode = false): Promi
 
   if (sub) {
     return {
-      plan: PLANS.PRO,
+      plan: PLAN_LIMITS.PRO,
       isPro: true,
       proSource: 'subscription',
       subscription: {
@@ -238,7 +265,7 @@ export async function getUserEntitlement(userId: string, godMode = false): Promi
   // 2. Check active promo-PRO
   if (promoPro) {
     return {
-      plan: PLANS.PRO,
+      plan: PLAN_LIMITS.PRO,
       isPro: true,
       proSource: 'promo',
       subscription: null,
@@ -248,10 +275,20 @@ export async function getUserEntitlement(userId: string, godMode = false): Promi
 
   // 3. God Mode: virtual PRO without real subscription
   if (godMode) {
-    return { plan: PLANS.PRO, isPro: true, proSource: 'god_mode', subscription: null, promoPro: null };
+    return { plan: PLAN_LIMITS.PRO, isPro: true, proSource: 'god_mode', subscription: null, promoPro: null };
   }
 
-  return { plan: PLANS.FREE, isPro: false, proSource: null, subscription: null, promoPro: null };
+  // 4. FREE — default tier. A prepared growth-first-limits experiment may serve
+  //    a more generous FREE plan (Variant B) to enrolled `treatment` users.
+  //    Resolution is READ-ONLY: a disabled experiment (the default), a control /
+  //    holdout / not-yet-enrolled user, or any failure all fall through to the
+  //    production FREE plan — existing users are unaffected until the flag is
+  //    flipped AND the user is enrolled. No write and no exposure event fire from
+  //    here (enrolment is the sole job of GET /tg/experiments/:key), so scheduler
+  //    and bot callers that resolve entitlements never pollute the cohort.
+  const growthVariant = await resolveGrowthFirstVariant(userId);
+  const freePlan = growthFirstFreePlanForVariant(growthVariant) ?? PLAN_LIMITS.FREE;
+  return { plan: freePlan, isPro: false, proSource: null, subscription: null, promoPro: null };
 }
 
 /** Unified effective entitlement resolver — single source of truth for all limit checks.
