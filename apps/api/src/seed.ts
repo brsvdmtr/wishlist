@@ -42,18 +42,6 @@ async function main() {
 
     // Reset demo contents to a known state (idempotent seed).
     await tx.item.deleteMany({ where: { wishlistId: wl.id } });
-    await tx.tag.deleteMany({ where: { wishlistId: wl.id } });
-
-    const tags = await Promise.all(
-      ['вкусняхи', 'техника', 'дорого'].map((name) =>
-        tx.tag.create({
-          data: { wishlistId: wl.id, name },
-          select: { id: true, name: true },
-        }),
-      ),
-    );
-
-    const tagByName = new Map(tags.map((t) => [t.name, t.id]));
 
     const itemsSeed = [
       {
@@ -63,7 +51,6 @@ async function main() {
         priority: 'MEDIUM' as const,
         commentOwner: 'Любой свежей обжарки, без ароматизаторов.',
         deadline: null as Date | null,
-        tags: ['вкусняхи'],
       },
       {
         title: 'Наушники (over-ear)',
@@ -72,7 +59,6 @@ async function main() {
         priority: 'HIGH' as const,
         commentOwner: 'Желательно с шумодавом.',
         deadline: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
-        tags: ['техника', 'дорого'],
       },
       {
         title: 'Умная лампочка',
@@ -81,7 +67,6 @@ async function main() {
         priority: 'LOW' as const,
         commentOwner: 'Под HomeKit/Google Home.',
         deadline: null as Date | null,
-        tags: ['техника'],
       },
       {
         title: 'Сертификат в книжный',
@@ -90,7 +75,6 @@ async function main() {
         priority: 'MEDIUM' as const,
         commentOwner: 'Любой номинал ок.',
         deadline: new Date(Date.now() + 1000 * 60 * 60 * 24 * 14),
-        tags: [],
       },
       {
         title: 'Набор шоколада',
@@ -99,7 +83,6 @@ async function main() {
         priority: 'LOW' as const,
         commentOwner: 'Горький/без изюма.',
         deadline: null as Date | null,
-        tags: ['вкусняхи'],
       },
     ];
 
@@ -123,12 +106,6 @@ async function main() {
       await tx.wishlistItemPlacement.create({
         data: { wishlistId: wl.id, itemId: item.id },
       });
-
-      for (const tagName of seed.tags) {
-        const tagId = tagByName.get(tagName);
-        if (!tagId) continue;
-        await tx.itemTag.create({ data: { itemId: item.id, tagId } });
-      }
     }
 
     return wl;

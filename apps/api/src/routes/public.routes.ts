@@ -49,7 +49,6 @@ function mapItemForPublic(item: {
   status: string;
   createdAt: Date;
   updatedAt: Date;
-  itemTags: { tag: { id: string; name: string } }[];
   reservationEvents?: { comment: string | null; actorHash: string }[];
 }) {
   return {
@@ -66,7 +65,6 @@ function mapItemForPublic(item: {
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
     categoryId: (item as any).categoryId ?? null,
-    tags: item.itemTags.map((it) => it.tag),
     // Name of the guest who reserved (visible to other guests, hidden from owner by design).
     reservedByDisplayName:
       item.status === 'RESERVED' && item.reservationEvents?.length
@@ -118,7 +116,6 @@ export function registerPublicRouter(deps: PublicRouterDeps): Router {
       const queryParsed = z
         .object({
           status: z.enum(['AVAILABLE', 'RESERVED', 'PURCHASED']).optional(),
-          tag: z.string().min(1).optional(),
         })
         .safeParse(req.query);
       if (!queryParsed.success) return zodError(res, queryParsed.error);
@@ -135,7 +132,6 @@ export function registerPublicRouter(deps: PublicRouterDeps): Router {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const itemWhere: Record<string, any> = { status: { in: [...ACTIVE_STATUSES] } };
       if (queryParsed.data.status) itemWhere.status = queryParsed.data.status;
-      if (queryParsed.data.tag) itemWhere.itemTags = { some: { tagId: queryParsed.data.tag } };
 
       const placements = await prisma.wishlistItemPlacement.findMany({
         where: { wishlistId: wishlist.id, item: itemWhere },
@@ -145,7 +141,6 @@ export function registerPublicRouter(deps: PublicRouterDeps): Router {
           categoryId: true,
           item: {
             include: {
-              itemTags: { include: { tag: { select: { id: true, name: true } } } },
               reservationEvents: {
                 where: { type: 'RESERVED' },
                 orderBy: { createdAt: 'desc' },
@@ -193,7 +188,6 @@ export function registerPublicRouter(deps: PublicRouterDeps): Router {
               profile: { select: { displayName: true, username: true, avatarUrl: true, avatarPublic: true, profileVisibility: true, dontGiftPresets: true, dontGiftCustomItems: true, dontGiftComment: true, dontGiftVisible: true } },
             },
           },
-          tags: { select: { id: true, name: true } },
           categories: {
             orderBy: [{ isDefault: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
             select: { id: true, name: true, sortOrder: true, isDefault: true },
@@ -214,7 +208,6 @@ export function registerPublicRouter(deps: PublicRouterDeps): Router {
           categoryId: true,
           item: {
             include: {
-              itemTags: { include: { tag: { select: { id: true, name: true } } } },
               reservationEvents: {
                 where: { type: 'RESERVED' },
                 orderBy: { createdAt: 'desc' },
@@ -309,7 +302,6 @@ export function registerPublicRouter(deps: PublicRouterDeps): Router {
           ...mapItemForPublic(p.item),
           categoryId: p.categoryId,
         })),
-        tags: wishlist.tags,
         categories: wishlist.categories,
         dontGift: slugDontGift,
       });
@@ -347,7 +339,6 @@ export function registerPublicRouter(deps: PublicRouterDeps): Router {
                 profile: { select: { displayName: true, username: true, profileVisibility: true, dontGiftPresets: true, dontGiftCustomItems: true, dontGiftComment: true, dontGiftVisible: true } },
               },
             },
-            tags: { select: { id: true, name: true } },
             categories: {
               orderBy: [{ isDefault: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
               select: { id: true, name: true, sortOrder: true, isDefault: true },
@@ -370,7 +361,6 @@ export function registerPublicRouter(deps: PublicRouterDeps): Router {
           categoryId: true,
           item: {
             include: {
-              itemTags: { include: { tag: { select: { id: true, name: true } } } },
               reservationEvents: {
                 where: { type: 'RESERVED' },
                 orderBy: { createdAt: 'desc' },
@@ -433,7 +423,6 @@ export function registerPublicRouter(deps: PublicRouterDeps): Router {
           ...mapItemForPublic(p.item),
           categoryId: p.categoryId,
         })),
-        tags: wishlist.tags,
         categories: (wishlist as any).categories ?? [],
         dontGift: tokenDontGift,
       });
@@ -671,7 +660,6 @@ export function registerPublicRouter(deps: PublicRouterDeps): Router {
           where: { id },
           data: { status: 'RESERVED' },
           include: {
-            itemTags: { include: { tag: { select: { id: true, name: true } } } },
             reservationEvents: {
               where: { type: 'RESERVED' },
               orderBy: { createdAt: 'desc' },
@@ -731,7 +719,6 @@ export function registerPublicRouter(deps: PublicRouterDeps): Router {
           where: { id },
           data: { status: 'AVAILABLE' },
           include: {
-            itemTags: { include: { tag: { select: { id: true, name: true } } } },
             reservationEvents: {
               where: { type: 'RESERVED' },
               orderBy: { createdAt: 'desc' },
@@ -776,7 +763,6 @@ export function registerPublicRouter(deps: PublicRouterDeps): Router {
           where: { id },
           data: { status: 'PURCHASED' },
           include: {
-            itemTags: { include: { tag: { select: { id: true, name: true } } } },
             reservationEvents: {
               where: { type: 'RESERVED' },
               orderBy: { createdAt: 'desc' },

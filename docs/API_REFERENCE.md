@@ -130,8 +130,8 @@ No authentication required. Rate limited.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/public/wishlists/:slug` | Fetch wishlist by slug + active items. Respects `visibility`: PRIVATE wishlists return 403 `wishlist_private` unless the requester is the owner or a subscriber (TG auth optional). Response: `{ wishlist, items[], tags[] }` |
-| GET | `/public/wishlists/:slug/items` | Fetch items for a wishlist by slug. Query params: `status` (AVAILABLE/RESERVED/PURCHASED), `tag` (tag id). Response: `{ items[] }` |
+| GET | `/public/wishlists/:slug` | Fetch wishlist by slug + active items. Respects `visibility`: PRIVATE wishlists return 403 `wishlist_private` unless the requester is the owner or a subscriber (TG auth optional). Response: `{ wishlist, items[] }` |
+| GET | `/public/wishlists/:slug/items` | Fetch items for a wishlist by slug. Query params: `status` (AVAILABLE/RESERVED/PURCHASED). Response: `{ items[] }` |
 | GET | `/public/share/:token` | Resolve share token to wishlist + items. Increments `shareOpenCount` (fire-and-forget). 404 if token not found. Response same shape as `/public/wishlists/:slug` |
 | GET | `/public/profiles/:username` | Public user profile. Respects `profileVisibility`: NOBODY returns 404. ALL includes `wishlists[]` (PUBLIC_PROFILE, non-archived only). Respects `avatarPublic` setting. Response: `{ profile, wishlists[] }` |
 
@@ -771,11 +771,6 @@ Requires `X-ADMIN-KEY` header. Used by the Next.js admin panel pages. Routes ope
 | POST | `/wishlists/:id/items` | Add item to system wishlist |
 | PATCH | `/items/:id` | Update system item |
 | DELETE | `/items/:id` | Hard-delete system item |
-| POST | `/wishlists/:id/tags` | Create tag |
-| PATCH | `/tags/:id` | Rename tag |
-| DELETE | `/tags/:id` | Delete tag |
-| POST | `/items/:itemId/tags/:tagId` | Associate tag with item |
-| DELETE | `/items/:itemId/tags/:tagId` | Remove tag from item |
 
 ---
 

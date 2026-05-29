@@ -19,8 +19,6 @@ vi.mock('@/lib/admin-api-client', () => ({
   createItem: vi.fn(),
   updateItem: vi.fn(),
   deleteItem: vi.fn(),
-  createTag: vi.fn(),
-  deleteTag: vi.fn(),
 }));
 
 const getWishlistMock = vi.mocked(getWishlist);
@@ -37,7 +35,6 @@ beforeEach(() => {
       updatedAt: '2026-01-01T00:00:00.000Z',
     },
     items: [],
-    tags: [],
   });
 });
 

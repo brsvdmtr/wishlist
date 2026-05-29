@@ -123,7 +123,7 @@ Used exclusively for bot-to-API communication. The middleware (`requireInternalA
 
 ### Tier 4 — Admin (`/*` via `privateRouter`)
 
-The legacy `privateRouter` (wishlist/item/tag CRUD for system users) uses an `X-ADMIN-KEY` header compared against `ADMIN_KEY`. The Next.js web server's admin routes use HTTP Basic Auth (`ADMIN_BASIC_USER` / `ADMIN_BASIC_PASS`).
+The legacy `privateRouter` (wishlist/item CRUD for system users) uses an `X-ADMIN-KEY` header compared against `ADMIN_KEY`. The Next.js web server's admin routes use HTTP Basic Auth (`ADMIN_BASIC_USER` / `ADMIN_BASIC_PASS`).
 
 ---
 

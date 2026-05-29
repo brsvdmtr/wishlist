@@ -128,10 +128,8 @@
 
 ## MISSING FEATURES / INCOMPLETE
 
-### 20. Tags Only via Admin
-- **Status**: Tag model exists, admin CRUD works
-- **Gap**: No tag creation/management in Mini App UI
-- **Impact**: Feature exists in DB but unusable for Telegram users
+### 20. Tags — REMOVED (2026-05-30)
+- **Resolution**: The Tag/ItemTag subsystem was dropped entirely — 0 organic prod data (only demo seed rows), no end-user UI, redundant with the live `WishlistCategory` primitive. All code consumers + Prisma models + tables removed. See `docs/research/tags-decision.md`.
 
 ### 21. Public Web Wishlist Page
 - **Status**: `/w/:slug` pages exist with SSR

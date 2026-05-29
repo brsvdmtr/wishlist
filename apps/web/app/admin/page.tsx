@@ -23,7 +23,7 @@ export default async function AdminPage() {
             <h1 className="font-display text-3xl font-bold tracking-tight text-slate-900">
               Admin Panel
             </h1>
-            <p className="mt-2 text-slate-600">Manage your wishlists, items and tags</p>
+            <p className="mt-2 text-slate-600">Manage your wishlists and items</p>
           </div>
 
           <Link
@@ -66,14 +66,10 @@ export default async function AdminPage() {
                     <p className="mt-2 line-clamp-2 text-sm text-slate-600">{wl.description}</p>
                   )}
 
-                  <dl className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                  <dl className="mt-4 grid grid-cols-1 gap-2 text-sm">
                     <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                       <dt className="text-slate-500">Items</dt>
                       <dd className="font-semibold text-slate-900">{wl._count?.items ?? 0}</dd>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                      <dt className="text-slate-500">Tags</dt>
-                      <dd className="font-semibold text-slate-900">{wl._count?.tags ?? 0}</dd>
                     </div>
                   </dl>
 

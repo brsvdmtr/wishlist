@@ -1,4 +1,4 @@
-// Admin router (legacy /wishlists, /items, /tags, /admin/referral/*) — gated
+// Admin router (legacy /wishlists, /items, /admin/referral/*) — gated
 // by the `X-ADMIN-KEY` header. Mounted as `app.use(adminRouter)` (no prefix —
 // the prefixes live on each handler) in apps/api/src/index.ts.
 //
@@ -256,94 +256,6 @@ export function registerAdminRouter(deps: AdminRouterDeps): Router {
         return res.json({ ok: true });
       } catch {
         return res.status(404).json({ error: 'Item not found' });
-      }
-    }),
-  );
-
-  // Item-tag association endpoints
-  privateRouter.post(
-    '/items/:itemId/tags/:tagId',
-    asyncHandler(async (req, res) => {
-      const { itemId, tagId } = req.params as { itemId: string; tagId: string };
-      const [item, tag] = await Promise.all([
-        prisma.item.findUnique({ where: { id: itemId }, select: { id: true, wishlistId: true } }),
-        prisma.tag.findUnique({ where: { id: tagId }, select: { id: true, wishlistId: true } }),
-      ]);
-      if (!item) return res.status(404).json({ error: 'Item not found' });
-      if (!tag) return res.status(404).json({ error: 'Tag not found' });
-      if (item.wishlistId !== tag.wishlistId)
-        return res.status(422).json({ error: 'Item and tag belong to different wishlists' });
-      try {
-        await prisma.itemTag.create({ data: { itemId, tagId } });
-        return res.status(201).json({ ok: true });
-      } catch {
-        return res.status(409).json({ error: 'Tag already assigned to item' });
-      }
-    }),
-  );
-
-  privateRouter.delete(
-    '/items/:itemId/tags/:tagId',
-    asyncHandler(async (req, res) => {
-      const { itemId, tagId } = req.params as { itemId: string; tagId: string };
-      try {
-        await prisma.itemTag.delete({ where: { itemId_tagId: { itemId, tagId } } });
-        return res.json({ ok: true });
-      } catch {
-        return res.status(404).json({ error: 'Association not found' });
-      }
-    }),
-  );
-
-  privateRouter.post(
-    '/wishlists/:id/tags',
-    asyncHandler(async (req, res) => {
-      const wishlistId = req.params.id ?? '';
-      if (!wishlistId) return res.status(400).json({ error: 'Missing wishlist id' });
-      const parsed = z.object({ name: z.string().min(1).max(64) }).safeParse(req.body);
-      if (!parsed.success) return zodError(res, parsed.error);
-
-      const wishlist = await prisma.wishlist.findUnique({ where: { id: wishlistId }, select: { id: true } });
-      if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
-
-      const tag = await prisma.tag.create({
-        data: { wishlistId, name: parsed.data.name },
-        select: { id: true, wishlistId: true, name: true, createdAt: true },
-      });
-      return res.status(201).json({ tag });
-    }),
-  );
-
-  privateRouter.patch(
-    '/tags/:id',
-    asyncHandler(async (req, res) => {
-      const id = req.params.id ?? '';
-      if (!id) return res.status(400).json({ error: 'Missing tag id' });
-      const parsed = z.object({ name: z.string().min(1).max(64) }).safeParse(req.body);
-      if (!parsed.success) return zodError(res, parsed.error);
-      try {
-        const tag = await prisma.tag.update({
-          where: { id },
-          data: { name: parsed.data.name },
-          select: { id: true, wishlistId: true, name: true, createdAt: true },
-        });
-        return res.json({ tag });
-      } catch {
-        return res.status(404).json({ error: 'Tag not found' });
-      }
-    }),
-  );
-
-  privateRouter.delete(
-    '/tags/:id',
-    asyncHandler(async (req, res) => {
-      const id = req.params.id ?? '';
-      if (!id) return res.status(400).json({ error: 'Missing tag id' });
-      try {
-        await prisma.tag.delete({ where: { id } });
-        return res.json({ ok: true });
-      } catch {
-        return res.status(404).json({ error: 'Tag not found' });
       }
     }),
   );

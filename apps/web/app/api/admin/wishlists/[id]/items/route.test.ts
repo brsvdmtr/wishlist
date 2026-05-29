@@ -33,12 +33,12 @@ describe('admin /api/admin/wishlists/[id]/items', () => {
 
   it('GET forwards the request query string to the proxied path', async () => {
     await GET(
-      makeReq('http://localhost/api/admin/wishlists/wl-1/items?status=AVAILABLE&tag=books'),
+      makeReq('http://localhost/api/admin/wishlists/wl-1/items?status=AVAILABLE'),
       { params: Promise.resolve({ id: 'wl-1' }) },
     );
     expect(proxy).toHaveBeenCalledWith({
       method: 'GET',
-      path: '/public/wishlists/wl-1/items?status=AVAILABLE&tag=books',
+      path: '/public/wishlists/wl-1/items?status=AVAILABLE',
     });
   });
 

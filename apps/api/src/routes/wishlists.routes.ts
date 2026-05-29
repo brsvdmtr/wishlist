@@ -1329,7 +1329,6 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
               profile: { select: { displayName: true, username: true, profileVisibility: true, avatarThumbUrl: true, avatarPublic: true, dontGiftPresets: true, dontGiftCustomItems: true, dontGiftComment: true, dontGiftVisible: true } },
             },
           },
-          tags: { select: { id: true, name: true } },
           categories: {
             orderBy: [{ isDefault: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
             select: { id: true, name: true, sortOrder: true, isDefault: true },
@@ -1357,7 +1356,6 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
               priceText: true, currency: true, commentOwner: true,
               priority: true, deadline: true, imageUrl: true, status: true,
               createdAt: true, updatedAt: true,
-              itemTags: { include: { tag: { select: { id: true, name: true } } } },
               reservationEvents: {
                 where: { type: 'RESERVED' },
                 orderBy: { createdAt: 'desc' },
@@ -1434,7 +1432,6 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
           updatedAt: p.item.updatedAt,
           categoryId: p.categoryId,
           position: p.position,
-          tags: p.item.itemTags.map((it) => it.tag),
           reservedByDisplayName:
             p.item.status === 'RESERVED' && p.item.reservationEvents?.length
               ? (p.item.reservationEvents[0]?.comment ?? null)
@@ -1444,7 +1441,6 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
               ? (p.item.reservationEvents[0]?.actorHash ?? null)
               : null,
         })),
-        tags: wishlist.tags,
         categories: wishlist.categories,
         dontGift,
       });

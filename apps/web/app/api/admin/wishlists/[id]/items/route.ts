@@ -14,7 +14,7 @@ export async function GET(req: NextRequest, props: Params) {
   const { id } = params;
   const { searchParams } = new URL(req.url);
 
-  // Pass through query params (status, tag)
+  // Pass through query params (status)
   const queryString = searchParams.toString();
   const path = `/public/wishlists/${id}/items${queryString ? `?${queryString}` : ''}`;
 

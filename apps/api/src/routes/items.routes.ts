@@ -812,7 +812,7 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
 
       if (eligibleIds.length === 0) return res.json({ deleted: 0 });
 
-      // Hard-delete — Prisma cascades handle child records (reservationEvents, itemTags, comments)
+      // Hard-delete — Prisma cascades handle child records (reservationEvents, comments)
       await prisma.item.deleteMany({ where: { id: { in: eligibleIds } } });
 
       return res.json({ deleted: eligibleIds.length });

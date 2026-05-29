@@ -13,7 +13,7 @@ export type Wishlist = {
   description: string | null;
   createdAt: string;
   updatedAt: string;
-  _count?: { items: number; tags: number };
+  _count?: { items: number };
 };
 
 export type Item = {
@@ -29,14 +29,6 @@ export type Item = {
   status: 'AVAILABLE' | 'RESERVED' | 'PURCHASED';
   createdAt: string;
   updatedAt: string;
-  tags?: { id: string; name: string }[];
-};
-
-export type Tag = {
-  id: string;
-  wishlistId: string;
-  name: string;
-  createdAt: string;
 };
 
 const handleResponse = async <T>(res: Response): Promise<T> => {
@@ -57,7 +49,6 @@ export async function getWishlists(): Promise<{ wishlists: Wishlist[] }> {
 export async function getWishlist(id: string): Promise<{
   wishlist: Wishlist;
   items: Item[];
-  tags: Tag[];
 }> {
   const res = await fetch(`/api/admin/wishlists/${id}`, { cache: 'no-store' });
   return handleResponse(res);
@@ -96,11 +87,10 @@ export async function deleteWishlist(id: string): Promise<{ ok: boolean }> {
 
 export async function getItems(
   wishlistId: string,
-  filters?: { status?: string; tag?: string },
+  filters?: { status?: string },
 ): Promise<{ items: Item[] }> {
   const params = new URLSearchParams();
   if (filters?.status) params.set('status', filters.status);
-  if (filters?.tag) params.set('tag', filters.tag);
 
   const query = params.toString();
   const url = `/api/admin/wishlists/${wishlistId}/items${query ? `?${query}` : ''}`;
@@ -152,24 +142,5 @@ export async function updateItem(
 
 export async function deleteItem(itemId: string): Promise<{ ok: boolean }> {
   const res = await fetch(`/api/admin/items/${itemId}`, { method: 'DELETE' });
-  return handleResponse(res);
-}
-
-// === Tags ===
-
-export async function createTag(
-  wishlistId: string,
-  data: { name: string },
-): Promise<{ tag: Tag }> {
-  const res = await fetch(`/api/admin/wishlists/${wishlistId}/tags`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  return handleResponse(res);
-}
-
-export async function deleteTag(tagId: string): Promise<{ ok: boolean }> {
-  const res = await fetch(`/api/admin/tags/${tagId}`, { method: 'DELETE' });
   return handleResponse(res);
 }

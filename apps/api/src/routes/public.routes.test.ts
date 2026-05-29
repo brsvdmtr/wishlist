@@ -10,6 +10,7 @@ import { z } from 'zod';
 const shared = vi.hoisted(() => ({
   wishlist: { findUnique: vi.fn(), findFirst: vi.fn() },
   item: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+  wishlistItemPlacement: { findMany: vi.fn() },
   reservationEvent: { create: vi.fn() },
   user: { findUnique: vi.fn() },
 }));
@@ -18,6 +19,7 @@ vi.mock('@wishlist/db', () => ({
   prisma: {
     wishlist: shared.wishlist,
     item: shared.item,
+    wishlistItemPlacement: shared.wishlistItemPlacement,
     reservationEvent: shared.reservationEvent,
     user: shared.user,
   },
@@ -67,6 +69,40 @@ describe('GET /wishlists/:slug/items — public read', () => {
     expect(shared.wishlist.findUnique).toHaveBeenCalled();
     const arg = shared.wishlist.findUnique.mock.calls[0]![0];
     expect(arg.where.slug).toBe('birthday');
+  });
+});
+
+// Regression guard for the Tag-feature removal (docs/research/tags-decision.md).
+// The Tag/ItemTag subsystem was dropped: item payloads must no longer carry a
+// `tags` field, and the long-gone `?tag=` filter param must be silently ignored
+// (NOT 400) so cached old Mini App / web clients in Telegram WebViews don't break.
+describe('GET /wishlists/:slug/items — Tag removal regression', () => {
+  it('ignores a stale ?tag= query param instead of 400 (cached-client safety)', async () => {
+    // Reaches the wishlist lookup (→404 here) only if the query parsed OK; a
+    // schema that rejected the unknown `tag` would short-circuit with 400.
+    shared.wishlist.findUnique.mockResolvedValueOnce(null);
+    const res = await request(makeApp()).get('/wishlists/some-slug/items?tag=books');
+    expect(res.status).toBe(404);
+  });
+
+  it('item payload no longer includes a `tags` field', async () => {
+    shared.wishlist.findUnique.mockResolvedValueOnce({ id: 'w1' });
+    shared.wishlistItemPlacement.findMany.mockResolvedValueOnce([
+      {
+        position: 0,
+        categoryId: null,
+        item: {
+          id: 'i1', title: 'Item', description: null, url: 'https://e.com',
+          priceText: null, commentOwner: null, priority: 'MEDIUM', deadline: null,
+          imageUrl: null, status: 'AVAILABLE', createdAt: new Date(), updatedAt: new Date(),
+          reservationEvents: [],
+        },
+      },
+    ]);
+    const res = await request(makeApp()).get('/wishlists/birthday/items');
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0]).not.toHaveProperty('tags');
   });
 });
 

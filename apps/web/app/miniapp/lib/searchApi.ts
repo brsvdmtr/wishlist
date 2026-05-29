@@ -225,7 +225,6 @@ export interface AccessViewResponse {
   };
   items: AccessViewItem[];
   categories: Array<{ id: string; name: string; sortOrder: number; isDefault: boolean }>;
-  tags: Array<{ id: string; name: string }>;
   dontGift: { presets: string[]; customItems: string[]; comment: string | null } | null;
 }
 

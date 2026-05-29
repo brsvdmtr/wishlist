@@ -177,8 +177,6 @@ The `getItemRole(itemId, tgUser)` helper returns one of `{ role: 'owner' | 'rese
 |--------|------|------------|
 | POST/PATCH/DELETE | `/wishlists`, `/wishlists/:id` | X-ADMIN-KEY |
 | POST/PATCH/DELETE | `/wishlists/:id/items`, `/items/:id` | X-ADMIN-KEY |
-| POST/PATCH/DELETE | `/wishlists/:id/tags`, `/tags/:id` | X-ADMIN-KEY |
-| POST/DELETE | `/items/:itemId/tags/:tagId` | X-ADMIN-KEY |
 
 ---
 

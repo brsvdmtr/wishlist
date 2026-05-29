@@ -440,12 +440,10 @@ Auth: HTTP Basic Auth (web) + `X-ADMIN-KEY` header (api).
 | 30 | `/api/admin/wishlists/{id}` | GET | Open wishlist | -- |
 | 31 | `/api/admin/wishlists/{id}` | PATCH | Edit | `{ title?, description? }` |
 | 32 | `/api/admin/wishlists/{id}` | DELETE | Delete | -- |
-| 33 | `/api/admin/wishlists/{id}/items` | GET | Load items | Query: `status?`, `tag?` |
+| 33 | `/api/admin/wishlists/{id}/items` | GET | Load items | Query: `status?` |
 | 34 | `/api/admin/wishlists/{id}/items` | POST | Create item | `{ title, url, priceText?, ... }` |
 | 35 | `/api/admin/items/{id}` | PATCH | Edit item | `{ title?, url?, status?, ... }` |
 | 36 | `/api/admin/items/{id}` | DELETE | Delete item | -- |
-| 37 | `/api/admin/wishlists/{id}/tags` | POST | Create tag | `{ name }` |
-| 38 | `/api/admin/tags/{id}` | DELETE | Delete tag | -- |
 
 ---
 

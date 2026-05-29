@@ -10,11 +10,8 @@ import {
   createItem,
   updateItem,
   deleteItem,
-  createTag,
-  deleteTag,
   type Wishlist,
   type Item,
-  type Tag,
 } from '@/lib/admin-api-client';
 
 type Props = {
@@ -28,7 +25,6 @@ export default function EditWishlistPage(props: Props) {
 
   const [wishlist, setWishlist] = useState<Wishlist | null>(null);
   const [items, setItems] = useState<Item[]>([]);
-  const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,11 +42,6 @@ export default function EditWishlistPage(props: Props) {
   const [newItemComment, setNewItemComment] = useState('');
   const [addingItem, setAddingItem] = useState(false);
 
-  // Add tag modal
-  const [showAddTag, setShowAddTag] = useState(false);
-  const [newTagName, setNewTagName] = useState('');
-  const [addingTag, setAddingTag] = useState(false);
-
   const load = async () => {
     try {
       setLoading(true);
@@ -58,7 +49,6 @@ export default function EditWishlistPage(props: Props) {
       const data = await getWishlist(wishlistId);
       setWishlist(data.wishlist);
       setItems(data.items);
-      setTags(data.tags);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load wishlist');
     } finally {
@@ -133,33 +123,6 @@ export default function EditWishlistPage(props: Props) {
       await load();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to delete item');
-    }
-  };
-
-  const handleAddTag = async () => {
-    if (!newTagName.trim()) return;
-
-    setAddingTag(true);
-    try {
-      await createTag(wishlistId, { name: newTagName.trim() });
-      await load();
-      setShowAddTag(false);
-      setNewTagName('');
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to add tag');
-    } finally {
-      setAddingTag(false);
-    }
-  };
-
-  const handleDeleteTag = async (tagId: string) => {
-    if (!confirm('Delete this tag?')) return;
-
-    try {
-      await deleteTag(tagId);
-      await load();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete tag');
     }
   };
 
@@ -238,40 +201,6 @@ export default function EditWishlistPage(props: Props) {
           </div>
         </header>
 
-        {/* Tags Section */}
-        <section className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-slate-900">Tags ({tags.length})</h2>
-            <button
-              onClick={() => setShowAddTag(true)}
-              className="rounded-xl bg-cyan-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-cyan-800"
-            >
-              + Add Tag
-            </button>
-          </div>
-
-          {tags.length === 0 ? (
-            <p className="text-slate-600">No tags yet.</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {tags.map((tag) => (
-                <div
-                  key={tag.id}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm"
-                >
-                  <span className="font-medium text-slate-900">{tag.name}</span>
-                  <button
-                    onClick={() => handleDeleteTag(tag.id)}
-                    className="text-slate-500 hover:text-rose-600"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
         {/* Items Section */}
         <section>
           <div className="flex items-center justify-between mb-4">
@@ -320,19 +249,6 @@ export default function EditWishlistPage(props: Props) {
                       {item.status}
                     </span>
                   </div>
-
-                  {item.tags && item.tags.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {item.tags.map((tag) => (
-                        <span
-                          key={tag.id}
-                          className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700"
-                        >
-                          {tag.name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
 
                   <div className="mt-4 flex gap-2">
                     <button
@@ -466,48 +382,6 @@ export default function EditWishlistPage(props: Props) {
                   className="rounded-xl bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800 disabled:opacity-50"
                 >
                   {addingItem ? 'Adding...' : 'Add Item'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Add Tag Modal */}
-        {showAddTag && (
-          <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-6 backdrop-blur-sm">
-            <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
-              <h3 className="text-xl font-semibold text-slate-900">Add Tag</h3>
-
-              <div className="mt-4">
-                <label className="grid gap-2">
-                  <span className="text-sm font-semibold text-slate-900">
-                    Name <span className="text-rose-600">*</span>
-                  </span>
-                  <input
-                    type="text"
-                    value={newTagName}
-                    onChange={(e) => setNewTagName(e.target.value)}
-                    placeholder="electronics"
-                    maxLength={64}
-                    className="rounded-xl border border-slate-200 px-4 py-3"
-                  />
-                </label>
-              </div>
-
-              <div className="mt-6 flex justify-end gap-2">
-                <button
-                  onClick={() => setShowAddTag(false)}
-                  disabled={addingTag}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleAddTag}
-                  disabled={addingTag || !newTagName.trim()}
-                  className="rounded-xl bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800 disabled:opacity-50"
-                >
-                  {addingTag ? 'Adding...' : 'Add Tag'}
                 </button>
               </div>
             </div>

@@ -557,7 +557,6 @@ An ordered collection of wish items owned by a user.
 **Relations:**
 - `owner` → `User`
 - `items[]` → `Item`
-- `tags[]` → `Tag`
 - `categories[]` → `WishlistCategory` (item categories within this wishlist)
 - `wishlistSubscriptions[]` → `WishlistSubscription`
 - `santaParticipants[]` → `SantaParticipant` (linked wishlists in Santa campaigns)
@@ -602,37 +601,12 @@ A single wish within a wishlist.
 **Relations:**
 - `wishlist` → `Wishlist`
 - `category` → `WishlistCategory?` (optional, onDelete: SetNull)
-- `itemTags[]` → `ItemTag`
 - `reservationEvents[]` → `ReservationEvent`
 - `comments[]` → `Comment`
 - `commentReadCursors[]` → `CommentReadCursor`
 - `hints[]` → `Hint`
 - `santaItemReservations[]` → `SantaItemReservation`
 - `groupGift` → `GroupGift?` (optional one-to-one; one group gift per item)
-
----
-
-### `Tag`
-A label that can be attached to items in a wishlist. Currently used via admin panel only; not exposed in the Mini App UI.
-
-| Field       | Type     | Required | Default | Notes               |
-|-------------|----------|----------|---------|---------------------|
-| `id`        | String   | Yes      | cuid    |                     |
-| `wishlistId`| String   | Yes      | —       | FK → `Wishlist`     |
-| `name`      | String   | Yes      | —       |                     |
-| `createdAt` | DateTime | Yes      | now     |                     |
-
----
-
-### `ItemTag`
-Join table linking items to tags. Composite primary key.
-
-| Field    | Type   | Required | Notes           |
-|----------|--------|----------|-----------------|
-| `itemId` | String | Yes      | FK → `Item`     |
-| `tagId`  | String | Yes      | FK → `Tag`      |
-
-**Primary key:** `(itemId, tagId)`
 
 ---
 
@@ -1607,7 +1581,6 @@ User ─────────────────────────
   │              │                  ├──► ReservationEvent     ││
   │              │                  ├──► Comment (threaded)   ││
   │              │                  ├──► CommentReadCursor ◄──┤│
-  │              │                  ├──► ItemTag              ││
   │              │                  ├──► Hint ◄───────────────┤│
   │              │                  ├──► SantaItemReservation ││
   │              │                  ├──► SecretReservation ◄──┤│
@@ -1617,7 +1590,6 @@ User ─────────────────────────
   │              │                         └──► Message[]     ││
   │              │                                            ││
   │              ├── has ──► WishlistCategory[] ◄── Item      ││
-  │              ├── has ──► Tag ◄── ItemTag                  ││
   │              ├── has ──► CuratedSelection[]               ││
   │              │              ├──► CuratedSelectionItem[]   ││
   │              │              └──► CuratedSelectionSubscription[] ◄──┤│
@@ -1816,10 +1788,6 @@ SantaGlobalConfig / SantaSeasonConfig / SantaSeasonalBroadcastLog │
 ### UserProfile Lazy Creation
 - `UserProfile` is not created at registration. It is created on the first write to `PATCH /tg/me/profile`.
 - API endpoints reading the profile must handle the case where it does not yet exist (`null`).
-
-### Tags
-- Tags exist in the schema but are managed only via the admin panel.
-- Tags are not exposed in the Mini App UI or its public API.
 
 ### Privacy Fields Not Yet Enforced
 - `SubscribePolicy.LINK_ONLY` and `SubscribePolicy.APPROVED` are defined in the schema but are not yet enforced in API logic. The API currently treats both values the same as `ALL`.

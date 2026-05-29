@@ -353,7 +353,7 @@
 
 | Feature | Frontend | Backend | Prisma | Bot | Plan |
 |---|---|---|---|---|---|
-| Admin panel (system-user wishlist/item/tag CRUD) | `apps/web/app/admin/{page,new/page,[id]/page}.tsx` (3 экрана) protected by HTTP Basic Auth в `apps/web/middleware.ts` | `routes/admin.routes.ts` (26 handlers; ~10 god-only) `/wishlists`, `/items`, `/tags` под `X-ADMIN-KEY` | `User` (system), `Tag` | — | admin |
+| Admin panel (system-user wishlist/item CRUD) | `apps/web/app/admin/{page,new/page,[id]/page}.tsx` (3 экрана) protected by HTTP Basic Auth в `apps/web/middleware.ts` | `routes/admin.routes.ts` (21 handlers; ~10 god-only) `/wishlists`, `/items` под `X-ADMIN-KEY` | `User` (system) | — | admin |
 | Internal API (bot → API) | — | `routes/internal.routes.ts` (8 handlers, `X-INTERNAL-KEY=BOT_TOKEN`) — `POST /internal/import-url`, `GET /internal/support/lookup` + 6 more | — | bot consumer | internal |
 | God Mode toggle | Settings | `routes/me.routes.ts` `POST /tg/me/god-mode` (whitelist `GOD_MODE_TELEGRAM_IDS` + flag `user.godMode`) | `User.godMode` | — | god |
 | God stats dashboard | inside Settings, gated by `godMode && canGodMode` | `GET /tg/god-stats` — overview, funnel (7 шагов), engagement, proLimits24h, errors24h, onboarding+AB, localeSegments | `AnalyticsEvent` aggregates | — | god |
@@ -497,12 +497,18 @@ Pricing source-of-truth: `apps/api/src/index.ts` constants `PLANS`, `ONE_TIME_SK
 | Birthday metrics `/tg/admin/birthday-reminders/metrics` | hidden tab | whitelist + flag |
 | Admin alerts via `ADMIN_ALERT_CHAT_IDS` | `notifications/adminAlerts.ts` | bot DMs |
 
-### 5.4 «Tags» — модель есть, UI нет (мёртвая фича для конечного пользователя)
+### 5.4 «Tags» — УДАЛЕНО (2026-05-30)
 
-- `Tag` модель в Prisma присутствует, `routes/admin.routes.ts` имеет CRUD endpoints (`/wishlists/:id/tags`, `/tags/:id`, `/items/:itemId/tags/:tagId`).
-- Mini App не имеет UI для тегов: документировано в KNOWN_GAPS Risk #20.
-- Поле `?tag=` фильтр существует в `GET /public/wishlists/:slug/items`, но никем не вызывается из официального клиента.
-- **Признак dead code** на уровне UX.
+Фича удалена как мёртвая: 0 органических тегов в prod (3 строки — seed на демо-вишлисте),
+end-user пути создать/присвоить тег не было, Mini App UI не было. Задачу группировки
+закрывает `WishlistCategory` (полный UI, 132 вишлиста adoption). Решение + анализ +
+migration/rollback: [tags-decision.md](tags-decision.md).
+
+- Убраны: admin CRUD (`routes/admin.routes.ts`), public `?tag` фильтр и все tags-includes
+  (`public.routes.ts`, `wishlists.routes.ts`), public web тег-UI (`/w/[slug]`), admin тег-UI +
+  proxy-роуты, seed, `Tag`/`ItemTag` модели из Prisma + `DROP TABLE` миграция. KNOWN_GAPS Risk #20 закрыт.
+- Историческая справка: `Tag`/`ItemTag` существовали с init-миграции `20260210151944_init`,
+  но end-user поверхность так и не получили — заброшенный ранний примитив, замещённый категориями.
 
 ### 5.5 «Coming soon» / частично доделанное
 
@@ -570,7 +576,6 @@ Pricing source-of-truth: `apps/api/src/index.ts` constants `PLANS`, `ONE_TIME_SK
 | Item | Предлагаемое действие | Причина |
 |---|---|---|
 | **Referral Program** (UI screens, routes, scheduler, ReferralProgramConfig) | Решить: или включить с честным rollout, или удалить subsystem полностью | Висящий мёртвый груз: 4 routes + scheduler + 2 screens + i18n + Prisma модели — все за флагом `enabled=false`. Поддерживать кодовую базу без бенефита. |
-| **Tag CRUD** в admin router + `Tag` модель + `?tag` filter в public router | Удалить admin endpoints и `Tag` модель если не планируется UI; либо запланировать UI спринт | Risk #20: модель есть, юзер не видит. Технический долг. |
 | **`subscribePolicy = APPROVED`** enum value | Удалить из enum (миграция) или реализовать approval flow | "Reserved for future use" уже год+. Зомби-state. |
 | **Onboarding v1 deprecated path** | Удалить v1-only ветки в `routes/onboarding.routes.ts` и `MiniApp.tsx` | v2 — default, v1 — pure dead code. |
 | **`AUTH_SECRET` env** | Удалить из docker-compose + .env.example | Не используется, путает оператора (Risk #12). |
@@ -691,7 +696,7 @@ smart_reservations_unlock 15 ⭐  permanent per-WL (НЕ входит в PRO)
 3. **Distribution Pro Monthly / Yearly / Lifetime** — для понимания, насколько Lifetime каннибализирует Monthly.
 4. **Coverage god-mode dashboard** vs. реальное использование — кто из whitelisted ID реально открывал god-stats последние 14 дней.
 5. **`subscribePolicy=APPROVED` adopters** — есть ли вообще такие записи в БД? Если 0 — миграция-удаление безопасна.
-6. **Tag adoption** — `SELECT COUNT(*) FROM Tag` и `SELECT COUNT(*) FROM (Item ↔ Tag)`.
+6. **Tag adoption** — ОТВЕЧЕНО: 0 органических тегов (только seed на демо-вишлисте); фича удалена. См. [tags-decision.md](tags-decision.md).
 7. **Onboarding v1 leftover** — сколько юзеров с `UserOnboardingState.variant='v1_demo'` сейчас в активной воронке.
 8. **Add-on revenue split** — какие SKU реально продают (по `PaymentEvent`).
 

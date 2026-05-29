@@ -110,7 +110,7 @@ Mounted as `publicRouter`. No authentication. Rate-limited.
 | Method | Path | Rate limit | Description |
 |---|---|---|---|
 | GET | `/public/wishlists/:slug` | 120/min | Fetch wishlist metadata + items by slug. Returns 403 for PRIVATE wishlists if caller is not a subscriber. |
-| GET | `/public/wishlists/:slug/items` | 120/min | Fetch items for wishlist by slug. Supports `?status` and `?tag` filters. |
+| GET | `/public/wishlists/:slug/items` | 120/min | Fetch items for wishlist by slug. Supports `?status` filter. |
 | GET | `/public/share/:token` | 120/min | Resolve a 12-character share token to wishlist + items. |
 | GET | `/public/profiles/:username` | 120/min | Fetch public profile + public wishlists (visibility `PUBLIC_PROFILE`). Respects `profileVisibility` setting. |
 | POST | `/public/items/:id/reserve` | 30/15 min | Reserve an item. Requires `actorHash` (UUID) and optional `comment` (display name). Uses a database transaction to prevent double-reservation. |
@@ -373,11 +373,6 @@ Mounted without prefix. Requires `X-ADMIN-KEY` header (`requireAdmin` middleware
 | POST | `/wishlists/:id/items` | Add item to system wishlist. |
 | PATCH | `/items/:id` | Update system item. |
 | DELETE | `/items/:id` | Hard-delete system item. |
-| POST | `/wishlists/:id/tags` | Create tag on system wishlist. |
-| PATCH | `/tags/:id` | Rename tag. |
-| DELETE | `/tags/:id` | Delete tag. |
-| POST | `/items/:itemId/tags/:tagId` | Associate item with tag. |
-| DELETE | `/items/:itemId/tags/:tagId` | Remove tag from item. |
 
 ---
 

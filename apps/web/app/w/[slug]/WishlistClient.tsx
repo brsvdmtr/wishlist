@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-type Tag = { id: string; name: string };
 type ItemStatus = 'AVAILABLE' | 'RESERVED' | 'PURCHASED';
 type Priority = 'LOW' | 'MEDIUM' | 'HIGH';
 
@@ -16,13 +15,11 @@ type PublicItem = {
   deadline: string | null;
   imageUrl: string | null;
   status: ItemStatus;
-  tags: Tag[];
 };
 
 type PublicWishlistResponse = {
   wishlist: { id: string; slug: string; title: string; description: string | null };
   items: PublicItem[];
-  tags: Tag[];
 };
 
 type Toast = { id: string; message: string; kind: 'error' | 'success' };
@@ -135,7 +132,6 @@ export default function WishlistClient({
   const [data, setData] = useState<PublicWishlistResponse>(() => initialData as PublicWishlistResponse);
   const [actorHash, setActorHash] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | ItemStatus>('all');
-  const [tagFilter, setTagFilter] = useState<string | null>(null); // Tag.id
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const [modal, setModal] = useState<
@@ -198,10 +194,9 @@ export default function WishlistClient({
     let items = data.items;
 
     if (statusFilter !== 'all') items = items.filter((i) => i.status === statusFilter);
-    if (tagFilter) items = items.filter((i) => i.tags.some((t) => t.id === tagFilter));
 
     return items;
-  }, [data.items, statusFilter, tagFilter]);
+  }, [data.items, statusFilter]);
 
   const reserveOrPurchase = useCallback(
     async (kind: 'reserve' | 'purchase', itemId: string, comment: string) => {
@@ -275,22 +270,6 @@ export default function WishlistClient({
                 <option value="PURCHASED">Куплено</option>
               </select>
             </label>
-
-            <label className="grid gap-1">
-              <span className="text-xs text-slate-500">Тег</span>
-              <select
-                value={tagFilter ?? 'all'}
-                onChange={(e) => setTagFilter(e.target.value === 'all' ? null : e.target.value)}
-                className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-200"
-              >
-                <option value="all">Все</option>
-                {data.tags.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </label>
           </div>
         </div>
       </header>
@@ -355,19 +334,6 @@ export default function WishlistClient({
                       <dd className="font-semibold">{deadline ?? '—'}</dd>
                     </div>
                   </dl>
-
-                  {item.tags.length ? (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {item.tags.map((t) => (
-                        <span
-                          key={t.id}
-                          className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700"
-                        >
-                          {t.name}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
 
                   <div className="mt-6 flex flex-wrap gap-2">
                     {canReserve ? (
