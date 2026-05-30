@@ -41,6 +41,8 @@ import { t, resolveLocaleWithSource } from '@wishlist/shared';
 import { sendTgNotification } from '../telegram/botApi';
 import { profileToLanguageSettings } from './locale';
 import { sendAdminAlert } from '../notifications/adminAlerts';
+import { readExperimentConfig } from './experiments.service';
+import { runPreseasonWave, isPreseasonWindow, PRESEASON_EXPERIMENT_KEY } from './santa-preseason';
 import logger from '../logger';
 
 /**
@@ -369,7 +371,11 @@ export async function sendSeasonalBroadcast(type: 'PROMO' | 'CLOSING_SOON', seas
   // eslint-disable-next-line no-constant-condition
   for (;;) {
     const users = await prisma.user.findMany({
-      where:   { telegramChatId: { not: null } },
+      // notifyMarketing opt-out (PRO-only) is now respected. NULL-safe: users
+      // with no UserProfile row (default marketing "on") still receive it — only
+      // explicit opt-outs (notifyMarketing=false) are excluded. Previously this
+      // broadcast blasted every user regardless of opt-out (compliance gap).
+      where:   { telegramChatId: { not: null }, NOT: { profile: { is: { notifyMarketing: false } } } },
       select:  { id: true, telegramChatId: true, profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } } },
       take:    BATCH,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -445,6 +451,26 @@ export async function maybeRunSeasonalEvents(now: Date = new Date()): Promise<vo
     // Abort if the feature is globally disabled
     const globalConfig = await prisma.santaGlobalConfig.findUnique({ where: { id: 'global' } });
     if (!globalConfig?.santaEnabled) return;
+
+    // ── E23 pre-season teaser DM — supersedes the legacy Nov-1 PROMO blast ──
+    // When the santa-preseason-dm experiment is ENABLED, E23 owns the Nov 1–14
+    // window: it runs the segmented, opt-out-respecting, A/B-controlled,
+    // mute-kill-switched teaser wave (advancing one tick per hour), and on Nov 1
+    // tombstones the legacy PROMO log row so the broadcast below can NEVER also
+    // fire this season — even if the flag is toggled off mid-window. When the
+    // experiment is OFF (default), this whole block is a no-op and the legacy
+    // PROMO fires exactly as before. The pre-season wave sits behind the same
+    // santaEnabled kill-switch above (no teaser for a disabled feature).
+    const preseasonConfig = readExperimentConfig(PRESEASON_EXPERIMENT_KEY);
+    if (preseasonConfig.enabled && isPreseasonWindow(now)) {
+      const preseasonYear = getSeasonStartYear(now);
+      await runPreseasonWave({ now, seasonYear: preseasonYear, config: preseasonConfig });
+      if (now.getUTCMonth() === 10 && now.getUTCDate() === 1) {
+        await prisma.santaSeasonalBroadcastLog
+          .create({ data: { year: preseasonYear, type: 'PROMO' } })
+          .catch(() => { /* already tombstoned by an earlier tick — fine */ });
+      }
+    }
 
     const trigger = isSeasonalEventTriggerDay(now);
     if (!trigger) return;

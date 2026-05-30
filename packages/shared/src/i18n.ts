@@ -1291,6 +1291,12 @@ const ru: Dict = {
   // Santa seasonal broadcast (sent to every user with telegramChatId on Nov 1 PROMO / Feb 1 CLOSING_SOON).
   santa_broadcast_promo: '🎅 Тайный Санта скоро открывается! Подготовьте вишлист — обмен подарками начнётся 15 ноября.',
   santa_broadcast_closing_soon: '⏰ Тайный Санта закроется 15 февраля. Успейте завершить обмен подарками!',
+  // E23 pre-season teaser DM (segmented, Nov 1; CTA opens santa-hub).
+  santa_preseason_teaser_msg: '🎅 Тайный Санта возвращается! Сезон откроется 15 ноября. Соберите друзей и подготовьте вишлист заранее — мы напомним, когда можно будет создать игру.',
+  santa_preseason_cta_btn: '🎁 Подготовиться к Санте',
+  santa_preseason_mute_btn: '🔕 Не напоминать',
+  santa_preseason_muted_toast: 'Готово — в этом сезоне больше не напомним про Тайного Санту.',
+  santa_preseason_mute_already: 'Напоминание про Тайного Санту уже отключено.',
   // ── God Mode retention dashboard ──
   ret_title: '📊 Возврат пользователей',
   ret_comms: '✉️ Коммуникации',
@@ -4340,6 +4346,12 @@ const en: Dict = {
   notif_batch_comments_word_many: 'new comments',
   santa_broadcast_promo: '🎅 Secret Santa is opening soon! Prepare your wishlist — the gift exchange starts November 15.',
   santa_broadcast_closing_soon: '⏰ Secret Santa closes on February 15. Make sure to finish your gift exchange!',
+  // E23 pre-season teaser DM (segmented, Nov 1; CTA opens santa-hub).
+  santa_preseason_teaser_msg: '🎅 Secret Santa is back! The season opens on November 15. Round up your friends and prep your wishlist now — we\'ll remind you the moment you can start a game.',
+  santa_preseason_cta_btn: '🎁 Get ready for Santa',
+  santa_preseason_mute_btn: '🔕 Don\'t remind me',
+  santa_preseason_muted_toast: 'Done — we won\'t remind you about Secret Santa this season.',
+  santa_preseason_mute_already: 'Secret Santa reminders are already off.',
   // ── God Mode retention dashboard ──
   ret_title: '📊 User retention',
   ret_comms: '✉️ Communications',
@@ -8451,6 +8463,12 @@ const zhCN: Dict = {
   notif_batch_comments_word_many: '条新评论',
   santa_broadcast_promo: '🎅 神秘圣诞老人即将开启！准备好你的心愿单——礼物交换将于11月15日开始。',
   santa_broadcast_closing_soon: '⏰ 神秘圣诞老人将于2月15日关闭。请确保完成你的礼物交换！',
+  // E23 pre-season teaser DM (segmented, Nov 1; CTA opens santa-hub).
+  santa_preseason_teaser_msg: '🎅 神秘圣诞老人回来啦！活动将于11月15日开启。现在就召集好友、准备好心愿单——可以创建游戏时我们会提醒你。',
+  santa_preseason_cta_btn: '🎁 准备神秘圣诞老人',
+  santa_preseason_mute_btn: '🔕 不再提醒',
+  santa_preseason_muted_toast: '好的——本季不再提醒你神秘圣诞老人。',
+  santa_preseason_mute_already: '神秘圣诞老人的提醒已关闭。',
   wb_promo_s3_title: '心愿单快完成了——这是你的奖励',
   wb_promo_s3_body: '你的列表已经很棒了。送你一个月Pro：',
   wb_promo_s2_title: '第一个愿望已添加——送你奖励',
@@ -11360,6 +11378,12 @@ const hi: Dict = {
   notif_batch_comments_word_many: 'नई टिप्पणियाँ',
   santa_broadcast_promo: '🎅 सीक्रेट सांता जल्द शुरू हो रहा है! अपनी विशलिस्ट तैयार करें — गिफ्ट एक्सचेंज 15 नवंबर को शुरू होगा।',
   santa_broadcast_closing_soon: '⏰ सीक्रेट सांता 15 फरवरी को बंद होगा। अपना गिफ्ट एक्सचेंज पूरा करना न भूलें!',
+  // E23 pre-season teaser DM (segmented, Nov 1; CTA opens santa-hub).
+  santa_preseason_teaser_msg: '🎅 सीक्रेट सांता वापस आ रहा है! सीज़न 15 नवंबर को शुरू होगा। अभी दोस्तों को इकट्ठा करें और अपनी विशलिस्ट तैयार करें — जैसे ही आप गेम शुरू कर सकेंगे, हम आपको याद दिला देंगे।',
+  santa_preseason_cta_btn: '🎁 सांता की तैयारी करें',
+  santa_preseason_mute_btn: '🔕 याद न दिलाएं',
+  santa_preseason_muted_toast: 'हो गया — इस सीज़न में हम आपको सीक्रेट सांता के बारे में याद नहीं दिलाएंगे।',
+  santa_preseason_mute_already: 'सीक्रेट सांता के रिमाइंडर पहले से बंद हैं।',
   wb_promo_s3_title: 'विशलिस्ट लगभग तैयार — यह रहा आपका बोनस',
   wb_promo_s3_body: 'आपकी सूची बढ़िया स्थिति में है। एक महीने का Pro:',
   wb_promo_s2_title: 'पहली इच्छा जोड़ी — यह रहा बोनस',
@@ -14270,6 +14294,12 @@ const es: Dict = {
   notif_batch_comments_word_many: 'nuevos comentarios',
   santa_broadcast_promo: '🎅 ¡Santa Secreto está por abrir! Prepara tu wishlist — el intercambio de regalos empieza el 15 de noviembre.',
   santa_broadcast_closing_soon: '⏰ Santa Secreto cierra el 15 de febrero. ¡Asegúrate de terminar tu intercambio de regalos!',
+  // E23 pre-season teaser DM (segmented, Nov 1; CTA opens santa-hub).
+  santa_preseason_teaser_msg: '🎅 ¡Santa Secreto vuelve! La temporada abre el 15 de noviembre. Reúne a tus amigos y prepara tu lista de deseos ya — te avisaremos en cuanto puedas crear un juego.',
+  santa_preseason_cta_btn: '🎁 Prepararme para Santa',
+  santa_preseason_mute_btn: '🔕 No recordarme',
+  santa_preseason_muted_toast: 'Listo — no te recordaremos sobre Santa Secreto esta temporada.',
+  santa_preseason_mute_already: 'Los recordatorios de Santa Secreto ya están desactivados.',
   wb_promo_s3_title: 'Tu wishlist casi está lista — aquí tienes tu bonus',
   wb_promo_s3_body: 'Tu lista está en muy buen punto. Un mes de Pro:',
   wb_promo_s2_title: 'Primer deseo añadido — aquí tienes tu bonus',
@@ -17183,6 +17213,12 @@ const ar: Dict = {
   notif_batch_comments_word_many: 'تعليقات جديدة',
   santa_broadcast_promo: '🎅 سانتا السرّي يفتح قريباً! جهّز قائمة أمنياتك — تبادل الهدايا يبدأ في 15 نوفمبر.',
   santa_broadcast_closing_soon: '⏰ سانتا السرّي يغلق في 15 فبراير. تأكد من إكمال تبادل الهدايا!',
+  // E23 pre-season teaser DM (segmented, Nov 1; CTA opens santa-hub).
+  santa_preseason_teaser_msg: '🎅 عاد سانتا السرّي! ينطلق الموسم في 15 نوفمبر. اجمع أصدقاءك وجهّز قائمة أمنياتك الآن — وسنذكّرك فور أن تتمكن من إنشاء لعبة.',
+  santa_preseason_cta_btn: '🎁 الاستعداد لسانتا',
+  santa_preseason_mute_btn: '🔕 عدم التذكير',
+  santa_preseason_muted_toast: 'تم — لن نذكّرك بسانتا السرّي هذا الموسم.',
+  santa_preseason_mute_already: 'تذكيرات سانتا السرّي مُعطّلة بالفعل.',
   wb_promo_s3_title: 'قائمة أمنياتك شبه جاهزة — إليك مكافأتك',
   wb_promo_s3_body: 'قائمتك في حالة رائعة. إليك شهر Pro:',
   wb_promo_s2_title: 'تمت إضافة الأمنية الأولى — إليك مكافأتك',

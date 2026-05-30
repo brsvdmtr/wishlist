@@ -1180,6 +1180,70 @@ if (!token) {
     }
   });
 
+  // ─── E23 Santa pre-season teaser: mute callback "🔕 Не напоминать" ─────────
+  // Callback data: sps:<touchId>. Resolves the touch → stamps mutedAt
+  // (idempotent) → emits santa_preseason.muted → answers + drops the mute row
+  // from the keyboard. Self-contained (the bot can't import apps/api services);
+  // mirrors the bdm: handler above. The mutedAt write feeds the pre-season
+  // wave's settled-cohort >15% kill-switch (services/santa-preseason.ts).
+  bot.action(/^sps:(.+)$/, async (ctx) => {
+    try {
+      const touchId = ctx.match[1]!;
+      const telegramId = String(ctx.from.id);
+      const locale = getLocale(ctx);
+
+      const user = await prisma.user.findFirst({ where: { telegramId }, select: { id: true } });
+      if (!user) {
+        await ctx.answerCbQuery('User not found');
+        return;
+      }
+
+      const touch = await prisma.santaPreseasonTouch.findUnique({
+        where: { id: touchId },
+        select: { id: true, userId: true, seasonYear: true, mutedAt: true },
+      });
+      if (!touch || touch.userId !== user.id) {
+        await ctx.answerCbQuery('Forbidden');
+        return;
+      }
+
+      const already = touch.mutedAt != null;
+      if (!already) {
+        await prisma.santaPreseasonTouch.update({ where: { id: touch.id }, data: { mutedAt: new Date() } });
+        // Direct AnalyticsEvent write — the bot can't use trackProductEvent.
+        // sources:['bot'] in the PRODUCT_EVENTS registry. Props carry no PII.
+        prisma.analyticsEvent
+          .create({ data: { event: 'santa_preseason.muted', userId: user.id, props: { seasonYear: touch.seasonYear } } })
+          .catch(() => {});
+      }
+
+      await ctx.answerCbQuery(already ? t('santa_preseason_mute_already', locale) : t('santa_preseason_muted_toast', locale));
+
+      // Replace the inline keyboard: keep the CTA, drop the sps: mute row.
+      try {
+        const msg = ctx.callbackQuery.message;
+        const reply = (msg && 'reply_markup' in msg ? msg.reply_markup : undefined) as
+          | { inline_keyboard?: unknown[][] }
+          | undefined;
+        const original = (reply?.inline_keyboard ?? []) as Array<Array<Record<string, unknown>>>;
+        const filtered = original.filter(
+          (row) =>
+            !row.some(
+              (btn) =>
+                'callback_data' in btn && typeof btn.callback_data === 'string' && (btn.callback_data as string).startsWith('sps:'),
+            ),
+        );
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await ctx.editMessageReplyMarkup({ inline_keyboard: filtered as any });
+      } catch {
+        // Already edited or no message context — toast is enough.
+      }
+    } catch (err) {
+      logger.error({ err }, 'santa-preseason: sps callback failed');
+      await ctx.answerCbQuery('Error').catch(() => {});
+    }
+  });
+
   bot.command('paysupport', (ctx) => {
     const locale = getLocale(ctx);
     return ctx.reply(t('bot_paysupport', locale));

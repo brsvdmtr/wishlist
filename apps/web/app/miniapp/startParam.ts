@@ -12,6 +12,7 @@
 //   event-reminder       — evnt_<occasionId>
 //   research-survey      — srvy_<inviteId>
 //   item-open            — item_<itemId>
+//   santa-preseason      — spsn_<seasonYear>
 
 // Cuid-shape guard reused by every deep-link parser. cuids are
 // `^[a-z0-9]{20,30}$` in practice, but the looser regex below also accepts
@@ -107,4 +108,19 @@ export function parseItemOpenPayload(payload: string): ItemOpenPayload {
 
   if (!looksLikeId(itemId)) return { kind: 'malformed' };
   return { kind: 'ok', itemId };
+}
+
+export type SantaPreseasonPayload =
+  | { kind: 'ok'; seasonYear: number }
+  | { kind: 'malformed' };
+
+// E23 pre-season teaser deep link — `spsn_<seasonYear>`. seasonYear is the
+// canonical November-start year (4 digits). Routes the Mini App to the Santa
+// hub and lets the client emit santa_preseason.dm_clicked. Symmetric with
+// apps/api/src/telegram/deepLinks.ts::buildSantaPreseasonDeepLink.
+export function parseSantaPreseasonPayload(payload: string): SantaPreseasonPayload {
+  if (!payload.startsWith('spsn_')) return { kind: 'malformed' };
+  const rest = payload.slice('spsn_'.length);
+  if (!/^\d{4}$/.test(rest)) return { kind: 'malformed' };
+  return { kind: 'ok', seasonYear: Number.parseInt(rest, 10) };
 }

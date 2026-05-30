@@ -434,6 +434,22 @@ describe('sendSeasonalBroadcast', () => {
     expect(alertText).toContain('CLOSING_SOON');
     expect(alertText).toContain('2026');
   });
+
+  it('respects marketing opt-out null-safely (compliance fix)', async () => {
+    // Regression for the E23-bundled fix: the broadcast used to blast EVERY
+    // user with a telegramChatId, ignoring notifyMarketing. It now excludes
+    // explicit opt-outs — but NULL-SAFELY, so users with no UserProfile row
+    // (marketing default "on") still receive it. The `NOT: { is: false }` form
+    // is the whole point: `is: { notifyMarketing: true }` would have silently
+    // dropped every null-profile user.
+    shared.userFindMany.mockResolvedValueOnce([]);
+    await sendSeasonalBroadcast('PROMO', 2026);
+    const where = shared.userFindMany.mock.calls[0]![0].where;
+    expect(where).toEqual({
+      telegramChatId: { not: null },
+      NOT: { profile: { is: { notifyMarketing: false } } },
+    });
+  });
 });
 
 describe('maybeRunSeasonalEvents', () => {

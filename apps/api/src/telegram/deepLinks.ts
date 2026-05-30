@@ -16,6 +16,7 @@
 //   event-reminder       — evnt_<occasionId>
 //   research-survey      — srvy_<inviteId>
 //   item-open            — item_<itemId>
+//   santa-preseason      — spsn_<seasonYear>
 //
 // MINI_APP_URL fallback chain matches every other call site in index.ts:
 //   1. process.env.MINI_APP_URL (preferred, set in prod)
@@ -46,4 +47,11 @@ export function buildSurveyDeepLink(inviteId: string): string {
 
 export function buildItemOpenDeepLink(itemId: string): string {
   return `${getMiniAppUrl()}?startapp=item_${encodeURIComponent(itemId)}`;
+}
+
+/** E23 Santa pre-season teaser → opens the Mini App on the Santa hub and lets
+ *  the client emit santa_preseason.dm_clicked. seasonYear is the canonical
+ *  November-start year (digits only, no encoding needed). */
+export function buildSantaPreseasonDeepLink(seasonYear: number): string {
+  return `${getMiniAppUrl()}?startapp=spsn_${seasonYear}`;
 }

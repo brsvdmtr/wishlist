@@ -95,7 +95,7 @@ import {
   SECURITY_TOAST_CODES,
   CLIENT_BUG_CODES,
 } from './idempotency';
-import { parseReservationReminderPayload, parseEventReminderPayload, parseSurveyInvitePayload, parseItemOpenPayload, looksLikeId } from './startParam';
+import { parseReservationReminderPayload, parseEventReminderPayload, parseSurveyInvitePayload, parseItemOpenPayload, parseSantaPreseasonPayload, looksLikeId } from './startParam';
 // Tiny constant — the full RELEASE_NOTES array stays in the lazy ChangelogScreen
 // chunk; only the latest id is referenced from the main chunk (changelog "new!"
 // badge in settings). HAND-SYNC on release: see release-notes-latest.ts.
@@ -8112,6 +8112,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           })
           .catch(() => bootSetScreen('my-wishlists'))
           .finally(() => setSantaJoinLoading(false));
+        loadWishlists().catch(() => {});
+      } else if (startParam && startParam.startsWith('spsn_')) {
+        // E23 pre-season teaser DM (spsn_<seasonYear>) → land on the Santa hub
+        // and attribute the click. Click-through is the analytics join of
+        // santa_preseason.dm_sent (server) × santa_preseason.dm_clicked (here)
+        // on userId+seasonYear. The hub copes if the season isn't open yet
+        // (canCreate=false before Nov 15) — the teaser is "get ready", not "create".
+        const preseason = parseSantaPreseasonPayload(startParam);
+        if (preseason.kind === 'ok') {
+          trackEvent('santa_preseason.dm_clicked', { seasonYear: preseason.seasonYear });
+        }
+        trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
+        bootSetScreen('santa-hub');
         loadWishlists().catch(() => {});
       } else if (startParam && startParam.startsWith('gg_')) {
         // Deep link: group gift invite
