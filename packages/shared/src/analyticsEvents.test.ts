@@ -383,9 +383,45 @@ describe('PRODUCT_EVENTS — fixture snapshot', () => {
           ],
         },
         {
+          "action": "campaign_created",
+          "domain": "santa",
+          "name": "santa.campaign_created",
+          "pii": "userId-only",
+          "sources": [
+            "server",
+          ],
+        },
+        {
+          "action": "draw_completed",
+          "domain": "santa",
+          "name": "santa.draw_completed",
+          "pii": "userId-only",
+          "sources": [
+            "server",
+          ],
+        },
+        {
           "action": "gate_hit",
           "domain": "santa",
           "name": "santa.gate_hit",
+          "pii": "userId-only",
+          "sources": [
+            "server",
+          ],
+        },
+        {
+          "action": "invite_clicked",
+          "domain": "santa",
+          "name": "santa.invite_clicked",
+          "pii": "userId-only",
+          "sources": [
+            "server",
+          ],
+        },
+        {
+          "action": "joined",
+          "domain": "santa",
+          "name": "santa.joined",
           "pii": "userId-only",
           "sources": [
             "server",
@@ -407,6 +443,15 @@ describe('PRODUCT_EVENTS — fixture snapshot', () => {
           "pii": "none",
           "sources": [
             "client",
+          ],
+        },
+        {
+          "action": "reveal_opened",
+          "domain": "santa",
+          "name": "santa.reveal_opened",
+          "pii": "userId-only",
+          "sources": [
+            "server",
           ],
         },
         {

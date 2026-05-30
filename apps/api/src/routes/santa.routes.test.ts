@@ -8,12 +8,13 @@ import express from 'express';
 import request from 'supertest';
 
 const shared = vi.hoisted(() => ({
-  santaCampaign: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
-  santaParticipant: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
-  santaParticipantAlias: { findMany: vi.fn() },
-  santaRound: { findUnique: vi.fn(), findMany: vi.fn() },
-  santaAssignment: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
-  santaNotification: { findMany: vi.fn(), updateMany: vi.fn() },
+  santaCampaign: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+  santaParticipant: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
+  santaParticipantAlias: { findMany: vi.fn(), createMany: vi.fn() },
+  santaRound: { findUnique: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+  santaAssignment: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), createMany: vi.fn() },
+  santaExclusion: { findMany: vi.fn() },
+  santaNotification: { findMany: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
   santaHintRequest: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn(), create: vi.fn() },
   santaExclusionGroup: { findMany: vi.fn(), create: vi.fn() },
   santaExclusionGroupMember: { findMany: vi.fn() },
@@ -160,7 +161,7 @@ describe('santa — PRO gates (multi-wave / exclusions / exclusion groups)', () 
     });
   });
 
-  it('FREE user creating a CLASSIC campaign → no gate, no santa.gate_hit', async () => {
+  it('FREE user creating a CLASSIC campaign → no gate, emits santa.campaign_created', async () => {
     const { app } = makeApp();
     shared.santaCampaign.create.mockResolvedValue({
       id: 'c1', title: 'Office NY', status: 'DRAFT', inviteToken: 'tok',
@@ -169,10 +170,19 @@ describe('santa — PRO gates (multi-wave / exclusions / exclusion groups)', () 
     const res = await request(app).post('/santa/campaigns').send({ title: 'Office NY' });
 
     expect(res.status).toBe(201);
-    expect(trackProductEvent).not.toHaveBeenCalled();
+    // CLASSIC has no PRO gate — gate_hit must NOT fire…
+    expect(trackProductEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'santa.gate_hit' }),
+    );
+    // …but the funnel event does (top of the organizer funnel).
+    expect(trackProductEvent).toHaveBeenCalledWith({
+      event: 'santa.campaign_created',
+      userId: 'u-test',
+      props: { campaignId: 'c1', type: 'CLASSIC', seasonYear: 2026 },
+    });
   });
 
-  it('PRO user creating a MULTI_WAVE campaign → passes the gate (201)', async () => {
+  it('PRO user creating a MULTI_WAVE campaign → passes the gate (201), emits santa.campaign_created', async () => {
     const deps = buildDeps();
     deps.getUserEntitlement = vi.fn(async () => ({ isPro: true, plan: { code: 'PRO' } }));
     const { app } = makeApp(deps);
@@ -185,7 +195,16 @@ describe('santa — PRO gates (multi-wave / exclusions / exclusion groups)', () 
       .send({ title: 'Office NY', type: 'MULTI_WAVE' });
 
     expect(res.status).toBe(201);
-    expect(trackProductEvent).not.toHaveBeenCalled();
+    // Gate passes for PRO — no gate_hit…
+    expect(trackProductEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'santa.gate_hit' }),
+    );
+    // …and the funnel event carries the MULTI_WAVE type dimension.
+    expect(trackProductEvent).toHaveBeenCalledWith({
+      event: 'santa.campaign_created',
+      userId: 'u-test',
+      props: { campaignId: 'c1', type: 'MULTI_WAVE', seasonYear: 2026 },
+    });
   });
 
   it('FREE owner adding an exclusion pair → 402 pro_required + santa.gate_hit', async () => {
@@ -342,5 +361,241 @@ describe('santa — hint quota (POST /santa/campaigns/:id/hints)', () => {
     expect(res.status).toBe(200);
     expect(shared.santaHintRequest.count).not.toHaveBeenCalled();
     expect(shared.santaHintRequest.create).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Funnel analytics: santa.campaign_created / invite_clicked / joined /
+// draw_completed / reveal_opened. Five server-emitted events feeding the
+// seasonal Secret Santa funnel (docs/research/santa-funnel-sql.md). The two
+// santa.paywall_* events are client-emitted from the Mini App and already
+// live in PRODUCT_EVENTS; they are not exercised here.
+//
+// PRIVACY CONTRACT (task self-check #5): no giver↔receiver assignment
+// identity may reach AnalyticsEvent.props. sanitizeAnalyticsProps is a NAME
+// denylist that would NOT strip a key like `giverParticipantId`, so the
+// guarantee is enforced at the call-site and pinned by the last test below.
+// ─────────────────────────────────────────────────────────────────────────
+describe('santa — funnel analytics events', () => {
+  // Prop keys that would betray a giver↔receiver pairing — or leak the
+  // free-text gift note carried on the reveal assignment row — if they ever
+  // surfaced in props.
+  const FORBIDDEN_KEYS = [
+    'giver', 'receiver', 'giverid', 'receiverid', 'giverparticipantid',
+    'receiverparticipantid', 'assignments', 'assignmentid', 'alias', 'giveralias',
+    'giftnote', 'giftnotetext',
+  ];
+
+  // Loose shape over the typed trackProductEvent call args, filtered to santa.*.
+  function santaProductEventCalls() {
+    return vi.mocked(trackProductEvent).mock.calls
+      .map((c) => c[0] as { event?: string; userId?: string; props?: Record<string, unknown> })
+      .filter((a) => typeof a.event === 'string' && a.event.startsWith('santa.'));
+  }
+
+  // Scan every santa.* event the just-exercised handler emitted for a leak:
+  // neither a forbidden KEY (a pairing-shaped prop name) nor a forbidden VALUE
+  // (a giver/receiver/participant id that is in scope in the handler under test
+  // and must not reach props). Centralises the scan so each privacy test only
+  // declares its own scenario secrets.
+  function assertNoIdentityLeak(forbiddenValues: string[]) {
+    const calls = santaProductEventCalls();
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) {
+      const props = (call.props ?? {}) as Record<string, unknown>;
+      const keys = Object.keys(props).map((k) => k.toLowerCase());
+      for (const forbidden of FORBIDDEN_KEYS) {
+        expect(keys).not.toContain(forbidden);
+      }
+      const serialized = JSON.stringify(props);
+      for (const v of forbiddenValues) {
+        expect(serialized).not.toContain(v);
+      }
+    }
+  }
+
+  it('campaign creation writes santa.campaign_created', async () => {
+    const { app } = makeApp();
+    shared.santaCampaign.create.mockResolvedValue({
+      id: 'c-fun', title: 'NY', status: 'DRAFT', inviteToken: 'tok',
+      type: 'CLASSIC', seasonYear: 2026, createdAt: new Date(),
+    });
+
+    const res = await request(app).post('/santa/campaigns').send({ title: 'NY' });
+
+    expect(res.status).toBe(201);
+    expect(trackProductEvent).toHaveBeenCalledWith({
+      event: 'santa.campaign_created',
+      userId: 'u-test',
+      props: { campaignId: 'c-fun', type: 'CLASSIC', seasonYear: 2026 },
+    });
+  });
+
+  it('valid invite resolution writes santa.invite_clicked', async () => {
+    const { app } = makeApp();
+    shared.santaCampaign.findUnique.mockResolvedValue({
+      id: 'c-inv', title: 'NY', description: null, status: 'OPEN', type: 'CLASSIC',
+      seasonYear: 2026, minBudget: null, maxBudget: null, currency: 'RUB',
+      owner: { firstName: 'Org', profile: null }, _count: { participants: 3 },
+    });
+    shared.santaParticipant.findFirst.mockResolvedValue(null); // not already joined
+
+    const res = await request(app).get('/santa/invite/tok-123');
+
+    expect(res.status).toBe(200);
+    expect(trackProductEvent).toHaveBeenCalledWith({
+      event: 'santa.invite_clicked',
+      userId: 'u-test',
+      props: { campaignId: 'c-inv', alreadyJoined: false },
+    });
+  });
+
+  it('dead invite (404) does NOT emit santa.invite_clicked', async () => {
+    const { app } = makeApp();
+    shared.santaCampaign.findUnique.mockResolvedValue(null); // unknown token
+
+    const res = await request(app).get('/santa/invite/nope');
+
+    expect(res.status).toBe(404);
+    expect(trackProductEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'santa.invite_clicked' }),
+    );
+  });
+
+  it('fresh join writes santa.joined (rejoin:false)', async () => {
+    const { app } = makeApp();
+    shared.santaCampaign.findUnique.mockResolvedValue({ status: 'OPEN', ownerId: 'owner-x' });
+    shared.santaParticipant.findUnique.mockResolvedValue(null); // not yet a participant
+    shared.santaParticipant.create.mockResolvedValue({ id: 'p-new' });
+    shared.santaNotification.create.mockResolvedValue({}); // owner-notify (fire-and-forget)
+
+    const res = await request(app).post('/santa/campaigns/c-join/join').send({});
+
+    expect(res.status).toBe(201);
+    expect(trackProductEvent).toHaveBeenCalledWith({
+      event: 'santa.joined',
+      userId: 'u-test',
+      props: { campaignId: 'c-join', rejoin: false },
+    });
+  });
+
+  it('idempotent already-JOINED re-POST does NOT re-emit santa.joined', async () => {
+    const { app } = makeApp();
+    shared.santaCampaign.findUnique.mockResolvedValue({ status: 'OPEN', ownerId: 'owner-x' });
+    shared.santaParticipant.findUnique.mockResolvedValue({ id: 'p-old', status: 'JOINED' });
+
+    const res = await request(app).post('/santa/campaigns/c-join/join').send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, alreadyJoined: true });
+    expect(trackProductEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'santa.joined' }),
+    );
+  });
+
+  it('draw writes santa.draw_completed with aggregate counts only (no pairing leak)', async () => {
+    const { app } = makeApp();
+    // Sentinel ids: drawRandomAssignments builds an in-scope `assignments` array
+    // of giver→receiver pairs from these, three lines above the emit. The exact
+    // props assertion pins the shape; assertNoIdentityLeak proves none of the
+    // pair ids leaked — the structurally riskiest site, per review finding #1.
+    shared.santaCampaign.findUnique.mockResolvedValue({ ownerId: 'u-test', status: 'LOCKED', id: 'c-draw' });
+    shared.santaParticipant.findMany.mockResolvedValue([
+      { id: 'pid-giver-SECRET-1', userId: 'uid-SECRET-1', user: { firstName: 'A' } },
+      { id: 'pid-giver-SECRET-2', userId: 'uid-SECRET-2', user: { firstName: 'B' } },
+    ]);
+    shared.santaExclusion.findMany.mockResolvedValue([]);
+    shared.santaExclusionGroup.findMany.mockResolvedValue([]);
+    shared.santaCampaign.updateMany.mockResolvedValue({ count: 1 });
+    shared.santaRound.findFirst.mockResolvedValue(null); // no pending round, no prior round
+    shared.santaRound.create.mockResolvedValue({ id: 'r-1', roundNumber: 1, campaignId: 'c-draw', drawStatus: 'IN_PROGRESS' });
+    shared.santaAssignment.createMany.mockResolvedValue({ count: 2 });
+    shared.santaParticipantAlias.createMany.mockResolvedValue({ count: 0 });
+    shared.santaRound.update.mockResolvedValue({});
+    shared.santaCampaign.update.mockResolvedValue({});
+
+    const res = await request(app).post('/santa/campaigns/c-draw/draw').send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, assignmentCount: 2 });
+    expect(trackProductEvent).toHaveBeenCalledWith({
+      event: 'santa.draw_completed',
+      userId: 'u-test',
+      props: { campaignId: 'c-draw', roundId: 'r-1', roundNumber: 1, participantCount: 2, assignmentCount: 2 },
+    });
+    assertNoIdentityLeak(['pid-giver-SECRET-1', 'pid-giver-SECRET-2', 'uid-SECRET-1', 'uid-SECRET-2']);
+  });
+
+  it('draw on an existing PENDING round emits that round number (multi-wave path)', async () => {
+    const { app } = makeApp();
+    // Subsequent-round path: a PENDING round already exists, so the handler
+    // UPDATEs it (no create) and round.roundNumber comes from the findFirst row.
+    // Pins that the emit reads the number off the existing round, not create.
+    shared.santaCampaign.findUnique.mockResolvedValue({ ownerId: 'u-test', status: 'LOCKED', id: 'c-draw' });
+    shared.santaParticipant.findMany.mockResolvedValue([
+      { id: 'p1', userId: 'u1', user: { firstName: 'A' } },
+      { id: 'p2', userId: 'u2', user: { firstName: 'B' } },
+    ]);
+    shared.santaExclusion.findMany.mockResolvedValue([]);
+    shared.santaExclusionGroup.findMany.mockResolvedValue([]);
+    shared.santaCampaign.updateMany.mockResolvedValue({ count: 1 });
+    shared.santaRound.findFirst.mockResolvedValue({ id: 'r-2', roundNumber: 2, campaignId: 'c-draw', drawStatus: 'PENDING' });
+    shared.santaAssignment.createMany.mockResolvedValue({ count: 2 });
+    shared.santaParticipantAlias.createMany.mockResolvedValue({ count: 0 });
+    shared.santaRound.update.mockResolvedValue({});
+    shared.santaCampaign.update.mockResolvedValue({});
+
+    const res = await request(app).post('/santa/campaigns/c-draw/draw').send({});
+
+    expect(res.status).toBe(200);
+    expect(shared.santaRound.create).not.toHaveBeenCalled(); // existing round → UPDATE path
+    expect(trackProductEvent).toHaveBeenCalledWith({
+      event: 'santa.draw_completed',
+      userId: 'u-test',
+      props: { campaignId: 'c-draw', roundId: 'r-2', roundNumber: 2, participantCount: 2, assignmentCount: 2 },
+    });
+  });
+
+  it('reveal writes santa.reveal_opened (isFirstReveal:true)', async () => {
+    const { app } = makeApp();
+    shared.santaParticipant.findUnique.mockResolvedValue({ id: 'p-recv', userId: 'u-test', status: 'JOINED' });
+    shared.santaCampaign.findUnique.mockResolvedValue({ status: 'ACTIVE', currentRoundId: 'r-1' });
+    shared.santaAssignment.findUnique.mockResolvedValue({
+      id: 'a-1', giftStatus: 'RECEIVED', revealedAt: null, giftNote: null,
+      giver: { id: 'p-giver-SECRET' },
+    });
+    shared.santaAssignment.update.mockResolvedValue({});
+    shared.santaParticipantAlias.findMany.mockResolvedValue([]);
+
+    const res = await request(app).get('/santa/campaigns/c-rev/reveal');
+
+    expect(res.status).toBe(200);
+    expect(trackProductEvent).toHaveBeenCalledWith({
+      event: 'santa.reveal_opened',
+      userId: 'u-test',
+      props: { campaignId: 'c-rev', isFirstReveal: true },
+    });
+  });
+
+  it('reveal handler leaks no giver identity in any santa.* event props', async () => {
+    const { app } = makeApp();
+    // Reveal is identity-dense — the assignment row carries the giver id and the
+    // giver alias is resolved (after the emit). Neither may reach props.
+    shared.santaParticipant.findUnique.mockResolvedValue({ id: 'p-recv', userId: 'u-test', status: 'JOINED' });
+    shared.santaCampaign.findUnique.mockResolvedValue({ status: 'ACTIVE', currentRoundId: 'r-1' });
+    // Real in-scope secrets: the giver participant id AND a free-text gift note.
+    // Both are read by the handler (giftNote into the HTTP response) — the scan
+    // proves neither reaches analytics props, so the assertion is non-tautological.
+    shared.santaAssignment.findUnique.mockResolvedValue({
+      id: 'a-1', giftStatus: 'RECEIVED', revealedAt: null, giftNote: 'SECRET-NOTE-TEXT',
+      giver: { id: 'p-giver-SECRET' },
+    });
+    shared.santaAssignment.update.mockResolvedValue({});
+    shared.santaParticipantAlias.findMany.mockResolvedValue([]);
+
+    const res = await request(app).get('/santa/campaigns/c-rev/reveal');
+    expect(res.status).toBe(200);
+
+    assertNoIdentityLeak(['p-giver-SECRET', 'SECRET-NOTE-TEXT']);
   });
 });

@@ -507,6 +507,62 @@ export const PRODUCT_EVENTS = [
     sources: ['client'],
     pii: 'none',
   },
+  // ── Secret Santa funnel (server-emitted) ──
+  // Five-stage seasonal funnel for the Secret Santa flow, complementing the
+  // PRO-gate (santa.gate_hit) and paywall (santa.paywall_*) events above.
+  // All five are server-authoritative — emitted by the route handlers in
+  // apps/api/src/routes/santa.routes.ts, never trusted from a client: the
+  // `santa.` domain is NOT in ANALYTICS_EVENT_PREFIXES, and sources:['server']
+  // hard-denies them at /tg/telemetry (isServerOnlyProductEvent). props carry
+  // ONLY campaign/round-scoped ids, counts, and booleans — NEVER giver↔receiver
+  // assignment identity, so the anonymity guarantee of the draw is preserved
+  // in the (unencrypted, ad-hoc-queried) AnalyticsEvent table. Funnel readout
+  // SQL + privacy notes: docs/research/santa-funnel-sql.md.
+  {
+    name: 'santa.campaign_created',
+    domain: 'santa',
+    action: 'campaign_created',
+    description:
+      'Organizer created a Secret Santa campaign (status DRAFT). Top of the organizer funnel. Emitted by POST /tg/santa/campaigns after the SantaCampaign row is written. props: campaignId, type (CLASSIC | MULTI_WAVE), seasonYear.',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'santa.invite_clicked',
+    domain: 'santa',
+    action: 'invite_clicked',
+    description:
+      'A user opened a Secret Santa invite link and the campaign preview resolved successfully. Top of the invitee funnel. Emitted by GET /tg/santa/invite/:token — only on a valid, joinable resolution (200), never on a dead / cancelled / closed invite. props: campaignId, alreadyJoined.',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'santa.joined',
+    domain: 'santa',
+    action: 'joined',
+    description:
+      'A participant joined a campaign — a real transition to status JOINED (fresh join or rejoin after leaving). Emitted by POST /tg/santa/campaigns/:id/join. The idempotent already-JOINED re-POST does NOT re-emit. props: campaignId, rejoin (true for a left→JOINED transition).',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'santa.draw_completed',
+    domain: 'santa',
+    action: 'draw_completed',
+    description:
+      'The organizer ran the draw and assignments were persisted (campaign → ACTIVE). Emitted by POST /tg/santa/campaigns/:id/draw inside the success path, AFTER the assignment transaction commits. props: campaignId, roundId, roundNumber, participantCount, assignmentCount — AGGREGATE COUNTS ONLY. The giver→receiver pairs are NEVER included; leaking them would break draw anonymity.',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'santa.reveal_opened',
+    domain: 'santa',
+    action: 'reveal_opened',
+    description:
+      'A receiver opened their post-gift reveal (their own giftStatus is RECEIVED) on GET /tg/santa/campaigns/:id/reveal. Bottom of the funnel. props: campaignId, isFirstReveal (true on the first-ever open, tracked via SantaAssignment.revealedAt). userId is the receiver, acting on their own assignment — the giver identity (even the anonymised alias) is NEVER put in props, so the reveal event cannot reconstruct a pairing.',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
   // ── PRO cancel anti-churn sheet (client-side funnel) ──
   // Three events form the cancel-flow funnel: sheet impression → explicit
   // "Keep PRO" tap → confirmed cancel. Distinct from the legacy
