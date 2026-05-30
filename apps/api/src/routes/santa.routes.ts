@@ -972,6 +972,13 @@ export function registerSantaRouter(deps: SantaRouterDeps): Router {
       data: { campaignId: campaign.id, actorId: user.id, action: 'campaign_created' },
     });
 
+    // Funnel: top of the organizer funnel. Campaign-scoped props only — no PII.
+    trackProductEvent({
+      event: 'santa.campaign_created',
+      userId: user.id,
+      props: { campaignId: campaign.id, type: campaign.type, seasonYear: campaign.seasonYear },
+    });
+
     return res.status(201).json({ campaign });
   }));
 
@@ -1510,6 +1517,25 @@ export function registerSantaRouter(deps: SantaRouterDeps): Router {
         prisma.santaCampaign.update({ where: { id: campaignId }, data: { status: 'ACTIVE', currentRoundId: round.id } }),
       ]);
 
+      // Funnel: emitted immediately after the assignment transaction COMMITS
+      // (campaign → ACTIVE) and BEFORE the fallible, non-transactional audit-log
+      // write below. A draw that committed must register in the funnel even if a
+      // later write throws into the catch (which rolls the campaign back to
+      // LOCKED and 500s — a pre-existing wart this ordering sidesteps for the
+      // funnel signal). AGGREGATE COUNTS ONLY: the giver→receiver pairs in
+      // `assignments` are never emitted (would break draw anonymity).
+      trackProductEvent({
+        event: 'santa.draw_completed',
+        userId: user.id,
+        props: {
+          campaignId,
+          roundId,
+          roundNumber: round.roundNumber,
+          participantCount: participants.length,
+          assignmentCount: assignments.length,
+        },
+      });
+
       // 8. Audit log
       await prisma.santaAdminAuditLog.create({
         data: { campaignId, actorId: user.id, action: 'draw_completed', payload: { drawJobId, assignmentCount: assignments.length } },
@@ -1597,6 +1623,14 @@ export function registerSantaRouter(deps: SantaRouterDeps): Router {
       ownerAvatarUrl: campaign.owner.profile?.avatarUrl || null,
     };
 
+    // Funnel: top of the invitee funnel — only a valid, joinable resolution
+    // counts (dead / cancelled / closed invites returned earlier). No PII.
+    trackProductEvent({
+      event: 'santa.invite_clicked',
+      userId: user.id,
+      props: { campaignId: campaign.id, alreadyJoined: !!alreadyJoined },
+    });
+
     return res.json({ campaign: campaignPreview, alreadyJoined: !!alreadyJoined });
   }));
 
@@ -1627,6 +1661,12 @@ export function registerSantaRouter(deps: SantaRouterDeps): Router {
       });
       // System message: rejoined — no real name in payload
       void createSystemMessage(campaignId, 'participant_joined', {}).catch(() => {});
+      // Funnel: a left→JOINED transition is a real join. No PII.
+      trackProductEvent({
+        event: 'santa.joined',
+        userId: user.id,
+        props: { campaignId, rejoin: true },
+      });
       return res.json({ ok: true });
     }
 
@@ -1640,6 +1680,13 @@ export function registerSantaRouter(deps: SantaRouterDeps): Router {
     void prisma.santaNotification.create({
       data: { campaignId, userId: campaign.ownerId, type: 'JOINED', payload: { participantId: newParticipant.id } },
     }).catch(() => {});
+
+    // Funnel: fresh join — a real transition to JOINED. No PII.
+    trackProductEvent({
+      event: 'santa.joined',
+      userId: user.id,
+      props: { campaignId, rejoin: false },
+    });
 
     return res.status(201).json({ ok: true });
   }));
@@ -2663,6 +2710,15 @@ export function registerSantaRouter(deps: SantaRouterDeps): Router {
         data: { revealedAt: new Date() },
       }).catch(() => { /* non-fatal — revealedAt is cosmetic tracking */ });
     }
+
+    // Funnel: bottom of the funnel. userId is the RECEIVER acting on their own
+    // assignment; the giver identity (even the anonymised alias resolved below)
+    // is deliberately kept OUT of props so the event cannot reconstruct a pair.
+    trackProductEvent({
+      event: 'santa.reveal_opened',
+      userId: user.id,
+      props: { campaignId, isFirstReveal },
+    });
 
     // Reveal stays alias-only forever — no real identity disclosed, not even post-reveal
     const aliasMap = await loadSantaAliasMap(roundId);
