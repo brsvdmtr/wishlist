@@ -258,6 +258,7 @@ model User {
 
   dailyActivity            UserDailyActivity[]
   experimentAssignments    ExperimentAssignment[]
+  santaPreseasonTouches    SantaPreseasonTouch[]
 }
 
 model Wishlist {
@@ -1031,6 +1032,53 @@ model SantaSeasonalBroadcastLog {
   userCount Int      @default(0)
 
   @@unique([year, type])
+}
+
+/// E23 Santa pre-season teaser DM — per-(user, season) ledger.
+/// One row per recipient per season: the dedup guarantee (`@@unique([userId, seasonYear])`
+/// = "one user never gets a duplicate"), the A/B variant record, the send-state, and the
+/// per-touch mute. CONTROL users get a row with `variant='control'`, `stopReason='control'`,
+/// and no send. The >15%-mute stop-rule counts this table directly (sentAt / mutedAt) rather
+/// than denormalized counters, so it stays race-free across the API + bot processes.
+/// Click-through is the analytics join of santa_preseason.dm_sent × santa_preseason.dm_clicked
+/// on userId+seasonYear — no clickedAt column needed.
+model SantaPreseasonTouch {
+  id           String    @id @default(cuid())
+  userId       String
+  /// Season start year (November year), via getSeasonStartYear(now) — e.g. 2026.
+  seasonYear   Int
+  /// 'treatment' (gets the DM) | 'control' (tracked, no DM).
+  variant      String
+  /// Primary matched segment: 'past_santa' | 'social' | 'active_owner'.
+  segment      String
+  scheduledFor DateTime
+  sentAt       DateTime?
+  delivered    Boolean   @default(false)
+  /// null on success; otherwise control | bot_blocked | chat_not_found | delivery_failed | broadcast_stopped.
+  stopReason   String?
+  mutedAt      DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, seasonYear])
+  @@index([seasonYear, variant])
+  @@index([seasonYear, sentAt])
+  @@index([seasonYear, mutedAt])
+}
+
+/// E23 phased-broadcast latch — one row per season. Status only (no counters; the stop-rule
+/// reads SantaPreseasonTouch). `running` → `completed` (pool drained / past the Nov-14 window)
+/// or `stopped` (mute rate crossed the kill-switch threshold). `seasonYear` is the PK so it
+/// doubles as the write-once lock.
+model SantaPreseasonBroadcast {
+  seasonYear  Int       @id
+  status      String    @default("running")
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  stopReason  String?
+  updatedAt   DateTime  @updatedAt
 }
 
 // Optional per-year admin override. When a row exists for seasonYear it takes full priority

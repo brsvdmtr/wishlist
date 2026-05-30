@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseReservationReminderPayload, parseEventReminderPayload, parseSurveyInvitePayload, parseItemOpenPayload } from './startParam';
+import { parseReservationReminderPayload, parseEventReminderPayload, parseSurveyInvitePayload, parseItemOpenPayload, parseSantaPreseasonPayload } from './startParam';
 
 describe('parseReservationReminderPayload', () => {
   it('parses a well-formed rrem_<itemId>__m_<metaId> payload', () => {
@@ -227,5 +227,32 @@ describe('parseItemOpenPayload', () => {
     ]) {
       expect(parseItemOpenPayload(other)).toEqual({ kind: 'malformed' });
     }
+  });
+});
+
+describe('parseSantaPreseasonPayload', () => {
+  it('parses a well-formed spsn_<seasonYear> payload to a number', () => {
+    expect(parseSantaPreseasonPayload('spsn_2026')).toEqual({ kind: 'ok', seasonYear: 2026 });
+  });
+
+  it('round-trips the wire format produced by buildSantaPreseasonDeepLink', () => {
+    // Contract test — symmetric with apps/api/src/telegram/deepLinks.ts.
+    const seasonYear = 2026;
+    expect(parseSantaPreseasonPayload(`spsn_${seasonYear}`)).toEqual({ kind: 'ok', seasonYear });
+  });
+
+  it('rejects payloads without the spsn_ prefix', () => {
+    expect(parseSantaPreseasonPayload('santa_join_token123')).toEqual({ kind: 'malformed' });
+    expect(parseSantaPreseasonPayload('srvy_cmaa1bb2ccdd')).toEqual({ kind: 'malformed' });
+    expect(parseSantaPreseasonPayload('foo')).toEqual({ kind: 'malformed' });
+    expect(parseSantaPreseasonPayload('')).toEqual({ kind: 'malformed' });
+  });
+
+  it('rejects a non-4-digit season (the strict \\d{4} guard)', () => {
+    expect(parseSantaPreseasonPayload('spsn_')).toEqual({ kind: 'malformed' });
+    expect(parseSantaPreseasonPayload('spsn_202')).toEqual({ kind: 'malformed' });
+    expect(parseSantaPreseasonPayload('spsn_20260')).toEqual({ kind: 'malformed' });
+    expect(parseSantaPreseasonPayload('spsn_20a6')).toEqual({ kind: 'malformed' });
+    expect(parseSantaPreseasonPayload('spsn_ 026')).toEqual({ kind: 'malformed' });
   });
 });

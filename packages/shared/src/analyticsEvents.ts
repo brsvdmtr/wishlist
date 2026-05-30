@@ -705,6 +705,39 @@ export const PRODUCT_EVENTS = [
     sources: ['client'],
     pii: 'none',
   },
+  // ── E23 Santa pre-season teaser DM (santa-preseason-dm experiment) ──
+  // One DM near Nov 1 to past-Santa / active-owner / social-active users,
+  // priming Santa campaign creation once the season opens (Nov 15). The success
+  // metric santa.campaign_created already lives in the Santa funnel block above
+  // (added by the Secret Santa funnel PR); E23 only adds the DM lifecycle events.
+  // See docs/research/experiments/santa-preseason-dm-e23.md.
+  {
+    name: 'santa_preseason.dm_sent',
+    domain: 'santa_preseason',
+    action: 'dm_sent',
+    description:
+      'Pre-season teaser DM delivered to a TREATMENT user by the phased broadcast wave. Server-authoritative — emitted by runPreseasonWave only after Telegram acknowledges delivery (never on a control row, never on a send failure). props: seasonYear, segment (past_santa | social | active_owner).',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'santa_preseason.dm_clicked',
+    domain: 'santa_preseason',
+    action: 'dm_clicked',
+    description:
+      'User tapped the teaser DM CTA and the Mini App opened on the spsn_<seasonYear> deep link. Client UI signal — emitted from the Mini App telemetry buffer. Click-through is derived by joining this against santa_preseason.dm_sent on userId+seasonYear. props: seasonYear.',
+    sources: ['client'],
+    pii: 'none',
+  },
+  {
+    name: 'santa_preseason.muted',
+    domain: 'santa_preseason',
+    action: 'muted',
+    description:
+      'User tapped the "🔕 mute" button on the teaser DM. Emitted by the bot callback (sps:<touchId>) via direct AnalyticsEvent write. Drives the >15%-mute kill-switch (the wave stops sending when the settled-cohort mute rate crosses the threshold). props: seasonYear.',
+    sources: ['bot'],
+    pii: 'userId-only',
+  },
 ] as const satisfies readonly ProductEventDescriptor[];
 
 export type ProductEventName = (typeof PRODUCT_EVENTS)[number]['name'];

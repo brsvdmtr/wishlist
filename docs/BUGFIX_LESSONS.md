@@ -5,6 +5,63 @@ New entries go at the top.
 
 ---
 
+## 2026-05-30 — Santa seasonal broadcast ignored marketing opt-out (compliance gap, fixed with E23)
+
+### Symptom
+
+While building E23 (Santa pre-season teaser DM), discovered that the existing
+`sendSeasonalBroadcast('PROMO'|'CLOSING_SOON')`
+([apps/api/src/services/santa-season.ts](../apps/api/src/services/santa-season.ts))
+— which DMs users on Nov 1 / Feb 1 — queried `where: { telegramChatId: { not: null } }`
+with **no marketing opt-out filter**. Every user with a bot chat got the
+broadcast, including PRO users who had explicitly turned `notifyMarketing` off in
+Settings. The lifecycle / pro-renewal / research-survey DM paths all honor
+`notifyMarketing`; this one silently didn't.
+
+### Root cause
+
+The seasonal broadcast predates the notification-preferences contract and was
+never retrofitted. It's a different code path from the lifecycle stack, so the
+"respect `notifyMarketing`" rule that the win-back DMs follow never propagated to
+it. No test asserted the opt-out filter, so the gap was invisible.
+
+### Lesson
+
+- **A marketing-class outbound is defined by intent, not by which module sends
+  it.** Any DM a user would reasonably call "promotional" (season teasers,
+  win-back, upsells) must gate on `notifyMarketing`. Grep for *every*
+  `prisma.user.findMany`/`findUnique` that feeds a `sendTg*`/`sendLifecycleDM`
+  and confirm the opt-out filter is present — don't assume the lifecycle stack is
+  the only sender.
+- **Use the NULL-SAFE opt-out form.** `NOT: { profile: { is: { notifyMarketing: false } } }`,
+  **not** `profile: { is: { notifyMarketing: true } }`. The relation is optional
+  (`profile UserProfile?`); the `is: true` form silently drops every user with no
+  `UserProfile` row (their marketing default is "on"), shrinking the audience
+  invisibly. The research-survey recipient query uses `is: { notifyMarketing: true }`
+  *on purpose* (it also requires other profile fields), but a broad broadcast
+  must reach null-profile users.
+
+### Rule
+
+Every user-segment query that feeds a marketing/promotional DM filters
+`NOT: { profile: { is: { notifyMarketing: false } } }`, and ships with a test
+asserting the filter shape. Opt-out is non-negotiable and null-safe.
+
+### Better code
+
+```ts
+// before — blasts everyone, opt-outs included
+where: { telegramChatId: { not: null } }
+// after — honors opt-out, null-safe (null-profile users still reached)
+where: { telegramChatId: { not: null }, NOT: { profile: { is: { notifyMarketing: false } } } }
+```
+
+Regression test: `sendSeasonalBroadcast` → "respects marketing opt-out
+null-safely" in
+[apps/api/src/services/santa-season.test.ts](../apps/api/src/services/santa-season.test.ts).
+
+---
+
 ## 2026-05-30 — Billing reconciler false-positived a paid GIFT_CALENDAR sub as "no payment trail"
 
 ### Symptom

@@ -383,6 +383,33 @@ describe('PRODUCT_EVENTS — fixture snapshot', () => {
           ],
         },
         {
+          "action": "dm_clicked",
+          "domain": "santa_preseason",
+          "name": "santa_preseason.dm_clicked",
+          "pii": "none",
+          "sources": [
+            "client",
+          ],
+        },
+        {
+          "action": "dm_sent",
+          "domain": "santa_preseason",
+          "name": "santa_preseason.dm_sent",
+          "pii": "userId-only",
+          "sources": [
+            "server",
+          ],
+        },
+        {
+          "action": "muted",
+          "domain": "santa_preseason",
+          "name": "santa_preseason.muted",
+          "pii": "userId-only",
+          "sources": [
+            "bot",
+          ],
+        },
+        {
           "action": "campaign_created",
           "domain": "santa",
           "name": "santa.campaign_created",
