@@ -5,6 +5,82 @@ New entries go at the top.
 
 ---
 
+## 2026-05-30 — Fake-interactive «coming soon» placeholders в проде (доверие к UI)
+
+### Ошибка
+
+В проде висели «coming soon» заглушки, которые ВЫГЛЯДЕЛИ кликабельными, но
+вели только в toast «скоро»:
+- StatRow на главной — плитка «Истекает» (`expiringCount`) была `<button>` с
+  `onClick → toast_section_coming_soon('Истекает')`. Выделенной «expiring»-вьюхи
+  нет и не планируется (для этого уже есть PRO smart-фильтр в поиске).
+- Список «Мои брони» — шапка-владелец (avatar + имя) была `cursor:pointer`
+  c `onClick → toast_profile_coming` («Профиль появится в следующих версиях»).
+  Публичного профиля по этому пути нет.
+- `formatBirthday(null)` в Settings (`SettingsRoot.tsx`) возвращал
+  `settings_coming_soon` («Скоро в следующих обновлениях») как заглушку для
+  НЕзаданной даты — это не «скоро», а «не задано» (ветка к тому же недостижима).
+- Мёртвые i18n-ключи `wl_reorder_soon` / `cancel_feat_soon` — 0 ссылок в коде,
+  но жили во всех 6 локалях.
+
+Симптом не «краш», а эрозия доверия: пользователь несколько релизов видит
+«скоро» → перестаёт верить интерфейсу и не возвращается к плитке/кнопке.
+
+### Урок
+
+- **Заглушка, которая не зашипится в ближайшие ~2 недели, — это не фича, а
+  анти-фича.** Лучше показать пассивную цифру (`<div>` без `onClick`), чем
+  фейково-кликабельный тупик в toast.
+- **Удалять надо ПОЛНЫЙ след:** хендлер + i18n-ключ во всех 6 локалях +
+  запись в `i18n.resolver.test.ts → CATALOGUE_KEYS` (иначе resolver-тест
+  падает: ключ в каталоге есть, в словаре нет).
+- **Сверяй живой render-site, а не имя файла.** `formatBirthday` живёт в
+  `SettingsRoot.tsx` — после PR #28 это РЕНДЕРЯЩАЯСЯ копия (`<SettingsRoot>` в
+  MiniApp.tsx; inline IIFE удалён). См. отдельный урок ниже о dead-copy.
+- **Co-mingled дерево + разъезд с origin/main.** Локальный HEAD отставал на 15
+  коммитов; правки делались на устаревшем дереве. Деплой — ТОЛЬКО через worktree
+  от `origin/main`, перенося лишь свой фичевый дифф; никаких stash/reset общего
+  рабочего стола (см. feedback_isolate_deploy_comingled_tree).
+
+### Правило
+
+1. Перед коммитом UI — `grep -rniE "coming soon|скоро|_soon|profile_coming"`
+   по `apps/web` И `apps/api`. Каждый хит классифицировать: реальные данные
+   (smart-фильтр, дни рождения, сезон, maintenance, feature-flag rollout) —
+   оставить; фейк-интерактив в toast — убрать/обездвижить.
+2. Любой `onClick`, который ведёт только в toast «скоро», — запрещён в проде.
+   Либо шипим фичу, либо делаем элемент не-интерактивным (без `onClick`,
+   `cursor:default`, `<div>` вместо `<button>`).
+3. FAQ-«роадмап» допустим, только если он ЯВНО не обещает сроков/фич
+   (наши q49/q50: «конкретные обещания по фичам не даём, чтобы не подводить»).
+
+### Лучший код
+
+```tsx
+// ❌ До: плитка-статистика прикидывается кнопкой, ведёт в «скоро»
+const comingSoon = (label: string) => pushToast(t('toast_section_coming_soon', locale, { label }), 'info');
+{ n: expiringCount, l: t('sort_label_expiring', locale), onClick: () => comingSoon(t('sort_button_expiring', locale)) }
+// ...все плитки — <button> с одним общим tileStyle (cursor:pointer на всех)
+
+// ✅ После: нет вьюхи — нет кликабельности; пассивная цифра как <div>
+{ n: expiringCount, l: t('sort_label_expiring', locale), onClick: undefined }
+// ... baseStyle = только визуал; interaction-props (transition,
+//     WebkitTapHighlightColor) — лишь в ветке <button>:
+return tile.onClick
+  ? <button style={{ ...baseStyle, cursor: 'pointer', transition: '…' }}>{inner}</button>
+  : <div style={{ ...baseStyle, cursor: 'default' }}>{inner}</div>;
+```
+
+```tsx
+// ❌ До: шапка владельца брони — фейковый переход в «профиль скоро»
+<div style={{ cursor: 'pointer' }} onClick={() => pushToast(t('toast_profile_coming', locale))}>…</div>
+// ✅ После: просто заголовок группы, без ложной интерактивности
+<div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>…</div>
+```
+
+**Самопроверка:** `pnpm --filter @wishlist/shared test` (resolver+parity),
+`tsc` web+api по 0 ошибок, `grep` фейк-плейсхолдеров = 0.
+
 ## 2026-05-30 — Settings screen rendered from a DEAD copy — extraction landed the import + orphaned file but never the render site
 
 ### Symptom

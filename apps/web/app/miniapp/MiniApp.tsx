@@ -12841,10 +12841,6 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               const days = (new Date(wl.deadline).getTime() - Date.now()) / 86400000;
               return days > 0 && days <= 14;
             }).length;
-            const comingSoon = (label: string) => pushToast(
-              t('toast_section_coming_soon', locale, { label }),
-              'info',
-            );
             // Russian-first labels — mini-app's primary locale.
             // t() falls back to the key string when translation missing,
             // so `|| fallback` never kicks in for untranslated keys. Hardcoding
@@ -12891,7 +12887,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 n: expiringCount,
                 l: t('sort_label_expiring', locale),
                 tone: 'warning' as const,
-                onClick: () => comingSoon(t('sort_button_expiring', locale)),
+                // No tap target: there's no dedicated "expiring" view yet, so this
+                // tile is a passive stat rather than a "coming soon" dead end.
+                onClick: undefined,
               },
             ];
             const toneColor = (tone: 'neutral' | 'accent' | 'success' | 'warning') =>
@@ -12901,37 +12899,56 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               : 'var(--wb-text)';
             return (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 16 }}>
-                {tiles.map((tile, i) => (
-                  <button
-                    key={i}
-                    onClick={tile.onClick}
-                    style={{
-                      background: 'var(--wb-card)',
-                      border: '1px solid var(--wb-border)',
-                      borderRadius: 16,
-                      padding: '12px 6px 10px',
-                      textAlign: 'center' as const,
-                      WebkitBackdropFilter: 'blur(16px)' as never,
-                      backdropFilter: 'blur(16px)' as never,
-                      cursor: 'pointer',
-                      fontFamily: font,
-                      transition: 'transform 0.12s ease, background 0.15s ease',
-                      WebkitTapHighlightColor: 'transparent',
-                    }}
-                  >
-                    <div style={{
-                      fontSize: 22, fontWeight: 700,
-                      color: toneColor(tile.tone),
-                      letterSpacing: '-0.03em', lineHeight: 1,
-                      fontFeatureSettings: '"tnum"',
-                    }}>{tile.n}</div>
-                    <div style={{
-                      fontSize: 10, color: 'var(--wb-text-muted)',
-                      marginTop: 4, letterSpacing: '0.1px',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>{tile.l}</div>
-                  </button>
-                ))}
+                {tiles.map((tile, i) => {
+                  // Shared visual chrome. Interaction-only props (press
+                  // transition, tap-highlight suppression) are added on the
+                  // <button> branch only — they're dead weight on a static div.
+                  const baseStyle = {
+                    background: 'var(--wb-card)',
+                    border: '1px solid var(--wb-border)',
+                    borderRadius: 16,
+                    padding: '12px 6px 10px',
+                    textAlign: 'center' as const,
+                    WebkitBackdropFilter: 'blur(16px)' as never,
+                    backdropFilter: 'blur(16px)' as never,
+                    fontFamily: font,
+                  };
+                  const inner = (
+                    <>
+                      <div style={{
+                        fontSize: 22, fontWeight: 700,
+                        color: toneColor(tile.tone),
+                        letterSpacing: '-0.03em', lineHeight: 1,
+                        fontFeatureSettings: '"tnum"',
+                      }}>{tile.n}</div>
+                      <div style={{
+                        fontSize: 10, color: 'var(--wb-text-muted)',
+                        marginTop: 4, letterSpacing: '0.1px',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>{tile.l}</div>
+                    </>
+                  );
+                  // Stat-only tiles (no onClick) render as a non-interactive div so
+                  // they don't masquerade as tappable "coming soon" dead ends.
+                  return tile.onClick ? (
+                    <button
+                      key={i}
+                      onClick={tile.onClick}
+                      style={{
+                        ...baseStyle,
+                        cursor: 'pointer',
+                        transition: 'transform 0.12s ease, background 0.15s ease',
+                        WebkitTapHighlightColor: 'transparent',
+                      }}
+                    >
+                      {inner}
+                    </button>
+                  ) : (
+                    <div key={i} style={{ ...baseStyle, cursor: 'default' }}>
+                      {inner}
+                    </div>
+                  );
+                })}
               </div>
             );
           })()}
@@ -14711,13 +14728,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             let globalIdx = 0;
             return Object.entries(groups).map(([ownerId, group]) => (
               <div key={ownerId} style={{ marginBottom: 24 }}>
-                <div
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
-                    cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
-                  }}
-                  onClick={() => pushToast(t('toast_profile_coming', locale), 'success')}
-                >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                   <UserAvatar avatarUrl={group.ownerAvatarUrl} name={group.ownerName || t('api_user_fallback', locale)} size={36} accent={C.accent} />
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: font }}>{group.ownerName}</div>

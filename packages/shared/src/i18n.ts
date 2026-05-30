@@ -890,7 +890,6 @@ const ru: Dict = {
   wl_archive_confirm_body: 'Он исчезнет из основного списка, но его можно будет вернуть позже.',
   wl_archive_confirm_btn: 'Архивировать',
   wl_archived_toast: 'Вишлист архивирован',
-  wl_reorder_soon: 'Скоро появится',
   read_only_notice: 'Только просмотр — лимит Free.',
   read_only_upgrade: 'Подключи Pro',
   read_only_to_edit: ', чтобы редактировать.',
@@ -1130,7 +1129,6 @@ const ru: Dict = {
   cancel_feat_subs: 'До 5 подписок на вишлисты',
   cancel_feat_privacy: 'Расширенная приватность',
   cancel_feat_sort: 'Умная сортировка',
-  cancel_feat_soon: 'скоро',
   cancel_support_text: 'Что-то не так? Мы готовы помочь.',
   cancel_support_btn: 'Написать в поддержку',
 
@@ -1478,7 +1476,6 @@ const ru: Dict = {
 
   // ── Bot add-on notification ─────────────────────────────────────────────
   bot_addon_activated: '✅ Куплено! Изменения уже применены к аккаунту.',
-  toast_profile_coming: 'Профиль появится в следующих версиях',
   link_label: '🔗 ссылка',
 
   // ── Plural helpers (Russian declension) ───────────────────────────────────
@@ -1538,8 +1535,6 @@ const ru: Dict = {
   sort_label_reserved: 'забронировано',
   sort_label_gifted: 'подарено',
   sort_label_expiring: 'истекает',
-  sort_button_expiring: 'Истекает',
-  toast_section_coming_soon: 'Раздел «{{label}}» появится совсем скоро',
   common_collapse: 'Свернуть',
   item_action_where_placed: 'Где размещено',
   item_action_create_copy: 'Создать копию',
@@ -3965,7 +3960,6 @@ const en: Dict = {
   wl_archive_confirm_body: 'It will disappear from the main list, but can be restored later.',
   wl_archive_confirm_btn: 'Archive',
   wl_archived_toast: 'Wishlist archived',
-  wl_reorder_soon: 'Coming soon',
   read_only_notice: 'View only — Free plan limit.',
   read_only_upgrade: 'Get Pro',
   read_only_to_edit: ' to edit.',
@@ -4205,7 +4199,6 @@ const en: Dict = {
   cancel_feat_subs: 'Up to 5 wishlist subscriptions',
   cancel_feat_privacy: 'Advanced privacy controls',
   cancel_feat_sort: 'Smart sort',
-  cancel_feat_soon: 'soon',
   cancel_support_text: 'Something not right? We can help.',
   cancel_support_btn: 'Contact support',
 
@@ -4479,7 +4472,6 @@ const en: Dict = {
   toast_god_toggle_error: 'Failed to toggle',
   toast_max_wishlists: 'Wishlist limit reached',
   toast_max_items: 'Wish limit reached for this list',
-  toast_profile_coming: 'Profile coming in future versions',
   link_label: '🔗 link',
 
   // ── Add-on offer strings ─────────────────────────────────────────────────
@@ -4590,8 +4582,6 @@ const en: Dict = {
   sort_label_reserved: 'reserved',
   sort_label_gifted: 'gifted',
   sort_label_expiring: 'expiring',
-  sort_button_expiring: 'Expiring',
-  toast_section_coming_soon: '"{{label}}" is coming soon',
   common_collapse: 'Collapse',
   item_action_where_placed: 'Where placed',
   item_action_create_copy: 'Create copy',
@@ -6879,7 +6869,6 @@ const zhCN: Dict = {
   wl_archive_confirm_body: '它将从主列表中消失，但可以稍后恢复。',
   wl_archive_confirm_btn: '归档',
   wl_archived_toast: '心愿单已归档',
-  wl_reorder_soon: '即将推出',
   read_only_notice: '仅查看 — Free 套餐限制。',
   read_only_upgrade: '升级 Pro',
   read_only_to_edit: ' 以编辑。',
@@ -7093,7 +7082,6 @@ const zhCN: Dict = {
   cancel_feat_subs: '最多 5 个心愿单订阅',
   cancel_feat_privacy: '高级隐私',
   cancel_feat_sort: '智能排序',
-  cancel_feat_soon: '即将推出',
   cancel_support_text: '有问题？我们随时帮助你。',
   cancel_support_btn: '联系支持',
 
@@ -7274,7 +7262,6 @@ const zhCN: Dict = {
   addon_activated_seasonal: '节日模式已启用！🎄',
   addon_syncing: '购买成功！数据将在几秒内更新',
   bot_addon_activated: '✅ 已购买！更改已应用到账户。',
-  toast_profile_coming: '个人资料将在后续版本推出',
   link_label: '🔗 链接',
 
   // ── Plural helpers ────────────────────────────────────────────────────────
@@ -7331,8 +7318,6 @@ const zhCN: Dict = {
   sort_label_reserved: '已预订',
   sort_label_gifted: '已赠送',
   sort_label_expiring: '即将过期',
-  sort_button_expiring: '即将过期',
-  toast_section_coming_soon: '「{{label}}」即将推出',
   common_collapse: '收起',
   item_action_where_placed: '放在哪里',
   item_action_create_copy: '创建副本',
@@ -9797,7 +9782,6 @@ const hi: Dict = {
   wl_archive_confirm_body: 'यह मुख्य सूची से गायब हो जाएगी, लेकिन बाद में वापस लाई जा सकती है।',
   wl_archive_confirm_btn: 'आर्काइव करें',
   wl_archived_toast: 'विशलिस्ट आर्काइव की गई',
-  wl_reorder_soon: 'जल्द आ रहा है',
   read_only_notice: 'केवल देखें — Free प्लान सीमा।',
   read_only_upgrade: 'Pro लें',
   read_only_to_edit: ' संपादन के लिए।',
@@ -10011,7 +9995,6 @@ const hi: Dict = {
   cancel_feat_subs: 'अधिकतम 5 विशलिस्ट सदस्यताएं',
   cancel_feat_privacy: 'उन्नत गोपनीयता',
   cancel_feat_sort: 'स्मार्ट सॉर्टिंग',
-  cancel_feat_soon: 'जल्द आ रहा है',
   cancel_support_text: 'कोई समस्या? हम मदद के लिए तैयार हैं।',
   cancel_support_btn: 'सहायता से संपर्क करें',
 
@@ -10192,7 +10175,6 @@ const hi: Dict = {
   addon_activated_seasonal: 'त्योहार मोड चालू! 🎄',
   addon_syncing: 'खरीद हो गई! डेटा कुछ सेकंड में अपडेट होगा',
   bot_addon_activated: '✅ खरीदा! बदलाव खाते पर लागू।',
-  toast_profile_coming: 'प्रोफ़ाइल अगले वर्शन में आएगा',
   link_label: '🔗 लिंक',
 
   // ── Plural helpers ────────────────────────────────────────────────────────
@@ -10249,8 +10231,6 @@ const hi: Dict = {
   sort_label_reserved: 'बुक्ड',
   sort_label_gifted: 'दिए गए',
   sort_label_expiring: 'समाप्त हो रहे',
-  sort_button_expiring: 'समाप्त हो रहे',
-  toast_section_coming_soon: '«{{label}}» जल्द आ रहा है',
   common_collapse: 'समेटें',
   item_action_where_placed: 'कहाँ रखा है',
   item_action_create_copy: 'कॉपी बनाएँ',
@@ -12712,7 +12692,6 @@ const es: Dict = {
   wl_archive_confirm_body: 'Desaparecerá de la lista principal, pero podrás restaurarla después.',
   wl_archive_confirm_btn: 'Archivar',
   wl_archived_toast: 'Wishlist archivada',
-  wl_reorder_soon: 'Próximamente',
   read_only_notice: 'Solo lectura — límite del plan Free.',
   read_only_upgrade: 'Obtener Pro',
   read_only_to_edit: ' para editar.',
@@ -12926,7 +12905,6 @@ const es: Dict = {
   cancel_feat_subs: 'Hasta 5 suscripciones a wishlists',
   cancel_feat_privacy: 'Privacidad avanzada',
   cancel_feat_sort: 'Ordenación inteligente',
-  cancel_feat_soon: 'pronto',
   cancel_support_text: '¿Algo va mal? Estamos aquí para ayudar.',
   cancel_support_btn: 'Contactar soporte',
 
@@ -13107,7 +13085,6 @@ const es: Dict = {
   addon_activated_seasonal: '¡Modo festivo activado! 🎄',
   addon_syncing: '¡Compra realizada! Los datos se actualizarán en unos segundos',
   bot_addon_activated: '✅ ¡Comprado! Los cambios ya están aplicados.',
-  toast_profile_coming: 'El perfil llegará en próximas versiones',
   link_label: '🔗 enlace',
 
   // ── Plural helpers ────────────────────────────────────────────────────────
@@ -13164,8 +13141,6 @@ const es: Dict = {
   sort_label_reserved: 'reservado',
   sort_label_gifted: 'regalado',
   sort_label_expiring: 'caduca',
-  sort_button_expiring: 'Caduca',
-  toast_section_coming_soon: '«{{label}}» llegará pronto',
   common_collapse: 'Cerrar',
   item_action_where_placed: 'Dónde está',
   item_action_create_copy: 'Crear copia',
@@ -15628,7 +15603,6 @@ const ar: Dict = {
   wl_archive_confirm_body: 'ستختفي من القائمة الرئيسية، ويمكن استعادتها لاحقاً.',
   wl_archive_confirm_btn: 'أرشفة',
   wl_archived_toast: 'تمت أرشفة القائمة',
-  wl_reorder_soon: 'قريباً',
   read_only_notice: 'عرض فقط — حد الخطة المجانية.',
   read_only_upgrade: 'الحصول على Pro',
   read_only_to_edit: ' للتعديل.',
@@ -15842,7 +15816,6 @@ const ar: Dict = {
   cancel_feat_subs: 'حتى 5 اشتراكات في القوائم',
   cancel_feat_privacy: 'خصوصية متقدمة',
   cancel_feat_sort: 'ترتيب ذكي',
-  cancel_feat_soon: 'قريباً',
   cancel_support_text: 'هل هناك مشكلة؟ نحن هنا للمساعدة.',
   cancel_support_btn: 'التواصل مع الدعم',
 
@@ -16023,7 +15996,6 @@ const ar: Dict = {
   addon_activated_seasonal: 'وضع الاحتفال مفعَّل! 🎄',
   addon_syncing: 'تمّ الشراء! ستتحدث البيانات خلال ثوانٍ',
   bot_addon_activated: '✅ تمّ الشراء! التغييرات مطبّقة.',
-  toast_profile_coming: 'سيظهر الملف الشخصي في الإصدارات القادمة',
   link_label: '🔗 رابط',
 
   // ── Plural helpers ────────────────────────────────────────────────────────
@@ -16080,8 +16052,6 @@ const ar: Dict = {
   sort_label_reserved: 'محجوز',
   sort_label_gifted: 'تم الإهداء',
   sort_label_expiring: 'ينتهي قريباً',
-  sort_button_expiring: 'ينتهي قريباً',
-  toast_section_coming_soon: '«{{label}}» قريباً',
   common_collapse: 'طي',
   item_action_where_placed: 'مكان الوضع',
   item_action_create_copy: 'إنشاء نسخة',
