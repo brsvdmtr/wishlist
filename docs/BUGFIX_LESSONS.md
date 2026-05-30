@@ -5,6 +5,81 @@ New entries go at the top.
 
 ---
 
+## 2026-05-30 — E17 yearly-price: `paywall.viewed` всегда слал `yearlyVariant: undefined` (рассинхрон имён полей между слоями)
+
+### Ошибка
+
+E17 (3-way A/B годовой цены Pro) тегирует impression `paywall.viewed` армой
+эксперимента. Сервер в бутстрапе `GET /tg/wishlists` отдаёт бакет как
+`proYearly: { priceXtr, priceVariant }` (имя поля `priceVariant` — как в
+референсе E24 group-gift). Клиент сохраняет объект ВЕРБАТИМ:
+`setProYearlyPricing(json.proYearly)`. Но тип стейта и чтение в эффекте звали
+`variant`, а не `priceVariant`:
+
+- стейт: `useState<{ priceXtr: number; variant: string } | null>` ❌
+- чтение: `{ yearlyVariant: proYearlyPricing.variant, … }` ❌
+
+`proYearlyPricing.variant` на сохранённом объекте — `undefined`, поэтому
+`paywall.viewed` слал `yearlyVariant: undefined`, пока эксперимент активен.
+Плитка цены и CTA не пострадали — они читают `.priceXtr` (имя совпадает).
+«Показано == списано» не затронуто. Сдох ТОЛЬКО телеметрийный тег.
+
+### Корень
+
+Ингест кастует ответ как `(json as any).proYearly` и кладёт as-is — каст
+`as any` глушит TS, поэтому компилятор НЕ ловил `variant` vs `priceVariant`.
+Когда клиентский стейт хранит серверный объект вербатим, имена полей стейта
+обязаны совпадать с именами ПРОДЮСЕРА (сервера), иначе рассинхрон тихо проходит
+и компиляцию, и ревью. `/me/plan` — отдельный консьюмер с другими именами
+(`proYearlyPriceVariant`) — здесь ни при чём.
+
+### Урок
+
+- **Сохраняешь серверный объект вербатим — типизируй стейт именами полей
+  СЕРВЕРА, а не «как удобнее».** Любой `as any` на ингесте = TS больше не страж
+  контракта; нужен рантайм-/греп-тест.
+- **Один и тот же бакет цены едет в 3 поверхности** (плитка бутстрапа,
+  `/me/plan`, инвойс). Имя поля — контракт между слоями; рассинхрон на одном
+  конце убивает потребителя на другом без ошибки типов.
+- **Эмиттер живёт в немонтируемом монолите** (`MiniApp.tsx`, 23k+ LOC):
+  поведенческий RTL-тест невозможен без extraction → грепаем исходник, ровно как
+  guard'ы `user.session_started` / L3 в `monolith-guards.test.ts`.
+
+### Правило
+
+1. Каждый бакет эксперимента, который сервер кладёт в ответ и клиент читает,
+   пиннится с ОБЕИХ сторон: имя поля в ответе (роут) и имя поля чтения (клиент).
+   Тег impression проверяется тестом, а не «на глаз».
+2. Ингест вида `setX(json.x)` обязан типизировать `X` ровно по форме `json.x`.
+   Никаких «переименую поле в стейте, мне так удобнее».
+3. Регресс монолитного бага без extraction — греп-guard в
+   `monolith-guards.test.ts` (fail-before/pass-after), не «потом, на моках».
+
+### Лучший код
+
+```ts
+// ❌ До: стейт и чтение зовут поле `variant`, а сервер кладёт `priceVariant`
+const [proYearlyPricing, setProYearlyPricing] =
+  useState<{ priceXtr: number; variant: string } | null>(null);
+// …
+...(proYearlyPricing
+  ? { yearlyVariant: proYearlyPricing.variant /* ← всегда undefined */, yearlyPriceXtr: proYearlyPricing.priceXtr }
+  : {}),
+
+// ✅ После: имя поля стейта == имя поля сервера (priceVariant), как в E24
+const [proYearlyPricing, setProYearlyPricing] =
+  useState<{ priceXtr: number; priceVariant: string } | null>(null);
+// …
+...(proYearlyPricing
+  ? { yearlyVariant: proYearlyPricing.priceVariant, yearlyPriceXtr: proYearlyPricing.priceXtr }
+  : {}),
+```
+
+**Самопроверка:** `pnpm -C apps/web test` (греп-guard `monolith-guards.test.ts`:
+позитив на `.priceVariant`, негатив на `.variant`), `apps/api`
+`wishlists.routes.test.ts` (response-контракт `proYearly.priceVariant`),
+`npx tsc --project apps/web/tsconfig.json --noEmit` = 0 ошибок.
+
 ## 2026-05-30 — PublicProfileRoot: second instance of the same extraction-drift (caught while fixing Settings)
 
 ### Symptom
