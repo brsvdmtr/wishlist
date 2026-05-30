@@ -433,7 +433,9 @@ export function SettingsRoot(props: SettingsRootProps) {
                 };
 
                 const formatBirthday = (iso: string | null): string => {
-                  if (!iso) return t('settings_coming_soon', locale);
+                  // Unreachable in practice (only called with a set birthday); return
+                  // an empty value rather than a misleading "coming soon" string.
+                  if (!iso) return '';
                   const d = new Date(iso);
                   return new Intl.DateTimeFormat(localeToBCP47(locale), { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(d);
                 };
