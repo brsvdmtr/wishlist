@@ -136,6 +136,55 @@ describe('emitPaymentAnalytics — yearly + lifetime PRO', () => {
   });
 });
 
+describe('emitPaymentAnalytics — E17 yearly-price bucket (self-check #4)', () => {
+  it('stamps priceBucket on BOTH payment.completed and pro.activated when present', async () => {
+    await emitPaymentAnalytics({
+      userId: 'u1',
+      payload: { ...basePayload, invoice_payload: 'pro_yearly:123:session:a', total_amount: 600 },
+      planCode: 'PRO',
+      billingPeriod: 'yearly',
+      hadActivePriorSub: false,
+      priceBucket: 'a',
+    });
+
+    const events = productEmit.mock.calls.map((c) => c[0]);
+    const payment = events.find((e) => e.event === 'payment.completed')!;
+    const pro = events.find((e) => e.event === 'pro.activated')!;
+    expect(payment.props).toMatchObject({ billingPeriod: 'yearly', amountStars: 600, priceBucket: 'a' });
+    expect(pro.props).toMatchObject({ billingPeriod: 'yearly', priceBucket: 'a' });
+  });
+
+  it('renewal path also carries priceBucket on subscription.renewed? no — only payment.completed + the renewed event keep money fields; bucket rides payment.completed', async () => {
+    await emitPaymentAnalytics({
+      userId: 'u1',
+      payload: { ...basePayload, invoice_payload: 'pro_yearly:123:session:b', total_amount: 1000 },
+      planCode: 'PRO',
+      billingPeriod: 'yearly',
+      hadActivePriorSub: true,
+      priceBucket: 'b',
+    });
+    const events = productEmit.mock.calls.map((c) => c[0]);
+    const payment = events.find((e) => e.event === 'payment.completed')!;
+    expect(payment.props).toMatchObject({ priceBucket: 'b' });
+    // Renewal emits subscription.renewed instead of pro.activated.
+    expect(events.find((e) => e.event === 'pro.activated')).toBeUndefined();
+  });
+
+  it('omits priceBucket entirely when not provided (legacy/dormant yearly invoice)', async () => {
+    await emitPaymentAnalytics({
+      userId: 'u1',
+      payload: { ...basePayload, invoice_payload: 'pro_yearly:123:session', total_amount: 800 },
+      planCode: 'PRO',
+      billingPeriod: 'yearly',
+      hadActivePriorSub: false,
+    });
+    const events = productEmit.mock.calls.map((c) => c[0]);
+    for (const e of events) {
+      expect(e.props).not.toHaveProperty('priceBucket');
+    }
+  });
+});
+
 describe('emitPaymentAnalytics — addon', () => {
   it('emits only payment.completed (no pro.activated, no subscription.renewed)', async () => {
     await emitPaymentAnalytics({

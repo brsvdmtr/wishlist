@@ -1410,6 +1410,11 @@ if (!token) {
           planCode: 'PRO',
           billingPeriod: 'yearly',
           hadActivePriorSub: outcome.hadActivePriorSub,
+          // E17 — yearly-price bucket rides the 4th payload segment
+          // (pro_yearly:<tgId>:<uuid>:<bucket>). undefined for legacy 3-segment
+          // invoices still in flight and for purchases made while the experiment
+          // was dormant — emitPaymentAnalytics only stamps it when present.
+          priceBucket: parts[3],
         });
 
         const locale = getLocale(ctx);

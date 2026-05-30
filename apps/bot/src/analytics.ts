@@ -82,6 +82,14 @@ export type PaymentAnalyticsInput = {
   billingPeriod: 'monthly' | 'yearly' | 'lifetime' | 'addon';
   hadActivePriorSub: boolean;
   skuCode?: string | null;
+  /**
+   * E17 — yearly-price experiment arm ('control' | 'a' | 'b'), parsed from the
+   * invoice payload's 4th segment. Stamped on payment.completed and pro.activated
+   * so revenue can be sliced by price arm without a join to the assignment
+   * ledger (self-check #4). Absent for monthly/lifetime/addon and for yearly
+   * purchases made while the experiment was dormant.
+   */
+  priceBucket?: string | null;
 };
 
 /**
@@ -104,7 +112,7 @@ export type PaymentAnalyticsInput = {
  *   not entitlement state transitions.
  */
 export async function emitPaymentAnalytics(opts: PaymentAnalyticsInput): Promise<void> {
-  const { userId, payload, planCode, billingPeriod, hadActivePriorSub, skuCode } = opts;
+  const { userId, payload, planCode, billingPeriod, hadActivePriorSub, skuCode, priceBucket } = opts;
 
   const baseProps: Record<string, unknown> = {
     amountStars: payload.total_amount,
@@ -115,6 +123,7 @@ export async function emitPaymentAnalytics(opts: PaymentAnalyticsInput): Promise
   };
   if (planCode) baseProps.planCode = planCode;
   if (skuCode) baseProps.skuCode = skuCode;
+  if (priceBucket) baseProps.priceBucket = priceBucket; // E17 yearly-price arm
 
   _productEmit({ event: 'payment.completed', userId, props: baseProps });
 
@@ -130,7 +139,7 @@ export async function emitPaymentAnalytics(opts: PaymentAnalyticsInput): Promise
     _productEmit({
       event: 'pro.activated',
       userId,
-      props: { planCode, billingPeriod, source: 'telegram_stars', amountStars: payload.total_amount, currency: payload.currency },
+      props: { planCode, billingPeriod, source: 'telegram_stars', amountStars: payload.total_amount, currency: payload.currency, ...(priceBucket ? { priceBucket } : {}) },
     });
 
     try {

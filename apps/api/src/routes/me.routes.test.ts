@@ -16,7 +16,15 @@ vi.mock('@wishlist/db', () => ({
   }),
 }));
 
+// E17 — stub the yearly-price display resolver so the route tests are
+// deterministic. Default null = dormant/Pro (the field is omitted), which keeps
+// every pre-existing /me/plan test byte-identical; E17 tests override per-case.
+vi.mock('../services/yearly-pricing', () => ({
+  resolveYearlyDisplay: vi.fn(async () => null),
+}));
+
 import { registerMeRouter } from './me.routes';
+import { resolveYearlyDisplay } from './../services/yearly-pricing';
 
 type TestUser = { id: string; godMode: boolean; godModeActive: boolean; telegramId: string | null; themePreference: string | null; accentPreference: string | null };
 
@@ -195,5 +203,39 @@ describe('GET /me/plan — reservationPro contract', () => {
     expect(codes).toContain('extra_wishlist_slot');
     expect(codes).toContain('hints_pack_5');
     expect(codes).not.toContain('seasonal_decoration');
+  });
+
+  // E17 — the canonical pricing endpoint must surface the SAME bucket price the
+  // /pro/checkout invoice charges (shown == charged). The !isPro + active gating
+  // lives in resolveYearlyDisplay (unit-tested in yearly-pricing.test.ts); these
+  // pin the route WIRING: active → bucket fields present; null → flat-800
+  // fallback with no variant; and that the resolver is asked with ent.isPro.
+  describe('E17 yearly bucket price', () => {
+    afterEach(() => vi.mocked(resolveYearlyDisplay).mockReset());
+
+    it('active arm a → proYearlyPriceStars 600 + proYearlyPriceVariant "a"', async () => {
+      vi.mocked(resolveYearlyDisplay).mockResolvedValue({ priceXtr: 600, variant: 'a' });
+      const { app } = appWith({});
+      const res = await request(app).get('/me/plan');
+      expect(res.status).toBe(200);
+      expect(res.body.proYearlyPriceStars).toBe(600);
+      expect(res.body.proYearlyPriceVariant).toBe('a');
+    });
+
+    it('dormant / null → flat 800 and NO proYearlyPriceVariant field (byte-identical to today)', async () => {
+      vi.mocked(resolveYearlyDisplay).mockResolvedValue(null);
+      const { app } = appWith({});
+      const res = await request(app).get('/me/plan');
+      expect(res.status).toBe(200);
+      expect(res.body.proYearlyPriceStars).toBe(800);
+      expect(res.body).not.toHaveProperty('proYearlyPriceVariant');
+    });
+
+    it('asks the resolver with the user id + ent.isPro so Pro users are gated out at the source', async () => {
+      vi.mocked(resolveYearlyDisplay).mockResolvedValue(null);
+      const { app } = appWith({});
+      await request(app).get('/me/plan');
+      expect(resolveYearlyDisplay).toHaveBeenCalledWith('u-test', false);
+    });
   });
 });

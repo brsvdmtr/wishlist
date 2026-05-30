@@ -151,6 +151,69 @@ function toVariant(value: string): ExperimentVariant {
 }
 
 /**
+ * Keys that MUST resolve through the weighted (multi-variant) path. This is the
+ * ENFORCEMENT of the "a key uses EITHER the binary OR the weighted path, never
+ * both" invariant — not just a comment. The binary `getExperimentAssignment`
+ * and the public `GET /tg/experiments/:key` route both refuse these keys, and
+ * `getWeightedAssignment` refuses anything NOT listed here. Without this guard a
+ * stray binary read of a weighted key (e.g. a careless `useExperiment('yearly-price')`
+ * or a direct hit on the debug route) would persist a binary `treatment` row
+ * that the weighted resolver then reads back flattened to 'control' — poisoning
+ * the ledger with a phantom arm and pinning that user to a dead label.
+ *
+ * Every new weighted experiment registers its key here.
+ */
+export const WEIGHTED_EXPERIMENT_KEYS = new Set<string>(['yearly-price']);
+
+/** True when `key` must be resolved through getWeightedAssignment, not the binary path. */
+export function isWeightedExperimentKey(key: string): boolean {
+  return WEIGHTED_EXPERIMENT_KEYS.has(key);
+}
+
+/**
+ * First-exposure write shared by the binary (getExperimentAssignment) and the
+ * multi-variant (getWeightedAssignment) sticky resolvers. Creates the
+ * ExperimentAssignment row and emits `experiment.assigned` exactly once; if a
+ * concurrent request won the race (unique-violation), it adopts that row's
+ * value instead so both callers agree. Returns the committed (variant, holdout)
+ * — the raw stored label, so the multi-variant caller can keep 'a'/'b' verbatim
+ * while the binary caller coerces via `toVariant`.
+ *
+ * Extracted so the subtle create-vs-race-vs-emit logic lives in ONE place: two
+ * inline copies were the kind of duplication that drifts (see the testing rules
+ * in CLAUDE.md). Callers own the disabled/holdout/bucketing decisions; this owns
+ * only the persistence + dedup.
+ */
+async function persistFirstExposure(
+  userId: string,
+  key: string,
+  variant: string,
+  holdout: boolean,
+): Promise<{ variant: string; holdout: boolean }> {
+  try {
+    await prisma.experimentAssignment.create({
+      data: { userId, experimentKey: key, variant, holdout },
+    });
+    // Reached exactly once per (user, experiment) — guarded by the unique
+    // index — so the exposure event is emitted exactly once.
+    trackProductEvent({
+      event: 'experiment.assigned',
+      userId,
+      props: { key, variant, holdout },
+    });
+    return { variant, holdout };
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err;
+    // A concurrent request created the row first — adopt its value so both
+    // callers agree. The winner already emitted `experiment.assigned`.
+    const row = await prisma.experimentAssignment.findUnique({
+      where: { userId_experimentKey: { userId, experimentKey: key } },
+    });
+    return row ? { variant: row.variant, holdout: row.holdout } : { variant, holdout };
+  }
+}
+
+/**
  * Resolve a user's variant for `key`, persisting it on first exposure.
  *
  * Read-through: an existing ExperimentAssignment row always wins, so the
@@ -168,6 +231,13 @@ export async function getExperimentAssignment(
   key: string,
   config: ExperimentConfig,
 ): Promise<ExperimentAssignmentResult> {
+  // Refuse weighted keys at the owner layer — resolving a multi-variant key
+  // through the binary path would persist + read it back flattened to control.
+  if (WEIGHTED_EXPERIMENT_KEYS.has(key)) {
+    throw new Error(
+      `experiment "${key}" is weighted (multi-variant); call getWeightedAssignment, not getExperimentAssignment`,
+    );
+  }
   if (!config.enabled) {
     return { key, variant: 'control', holdout: false, active: false };
   }
@@ -180,35 +250,8 @@ export async function getExperimentAssignment(
   }
 
   const resolved = resolveExperiment(userId, key, config);
-  try {
-    await prisma.experimentAssignment.create({
-      data: {
-        userId,
-        experimentKey: key,
-        variant: resolved.variant,
-        holdout: resolved.holdout,
-      },
-    });
-    // Reached exactly once per (user, experiment) — guarded by the unique
-    // index — so the exposure event is emitted exactly once.
-    trackProductEvent({
-      event: 'experiment.assigned',
-      userId,
-      props: { key, variant: resolved.variant, holdout: resolved.holdout },
-    });
-  } catch (err) {
-    if (!isUniqueViolation(err)) throw err;
-    // A concurrent request created the row first — adopt its value so both
-    // callers agree. The winner already emitted `experiment.assigned`.
-    const row = await prisma.experimentAssignment.findUnique({
-      where: { userId_experimentKey: { userId, experimentKey: key } },
-    });
-    if (row) {
-      return { key, variant: toVariant(row.variant), holdout: row.holdout, active: true };
-    }
-  }
-
-  return { key, variant: resolved.variant, holdout: resolved.holdout, active: true };
+  const persisted = await persistFirstExposure(userId, key, resolved.variant, resolved.holdout);
+  return { key, variant: toVariant(persisted.variant), holdout: persisted.holdout, active: true };
 }
 
 /**
@@ -241,9 +284,126 @@ export async function peekExperimentVariant(
   key: string,
   config: ExperimentConfig,
 ): Promise<ExperimentVariant> {
+  // Symmetric with getExperimentAssignment: peeking a weighted key through the
+  // binary reader would flatten its a/b row to 'control' (toVariant) and hand a
+  // wrong variant to the caller. Read-only, so it can't poison the ledger, but
+  // a weighted peek is still a programming error — fail loud.
+  if (WEIGHTED_EXPERIMENT_KEYS.has(key)) {
+    throw new Error(
+      `experiment "${key}" is weighted (multi-variant); peekExperimentVariant only reads binary experiments`,
+    );
+  }
   if (!config.enabled) return 'control';
   const existing = await prisma.experimentAssignment.findUnique({
     where: { userId_experimentKey: { userId, experimentKey: key } },
   });
   return existing ? toVariant(existing.variant) : 'control';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Multi-variant (N-way) assignment
+//
+// The binary control/treatment path above covers two-arm experiments. A few
+// experiments need more than two arms — the first is E17, a 3-way yearly-price
+// test (control / a / b). The README flagged multi-variant as a deliberate
+// future extension of Phase 0; this is it. It reuses the same hash seed, the
+// same 5% holdout, the same env config, and the same sticky-persistence +
+// once-only exposure machinery (persistFirstExposure) as the binary path — only
+// the bucketing is generalised and the stored label is kept verbatim instead of
+// being coerced to the binary union.
+//
+// INVARIANT: a given experiment key uses EITHER the binary path
+// (getExperimentAssignment) OR the weighted path (getWeightedAssignment), never
+// both. The binary path's `toVariant` read-back flattens any label that isn't
+// 'treatment' to 'control', which would silently destroy an 'a'/'b' assignment.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface WeightedVariant {
+  /** Variant label persisted verbatim to ExperimentAssignment.variant (e.g. 'control' | 'a' | 'b'). */
+  variant: string;
+  /**
+   * Share of the hash space, in buckets out of BUCKET_COUNT (10 000). The list
+   * MUST sum to BUCKET_COUNT — assignWeightedVariant partitions [0, BUCKET_COUNT)
+   * in list order, so any shortfall/overflow skews the last arm. The resolver
+   * that builds the list owns that arithmetic and asserts it in its unit test.
+   */
+  weightBps: number;
+}
+
+export interface WeightedAssignmentResult {
+  key: string;
+  /** Raw stored label — NOT coerced to the binary union. */
+  variant: string;
+  /** True when the user is in the global holdout (always the control arm). */
+  holdout: boolean;
+  /** True when the experiment is enabled. */
+  active: boolean;
+}
+
+/**
+ * Deterministic N-way variant for one (user, experiment). The variants partition
+ * the hash space [0, BUCKET_COUNT) in list order: variants[0] owns [0, w0),
+ * variants[1] owns [w0, w0+w1), and so on. Same `exp::${key}::${userId}` seed as
+ * assignVariant, so a key buckets identically whether it is read binary or
+ * weighted (a key only ever uses one path — see the invariant above).
+ *
+ * Put the control variant FIRST: shrinking its leading weight (i.e. raising test
+ * enrolment) then only ever moves a not-yet-assigned user OUT of control, never
+ * back in — the same one-way monotonicity assignVariant gives control→treatment.
+ */
+export function assignWeightedVariant(
+  userId: string,
+  key: string,
+  variants: WeightedVariant[],
+): string {
+  const h = hashBucket(`exp::${key}::${userId}`);
+  let acc = 0;
+  for (const v of variants) {
+    acc += v.weightBps;
+    if (h < acc) return v.variant;
+  }
+  // Defensive: weights should sum to BUCKET_COUNT (asserted by the resolver's
+  // tests). If they fall short, the top of the range lands in the last arm.
+  return variants[variants.length - 1]!.variant;
+}
+
+/**
+ * Multi-variant counterpart of getExperimentAssignment. Same sticky semantics —
+ * first-exposure write, `experiment.assigned` exactly once, read-through for an
+ * existing row — but the stored variant is an arbitrary label, returned verbatim
+ * (no toVariant coercion). A disabled experiment and a holdout user both resolve
+ * to variants[0] (control by convention); a disabled experiment writes nothing
+ * (kill switch, zero DB), so a dormant weighted experiment is byte-identical to
+ * not having it at all.
+ */
+export async function getWeightedAssignment(
+  userId: string,
+  key: string,
+  config: ExperimentConfig,
+  variants: WeightedVariant[],
+): Promise<WeightedAssignmentResult> {
+  // Symmetric guard: a weighted resolver must only ever be used for a key that
+  // is registered weighted, so the binary path is guaranteed to never touch it.
+  if (!WEIGHTED_EXPERIMENT_KEYS.has(key)) {
+    throw new Error(
+      `experiment "${key}" is not registered in WEIGHTED_EXPERIMENT_KEYS; register it or use getExperimentAssignment`,
+    );
+  }
+  const controlVariant = variants[0]!.variant;
+  if (!config.enabled) {
+    return { key, variant: controlVariant, holdout: false, active: false };
+  }
+
+  const existing = await prisma.experimentAssignment.findUnique({
+    where: { userId_experimentKey: { userId, experimentKey: key } },
+  });
+  if (existing) {
+    return { key, variant: existing.variant, holdout: existing.holdout, active: true };
+  }
+
+  // Holdout users never enter a non-control arm — they are the clean baseline.
+  const holdout = isInHoldout(userId);
+  const variant = holdout ? controlVariant : assignWeightedVariant(userId, key, variants);
+  const persisted = await persistFirstExposure(userId, key, variant, holdout);
+  return { key, variant: persisted.variant, holdout: persisted.holdout, active: true };
 }

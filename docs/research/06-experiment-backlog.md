@@ -402,6 +402,8 @@
 13. **Если успех.** Закрепляем цену globally. Документируем в `MONETIZATION.md`.
 14. **Если провал** (все 4 buckets converge). Эластичность низкая → лимитирующий фактор не цена, а value perception. Идти к E18, E19.
 
+> **СТАТУС: PREPARED, DORMANT (2026-05-30).** Реализовано как **3-way** (control 800 / `a` 600 / `b` 1000), а не 4-way — 1200 убран, чтобы держать руки сбалансированными и statistically powered при одном `ROLLOUT`-кноб. Это первый эксперимент на **multi-variant** инфраструктуре (`getWeightedAssignment`). Единый sticky-резолвер `services/yearly-pricing.ts` кормит bootstrap-цену, инвойс и `/me/plan` (shown==charged); bucket едет в payload → `payment.completed`/`pro.activated` (props `priceBucket`). Шипнуто с `EXP_YEARLY_PRICE_ENABLED` unset → плоские 800, byte-identical. Полная спека, readout SQL и **launch-чеклист**: [experiments/yearly-price-e17.md](experiments/yearly-price-e17.md). **Запускать только после** работающих `payment.completed`/`paywall.viewed`/`pro.activated` + готового июньского pricing readout, и **НИКОГДА одновременно с E21 (Event Pass)** — оба меняют paywall structure (см. ниже).
+
 ---
 
 ### E18 — Loss-aversion paywall copy

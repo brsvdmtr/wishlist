@@ -81,6 +81,7 @@ import { trackProductEvent } from '../services/analytics';
 import { evaluateGuestConversion } from '../services/wishlists';
 import { HIDDEN_FROM_INVENTORY_SKUS } from '../services/entitlement';
 import { resolveGroupGiftUnlockPrice } from '../services/group-gift-pricing';
+import { resolveYearlyDisplay } from '../services/yearly-pricing';
 import { makeAddonRequired, makePlanLimitReached, makeProRequired, sendPaywall } from '../services/paywall';
 import logger from '../logger';
 
@@ -422,6 +423,17 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
         groupGift = { unlocked: false, priceXtr: ggPrice.priceXtr, priceVariant: ggPrice.variant };
       }
 
+      // E17 — yearly Pro price is bucket-aware (control 800 / a 600 / b 1000).
+      // The paywall tile + CTA read `proYearly.priceXtr` and tag the impression
+      // with `proYearly.priceVariant`, so the price SHOWN equals the price the
+      // /pro/checkout invoice CHARGES (same sticky resolver via resolveYearlyDisplay).
+      // resolveYearlyDisplay returns null for Pro users (never see the paywall)
+      // and for a dormant experiment — so `proYearly` is omitted and the
+      // bootstrap stays byte-identical to today (client falls back to its 800 ⭐
+      // constant). The !isPro + active gating is unit-tested in yearly-pricing.
+      const yd = await resolveYearlyDisplay(user.id, ent.isPro);
+      const proYearly = yd ? { priceXtr: yd.priceXtr, priceVariant: yd.variant } : undefined;
+
       return res.json({
         wishlists: wishlists.map((wl, idx) => {
           const active = wl.items.filter((i) => (ACTIVE_STATUSES as readonly string[]).includes(i.status));
@@ -459,6 +471,7 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
         promoPro: ent.promoPro,
         giftNotes: ent.giftNotes,
         groupGift,
+        proYearly, // E17: omitted (undefined) when the experiment is dormant
         secretReservations: ent.secretReservations,
         cardDisplayMode: ent.isPro ? (userProfile?.cardDisplayMode ?? 'auto') : 'auto',
         godMode: user.godMode,

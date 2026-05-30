@@ -40,10 +40,18 @@ vi.mock('../services/group-gift-pricing', () => ({
     priceXtr: 39, variant: 'treatment', controlPriceXtr: 79, testPriceXtr: 39,
   })),
 }));
+// E17 — the bucket-aware yearly Pro price resolver; stub the bucket so the test
+// is deterministic and independent of env / hashing.
+vi.mock('../services/yearly-pricing', () => ({
+  resolveYearlyProPrice: vi.fn(async () => ({
+    priceXtr: 600, variant: 'a', active: true, controlPriceXtr: 800, aPriceXtr: 600, bPriceXtr: 1000,
+  })),
+}));
 
 import { registerBillingRouter } from './billing.routes';
 import { createTgInvoiceLink } from '../telegram/invoiceLink';
 import { resolveGroupGiftUnlockPrice } from '../services/group-gift-pricing';
+import { resolveYearlyProPrice } from '../services/yearly-pricing';
 
 function buildDeps(over: Partial<Parameters<typeof registerBillingRouter>[0]> = {}) {
   return {
@@ -156,5 +164,93 @@ describe('routes/billing — E24 group-gift bucket pricing (shown==charged at th
     expect(res.status).toBe(200);
     const invoiceArg = vi.mocked(createTgInvoiceLink).mock.calls.at(-1)![1] as { prices: { amount: number }[] };
     expect(invoiceArg.prices[0]!.amount).toBe(79);
+  });
+});
+
+describe('routes/billing — E17 yearly Pro bucket pricing (shown==charged at the invoice)', () => {
+  beforeEach(() => {
+    process.env.BOT_TOKEN = 'test-token';
+    vi.mocked(createTgInvoiceLink).mockClear();
+    vi.mocked(resolveYearlyProPrice).mockReset();
+  });
+
+  it('active arm a → charges the resolved bucket price (600), appends :a to the payload, tags checkout_started', async () => {
+    vi.mocked(resolveYearlyProPrice).mockResolvedValue({
+      priceXtr: 600, variant: 'a', active: true, controlPriceXtr: 800, aPriceXtr: 600, bPriceXtr: 1000,
+    });
+    const deps = buildDeps();
+    const { app } = makeApp(deps);
+    const res = await request(app).post('/billing/pro/checkout').send({ plan: 'yearly' });
+
+    expect(res.status).toBe(200);
+    expect(resolveYearlyProPrice).toHaveBeenCalledWith('u-test');
+    const invoiceArg = vi.mocked(createTgInvoiceLink).mock.calls.at(-1)![1] as { prices: { amount: number }[]; payload: string };
+    // The amount Telegram is asked to charge == the resolved bucket price.
+    expect(invoiceArg.prices[0]!.amount).toBe(600);
+    // The bucket rides the payload as a 4th segment so the bot can attribute it.
+    expect(invoiceArg.payload).toMatch(/^pro_yearly:42:[\w-]+:a$/);
+    // The PaymentEvent audit row records the same charged amount.
+    expect(shared.paymentEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ totalAmount: 600 }) }),
+    );
+    // checkout_started carries the bucket for the readout.
+    expect(deps.trackEvent).toHaveBeenCalledWith(
+      'checkout_started', 'u-test', expect.objectContaining({ plan: 'yearly', bucket: 'a' }),
+    );
+  });
+
+  it('active arm b → charges 1000 with a :b payload suffix', async () => {
+    vi.mocked(resolveYearlyProPrice).mockResolvedValue({
+      priceXtr: 1000, variant: 'b', active: true, controlPriceXtr: 800, aPriceXtr: 600, bPriceXtr: 1000,
+    });
+    const { app } = makeApp(buildDeps());
+    const res = await request(app).post('/billing/pro/checkout').send({ plan: 'yearly' });
+    expect(res.status).toBe(200);
+    const invoiceArg = vi.mocked(createTgInvoiceLink).mock.calls.at(-1)![1] as { prices: { amount: number }[]; payload: string };
+    expect(invoiceArg.prices[0]!.amount).toBe(1000);
+    expect(invoiceArg.payload).toMatch(/:b$/);
+  });
+
+  it('dormant experiment (active:false) → flat 800, payload byte-identical (no 4th segment), no bucket tag', async () => {
+    vi.mocked(resolveYearlyProPrice).mockResolvedValue({
+      priceXtr: 800, variant: 'control', active: false, controlPriceXtr: 800, aPriceXtr: 600, bPriceXtr: 1000,
+    });
+    const deps = buildDeps();
+    const { app } = makeApp(deps);
+    const res = await request(app).post('/billing/pro/checkout').send({ plan: 'yearly' });
+    expect(res.status).toBe(200);
+    const invoiceArg = vi.mocked(createTgInvoiceLink).mock.calls.at(-1)![1] as { prices: { amount: number }[]; payload: string };
+    expect(invoiceArg.prices[0]!.amount).toBe(800);
+    expect(invoiceArg.payload).toMatch(/^pro_yearly:42:[\w-]+$/); // exactly 3 segments
+    // No bucket prop leaks into checkout_started when dormant.
+    expect(deps.trackEvent).toHaveBeenCalledWith('checkout_started', 'u-test', { plan: 'yearly' });
+  });
+
+  it('Pro user stacking yearly → control 800, resolver NOT called (population is non-Pro only — self-check #3)', async () => {
+    const deps = buildDeps({
+      getUserEntitlement: vi.fn(async () => ({
+        isPro: true,
+        subscription: { id: 's1', status: 'ACTIVE', billingPeriod: 'monthly', cancelAtPeriodEnd: false, cancelledAt: null },
+      })) as never,
+    });
+    const { app } = makeApp(deps);
+    // Clear right before the request so the call-count assertion reflects ONLY
+    // this request — hermetic against any residual call history from a prior
+    // test/file sharing the same module mock under full-suite worker reuse.
+    vi.mocked(resolveYearlyProPrice).mockClear();
+    const res = await request(app).post('/billing/pro/checkout').send({ plan: 'yearly' });
+    expect(res.status).toBe(200);
+    expect(resolveYearlyProPrice).not.toHaveBeenCalled();
+    const invoiceArg = vi.mocked(createTgInvoiceLink).mock.calls.at(-1)![1] as { prices: { amount: number }[]; payload: string };
+    expect(invoiceArg.prices[0]!.amount).toBe(800);
+    expect(invoiceArg.payload).toMatch(/^pro_yearly:42:[\w-]+$/);
+  });
+
+  it('monthly checkout never touches the yearly resolver', async () => {
+    const { app } = makeApp(buildDeps());
+    vi.mocked(resolveYearlyProPrice).mockClear(); // hermetic call-count (see above)
+    const res = await request(app).post('/billing/pro/checkout').send({ plan: 'monthly' });
+    expect(res.status).toBe(200);
+    expect(resolveYearlyProPrice).not.toHaveBeenCalled();
   });
 });

@@ -19,6 +19,7 @@ vi.mock('../security', () => ({
 const service = vi.hoisted(() => ({
   getExperimentAssignment: vi.fn(),
   isValidExperimentKey: vi.fn(),
+  isWeightedExperimentKey: vi.fn(() => false),
   readExperimentConfig: vi.fn(() => ({ enabled: true, rolloutPercent: 50 })),
 }));
 vi.mock('../services/experiments.service', () => service);
@@ -60,6 +61,19 @@ describe('GET /experiments/:key', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('INVALID_EXPERIMENT_KEY');
+    expect(deps.getOrCreateTgUser).not.toHaveBeenCalled();
+    expect(service.getExperimentAssignment).not.toHaveBeenCalled();
+  });
+
+  it('400s WRONG_EXPERIMENT_PATH on a weighted key — no user lookup, no binary persist (E17 ledger-poison guard)', async () => {
+    service.isValidExperimentKey.mockReturnValue(true);
+    service.isWeightedExperimentKey.mockReturnValueOnce(true);
+    const { app, deps } = makeApp();
+
+    const res = await request(app).get('/experiments/yearly-price');
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('WRONG_EXPERIMENT_PATH');
     expect(deps.getOrCreateTgUser).not.toHaveBeenCalled();
     expect(service.getExperimentAssignment).not.toHaveBeenCalled();
   });
