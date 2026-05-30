@@ -406,3 +406,41 @@ describe('MiniApp.tsx — extracted-Root render-site guard (extraction-drift cla
     ).toEqual([]);
   });
 });
+
+describe('MiniApp.tsx — E17 paywall.viewed yearlyVariant field-name guard (2026-05-30)', () => {
+  // The GET /tg/wishlists bootstrap sends the bucket-aware yearly price as
+  //   proYearly: { priceXtr, priceVariant }     (server field name, mirrors E24)
+  // and the client stores json.proYearly VERBATIM via setProYearlyPricing. The
+  // paywall.viewed impression then tags the experiment arm from that state.
+  //
+  // Bug (caught in the E17 WIP, before ship): the state type + the effect read
+  // used `.variant` while the stored object only ever carries `.priceVariant`,
+  // so `yearlyVariant` was always `undefined` whenever the experiment was
+  // active — a silently-dead telemetry tag. The price tile/CTA were fine: they
+  // read `.priceXtr`, whose name matched. Shown==charged was never affected.
+  //
+  // The emit lives in a useEffect deep in the un-mountable monolith, so a
+  // behavioural RTL test isn't possible without extraction — we grep the source
+  // exactly like the user.session_started / L3 guards above. Fail-before /
+  // pass-after: at the buggy revision assertion #1 fails (source read `.variant`)
+  // and assertion #2 fires on any reintroduction of the `.variant` read.
+
+  it('tags yearlyVariant from proYearlyPricing.priceVariant (the stored server field)', () => {
+    expect(MINI_APP_SRC).toMatch(/yearlyVariant:\s*proYearlyPricing\.priceVariant\b/);
+  });
+
+  it('never reads the never-set proYearlyPricing.variant field', () => {
+    // The negative lookahead matches a real `.variant` access but NOT the
+    // longer, correct `.priceVariant` — so this fails only on the buggy read.
+    expect(MINI_APP_SRC).not.toMatch(/proYearlyPricing\.variant(?![A-Za-z0-9_])/);
+  });
+
+  it('types proYearlyPricing state with priceVariant (mirrors the verbatim-stored payload)', () => {
+    // The ingest does setProYearlyPricing(json.proYearly) with the raw server
+    // shape, so the state field name MUST equal the server field name. A
+    // `variant`-typed state is exactly what let the dead read type-check.
+    expect(MINI_APP_SRC).toMatch(
+      /const\s*\[\s*proYearlyPricing\s*,\s*setProYearlyPricing\s*\]\s*=\s*useState<\{[^}]*priceVariant:\s*string[^}]*\}\s*\|\s*null>/,
+    );
+  });
+});
