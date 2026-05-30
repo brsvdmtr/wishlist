@@ -24,6 +24,7 @@ import {
   type ReconciliationFinding,
   type ReconciliationReport,
 } from '../services/billing-reconciliation';
+import { parseArgs, resolveExitCode } from './billing-reconcile.cli';
 
 // Load DATABASE_URL from repo-root .env when running locally (prod sets it in
 // the container env). Mirrors packages/db/scripts/prisma.cjs.
@@ -37,31 +38,6 @@ function loadLocalEnv(): void {
   }
 }
 
-type Cli = { apply: boolean; json: boolean; strict: boolean; help: boolean };
-
-const KNOWN_FLAGS = new Set(['--apply', '--dry-run', '--json', '--strict', '--help', '-h']);
-
-function parseArgs(argv: string[]): Cli {
-  const flags = new Set(argv.filter((a) => a.startsWith('-')));
-  // Warn (don't fail) on typos — the safe default is dry-run, so an unknown
-  // flag can never silently mutate, but a typo'd `--apply` quietly no-op'ing
-  // would confuse an operator.
-  for (const f of flags) {
-    if (!KNOWN_FLAGS.has(f)) {
-      // eslint-disable-next-line no-console
-      console.error(`⚠ unknown flag '${f}' ignored — run with --help for usage. Proceeding in safe dry-run.`);
-    }
-  }
-  return {
-    // --apply is the ONLY way to mutate. --dry-run is accepted but redundant
-    // (read-only is the default); --apply always wins if both are present.
-    apply: flags.has('--apply'),
-    json: flags.has('--json'),
-    strict: flags.has('--strict'),
-    help: flags.has('--help') || flags.has('-h'),
-  };
-}
-
 const HELP = `billing:reconcile — cross-check PaymentEvent / Subscription / Purchase
 
 Usage:
@@ -72,8 +48,11 @@ Flags:
   --apply     Perform the safe relink backfill (orphan subscription-payment
               PaymentEvents → owner's PRO subscription, when unambiguous).
   --json      Emit the full report as JSON on stdout.
-  --strict    Exit code 2 when any finding exists (for cron alerting).
+  --strict    Exit non-zero when work remains (for cron alerting).
   -h, --help  Show this help.
+
+Exit codes: 0 clean · 2 (--strict) findings remain · 3 (--strict) --apply
+succeeded but the post-apply re-check failed · 1 unhandled error.
 
 Detection is read-only. Refunds, re-grants and EXPIRED transitions are never
 automated — see docs/ops/billing-reconciliation.md.`;
@@ -179,7 +158,7 @@ async function main(): Promise<number> {
       } else if (after) {
         printHuman(after);
       }
-      return after ? exitCode(after, cli.strict) : 0;
+      return resolveExitCode(after, cli.strict);
     }
 
     if (cli.json) {
@@ -188,15 +167,10 @@ async function main(): Promise<number> {
     } else {
       printHuman(report);
     }
-    return exitCode(report, cli.strict);
+    return resolveExitCode(report, cli.strict);
   } finally {
     await prisma.$disconnect();
   }
-}
-
-function exitCode(report: ReconciliationReport, strict: boolean): number {
-  if (strict && !report.ok) return 2;
-  return 0;
 }
 
 main()

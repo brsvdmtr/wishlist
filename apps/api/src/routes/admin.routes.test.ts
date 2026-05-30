@@ -18,8 +18,8 @@ const shared = vi.hoisted(() => ({
   purchase: { count: vi.fn(), findMany: vi.fn() },
 }));
 
-vi.mock('@wishlist/db', () => ({
-  prisma: {
+vi.mock('@wishlist/db', () => {
+  const prisma: Record<string, unknown> = {
     user: shared.user,
     wishlist: shared.wishlist,
     item: shared.item,
@@ -29,8 +29,12 @@ vi.mock('@wishlist/db', () => ({
     paymentEvent: shared.paymentEvent,
     subscription: shared.subscription,
     purchase: shared.purchase,
-  },
-}));
+  };
+  // reconcileBilling loads the three tables inside a read-only $transaction;
+  // run the callback against the same mocked client.
+  prisma.$transaction = async (fn: (tx: unknown) => unknown) => fn(prisma);
+  return { prisma };
+});
 
 import { registerAdminRouter } from './admin.routes';
 import { ANALYTICS_EVENTS } from '@wishlist/shared';

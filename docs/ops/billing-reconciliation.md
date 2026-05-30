@@ -95,9 +95,13 @@ forwarded-flag hiccup can never silently mutate billing data.
 pnpm billing:reconcile                 # dry-run, human-readable report
 pnpm billing:reconcile -- --json       # full report as JSON (for jq / tickets)
 pnpm billing:reconcile -- --apply      # perform the safe relink backfill
-pnpm billing:reconcile -- --strict     # exit code 2 if any finding exists
+pnpm billing:reconcile -- --strict     # exit non-zero when work remains
 pnpm billing:reconcile -- --help
 ```
+
+**Exit codes** (for cron alerting): `0` clean · `2` (`--strict`) findings
+remain · `3` (`--strict`) `--apply` succeeded but the post-apply re-check failed
+(applied-but-unverified — never read as clean) · `1` unhandled error.
 
 ### Production (compiled, inside the API container)
 
@@ -204,13 +208,16 @@ the raw payment identifiers live only in the DB. (Per the project's
 ## Scale note
 
 The reconciler loads the three tables into memory and computes discrepancies
-in JS — simple and exhaustive at the current scale (low thousands of rows). A
-cheap `count()` precheck **refuses** to run once the three tables together
-exceed `DEFAULT_MAX_SCAN_ROWS` (200 000), so the in-process
-`GET /admin/billing/reconcile` can never OOM the API; above that threshold the
-grouping/orphan checks must move to streamed SQL aggregation. The CLI shares
-the same guard (override per-call via the `maxScanRows` option if you ever need
-to force a larger in-memory pass locally).
+in JS — simple and exhaustive at the current scale (low thousands of rows). All
+three loads run inside a single **`REPEATABLE READ` transaction**, so they share
+one consistent snapshot — a payment written mid-scan can't produce a torn read
+(a sub seen without its just-written payment → a phantom "no payment trail").
+The row `count()` runs in that same snapshot and **refuses** to load once the
+three tables together exceed `DEFAULT_MAX_SCAN_ROWS` (200 000), so the in-process
+`GET /admin/billing/reconcile` can never OOM the API and there is no
+count→load TOCTOU. Above that threshold the grouping/orphan checks must move to
+streamed SQL aggregation. The CLI shares the same guard (override per-call via
+the `maxScanRows` option if you ever need to force a larger in-memory pass).
 
 <a id="future-live-telegram-ledger"></a>
 ## Future: live Telegram ledger

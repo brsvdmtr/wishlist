@@ -283,24 +283,35 @@ export async function reconcileBilling(
   const knownSkuCodes = opts.knownSkuCodes ?? new Set<string>(Object.keys(ONE_TIME_SKUS));
   const maxScanRows = opts.maxScanRows ?? DEFAULT_MAX_SCAN_ROWS;
 
-  // Cheap precheck before the in-memory load — refuse oversized scans so the
-  // in-process admin endpoint can't OOM the API process.
-  const [peCount, subCount, purCount] = await Promise.all([
-    prisma.paymentEvent.count(),
-    prisma.subscription.count(),
-    prisma.purchase.count(),
-  ]);
-  if (peCount + subCount + purCount > maxScanRows) {
-    throw new Error(
-      `billing reconciliation aborted: ${peCount + subCount + purCount} rows (pre-load count, advisory) exceed the in-memory ceiling (${maxScanRows}). Use a streamed reconciliation — see docs/ops/billing-reconciliation.md.`,
-    );
-  }
-
-  const [events, subs, purchases] = await Promise.all([
-    prisma.paymentEvent.findMany({ select: PAYMENT_EVENT_SELECT }) as Promise<PaymentEventRow[]>,
-    prisma.subscription.findMany({ select: SUBSCRIPTION_SELECT }) as Promise<SubscriptionRow[]>,
-    prisma.purchase.findMany({ select: PURCHASE_SELECT }) as Promise<PurchaseRow[]>,
-  ]);
+  // Load all three tables in ONE REPEATABLE READ transaction so they share a
+  // single consistent snapshot: a payment written mid-scan can't produce a torn
+  // read (a sub loaded without its just-written payment → a phantom "no payment
+  // trail"). The count runs in the SAME snapshot and refuses oversized scans
+  // BEFORE any rows load, so the in-process admin endpoint can't OOM the API —
+  // and there is no count→load TOCTOU because both see the same snapshot.
+  const { events, subs, purchases } = await prisma.$transaction(
+    async (tx) => {
+      const [peCount, subCount, purCount] = await Promise.all([
+        tx.paymentEvent.count(),
+        tx.subscription.count(),
+        tx.purchase.count(),
+      ]);
+      if (peCount + subCount + purCount > maxScanRows) {
+        throw new Error(
+          `billing reconciliation aborted: ${peCount + subCount + purCount} rows exceed the in-memory ceiling (${maxScanRows}). Use a streamed reconciliation — see docs/ops/billing-reconciliation.md.`,
+        );
+      }
+      const [events, subs, purchases] = await Promise.all([
+        tx.paymentEvent.findMany({ select: PAYMENT_EVENT_SELECT }) as Promise<PaymentEventRow[]>,
+        tx.subscription.findMany({ select: SUBSCRIPTION_SELECT }) as Promise<SubscriptionRow[]>,
+        tx.purchase.findMany({ select: PURCHASE_SELECT }) as Promise<PurchaseRow[]>,
+      ]);
+      return { events, subs, purchases };
+    },
+    // 'RepeatableRead' is a member of Prisma.TransactionIsolationLevel (a
+    // string-literal union), so no runtime Prisma import is needed.
+    { isolationLevel: 'RepeatableRead' },
+  );
 
   const findings: ReconciliationFinding[] = [];
   const push = (f: Omit<ReconciliationFinding, 'severity'>) =>
@@ -505,6 +516,10 @@ export async function reconcileBilling(
         occurredAt: p.createdAt.toISOString(),
         detail: 'Purchase for an unrecognised SKU — money taken, no entitlement granted.',
       });
+      // One finding per bad purchase: unknown SKU is the dominant signal, and
+      // its remediation already subsumes "look at this purchase", so don't also
+      // emit non_completed_purchase for the same row.
+      continue;
     }
     if (!PURCHASE_TERMINAL_STATUSES.has(p.status)) {
       push({

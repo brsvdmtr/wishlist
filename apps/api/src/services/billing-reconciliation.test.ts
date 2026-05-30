@@ -63,10 +63,11 @@ function purchase(over: Partial<Record<string, unknown>> = {}) {
   };
 }
 
-// Fake Prisma: findMany returns fixtures and count returns their length; ANY
-// model-level mutation (update/create/delete) OR top-level client call
-// ($transaction/$queryRaw/$executeRaw) throws — which is how we PROVE detection
-// is read-only (self-check: "dry-run doesn't change data"). Read-only against a
+// Fake Prisma: findMany returns fixtures and count returns their length;
+// $transaction runs its callback against the same read-only client. ANY
+// model-level mutation (update/create/delete) OR any other top-level client
+// call ($queryRaw/$executeRaw/…) throws — which is how we PROVE detection is
+// read-only (self-check: "dry-run doesn't change data"). Read-only against a
 // REAL client is additionally proven by the row-content snapshot in the
 // integration suite.
 function makeFakePrisma(rows: { events?: unknown[]; subs?: unknown[]; purchases?: unknown[] }) {
@@ -89,6 +90,11 @@ function makeFakePrisma(rows: { events?: unknown[]; subs?: unknown[]; purchases?
   return new Proxy(client, {
     get(target, prop) {
       if (prop in target) return (target as Record<string, unknown>)[prop as string];
+      // Read-only interactive transaction: run the callback with the same
+      // read-only client (mutations inside still hit the per-model traps).
+      if (prop === '$transaction') {
+        return async (fn: (tx: unknown) => unknown) => fn(client);
+      }
       if (typeof prop === 'string' && prop.startsWith('$')) {
         throw new Error(`reconcileBilling must be read-only — called prisma.${prop}()`);
       }
@@ -290,6 +296,13 @@ describe('reconcileBilling — bucket 4 (failed / partial)', () => {
     expect(kindsOf(refunded.findings)).not.toContain('non_completed_purchase');
     const cancelled = await run({ purchases: [purchase({ status: 'cancelled' })] });
     expect(kindsOf(cancelled.findings)).not.toContain('non_completed_purchase');
+  });
+
+  it('an unknown-SKU purchase that is ALSO non-terminal yields exactly one finding (unknown_sku)', async () => {
+    const report = await run({ purchases: [purchase({ skuCode: 'mystery', status: 'pending' })] });
+    expect(kindsOf(report.findings)).toContain('unknown_sku_purchase');
+    expect(kindsOf(report.findings)).not.toContain('non_completed_purchase');
+    expect(report.findings).toHaveLength(1); // not double-counted
   });
 
   it('flags an ACTIVE subscription whose period already ended (expiry-sweep gap)', async () => {
