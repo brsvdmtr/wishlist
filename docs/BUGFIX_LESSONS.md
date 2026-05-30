@@ -5,6 +5,56 @@ New entries go at the top.
 
 ---
 
+## 2026-05-30 — PublicProfileRoot: second instance of the same extraction-drift (caught while fixing Settings)
+
+### Symptom
+
+While finishing the SettingsRoot extraction (entry below), a render-site
+audit found `PublicProfileRoot` in the identical dead state: it was
+`dynamic()`-imported and given a `publicProfileRootCtx` bag in
+`MiniAppInner`, but **consumed nowhere** — no `<PublicProfileRoot .../>`
+render site existed, and the live copy was still the inline
+`{screen === 'public-profile' && (() => {...})()}` IIFE
+(~379 LOC) in [`apps/web/app/miniapp/MiniApp.tsx`](../apps/web/app/miniapp/MiniApp.tsx).
+The lazy `screens/public-profile/PublicProfileRoot.tsx` chunk never
+loaded; the two copies were free to drift.
+
+### Root cause
+
+Same as the Settings entry below — the F4 Wave A++ extraction's
+render-site commit never merged to main; only the import + orphaned file
++ ctx bag did. A normalized diff confirmed the two copies were
+behaviour-identical (the extracted file differed only in TS type
+annotations on `.map`/`new Set` callbacks, a `ctx`→`bctx` rename to avoid
+shadowing the props bag, and arrow-param parenthesisation). So finishing
+the extraction was safe.
+
+### Lesson
+
+- **A discovered bug class is a search query, not a single fix.** The
+  Settings drift wasn't unique — grepping every `dynamic()`-imported
+  `*Root` for a matching `<Root` render site immediately surfaced a
+  second victim. When you fix an instance of a class, sweep for siblings
+  before closing it out.
+
+### Rule
+
+- The render-site guard is now **data-driven** over a
+  `RENDER_GUARDED_ROOTS` list — adding a newly-extracted single-screen
+  Root is one row. Both SettingsRoot and PublicProfileRoot are covered
+  (rendered + inline-IIFE-gone + ctx-consumed).
+
+### Better code
+
+- [`apps/web/app/miniapp/MiniApp.tsx`](../apps/web/app/miniapp/MiniApp.tsx) —
+  inline ~379-LOC public-profile IIFE replaced with
+  `{screen === 'public-profile' && ( <PublicProfileRoot screen={screen} ctx={publicProfileRootCtx} /> )}`.
+  No import churn (Banner/Card/Chip stay used elsewhere). Net −378 LOC.
+- [`apps/web/app/miniapp/monolith-guards.test.ts`](../apps/web/app/miniapp/monolith-guards.test.ts) —
+  guard generalised to a loop; PublicProfileRoot added.
+
+---
+
 ## 2026-05-30 — Fake-interactive «coming soon» placeholders в проде (доверие к UI)
 
 ### Ошибка
@@ -80,6 +130,8 @@ return tile.onClick
 
 **Самопроверка:** `pnpm --filter @wishlist/shared test` (resolver+parity),
 `tsc` web+api по 0 ошибок, `grep` фейк-плейсхолдеров = 0.
+
+---
 
 ## 2026-05-30 — Settings screen rendered from a DEAD copy — extraction landed the import + orphaned file but never the render site
 
