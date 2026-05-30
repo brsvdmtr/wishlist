@@ -375,4 +375,34 @@ describe('MiniApp.tsx — extracted-Root render-site guard (extraction-drift cla
       expect(consumed, `${ctx} must be passed to <${root}/>`).toBe(true);
     });
   }
+
+  it('every *RootCtx bag built in MiniAppInner is consumed by a render site', () => {
+    // Generic, self-maintaining superset of the per-Root table above:
+    // enumerate every `const <name>RootCtx = {` bag and require a matching
+    // `ctx={<name>RootCtx}` render-site consumer. The RENDER_GUARDED_ROOTS
+    // table must be extended by hand per Root; this assertion needs no
+    // maintenance — a FUTURE extraction that lands a bag without a render
+    // site (the exact SettingsRoot / PublicProfileRoot drift class) goes red
+    // here on its own, even if nobody remembers to add a table row.
+    const declared = [...MINI_APP_SRC.matchAll(/const\s+(\w+RootCtx)\s*=\s*\{/g)].map((m) => m[1]!);
+    const consumed = new Set(
+      [...MINI_APP_SRC.matchAll(/\bctx=\{(\w+RootCtx)\}/g)].map((m) => m[1]!),
+    );
+    // Sanity: enumeration must find the known bags, else the regex rotted and
+    // the assertion would vacuously pass. 9 ctx-bag Roots today; the bound
+    // matches that count so a rot dropping even one bag goes red.
+    expect(declared.length, 'no *RootCtx bags found — enumeration regex rotted').toBeGreaterThanOrEqual(9);
+
+    // KNOWN_UNWIRED: bags intentionally built but not yet rendered. Empty
+    // today — every ctx-bag Root is wired. Add a name here ONLY alongside a
+    // tracking reference if an extraction is deliberately landed half-wired.
+    const KNOWN_UNWIRED = new Set<string>();
+
+    const deadBags = declared.filter((name) => !consumed.has(name) && !KNOWN_UNWIRED.has(name));
+    expect(
+      deadBags,
+      `dead ctx bag(s) built but never passed to a Root render site: ${deadBags.join(', ') || '(none)'}. ` +
+        'Render <DomainRoot screen={screen} ctx={...} /> or delete the bag.',
+    ).toEqual([]);
+  });
 });
