@@ -28,6 +28,10 @@ import {
   experimentEnvName,
   readExperimentConfig,
   peekExperimentVariant,
+  assignWeightedVariant,
+  getWeightedAssignment,
+  getExperimentAssignment,
+  isWeightedExperimentKey,
 } from './experiments.service';
 
 function userIds(n: number): string[] {
@@ -251,5 +255,160 @@ describe('peekExperimentVariant — read-only resolver (no write, no exposure)',
     expect(await peekExperimentVariant('u8', 'k', ENABLED)).toBe(
       await peekExperimentVariant('u8', 'k', ENABLED),
     );
+  });
+});
+
+describe('assignWeightedVariant — deterministic N-way bucket (E17 multi-variant)', () => {
+  // Balanced 3-way over the 10 000-bucket hash space: control first (the
+  // monotonicity convention), then two equal test arms. Sums to BUCKET_COUNT.
+  const BALANCED = [
+    { variant: 'control', weightBps: 3400 },
+    { variant: 'a', weightBps: 3300 },
+    { variant: 'b', weightBps: 3300 },
+  ];
+
+  it('same userId + key + weights always yields the same variant (sticky/deterministic)', () => {
+    for (const id of userIds(100)) {
+      expect(assignWeightedVariant(id, 'yearly-price', BALANCED)).toBe(
+        assignWeightedVariant(id, 'yearly-price', BALANCED),
+      );
+    }
+  });
+
+  it('partitions the population into all three arms at roughly the configured weights', () => {
+    const ids = userIds(9000);
+    // Typed literal keys (not Record<string,number>) so noUncheckedIndexedAccess
+    // doesn't widen reads to `number | undefined`.
+    const counts: Record<'control' | 'a' | 'b', number> = { control: 0, a: 0, b: 0 };
+    for (const id of ids) {
+      const v = assignWeightedVariant(id, 'yearly-price', BALANCED) as 'control' | 'a' | 'b';
+      counts[v]++;
+    }
+    // Every arm is populated and within a few points of its 34/33/33 target.
+    expect(counts.control / ids.length).toBeGreaterThan(0.30);
+    expect(counts.control / ids.length).toBeLessThan(0.38);
+    expect(counts.a / ids.length).toBeGreaterThan(0.29);
+    expect(counts.a / ids.length).toBeLessThan(0.37);
+    expect(counts.b / ids.length).toBeGreaterThan(0.29);
+    expect(counts.b / ids.length).toBeLessThan(0.37);
+  });
+
+  it('a single full-weight arm captures everyone (dormant/100%-control shape)', () => {
+    for (const id of userIds(500)) {
+      expect(assignWeightedVariant(id, 'yearly-price', [{ variant: 'control', weightBps: 10_000 }])).toBe('control');
+    }
+  });
+
+  it('control-first weight is a prefix range — raising it never moves a user OUT of control', () => {
+    // The ramp-down-of-test / ramp-up-of-control direction must be monotonic:
+    // [0, wControl) only ever grows, so a control user stays control.
+    const small = [
+      { variant: 'control', weightBps: 2000 },
+      { variant: 'a', weightBps: 4000 },
+      { variant: 'b', weightBps: 4000 },
+    ];
+    const large = [
+      { variant: 'control', weightBps: 8000 },
+      { variant: 'a', weightBps: 1000 },
+      { variant: 'b', weightBps: 1000 },
+    ];
+    for (const id of userIds(600)) {
+      if (assignWeightedVariant(id, 'yearly-price', small) === 'control') {
+        expect(assignWeightedVariant(id, 'yearly-price', large)).toBe('control');
+      }
+    }
+  });
+
+  it('different keys bucket independently', () => {
+    const ids = userIds(2000);
+    const agree = ids.filter(
+      (id) => assignWeightedVariant(id, 'key-one', BALANCED) === assignWeightedVariant(id, 'key-two', BALANCED),
+    ).length;
+    // Two independent 3-way splits agree ~1/3 of the time, never near 100%.
+    expect(agree).toBeLessThan(ids.length * 0.6);
+  });
+
+  it('under-sum weights: the unallocated tail falls through to the LAST arm (defensive fallback)', () => {
+    // yearly-pricing guarantees the weights sum to 10000; this pins the
+    // defensive `return variants[last]` branch for any caller that doesn't.
+    // control owns [0,5000); a and b have 0 weight, so [5000,10000) is
+    // unallocated → the loop falls through and hands it to the last arm (b).
+    const w = [
+      { variant: 'control', weightBps: 5000 },
+      { variant: 'a', weightBps: 0 },
+      { variant: 'b', weightBps: 0 },
+    ];
+    const ids = userIds(3000);
+    const got = new Set(ids.map((id) => assignWeightedVariant(id, 'k', w)));
+    expect(got.has('b')).toBe(true); // tail-catch fired for the [5000,10000) range
+    expect(got.has('a')).toBe(false); // a 0-weight middle arm is never assigned
+    for (const id of ids) expect(typeof assignWeightedVariant(id, 'k', w)).toBe('string'); // never undefined/throws
+  });
+});
+
+describe('isWeightedExperimentKey — the path registry', () => {
+  it('knows yearly-price is weighted', () => {
+    expect(isWeightedExperimentKey('yearly-price')).toBe(true);
+  });
+  it('treats unregistered keys as binary', () => {
+    expect(isWeightedExperimentKey('new-onboarding')).toBe(false);
+    expect(isWeightedExperimentKey('group-gift-price')).toBe(false); // E24 is binary
+  });
+});
+
+describe('EITHER/OR path enforcement (no ledger poisoning)', () => {
+  const ENABLED = { enabled: true, rolloutPercent: 100 };
+  const WEIGHTS = [
+    { variant: 'control', weightBps: 3400 },
+    { variant: 'a', weightBps: 3300 },
+    { variant: 'b', weightBps: 3300 },
+  ];
+
+  it('getExperimentAssignment REFUSES a weighted key (would persist a binary row that flattens a/b → control)', async () => {
+    await expect(getExperimentAssignment('u1', 'yearly-price', ENABLED)).rejects.toThrow(/weighted/i);
+  });
+
+  it('getWeightedAssignment REFUSES a key not registered weighted', async () => {
+    await expect(getWeightedAssignment('u1', 'new-onboarding', ENABLED, WEIGHTS)).rejects.toThrow(/not registered/i);
+  });
+
+  it('peekExperimentVariant REFUSES a weighted key (would flatten a/b → control on read)', async () => {
+    await expect(peekExperimentVariant('u1', 'yearly-price', ENABLED)).rejects.toThrow(/weighted/i);
+  });
+});
+
+describe('getWeightedAssignment — sticky multi-variant (mocked Prisma; DB paths in integration)', () => {
+  const ENABLED = { enabled: true, rolloutPercent: 100 };
+  const DISABLED = { enabled: false, rolloutPercent: 100 };
+  const WEIGHTS = [
+    { variant: 'control', weightBps: 3400 },
+    { variant: 'a', weightBps: 3300 },
+    { variant: 'b', weightBps: 3300 },
+  ];
+
+  beforeEach(() => {
+    shared.assignmentFindUnique.mockReset();
+    shared.trackProductEvent.mockReset();
+  });
+
+  it('disabled → variants[0] (control), active:false, ZERO DB calls (kill switch / dormant)', async () => {
+    const r = await getWeightedAssignment('u1', 'yearly-price', DISABLED, WEIGHTS);
+    expect(r).toEqual({ key: 'yearly-price', variant: 'control', holdout: false, active: false });
+    expect(shared.assignmentFindUnique).not.toHaveBeenCalled();
+    expect(shared.trackProductEvent).not.toHaveBeenCalled();
+  });
+
+  it('enabled + persisted row → returns the RAW stored label verbatim (a/b NOT flattened to control)', async () => {
+    shared.assignmentFindUnique.mockResolvedValue({ variant: 'a', holdout: false });
+    const r = await getWeightedAssignment('u2', 'yearly-price', ENABLED, WEIGHTS);
+    expect(r).toEqual({ key: 'yearly-price', variant: 'a', holdout: false, active: true });
+    // read-through: existing row wins, no exposure event re-emitted.
+    expect(shared.trackProductEvent).not.toHaveBeenCalled();
+  });
+
+  it('enabled + persisted holdout row → control (the clean baseline reads back as control)', async () => {
+    shared.assignmentFindUnique.mockResolvedValue({ variant: 'control', holdout: true });
+    const r = await getWeightedAssignment('u3', 'yearly-price', ENABLED, WEIGHTS);
+    expect(r).toEqual({ key: 'yearly-price', variant: 'control', holdout: true, active: true });
   });
 });

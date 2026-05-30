@@ -28,6 +28,7 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { zodError } from '../lib/http';
 import { getRequestLocale } from '../lib/locale';
 import { HIDDEN_FROM_INVENTORY_SKUS } from '../services/entitlement';
+import { resolveYearlyDisplay } from '../services/yearly-pricing';
 import { isGodModeTelegramId, isGodModeActive } from '../services/telegram-auth';
 import logger from '../logger';
 import { getOrCreateProfile } from '../profile.js';
@@ -323,7 +324,17 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
       // Summarize add-ons for frontend
       const extraWishlistSlots = ent.addOns.filter(a => a.addonType === 'wishlist_slot').reduce((s, a) => s + a.quantity, 0);
       const extraSubscriptionSlots = ent.addOns.filter(a => a.addonType === 'subscription_slot').reduce((s, a) => s + a.quantity, 0);
-  
+
+      // E17 — yearly Pro price is bucket-aware for non-Pro users, so this
+      // canonical pricing endpoint never reports a price different from what
+      // /pro/checkout charges the same user (same sticky resolver via
+      // resolveYearlyDisplay). It returns null for Pro users and for a dormant
+      // experiment → the flat control price with no variant, byte-identical to
+      // today. The !isPro + active gating is unit-tested in yearly-pricing.
+      const yd = await resolveYearlyDisplay(user.id, ent.isPro);
+      const proYearlyPriceStars = yd?.priceXtr ?? PRO_YEARLY_PRICE_XTR;
+      const proYearlyPriceVariant = yd?.variant;
+
       return res.json({
         plan: {
           code: ent.plan.code,
@@ -338,7 +349,8 @@ export function registerMeRouter(deps: MeRouterDeps): Router {
         promoPro: ent.promoPro,
         usage: { wishlists: wishlistCount },
         proPriceStars: PRO_PRICE_XTR,
-        proYearlyPriceStars: PRO_YEARLY_PRICE_XTR,
+        proYearlyPriceStars,
+        proYearlyPriceVariant, // E17: omitted (undefined) when the experiment is dormant
         proLifetimePriceStars: PRO_LIFETIME_PRICE_XTR,
         godMode: user.godMode,
         canGodMode,

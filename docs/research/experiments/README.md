@@ -24,8 +24,14 @@ useExperiment(tgFetch, key)            apps/web/app/miniapp/lib/experiments.ts
   `ExperimentAssignment` row is written and the variant is **pinned for life**.
   Read-through: later calls return the stored variant, so it never moves when
   you change `ROLLOUT` afterwards.
-- **Two variants:** `control` and `treatment`. (Multi-variant is a future
-  extension — not in Phase 0.)
+- **Two variants:** `control` and `treatment` for the binary path
+  (`getExperimentAssignment`). **N-way** experiments use the multi-variant path
+  (`getWeightedAssignment` / `assignWeightedVariant`), added for
+  [E17](./yearly-price-e17.md) (a 3-way price test). Same hash seed, holdout,
+  env config, and sticky once-only exposure — only the bucketing is weighted and
+  the stored label is kept verbatim (`a`/`b`, not coerced to the binary union).
+  **A key uses exactly one path** — the binary read-back flattens unknown labels
+  to `control`.
 - **Holdout.** A fixed **5%** of users (global, `sha256("holdout" + userId)`)
   are held out of *every* experiment — always `control`. They are the clean
   baseline cohort.

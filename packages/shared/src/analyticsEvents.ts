@@ -275,7 +275,7 @@ export const PRODUCT_EVENTS = [
     domain: 'payment',
     action: 'completed',
     description:
-      'Successful Telegram Stars payment confirmed by the server. Authoritative input for revenue dashboards. NEVER trust a client-side mirror of this.',
+      'Successful Telegram Stars payment confirmed by the server. Authoritative input for revenue dashboards. NEVER trust a client-side mirror of this. props: amountStars, currency, billingPeriod (monthly|yearly|lifetime|addon), chargeId, source, planCode?, skuCode?, priceBucket? (E17 yearly-price arm control|a|b — present only for yearly purchases made while the experiment was live).',
     sources: ['server'],
     pii: 'userId-only',
   },
@@ -284,7 +284,7 @@ export const PRODUCT_EVENTS = [
     domain: 'pro',
     action: 'activated',
     description:
-      'Pro entitlement granted (paid purchase, lifetime, referral reward, or admin grant). Server emits at the moment the entitlement row is written.',
+      'Pro entitlement granted (paid purchase, lifetime, referral reward, or admin grant). Server emits at the moment the entitlement row is written. props: planCode, billingPeriod, source, amountStars, currency, priceBucket? (E17 yearly-price arm — present only for yearly activations made while the experiment was live).',
     sources: ['server'],
     pii: 'userId-only',
   },
@@ -339,7 +339,7 @@ export const PRODUCT_EVENTS = [
     domain: 'paywall',
     action: 'viewed',
     description:
-      'Paywall sheet rendered to the user. UI impression — emitted from the Mini App.',
+      'Paywall sheet rendered to the user. UI impression — emitted from the Mini App. props: context, surface (pro_upsell_sheet|screen), trigger, wishlistId?, yearlyVariant? + yearlyPriceXtr? (E17 — the Pro upsell sheet always shows the yearly tile, so a pro_upsell_sheet impression IS the yearly-price experiment denominator; present only while the experiment is active).',
     sources: ['client'],
     pii: 'none',
   },

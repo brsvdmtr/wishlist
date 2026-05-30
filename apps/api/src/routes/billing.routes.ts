@@ -57,6 +57,7 @@ import { zodError } from '../lib/http';
 import { getRequestLocale } from '../lib/locale';
 import { createTgInvoiceLink } from '../telegram/invoiceLink';
 import { resolveGroupGiftUnlockPrice } from '../services/group-gift-pricing';
+import { resolveYearlyProPrice } from '../services/yearly-pricing';
 import { t, LIFETIME_BILLING_PERIOD } from '@wishlist/shared';
 import logger from '../logger';
 
@@ -234,11 +235,34 @@ export function registerBillingRouter(deps: BillingRouterDeps): Router {
 
       const checkoutSessionId = crypto.randomUUID();
       const payloadType = isLifetime ? 'pro_lifetime' : isYearly ? 'pro_yearly' : 'pro_monthly';
-      const payload = `${payloadType}:${req.tgUser!.id}:${checkoutSessionId}`;
-      const price = isLifetime ? PRO_LIFETIME_PRICE_XTR : isYearly ? PRO_YEARLY_PRICE_XTR : PRO_PRICE_XTR;
+
+      // E17 — yearly Pro price is bucket-aware (control 800 / a 600 / b 1000).
+      // Resolve the STICKY bucket here so the invoice charges exactly what the
+      // paywall showed this same user — services/yearly-pricing.ts is the single
+      // source of truth feeding the bootstrap display, /me/plan, and this
+      // invoice. Only NON-Pro users are bucketed: a Pro user stacking a yearly
+      // purchase keeps control (was never shown a test price), and existing
+      // yearly subscribers are never re-priced (entitlement is period-based —
+      // self-check #3). When the experiment is dormant (the default) `active` is
+      // false → no bucket, flat 800, payload byte-identical to today.
+      // Monthly/lifetime never bucket.
+      let price = isLifetime ? PRO_LIFETIME_PRICE_XTR : isYearly ? PRO_YEARLY_PRICE_XTR : PRO_PRICE_XTR;
+      let yearlyBucket: string | undefined;
+      if (isYearly && !ent.isPro) {
+        const yp = await resolveYearlyProPrice(user.id);
+        price = yp.priceXtr;
+        if (yp.active) yearlyBucket = yp.variant;
+      }
+      // The bucket rides the payload as a 4th segment so the bot can stamp
+      // payment.completed / pro.activated with it (self-check #4). The bot parses
+      // the payload by index and tolerates extra segments, so legacy 3-segment
+      // invoices already in flight stay valid.
+      const payload = yearlyBucket
+        ? `${payloadType}:${req.tgUser!.id}:${checkoutSessionId}:${yearlyBucket}`
+        : `${payloadType}:${req.tgUser!.id}:${checkoutSessionId}`;
       const locale = getRequestLocale(req);
 
-      trackEvent('checkout_started', user.id, { plan });
+      trackEvent('checkout_started', user.id, { plan, ...(yearlyBucket ? { bucket: yearlyBucket } : {}) });
 
       const invoiceBody: Record<string, unknown> = {
         title: isLifetime
@@ -272,11 +296,11 @@ export function registerBillingRouter(deps: BillingRouterDeps): Router {
       if (!tg.ok) {
         if (tg.retryable) {
           logger.warn({ reason: tg.description, plan }, 'billing createInvoiceLink network failure');
-          trackEvent('checkout_failed', user.id, { reason: 'tg_network_timeout', plan });
+          trackEvent('checkout_failed', user.id, { reason: 'tg_network_timeout', plan, ...(yearlyBucket ? { bucket: yearlyBucket } : {}) });
           return res.status(503).json({ error: 'telegram_unavailable' });
         }
         logger.error({ description: tg.description, plan }, 'billing createInvoiceLink failed');
-        trackEvent('checkout_failed', user.id, { reason: tg.description, plan });
+        trackEvent('checkout_failed', user.id, { reason: tg.description, plan, ...(yearlyBucket ? { bucket: yearlyBucket } : {}) });
         return res.status(502).json({ error: 'Failed to create invoice' });
       }
 

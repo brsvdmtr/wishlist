@@ -14,6 +14,7 @@ import { createRateLimiter } from '../security';
 import {
   getExperimentAssignment,
   isValidExperimentKey,
+  isWeightedExperimentKey,
   readExperimentConfig,
 } from '../services/experiments.service';
 
@@ -47,6 +48,13 @@ export function registerExperimentsRouter(deps: ExperimentsRouterDeps): Router {
       const key = req.params.key ?? '';
       if (!isValidExperimentKey(key)) {
         return res.status(400).json({ error: 'INVALID_EXPERIMENT_KEY' });
+      }
+      // Weighted (multi-variant) keys must NOT be resolved through this binary
+      // route — doing so would persist a binary row that poisons the weighted
+      // ledger (E17). The client reads weighted prices from the bootstrap /
+      // /me/plan, never from this hook. Fail closed with a clear signal.
+      if (isWeightedExperimentKey(key)) {
+        return res.status(400).json({ error: 'WRONG_EXPERIMENT_PATH' });
       }
       const user = await getOrCreateTgUser(req.tgUser!);
       const result = await getExperimentAssignment(user.id, key, readExperimentConfig(key));

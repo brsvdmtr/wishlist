@@ -2739,7 +2739,7 @@ function getAddonOffers(locale: Locale): Record<string, { title: string; tag: st
 // PRO UPSELL SHEET (context-aware)
 // ═══════════════════════════════════════════════════════
 
-function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon, addonCheckoutLoading, addonLoadingSku, availableSkus, cappedAddonCodes, locale, referralConfig, onOpenReferral, onReferralImpression, onAddManually, freeImportsLimit }: {
+function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon, addonCheckoutLoading, addonLoadingSku, availableSkus, cappedAddonCodes, locale, referralConfig, onOpenReferral, onReferralImpression, onAddManually, freeImportsLimit, proYearlyPricing }: {
   state: UpsellSheetState;
   onClose: () => void;
   onUpgrade: (plan: 'monthly' | 'yearly' | 'lifetime') => void;
@@ -2764,6 +2764,15 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
   onAddManually: () => void;
   /** FREE monthly URL-import allowance, for the quota-exhausted sheet copy. */
   freeImportsLimit: number;
+  /**
+   * E17 — server-resolved bucket-aware yearly price (control 800 / a 600 /
+   * b 1000). null when the experiment is dormant or the bootstrap hasn't
+   * answered → the tile + CTA fall back to the built-in 800 ⭐ constant. When
+   * set, this is the price the /pro/checkout invoice will charge this same user
+   * (sticky bucket) — so the tile, the per-month subtext, and the CTA all show
+   * exactly what they'll pay.
+   */
+  proYearlyPricing?: { priceXtr: number; priceVariant: string } | null;
 }) {
   const content = state ? getUpsellContent(locale)[state.context] : null;
   // Lifetime tile renders in EVERY paywall sheet — context-driven feature-gates
@@ -2783,7 +2792,10 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
   // sheet; 'pro' = the full PRO plan picker (reached by tapping the PRO option).
   const [quotaView, setQuotaView] = useState<'options' | 'pro'>('options');
   const monthlyPrice = PRO_PRICE_MONTHLY_STARS;
-  const yearlyPrice = PRO_PRICE_YEARLY_STARS;
+  // E17 — server-resolved bucket price wins once the bootstrap has answered;
+  // the constant is the pre-answer / dormant-experiment fallback. Because the
+  // server bucket is sticky, this is exactly what /pro/checkout will charge.
+  const yearlyPrice = proYearlyPricing?.priceXtr ?? PRO_PRICE_YEARLY_STARS;
   const lifetimePrice = PRO_PRICE_LIFETIME_STARS;
   const yearlyPerMonth = Math.round(yearlyPrice / 12);
   // Fire impression when the paywall becomes visible AND the referral alt
@@ -4179,6 +4191,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     ggAccess, setGgAccess,
   } = useGroupGiftState();
 
+  // E17 — server-resolved bucket-aware yearly Pro price (control 800 / a 600 /
+  // b 1000), delivered in the GET /tg/wishlists bootstrap for non-Pro users.
+  // null until the bootstrap answers, and the server OMITS the field when the
+  // experiment is dormant — so the paywall falls back to its built-in 800 ⭐
+  // constant. The server bucket is sticky, so this value equals what
+  // /pro/checkout charges the same user (shown == charged).
+  const [proYearlyPricing, setProYearlyPricing] = useState<{ priceXtr: number; priceVariant: string } | null>(null);
+
   // F3 + F4 Wave E — Guest View cluster state (~18 cells across the
   // public wishlist view, item detail, and filter sheet). Hook owns the
   // raw cells; loaders + reservation handlers + sibling ctx bags still
@@ -4919,6 +4939,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       surface: 'pro_upsell_sheet',
       trigger: upsellTriggerRef.current,
       wishlistId: upsellSheet?.wishlistId,
+      // E17 — the Pro upsell sheet always shows the yearly tile, so this is the
+      // yearly-price experiment's impression. Tag the arm + shown price when the
+      // experiment is active (proYearlyPricing set) so the impression is
+      // self-describing; readouts still attribute via the ExperimentAssignment
+      // ledger, so dormant impressions stay byte-identical (no extra props).
+      ...(proYearlyPricing
+        ? { yearlyVariant: proYearlyPricing.priceVariant, yearlyPriceXtr: proYearlyPricing.priceXtr }
+        : {}),
     });
     // Santa-specific paywall impression — coexists with the generic
     // paywall.viewed above (same pattern as search.* / showcase.* events).
@@ -4926,7 +4954,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       trackEvent('santa.paywall_viewed', { context: ctx });
     }
     upsellTriggerRef.current = 'tap';
-  }, [upsellSheet?.context, upsellSheet?.wishlistId, trackEvent]);
+  }, [upsellSheet?.context, upsellSheet?.wishlistId, trackEvent, proYearlyPricing]);
 
   const pushToast = useCallback((message: string, kind: Toast['kind']) => {
     const toast: Toast = { id: crypto.randomUUID(), message, kind };
@@ -5252,6 +5280,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     setSubscription(json.subscription);
     if ((json as any).giftNotes) setGnAccess((json as any).giftNotes);
     if ((json as any).groupGift) setGgAccess((json as any).groupGift);
+    // E17 — bucket-aware yearly price (omitted by the server when dormant).
+    if ((json as any).proYearly) setProYearlyPricing((json as any).proYearly);
     if ((json as any).secretReservations) setSecretAccess((json as any).secretReservations);
     if ((json as any).cardDisplayMode) setCardDisplayMode((json as any).cardDisplayMode);
     if ((json as any).proSource !== undefined) setProSource((json as any).proSource);
@@ -20853,6 +20883,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           setShowItemForm(true);
         }}
         freeImportsLimit={credits.freeImportsLimit ?? 5}
+        proYearlyPricing={proYearlyPricing}
         locale={locale}
         referralConfig={referralRulesConfig}
         onOpenReferral={() => {
