@@ -5,6 +5,104 @@ New entries go at the top.
 
 ---
 
+## 2026-05-30 — Settings screen rendered from a DEAD copy — extraction landed the import + orphaned file but never the render site
+
+### Symptom
+
+The Settings screen existed in **two copies** that silently diverged:
+
+1. **LIVE** — an inline `{screen === 'settings' && (() => {...})()}` IIFE
+   in [`apps/web/app/miniapp/MiniApp.tsx`](../apps/web/app/miniapp/MiniApp.tsx)
+   (~740 LOC). The only copy that rendered at runtime.
+2. **DEAD** — [`apps/web/app/miniapp/screens/settings/SettingsRoot.tsx`](../apps/web/app/miniapp/screens/settings/SettingsRoot.tsx),
+   `dynamic()`-imported at MiniApp.tsx + fed by a `settingsRootCtx` bag,
+   but with **no `<SettingsRoot .../>` render site anywhere**.
+
+The tell: a recent `formatBirthday` fix had to be applied to **both**
+implementations. Editing only the extracted file would have had zero
+prod effect, because that chunk is never loaded.
+
+### Root cause
+
+The F4 Wave D-1 extraction was made on a worktree branch and only
+**partially** cherry-picked to `main`: the `dynamic()` import, the
+orphaned `SettingsRoot.tsx`, and the `settingsRootCtx` bag landed — but
+the commit that replaced the inline IIFE with `<SettingsRoot
+screen={screen} ctx={settingsRootCtx} />` never merged. Result: an
+import that pulls a lazy chunk that's never rendered, a ctx bag that's
+built every render but consumed nowhere, and two copies free to drift.
+
+Two safety nets failed to catch it:
+
+- **tsc is blind to it.** A dead lazy component type-checks perfectly —
+  unused imports/locals don't error (`noUnusedLocals` is off), and
+  `next/dynamic` evaluates the importer lazily, so an unrendered chunk
+  is indistinguishable from a rendered one at compile time.
+- **The F1 monolith-guard only checks the *import*.** It asserts each
+  Root is `dynamic()`-wrapped and not statically imported — never that
+  it has a JSX **render site**. Import-without-render sails straight
+  through.
+
+A careful diff of the two copies showed they were **behaviour-identical
+except 4 type-only annotations** (3× explicit `(r: Response)` because
+`tgFetch` arrives via a typed `ctx`, and `typeof birthdayMutedList` →
+`BirthdayMutedUser[]` — the same DTO spelled out). So finishing the
+extraction (option a) was safe; reconciliation risk was nil.
+
+### Lesson
+
+- **An extraction is not "done" at the import — it's done at the render
+  site.** Landing the lazy import + the extracted file + the ctx bag,
+  but leaving the inline copy as the live renderer, is strictly worse
+  than not extracting at all: you now maintain two copies and only one
+  matters, with nothing flagging which.
+- **"Dead lazy chunk" is invisible to every automatic check we had.**
+  Type-check, the import-only guard, and even a passing test suite all
+  stay green. Only a human noticing "I edited this and nothing changed"
+  surfaces it.
+- **A partial cherry-pick from a worktree branch is a high-risk merge.**
+  When an extraction spans "create file + wire import" and "swap render
+  site + delete inline", the two halves MUST land together or the
+  feature half-lands into drift.
+
+### Rule
+
+- **Finishing a Root extraction = render site wired + inline copy
+  deleted + orphaned imports removed**, in one change. Grep `<Name`
+  before assuming an extracted screen is live.
+- **Every ctx-bag Root must have a render-site guard, not just an
+  import guard.** Added to
+  [`monolith-guards.test.ts`](../apps/web/app/miniapp/monolith-guards.test.ts):
+  assert `<SettingsRoot ... ctx={settingsRootCtx}/>` exists, the inline
+  `screen === 'settings' && (() =>` IIFE is gone, and the ctx bag is
+  consumed. (Red at the pre-fix HEAD on all three; green after.)
+- **When you touch one of two divergent copies, fix the divergence, not
+  just the symptom.** The `formatBirthday` double-edit was the warning
+  shot — the real fix is collapsing to one source.
+
+### Better code
+
+- [`apps/web/app/miniapp/MiniApp.tsx`](../apps/web/app/miniapp/MiniApp.tsx) —
+  inline 740-LOC settings IIFE replaced with `{screen === 'settings' && (
+  <SettingsRoot screen={screen} ctx={settingsRootCtx} /> )}` (matches the
+  8 sibling ctx-bag Roots exactly); the 5 now-orphaned `@wishlist/ui`
+  settings primitives (`DSSettingsSection/Row/Toggle/ActionRow`,
+  `SettingsDivider`) dropped from the import. Net −746 LOC; `settingsRootCtx`
+  is now consumed; `SettingsRoot.tsx` is the single source of truth.
+- [`apps/web/app/miniapp/monolith-guards.test.ts`](../apps/web/app/miniapp/monolith-guards.test.ts) —
+  3 render-site regression guards (95/95 pass).
+
+### What's NOT in this fix
+
+- **`PublicProfileRoot` carries the identical latent drift** — its
+  `publicProfileRootCtx` is built but consumed nowhere, and the
+  `{screen === 'public-profile' && (() => {...})()}` IIFE is still the
+  live copy. Out of scope here; tracked separately. The new guard's
+  doc-comment flags it for the next person to extend when that
+  extraction is finished.
+
+---
+
 ## 2026-05-30 — Santa seasonal broadcast ignored marketing opt-out (compliance gap, fixed with E23)
 
 ### Symptom

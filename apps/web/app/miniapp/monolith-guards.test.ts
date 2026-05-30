@@ -323,3 +323,50 @@ describe('MiniApp.tsx — Pro-upsell content guards (2026-05-22 monetization aud
     expect(MINI_APP_SRC).not.toMatch(/bot_import/);
   });
 });
+
+describe('MiniApp.tsx — extracted-Root render-site guard (Settings drift, 2026-05-30)', () => {
+  // The F4 SettingsRoot extraction landed the `dynamic()` import AND the
+  // `settingsRootCtx` bag, but the JSX render site (`<SettingsRoot .../>`)
+  // was made on a worktree branch that never merged. Only the import +
+  // the orphaned screens/settings/SettingsRoot.tsx file reached main, so
+  // the inline `{screen === 'settings' && (() => {...})()}` IIFE kept
+  // rendering at runtime while SettingsRoot.tsx silently diverged — a
+  // formatBirthday fix had to be applied to BOTH copies for any prod
+  // effect.
+  //
+  // The F1 guard above checks each Root is *imported* (dynamic + not
+  // statically imported); it never checked the Root is actually
+  // *rendered*. A dead lazy chunk is invisible to type-check AND to the
+  // F1 guard. This block closes that gap for SettingsRoot.
+  //
+  // NB: `PublicProfileRoot` carries the same latent drift today — its
+  // `publicProfileRootCtx` is built but never consumed and the
+  // `{screen === 'public-profile' && (() => {...})()}` IIFE is still the
+  // live copy. Extend this guard to PublicProfileRoot when that
+  // extraction is finished (tracked separately).
+
+  it('SettingsRoot is rendered, not just imported', () => {
+    // Tolerant of prop-order / line-break reformatting: anchor on the
+    // opening tag + the ctx bag it must receive.
+    const rendered = /<SettingsRoot\b[\s\S]{0,80}?ctx=\{settingsRootCtx\}/;
+    expect(MINI_APP_SRC, 'SettingsRoot must have a JSX render site').toMatch(rendered);
+  });
+
+  it('the inline settings IIFE is gone (single source of truth)', () => {
+    // The dead inline copy was `{screen === 'settings' && (() => {`.
+    // The finished extraction renders `{screen === 'settings' && (` then
+    // `<SettingsRoot .../>` — no IIFE. A re-introduced inline block would
+    // recreate the two-copies-drift hazard.
+    expect(
+      MINI_APP_SRC,
+      'inline settings IIFE re-introduced — SettingsRoot.tsx would drift again',
+    ).not.toMatch(/screen === 'settings' && \(\(\) =>/);
+  });
+
+  it('settingsRootCtx is consumed by a render site, not a dead bag', () => {
+    const defined = /const settingsRootCtx = \{/.test(MINI_APP_SRC);
+    const consumed = /ctx=\{settingsRootCtx\}/.test(MINI_APP_SRC);
+    expect(defined, 'settingsRootCtx bag must still be built').toBe(true);
+    expect(consumed, 'settingsRootCtx must be passed to <SettingsRoot/>').toBe(true);
+  });
+});
