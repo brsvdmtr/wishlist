@@ -1,6 +1,6 @@
 # API_REFERENCE.md — Complete Endpoint Reference
 
-> Last updated: 2026-05-29. Since the P1–P5s refactor (closed 2026-05-07), `apps/api/src/index.ts` is a composition root; route handlers live in **25 domain routers** under `apps/api/src/routes/<domain>.routes.ts` (the latest two: `experiments.routes.ts` and `research-survey.routes.ts`), with cross-cutting work in `apps/api/src/services/` and crons in `apps/api/src/schedulers/` (9 modules). See [docs/API_ARCHITECTURE_RULES.md](API_ARCHITECTURE_RULES.md).
+> Last updated: 2026-05-31. Since the P1–P5s refactor (closed 2026-05-07), `apps/api/src/index.ts` is a composition root; route handlers live in **25 domain routers** under `apps/api/src/routes/<domain>.routes.ts` (the latest two: `experiments.routes.ts` and `research-survey.routes.ts`), with cross-cutting work in `apps/api/src/services/` and crons in `apps/api/src/schedulers/` (9 modules). See [docs/API_ARCHITECTURE_RULES.md](API_ARCHITECTURE_RULES.md).
 
 ---
 
@@ -469,7 +469,7 @@ The 402 response is intentional — Pro fields are never silently saved as inact
 
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
-| POST | `/tg/me/god-mode` | Whitelisted TG IDs | Toggle godMode boolean. Controlled by `GOD_MODE_TELEGRAM_IDS` env var |
+| POST | `/tg/me/god-mode` | Whitelisted TG IDs | Toggle the operator's own `User.godModeActive` switch (restored 2026-05-29). Eligibility is env-derived from `GOD_MODE_TELEGRAM_IDS`; this toggle is ANDed with it, so it can only *suppress* god for an already-eligible operator (e.g. to dogfood as a normal user), never *grant* it. The deprecated `User.godMode` column is no longer read |
 | GET | `/tg/me/god-stats` | God mode user | Full analytics dashboard: overview (users, DAU/WAU/MAU, wishlists, items, reservations, PRO), funnel (activation, share, reservation), engagement (comments, hints, subs), PRO limits 24h, errors 24h, onboarding A/B metrics, locale segments. Query: `?localeScope=active30d|new7d|all` |
 | GET | `/tg/me/retention-stats` | God mode user | Lifecycle/winback analytics: touches sent/delivered, return rates (24h/72h/7d), promo assignment/delivery/redemption, by-segment breakdown (S1-S4), by-touch-number. Query: `?period=30` |
 | GET | `/tg/me/retention-recent` | God mode user | Last 30 lifecycle touches + last 10 promo redemptions for debugging |
@@ -722,6 +722,10 @@ Source: `apps/api/src/routes/experiments.routes.ts` + `services/experiments.serv
 |--------|------|-----|-------------|
 | GET | `/tg/experiments/:key` | Auth user | Resolve this user's sticky variant for one experiment. First exposure persists the assignment and emits `experiment.assigned`; later calls are sticky. **400** `INVALID_EXPERIMENT_KEY` for an unknown/malformed key. Behind the gentle `research.read` limiter (the first-exposure insert is idempotent, not a user mutation), so it carries no `protectTgRoute` chain |
 
+**Binary vs weighted resolvers (2026-05-30).** A key resolves through **exactly one** of two sticky paths, never both — enforced, not just documented (`services/experiments.service.ts`):
+- **Binary** (`getExperimentAssignment` → `control`/`treatment`, optional holdout) — the default; what this route and the `useExperiment` hook use.
+- **Weighted multi-variant** (`getWeightedAssignment` → arbitrary arm labels like `control`/`a`/`b`) — for >2-arm price tests. Registered keys live in `WEIGHTED_EXPERIMENT_KEYS` (currently `yearly-price`, the E17 3-way Pro-yearly price test). Both the binary resolver and this public route **refuse** a weighted key (throws / 400), so a stray binary read can't poison the ledger with a phantom arm flattened to `control`. First-exposure persistence + the single `experiment.assigned` emit are shared via `persistFirstExposure`.
+
 ### Research Surveys (since 2026-05-21)
 
 Source: `apps/api/src/routes/research-survey.routes.ts` + `services/research-survey.ts`. In-app PMF/research surveys delivered by invite (`survey-pmf-v1`). Survey rows never store Telegram IDs — handlers materialize the `User` row and use `User.id` (cuid) as the survey-side `userId`. **PII discipline:** error responses never echo the `optionIds` / `answerText` the user tried to send, nor segment metadata not already on the invite (anti-enumeration). State-changing routes carry `createRateLimiter('research.write')` + idempotency (`/complete` is `critical: true`).
@@ -771,6 +775,9 @@ Requires `X-ADMIN-KEY` header. Used by the Next.js admin panel pages. Routes ope
 | POST | `/wishlists/:id/items` | Add item to system wishlist |
 | PATCH | `/items/:id` | Update system item |
 | DELETE | `/items/:id` | Hard-delete system item |
+| GET | `/admin/billing/reconcile` | **Read-only** cross-table billing reconciliation (`PaymentEvent` / `Subscription` / `Purchase`). Surfaces orphan payments, paid subs with no payment trail, duplicate charge ids, and failed/partial cases. The report carries no PII (hashed charge ids, opaque cuids) and emits `admin.billing_reconcile_viewed` (counts only). **Mutations stay CLI-only** (`pnpm billing:reconcile -- --apply`) — a GET must be side-effect-free. Runbook: [docs/ops/billing-reconciliation.md](ops/billing-reconciliation.md) (added 2026-05-29) |
+
+> The legacy item/wishlist **tag** admin endpoints (`POST/DELETE /items/:itemId/tags/:tagId`, `POST /wishlists/:id/tags`, `PATCH/DELETE /tags/:id`) were removed 2026-05-30 along with the dead `Tag` / `ItemTag` tables. The feature was never surfaced in the Mini App.
 
 ---
 

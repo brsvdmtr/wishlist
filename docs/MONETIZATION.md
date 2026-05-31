@@ -1,7 +1,19 @@
 # MONETIZATION
 
 > Source of truth for plans, limits, entitlements, billing flow, and paywall content.
-> Last updated: 2026-05-28 · Branch: main
+> Last updated: 2026-05-31 · Branch: main
+
+---
+
+> **Pricing A/B experiments (all DEPLOYED to prod but DORMANT / OFF by default as of 2026-05-31).** Three experiments can override the prices/limits below at runtime once enabled via env — until then prod serves the control values documented here. Sticky per-user buckets live in the `ExperimentAssignment` table.
+>
+> | Experiment | Key | What it varies | Control → arms | Enable env | Status doc |
+> |---|---|---|---|---|---|
+> | **E17 yearly price** | `yearly-price` (weighted, 3-way) | PRO yearly price | 800 → {600, 1000} ⭐ | `EXP_YEARLY_PRICE_ENABLED=true` + `_ROLLOUT=67` | `docs/research/experiments/yearly-price-e17.md` |
+> | **E24 group-gift price** | `group-gift-price` (binary) | Group Gift unlock price | 79 → 39 ⭐ | `EXP_GROUP_GIFT_PRICE_ENABLED=true` + `_ROLLOUT` | `docs/research/experiments/group-gift-price-e24.md` |
+> | **growth-first limits** | `growth-first-limits` (binary) | FREE-tier wishlist/item caps | (loosened limits) | (ramp w/ PRO-conversion + ARPU guardrails) | `docs/research/growth-first-ab-plan.md` |
+>
+> E17 is the first weighted (multi-variant) experiment — its key is registered in `WEIGHTED_EXPERIMENT_KEYS` and resolved only via `getWeightedAssignment` (see API_REFERENCE § A/B Experiments). E17 launch is gated (events working + June readout) and must **never** run concurrently with the E21 Event Pass.
 
 ---
 

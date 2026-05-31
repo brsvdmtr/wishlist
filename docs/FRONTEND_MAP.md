@@ -1,6 +1,6 @@
 # FRONTEND_MAP.md — Frontend Architecture
 
-> Date: 2026-05-29. Verified from source code.
+> Date: 2026-05-31. Verified from source code.
 
 ---
 
@@ -53,6 +53,8 @@ apps/web/
         paywall.ts               - parsePaywallError / paywallContextFromError
         experiments.ts           - useExperiment() A/B hook (server-assigned sticky bucket)
         postReservationCta.ts    - E11 post-reservation account-claim CTA gate (pure)
+        guestBannerCta.ts        - E13 passive guest-view banner gate: eligibility (guest w/ 0
+                                   wishlists), 7-day impression cap, dismiss-mute, god-mode force
         reservePrefill.ts        - E15 display-name prefill chain for the reserve sheet
         attribution.ts           - fireAttributionBeacon (guest.converted_to_user etc.)
         referralFailReason.ts    - inferReferralLoadFailReason for analytics tagging
@@ -125,6 +127,17 @@ keeps the orchestration single-sourced in the shell while moving the bulk JSX
 cluster drives (e.g. Profile's edit-profile / change-avatar, Gift Notes'
 onboarding dispatcher) stay in `MiniApp.tsx` as global overlays sharing the
 same hook instance.
+
+**Decomposition fully landed (2026-05-30):** the last inline IIFE fallbacks for
+`SettingsRoot` and `PublicProfileRoot` were deleted and the extracted clusters
+are now what actually renders (PRs #28, #30) — `MiniApp.tsx` shed a further
+~1.3k LOC. A generic render-site guard (`monolith-guards.test.ts`) now asserts
+every `*RootCtx` bag is consumed, preventing a cluster from silently
+de-rendering. Separately, lingering fake-interactive **"coming soon" stubs**
+were removed (PR #29): the Home "expiring" stat tile is now a passive
+non-interactive `<div>`, the Reservations owner header dropped its dead
+`onClick`, and 5 dead i18n keys were deleted across all 6 locales (kept: FAQ
+roadmap, the search smart "expiring" PRO filter).
 
 ---
 
@@ -215,7 +228,7 @@ Navigation is done by calling `setScreen(...)` together with supporting state (`
 | # | Screen | Description |
 |---|--------|-------------|
 | 7 | `share` | Share screen: share token link, Telegram share button, copy link |
-| 8 | `guest-view` | Wishlist seen by a friend: items + reservation statuses. Filter/sort (price_asc, price_desc, priority_desc, recommended[PRO]). Budget filter. Subscribe button |
+| 8 | `guest-view` | Wishlist seen by a friend: items + reservation statuses. Filter/sort (price_asc, price_desc, priority_desc, recommended[PRO]). Budget filter. Subscribe button. **E13 banner**: a passive `GuestViewBanner` ("create your own wishlist") scrolls into view at the end of the list for a guest with zero own wishlists — fires once per session, capped N impressions / 7 days, dismissible; CTA launches onboarding (`entry_point="guest_view_banner"`). Eligibility/cap/mute logic is the pure `lib/guestBannerCta.ts`; telemetry `guest_banner.{shown,clicked,dismissed}`. Experiment-gated, env `EXP_E13_GUEST_BANNER_*` |
 | 9 | `guest-item-detail` | Single item seen by guest: reserve/unreserve button, comments (PRO), purchased button |
 | 10 | `my-reservations` | Items reserved by current user across all wishlists. Unread comment count badge per item. **PRO layer**: Active/History segment, filters bar (unread, owner, sort), inline note/purchased/reminder controls per card, history tab with filter chips (All/Gifted/Cancelled/Archived). Non-PRO users see lock icons and upsell prompts |
 

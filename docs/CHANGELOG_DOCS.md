@@ -4,6 +4,37 @@
 
 ---
 
+## 2026-05-31 — Weekly Documentation Update
+
+**6 docs touched** to reflect the **20 product commits on `origin/main` since the 2026-05-29 weekly pass** (`4cd16f2..a04679c`). Counts held steady at **81 models / 38 enums / 61 screens** — the dead `Tag`/`ItemTag` tables were dropped (−2) and the two E23 Santa pre-season models added (+2), a net wash.
+
+- **DATA_MODEL.md** — Added the E23 models `SantaPreseasonTouch` (per-`(userId, seasonYear)` teaser-DM ledger: A/B variant, segment, send-state, per-touch mute; the >15%-mute kill-switch counts this table directly) and `SantaPreseasonBroadcast` (per-season status latch / write-once lock); bumped the Secret Santa subsystem note **20 → 24 models** (the prose had already drifted 2 behind). Documented `User.godModeActive` (operator on/off toggle restored 2026-05-29; ANDed with env eligibility, can only suppress) and marked `User.godMode` **deprecated/inert**. Added the `santaPreseasonTouches[]` relation. Header note records the Tag-drop / Santa-add count wash. Migrations: `20260529120000_add_user_god_mode_active`, `20260530120000_add_santa_preseason`, `20260530120000_drop_tags`.
+- **API_REFERENCE.md** — Added **`GET /admin/billing/reconcile`** (read-only cross-table billing reconciliation; mutations stay CLI-only via `pnpm billing:reconcile`). Noted removal of the legacy tag admin endpoints. Rewrote `POST /tg/me/god-mode` to toggle `godModeActive` (env-eligibility-gated, suppress-only). Added the **binary-vs-weighted experiment-resolver** contract under § A/B Experiments — `WEIGHTED_EXPERIMENT_KEYS` (`yearly-price`), the refusal guard on the binary path / public route, and the shared `persistFirstExposure`.
+- **MONETIZATION.md** — Added a **Pricing A/B experiments** table at the top: E17 yearly-price (3-way 800→{600,1000}⭐, first weighted experiment), E24 group-gift-price (79→39⭐), growth-first-limits — all **deployed-but-DORMANT**, with their enable-envs and status docs.
+- **FRONTEND_MAP.md** — Documented the **E13 passive guest-view banner** (`GuestViewBanner`, `lib/guestBannerCta.ts`, `guest_banner.*` telemetry) on the `guest-view` screen; noted the decomposition fully landing (last `SettingsRoot`/`PublicProfileRoot` inline IIFEs deleted, `monolith-guards.test.ts` render-site guard, ~1.3k LOC shed) and the removal of fake-interactive "coming soon" stubs (5 dead i18n keys deleted across 6 locales). Screen count held at 61.
+- **USER_FLOWS.md** — Added the E13 banner as step 11 of Flow 6 (Guest Viewing), cross-linked to Flow 37 (E11 claim).
+- **CURRENT_PRODUCT_STATE.md** — Updated the count-verification note (Tag-drop / Santa-add wash); prepended 7 **Recently Shipped** entries (billing reconciliation, E23 Santa pre-season teaser, Santa funnel analytics, E13 guest banner, dormant pricing experiments, god-mode toggle restoration, dead-Tag removal).
+- **CHANGELOG_DOCS.md** — this entry.
+
+**Headline shipped work (20 commits, `4cd16f2..a04679c`):**
+
+- **Billing reconciliation** (`8c9ce22`, hardened `c735a02`/`fdb8127`/`fcc5252` to 10/10) — read-only cross-checks of `PaymentEvent`/`Subscription`/`Purchase` + idempotent CLI relink; `GET /admin/billing/reconcile`; operator runbook.
+- **E23 Santa pre-season teaser DM** (`b865df4`) — segmented, A/B-controlled, mute kill-switch; dormant until ~Nov 1. **Secret Santa funnel analytics** (`78a69ad`) — 5 server-authoritative funnel events, anonymity-preserving.
+- **E13 passive guest-view banner** (`be3d8bb`, env-wired `ce092d6`, mockup approved `9f360b3`) — ambient guest→owner growth nudge.
+- **Pricing experiments, all dormant** — E17 3-way yearly-price (`2f85dcd`, regression guards `a04679c`/`2035051`), E24 group-gift-price (`955ced8`), growth-first-limits (`a049a01`).
+- **God-mode** (`8a5eeb5`) — restored the operator on/off toggle (`godModeActive`), decoupled from env eligibility.
+- **Dead Tag feature removed** (`dc3dd35` + `306b854`) — code, Prisma models, admin endpoints, docs.
+- **Mini App decomposition finish** — render extracted `PublicProfileRoot`/`SettingsRoot`, delete inline IIFEs (`df3e62b`, `56a6b16`); remove fake "coming soon" placeholders (`f34e5a6`).
+
+**Migrations applied this window:**
+- `20260529120000_add_user_god_mode_active` — `User.godModeActive` (Boolean, default true).
+- `20260530120000_add_santa_preseason` — `SantaPreseasonTouch` + `SantaPreseasonBroadcast`.
+- `20260530120000_drop_tags` — drops `Tag` + `ItemTag` tables.
+
+> **Process note:** local `main` had diverged from `origin/main` (1 unpushed duplicate of the billing commit + a large co-mingled working tree of in-flight parallel work). This pass was authored in an **isolated worktree based on `origin/main`** so the docs reflect deployed reality and push as a clean fast-forward, without touching the shared local tree.
+
+---
+
 ## 2026-05-29 — Weekly Documentation Update
 
 **5 docs touched** to reflect ~50 product commits since the 2026-05-20 counter refresh (the 2026-05-28 `docs(changelog)` release note covered the prose CHANGELOG; the structured docs below had drifted on counts, monetization model, and the Mini App architecture). MONETIZATION.md was already refreshed in-flight on 2026-05-28 (conservative-pricing pass) and needed no further change this pass.

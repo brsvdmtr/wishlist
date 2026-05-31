@@ -1,6 +1,6 @@
 # WishBoard — User Flows
 
-> Source of truth for all user journeys. Last updated: 2026-05-29 · Branch: main
+> Source of truth for all user journeys. Last updated: 2026-05-31 · Branch: main
 >
 > This document reflects the product as implemented, not aspirational features.
 
@@ -240,6 +240,7 @@ The onboarding catalog is locale-aware. Two market segments determine which temp
 8. Guest sees the wishlist with each item's reservation status displayed as a count (e.g. "Reserved by 2 people").
 9. **Surprise mode:** The guest does NOT see the names of other people who have reserved items, only whether an item is reserved. This preserves gift surprise.
 10. Guest can tap any available item to view its details and reserve it -> [Flow 7](#flow-7-reservation-surprise-mode).
+11. **E13 passive banner (experiment-gated):** if the guest has zero own wishlists, a "create your own wishlist" banner scrolls into view at the end of the list. It fires once per session (capped N impressions / 7 days, dismissible). Tapping the CTA launches onboarding (`entry_point="guest_view_banner"`) — a softer, ambient sibling to the post-reservation claim in [Flow 37](#flow-37-guest--account-claim-e11-post-reservation-cta). Telemetry: `guest_banner.{shown,clicked,dismissed}`.
 
 **Edge cases:**
 - If the token is invalid or expired, the app shows an error screen.

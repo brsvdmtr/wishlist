@@ -2,7 +2,7 @@
 
 Production feature inventory for the Wishlist Telegram Mini App.
 
-**Last updated:** 2026-05-29
+**Last updated:** 2026-05-31
 
 ---
 
@@ -48,7 +48,7 @@ See also: `docs/MONETIZATION.md`
 - **61 screens** in the Mini App
 - **14 add-on SKUs**
 
-Verify counts: `grep -c '^model ' packages/db/prisma/schema.prisma` (81), `grep -c '^enum ' packages/db/prisma/schema.prisma` (38). The three models added since 2026-05-20 are `HintQuotaCharge`, `ExperimentAssignment`, `UserDailyActivity`.
+Verify counts: `grep -c '^model ' packages/db/prisma/schema.prisma` (81), `grep -c '^enum ' packages/db/prisma/schema.prisma` (38). Count held at 81 across 2026-05-31: the dead `Tag` / `ItemTag` tables were dropped (−2) and the E23 `SantaPreseasonTouch` / `SantaPreseasonBroadcast` models added (+2).
 
 ## Lifecycle & Retention
 
@@ -85,6 +85,13 @@ Verify counts: `grep -c '^model ' packages/db/prisma/schema.prisma` (81), `grep 
 
 ## Recently Shipped
 
+- **Billing reconciliation (2026-05-29)** — Operator tool that cross-checks the three Telegram Stars money tables (`PaymentEvent` / `Subscription` / `Purchase`) and surfaces every discrepancy: orphan payments, paid subs with no payment trail, duplicate charge ids, failed/partial cases. Read-only `GET /admin/billing/reconcile` (emits `admin.billing_reconcile_viewed`, no PII); the only mutation is a narrow idempotent relink behind `pnpm billing:reconcile -- --apply`. Hardened to 10/10 via adversarial review (snapshot scan, exit codes, legacy `gc_payment_received` recognition). Runbook: [docs/ops/billing-reconciliation.md](ops/billing-reconciliation.md)
+- **E23 — Secret Santa pre-season teaser DM (2026-05-30, dormant until Nov)** — A single segmented DM near Nov 1 to past-Santa / active-owner / social-active users, priming campaign creation before the season opens. A/B-controlled, phased broadcast with a >15%-mute kill-switch. New models `SantaPreseasonTouch` (per-user/season ledger) + `SantaPreseasonBroadcast` (per-season latch); telemetry `santa_preseason.{dm_sent,dm_clicked,muted}`
+- **Secret Santa funnel analytics (2026-05-30)** — Five server-authoritative funnel events (`santa.{campaign_created,invite_clicked,joined,draw_completed,reveal_opened}`) carrying only campaign/round-scoped counts — never giver↔receiver identity, preserving draw anonymity
+- **E13 — passive guest-view banner (2026-05-30, experiment-gated)** — A "create your own wishlist" banner that scrolls into view at the end of a guest-view for guests with zero own wishlists. Once-per-session, capped N / 7 days, dismissible; CTA launches onboarding. Telemetry `guest_banner.{shown,clicked,dismissed}`. Mockup approved into the design system
+- **Pricing A/B experiments prepared, all DORMANT (2026-05-29..30)** — E17 yearly-price (3-way 800→{600,1000}⭐, first weighted multi-variant experiment), E24 group-gift-price (79→39⭐), and growth-first-limits — all deployed to prod OFF by default, enabled per-env. See [docs/MONETIZATION.md](MONETIZATION.md)
+- **God-mode operator toggle restored (2026-05-29)** — The 2026-05-28 env-only change left god permanently ON for allowlisted operators; the on/off switch is back as `User.godModeActive` (ANDed with env eligibility — can only suppress, never grant). The legacy `User.godMode` column is now deprecated/inert
+- **Dead Tag feature removed (2026-05-30)** — The never-surfaced `Tag` / `ItemTag` tables, Prisma models, and admin tag endpoints were dropped (2-phase)
 - **Conservative pricing pass (2026-05-28)** — Re-balanced the freemium boundary to charge for delivered value rather than gating attempts. Santa hints: 1 free per campaign, then PRO. Categories: 1 free per wishlist, then PRO (20 with PRO). URL import opened to the FREE tier behind a monthly quota. Hints dropped the hard PRO gate for a FREE monthly quota. FREE participant limit raised 5 → 10. `seasonal_decoration` SKU hidden. Reservation PRO contract aligned. Unified paywall error envelope across `402 PRO_REQUIRED` / `403` / `409` with paywall context. New model `HintQuotaCharge` tracks metered hint usage. See [docs/MONETIZATION.md](MONETIZATION.md)
 - **A/B experiment infrastructure — Phase 0 (2026-05-2x)** — Sticky bucket assignment with a per-user `ExperimentAssignment` row (deterministic, persisted so a user stays in the same arm across sessions/devices). `useExperiment` Mini App hook gated on `tgReady` so buckets resolve only after Telegram init. Foundation for upcoming pricing/onboarding experiments
 - **E04 — default wishlist for new users (2026-05-2x)** — New users get an auto-created default wishlist (`Wishlist.isDefault`, unique-default-per-owner constraint) so the first-run experience is never an empty state

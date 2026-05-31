@@ -1,8 +1,10 @@
 # Data Model — Wishlist Telegram Mini App
 
-_Last updated: 2026-05-29_
+_Last updated: 2026-05-31_
 
 > **81 models, 38 enums** (PostgreSQL 16, managed by Prisma ORM)
+>
+> _Count held at 81 across 2026-05-31: the dead `Tag` / `ItemTag` tables were dropped (−2) and the E23 `SantaPreseasonTouch` / `SantaPreseasonBroadcast` models added (+2)._
 
 ---
 
@@ -405,7 +407,8 @@ A registered user, identified primarily by their Telegram account.
 | `lastName`       | String    | No       | —       | Telegram last name snapshot. Captured opportunistically by the auth middleware (Mini App initData) and bot `/start`. Added 2026-05-08 |
 | `username`       | String    | No       | —       | Telegram username snapshot (no `@`). Captured opportunistically. Added 2026-05-08 |
 | `isPremium`      | Boolean   | Yes      | `false` | Whether the Telegram user has Telegram Premium. Captured from initData / bot. Added 2026-05-08 |
-| `godMode`        | Boolean   | Yes      | `false` | When `true`, grants PRO features without an active subscription    |
+| `godMode`        | Boolean   | Yes      | `false` | **DEPRECATED (2026-05-28), inert.** Legacy god-mode persistence; no longer read on any privilege-granting path. Effective god access is env-derived from `GOD_MODE_TELEGRAM_IDS` (`services/telegram-auth.ts:isGodModeTelegramId`). A follow-up migration drops the column — do not reintroduce reads |
+| `godModeActive`  | Boolean   | Yes      | `true`  | Operator's own on/off toggle for god-mode, restored 2026-05-29. Effective god = `isGodModeTelegramId(tid)` **AND** `godModeActive` — can only ever *suppress* god for an eligible operator (e.g. to dogfood as a normal user), never *grant* it to anyone outside the env allowlist. Inert for non-allowlisted users. Migration `20260529120000_add_user_god_mode_active` |
 | `createdAt`      | DateTime  | Yes      | now     |                                                                    |
 | `updatedAt`      | DateTime  | Yes      | auto    |                                                                    |
 
@@ -446,6 +449,7 @@ A registered user, identified primarily by their Telegram account.
 - `hintQuotaCharges[]` → `HintQuotaCharge` (hint-quota consumption ledger)
 - `dailyActivity[]` → `UserDailyActivity` (per-day product-loop rollup)
 - `experimentAssignments[]` → `ExperimentAssignment` (A/B bucket assignments)
+- `santaPreseasonTouches[]` → `SantaPreseasonTouch` (E23 pre-season teaser DM ledger)
 
 ---
 
@@ -1278,12 +1282,14 @@ Per-recipient mute of a specific birthday user. Set via the bot inline keyboard 
 
 ### Secret Santa Models
 
-The Secret Santa subsystem adds 20 models. Key models are summarized below; see `packages/db/prisma/schema.prisma` for full field definitions.
+The Secret Santa subsystem adds 24 models. Key models are summarized below; see `packages/db/prisma/schema.prisma` for full field definitions.
 
 | Model | Purpose |
 |---|---|
 | `SantaGlobalConfig` | Singleton global master switch (santaEnabled flag) |
 | `SantaSeasonalBroadcastLog` | Prevents duplicate seasonal broadcast notifications per year |
+| `SantaPreseasonTouch` | E23 pre-season teaser DM ledger — one row per `(userId, seasonYear)` carrying the A/B variant, matched segment, send-state, and per-touch mute. The >15%-mute kill-switch counts this table directly (race-free across API + bot). Migration `20260530120000_add_santa_preseason` |
+| `SantaPreseasonBroadcast` | E23 phased-broadcast latch — one row per season (`seasonYear` PK doubles as write-once lock). Status only: `running` → `completed` / `stopped`; the stop-rule reads `SantaPreseasonTouch` |
 | `SantaSeasonConfig` | Optional per-year admin override for season dates |
 | `SantaCampaign` | A Secret Santa event with participants, budget, and invite token |
 | `SantaParticipant` | A user participating in a campaign with optional linked wishlist |
