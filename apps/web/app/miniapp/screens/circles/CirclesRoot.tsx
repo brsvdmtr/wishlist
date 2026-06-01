@@ -103,13 +103,10 @@ export function CirclesRoot({ tgFetch, locale, initial, onExit, onUpsell, pushTo
   const [view, setView] = useState<View>(initial ? { name: 'join', token: initial.token } : { name: 'list' });
 
   return (
-    <div
-      style={{
-        position: 'absolute', inset: 0, overflowY: 'auto',
-        padding: `${sp[4]}px ${sp[4]}px 120px`,
-        background: c.bg,
-      }}
-    >
+    // Normal-flow content — MiniApp's outer container owns the scroll and the
+    // FloatingNav, and the @wishlist/ui Sheet pins itself (position:fixed). An
+    // own absolute+overflow root here broke both scroll and sheet positioning.
+    <div style={{ padding: `${sp[4]}px ${sp[4]}px 120px`, minHeight: '100%' }}>
       {view.name === 'list' && (
         <ListView tgFetch={tgFetch} locale={locale} onOpen={(id) => setView({ name: 'detail', circleId: id })} onCreate={() => setView({ name: 'create' })} onExit={onExit} />
       )}
@@ -434,8 +431,9 @@ function DetailView({ tgFetch, locale, circleId, onBack, onOpenMember, onPrivacy
     <ListRow
       key={m.userId}
       variant="card"
-      interactive={!m.isMe || m.sharedListCount > 0}
+      interactive
       onClick={() => onOpenMember(m.userId)}
+      style={{ marginBottom: sp[2] }}
       leading={<UserAvatar name={m.name} avatarUrl={m.avatarUrl} size={44} accent={c.accent} />}
       title={m.isMe ? `${m.name} · ${t('circle_you', locale)}` : m.name}
       subtitle={
@@ -583,6 +581,13 @@ function MemberView({ tgFetch, locale, circleId, memberId, onBack, pushToast }: 
     }
   };
 
+  // Tapping a wish opens its product URL externally (Telegram in-app browser).
+  const openItem = (url: string | null) => {
+    if (!url) return;
+    const tg = (window as unknown as { Telegram?: { WebApp?: { openLink?: (u: string) => void } } }).Telegram?.WebApp;
+    try { if (tg?.openLink) tg.openLink(url); else window.open(url, '_blank'); } catch { window.open(url, '_blank'); }
+  };
+
   if (!data) return <><ScreenHeader title="" onBack={onBack} /><CenteredLoader /></>;
 
   const allItems = data.wishlists.flatMap((w) => w.items);
@@ -609,18 +614,29 @@ function MemberView({ tgFetch, locale, circleId, memberId, onBack, pushToast }: 
             <ListRow
               key={it.id}
               variant="card"
-              leading={<div style={{ width: 46, height: 46, borderRadius: r.lg, background: it.reservedByMe ? c.successSoft : c.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{it.imageUrl ? '' : '🎁'}</div>}
+              interactive={!!it.url}
+              onClick={it.url ? () => openItem(it.url) : undefined}
+              style={{ marginBottom: sp[2] }}
+              leading={
+                <div style={{
+                  width: 46, height: 46, minWidth: 46, borderRadius: r.lg,
+                  background: it.reservedByMe ? c.successSoft : c.accentSoft,
+                  backgroundImage: it.imageUrl ? `url("${it.imageUrl}")` : undefined,
+                  backgroundSize: 'cover', backgroundPosition: 'center',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
+                }}>{it.imageUrl ? '' : '🎁'}</div>
+              }
               title={it.title}
               subtitle={it.priceText ?? undefined}
               trailing={
                 // Surprise invariant: the owner's own list shows NO reservation
-                // control or status at all — no reserve button (which would leak
-                // the reserved fact via a 409), no chips. Just the reassurance
-                // banner above. Reservation data is already stripped server-side.
+                // control or status at all — no reserve button, no chips. Just the
+                // reassurance banner above (reservation data is stripped server-side).
+                // stopPropagation so the reserve tap doesn't also open the product URL.
                 ownerSelf ? undefined
-                  : it.reservedByMe ? <Button variant="ghost" size="sm" disabled={busyId === it.id} loading={busyId === it.id} onClick={() => void unreserve(it.id)}>✓ {t('circle_reserved_by_you', locale)}</Button>
+                  : it.reservedByMe ? <Button variant="ghost" size="sm" disabled={busyId === it.id} loading={busyId === it.id} onClick={(e) => { e.stopPropagation(); void unreserve(it.id); }}>✓ {t('circle_reserved_by_you', locale)}</Button>
                     : it.reserved ? <Chip tone="surface">{t('circle_reserved_taken', locale)}</Chip>
-                      : <Button variant="secondary" size="sm" disabled={busyId === it.id} loading={busyId === it.id} onClick={() => void reserve(it.id)}>{t('circle_reserve', locale)}</Button>
+                      : <Button variant="secondary" size="sm" disabled={busyId === it.id} loading={busyId === it.id} onClick={(e) => { e.stopPropagation(); void reserve(it.id); }}>{t('circle_reserve', locale)}</Button>
               }
             />
           ))}
