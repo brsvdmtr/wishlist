@@ -8,7 +8,7 @@ single route module. As of **2026-05-07** the P5s extraction wave is
 `apps/api/src/index.ts` is **1 789 LOC** (down from a peak of ~21 580 —
 −91.7% off the original monolith, −51.6% off the post-P5r baseline of
 3 700). Services added since then under the on-touch rule bring the live
-total to **15** (see § 1).
+total to **18** (see § 1).
 
 `services/` is the canonical home for:
 
@@ -32,7 +32,7 @@ It is **not** the right home for:
 
 ---
 
-## 1. Live services (17 modules)
+## 1. Live services (18 modules)
 
 | # | Module | Phase | Δ LOC out of index.ts | Strategy | Consumers |
 |---|---|---|---|---|---|
@@ -53,14 +53,15 @@ It is **not** the right home for:
 | 15 | `services/hint-credits.ts` | post-P5s (2026-05-21) | 0 (born new) | B — direct import | `routes/hints.routes.ts`, `routes/internal.routes.ts`, `services/entitlement.ts` |
 | 16 | `services/group-gift-pricing.ts` | post-P5s (2026-05-29, E24) | 0 (born new) | B — direct import | `routes/billing.routes.ts`, `routes/group-gifts.routes.ts`, `routes/wishlists.routes.ts` |
 | 17 | `services/yearly-pricing.ts` | post-P5s (2026-05-30, E17) | 0 (born new) | B — direct import | `routes/billing.routes.ts`, `routes/wishlists.routes.ts`, `routes/me.routes.ts` |
+| 18 | `services/circles.service.ts` | P0.1 (2026-06-01) | 0 (born new) | B — direct import | `routes/circles.routes.ts` — membership, capacity, per-circle visibility, surprise invariant, surprise-preserving circle reservations (`CircleReservation`). Reuses `getEffectiveEntitlements` (size cap) + `daysUntilNextBirthday` (member countdown) |
 
 **Total moved out of index.ts:** ~2 121 LOC (P5s alone) + 199 (P5r-5/-6) ≈ **2 320 LOC** across the entire services layer.
 
-**Post-P5s additions:** `services/import-credits.ts` (#14) is the first
-service added after the extraction wave closed; `services/hint-credits.ts`
-(#15) is the second, same `import-credits` blueprint. Both are **born new** —
-not carved out of index.ts — under the on-touch rule (§ 5). index.ts is
-untouched; consumers import them directly.
+**Post-P5s additions:** `import-credits.ts` (#14) and `hint-credits.ts` (#15)
+came first, then `group-gift-pricing.ts` (#16, E24) and `yearly-pricing.ts`
+(#17, E17); `services/circles.service.ts` (#18, P0.1 «Близкие») is the latest.
+All are **born new** — not carved out of index.ts — under the on-touch rule
+(§ 5). index.ts is untouched; consumers import them directly.
 
 ---
 

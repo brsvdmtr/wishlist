@@ -259,6 +259,10 @@ model User {
   dailyActivity            UserDailyActivity[]
   experimentAssignments    ExperimentAssignment[]
   santaPreseasonTouches    SantaPreseasonTouch[]
+
+  // Circles (Близкие) — private groups of close people (P0.1)
+  ownedCircles             Circle[]               @relation("CirclesOwned")
+  circleMemberships        CircleMembership[]      @relation("CircleMemberships")
 }
 
 model Wishlist {
@@ -320,6 +324,7 @@ model Wishlist {
   curatedSelections     CuratedSelection[]
   linkedGiftOccasions   GiftOccasion[]          @relation("GiftOccasionsLinkedWishlist")
   foreignAccesses       ForeignWishlistAccess[]
+  circleShares          CircleWishlistShare[]
 
   @@index([ownerId])
   @@index([ownerId, position])
@@ -364,6 +369,7 @@ model Item {
   santaItemReservations SantaItemReservation[]
   reservationMeta       ReservationMeta[]
   secretReservations    SecretReservation[]
+  circleReservations    CircleReservation[]
   groupGift             GroupGift?
 
   @@index([wishlistId])
@@ -2499,4 +2505,121 @@ model ResearchSurveyAnswer {
   @@unique([responseId, questionId, optionId])
   @@index([questionId, optionId])
   @@index([responseId, questionId])
+}
+
+// ─── Circles (Близкие) — P0.1 ────────────────────────────────────────────────
+// Private groups of close people (family / friends / colleagues / couple).
+// Members see each other's shared wishlists + events. Surprise invariant
+// (owner never sees who reserved their own wishes) is enforced in
+// services/circles.service.ts at the service layer, NOT the client.
+// Display name in the Mini App is «Близкие»; the internal model name stays
+// `Circle` (deep-link prefix `circ_`, action keys `circle.*`).
+
+enum CircleType {
+  FAMILY
+  FRIENDS
+  COLLEAGUES
+  COUPLE
+}
+
+enum CircleRole {
+  OWNER
+  MEMBER
+}
+
+enum CircleMemberStatus {
+  ACTIVE
+  LEFT
+}
+
+model Circle {
+  id        String     @id @default(cuid())
+  name      String
+  type      CircleType
+  emoji     String?
+  coverUrl  String?
+  ownerId   String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  owner        User                  @relation("CirclesOwned", fields: [ownerId], references: [id], onDelete: Cascade)
+  memberships  CircleMembership[]
+  invites      CircleInvite[]
+  shares       CircleWishlistShare[]
+  reservations CircleReservation[]
+
+  @@index([ownerId])
+}
+
+model CircleMembership {
+  id       String             @id @default(cuid())
+  circleId String
+  userId   String
+  role     CircleRole         @default(MEMBER)
+  status   CircleMemberStatus @default(ACTIVE)
+  joinedAt DateTime           @default(now())
+  leftAt   DateTime?
+
+  circle Circle @relation(fields: [circleId], references: [id], onDelete: Cascade)
+  user   User   @relation("CircleMemberships", fields: [userId], references: [id], onDelete: Cascade)
+
+  // Idempotent join: one membership row per (circle, user); rejoin flips status.
+  @@unique([circleId, userId])
+  // "my circles" reverse lookup + active-only filters
+  @@index([userId, status])
+  @@index([circleId, status])
+}
+
+model CircleInvite {
+  token     String    @id // url-safe; surfaced as ?startapp=circ_<token>
+  circleId  String
+  createdBy String // userId of the inviter (audit only; no FK to keep deletes simple)
+  expiresAt DateTime? // reusable link with TTL (default 30 days, set in service)
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  circle Circle @relation(fields: [circleId], references: [id], onDelete: Cascade)
+
+  @@index([circleId])
+}
+
+// Per-circle wishlist visibility: each member chooses which of THEIR OWN
+// wishlists this circle can see ("семье — одно, коллегам — другое").
+// wishlistId is globally unique, so (circleId, wishlistId) already implies the
+// sharer; sharedByUserId is denormalised for cheap "my shares in this circle".
+model CircleWishlistShare {
+  id             String   @id @default(cuid())
+  circleId       String
+  wishlistId     String
+  sharedByUserId String
+  createdAt      DateTime @default(now())
+
+  circle   Circle   @relation(fields: [circleId], references: [id], onDelete: Cascade)
+  wishlist Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+
+  @@unique([circleId, wishlistId])
+  @@index([circleId])
+  @@index([wishlistId])
+}
+
+// Surprise-preserving reservation inside a circle. Deliberately SEPARATE from
+// the public Reservation (which sets Item.status + DMs the owner) and from the
+// paid SecretReservation: a circle reservation is INVISIBLE to the wish owner
+// by construction (only circle read paths query this table, and they strip it
+// for the owner-self view) yet VISIBLE to co-members as a neutral "taken"
+// (no author). Free for circle members. No owner notification ever.
+model CircleReservation {
+  id             String   @id @default(cuid())
+  circleId       String
+  itemId         String
+  reserverUserId String
+  createdAt      DateTime @default(now())
+
+  circle Circle @relation(fields: [circleId], references: [id], onDelete: Cascade)
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  // One reservation per gifter per item (a claimed gift is claimed everywhere).
+  @@unique([itemId, reserverUserId])
+  @@index([circleId])
+  @@index([itemId])
 }

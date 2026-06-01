@@ -13,6 +13,7 @@
 //   research-survey      — srvy_<inviteId>
 //   item-open            — item_<itemId>
 //   santa-preseason      — spsn_<seasonYear>
+//   circle-join          — circ_<token>  (P0.1 «Близкие»; token, not a cuid)
 
 // Cuid-shape guard reused by every deep-link parser. cuids are
 // `^[a-z0-9]{20,30}$` in practice, but the looser regex below also accepts
@@ -123,4 +124,23 @@ export function parseSantaPreseasonPayload(payload: string): SantaPreseasonPaylo
   const rest = payload.slice('spsn_'.length);
   if (!/^\d{4}$/.test(rest)) return { kind: 'malformed' };
   return { kind: 'ok', seasonYear: Number.parseInt(rest, 10) };
+}
+
+export type CircleInvitePayload =
+  | { kind: 'ok'; token: string }
+  | { kind: 'malformed' };
+
+// circ_<token> — P0.1 «Близкие». The token is a url-safe base64url string
+// (NOT a cuid), so it uses a token-shape guard rather than `looksLikeId`.
+// Symmetric with apps/api/src/telegram/deepLinks.ts `buildCircleShareLink`.
+export function parseCircleInvitePayload(payload: string): CircleInvitePayload {
+  if (!payload.startsWith('circ_')) return { kind: 'malformed' };
+  let token: string;
+  try {
+    token = decodeURIComponent(payload.slice('circ_'.length));
+  } catch {
+    return { kind: 'malformed' };
+  }
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(token)) return { kind: 'malformed' };
+  return { kind: 'ok', token };
 }

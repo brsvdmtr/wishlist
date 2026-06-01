@@ -80,6 +80,7 @@ import { registerSantaRouter } from './routes/santa.routes';
 import { registerSearchRouter } from './routes/search.routes';
 import { registerResearchSurveyRouter } from './routes/research-survey.routes';
 import { registerExperimentsRouter } from './routes/experiments.routes';
+import { registerCirclesRouter } from './routes/circles.routes';
 import { startCleanupSchedulers } from './schedulers/cleanup';
 import { startBillingSchedulers } from './schedulers/billing';
 import { startReferralSchedulers } from './schedulers/referral';
@@ -539,6 +540,22 @@ const billingIdem = (endpointKey: string) =>
 protectTgRoute('POST',   '/research/surveys/:surveyId/answer',   createRateLimiter('research.write'), idem('POST /tg/research/surveys/:surveyId/answer',   { category: 'research.write' }));
 protectTgRoute('POST',   '/research/surveys/:surveyId/complete', createRateLimiter('research.write'), idem('POST /tg/research/surveys/:surveyId/complete', { category: 'research.write', critical: true }));
 protectTgRoute('POST',   '/research/surveys/:surveyId/dismiss',  createRateLimiter('research.write'), idem('POST /tg/research/surveys/:surveyId/dismiss',  { category: 'research.write' }));
+
+// ── Circles (Близкие) — P0.1 ─────────────────────────────────────────────────
+// Handlers ship from circlesRouter (routes/circles.routes.ts). The global
+// `state.changing` limiter (60/5m, already on tgRouter) covers rate; idem here
+// prevents double-tap replay. Joins are idempotent at the DB level too
+// (unique(circleId,userId)). Destructive ops (join/delete) are `critical` so a
+// missing Idempotency-Key is logged during rollout (soft-require).
+protectTgRoute('POST',   '/circles',                          idem('POST /tg/circles', { category: 'circle.create' }));
+protectTgRoute('POST',   '/circles/join',                     idem('POST /tg/circles/join', { category: 'circle.join', critical: true }));
+protectTgRoute('POST',   '/circles/:id/invite',               idem('POST /tg/circles/:id/invite', { category: 'circle.invite' }));
+protectTgRoute('POST',   '/circles/:id/leave',                idem('POST /tg/circles/:id/leave', { category: 'circle.member' }));
+protectTgRoute('DELETE', '/circles/:id',                      idem('DELETE /tg/circles/:id', { category: 'circle.delete', critical: true }));
+protectTgRoute('DELETE', '/circles/:id/members/:userId',      idem('DELETE /tg/circles/:id/members/:userId', { category: 'circle.member' }));
+protectTgRoute('PUT',    '/circles/:id/shares',               idem('PUT /tg/circles/:id/shares', { category: 'circle.shares' }));
+protectTgRoute('POST',   '/circles/:id/items/:itemId/reserve', idem('POST /tg/circles/:id/items/:itemId/reserve', { category: 'circle.reserve' }));
+protectTgRoute('DELETE', '/circles/:id/items/:itemId/reserve', idem('DELETE /tg/circles/:id/items/:itemId/reserve', { category: 'circle.reserve' }));
 
 // ── Wishlists ────────────────────────────────────────────────────────────────
 // POST /tg/wishlists: idempotency options live in `security/idempotencyRoutes.ts`
@@ -1583,6 +1600,13 @@ const profilesRouter = registerProfilesRouter({
   getOrCreateTgUser,
 });
 tgRouter.use(profilesRouter);
+
+// Circles (Близкие) — P0.1. Trivial isolated domain (Circle* tables + one
+// closure helper), same factory pattern as profilesRouter.
+const circlesRouter = registerCirclesRouter({
+  getOrCreateTgUser,
+});
+tgRouter.use(circlesRouter);
 
 const telemetryRouter = registerTelemetryRouter();
 tgRouter.use(telemetryRouter);

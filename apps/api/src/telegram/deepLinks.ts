@@ -17,6 +17,7 @@
 //   research-survey      — srvy_<inviteId>
 //   item-open            — item_<itemId>
 //   santa-preseason      — spsn_<seasonYear>
+//   circle-join          — circ_<token>  (P0.1 «Близкие»; token, not a cuid)
 //
 // MINI_APP_URL fallback chain matches every other call site in index.ts:
 //   1. process.env.MINI_APP_URL (preferred, set in prod)
@@ -54,4 +55,25 @@ export function buildItemOpenDeepLink(itemId: string): string {
  *  November-start year (digits only, no encoding needed). */
 export function buildSantaPreseasonDeepLink(seasonYear: number): string {
   return `${getMiniAppUrl()}?startapp=spsn_${seasonYear}`;
+}
+
+// Circle invite / open link (P0.1 «Близкие»). The token is a random url-safe
+// string (base64url), NOT a cuid — the frontend `circ_` parser validates the
+// token shape, not `looksLikeId`. Used both as the shareable invite and as the
+// owner's "open circle" notification button; the frontend opens the join
+// preview, which renders an "Open circle" CTA when the viewer is already a member.
+export function buildCircleDeepLink(token: string): string {
+  return `${getMiniAppUrl()}?startapp=circ_${encodeURIComponent(token)}`;
+}
+
+// Shareable t.me invite link for a circle, posted into a family/friends chat.
+// Unlike the web_app deep link above, this is a `t.me/<bot>?startapp=` URL so
+// tapping it in any chat opens Telegram → bot → Mini App with the start param.
+// Bot-username resolution mirrors referral.routes.ts.
+function getBotUsername(): string {
+  return process.env.TELEGRAM_BOT_USERNAME ?? process.env.NEXT_PUBLIC_BOT_USERNAME ?? 'WishHub_bot';
+}
+
+export function buildCircleShareLink(token: string): string {
+  return `https://t.me/${getBotUsername()}?startapp=circ_${encodeURIComponent(token)}`;
 }
