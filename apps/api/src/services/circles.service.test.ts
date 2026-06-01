@@ -18,6 +18,8 @@ const baseItem = (overrides: Partial<CircleItemInput> = {}): CircleItemInput => 
   currency: 'RUB',
   imageUrl: null,
   priority: 'HIGH',
+  description: null,
+  categoryId: null,
   ...overrides,
 });
 

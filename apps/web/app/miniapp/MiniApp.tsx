@@ -3740,6 +3740,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // Circles (Близкие) deep-link entry — set from a circ_ startParam, consumed
   // by CirclesRoot to open the join preview; cleared on normal nav entry.
   const [circlesInitial, setCirclesInitial] = useState<{ view: 'join'; token: string } | null>(null);
+  // «Близкие» nav discovery badge — a "NEW" tag shown until the user first
+  // opens the tab. Persisted in localStorage; cleared on any entry to circles
+  // (nav tap or invite deep-link).
+  const [circlesNavBadge, setCirclesNavBadge] = useState<boolean>(() => {
+    try { return !window.localStorage.getItem('circles_nav_badge_seen_v1'); } catch { return false; }
+  });
   const [errorMsg, setErrorMsg] = useState('');
   const [tgUser, setTgUser] = useState<TgUser | null>(null);
   const [locale, setLocale] = useState<Locale>('ru');
@@ -8537,6 +8543,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         if (parsed.kind === 'ok') {
           setCirclesInitial({ view: 'join', token: parsed.token });
           bootSetScreen('circles');
+          setCirclesNavBadge(false);
+          try { window.localStorage.setItem('circles_nav_badge_seen_v1', '1'); } catch { /* ok */ }
           trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
         } else {
           bootSetScreen('my-wishlists');
@@ -22376,12 +22384,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         // "Profile" / etc. for clarity over the prior single-glyph "Я".
         const navLabels = (() => {
           switch (locale) {
-            case 'en':    return { home: 'Home',     circles: 'People',   reservations: 'Bookings', me: 'Profile' };
-            case 'zh-CN': return { home: '主页',     circles: '密友',     reservations: '预订',     me: '个人资料' };
-            case 'hi':    return { home: 'होम',     circles: 'करीबी',   reservations: 'बुकिंग',   me: 'प्रोफ़ाइल' };
-            case 'es':    return { home: 'Inicio',   circles: 'Cercanos', reservations: 'Reservas', me: 'Perfil' };
-            case 'ar':    return { home: 'الرئيسية', circles: 'المقرّبون', reservations: 'الحجوزات', me: 'الملف الشخصي' };
-            default:      return { home: 'Главная',  circles: 'Близкие',  reservations: 'Брони',    me: 'Профиль' };
+            case 'en':    return { home: 'Home',     circles: 'People',   reservations: 'Bookings', me: 'Profile', badge: 'NEW' };
+            case 'zh-CN': return { home: '主页',     circles: '密友',     reservations: '预订',     me: '个人资料', badge: '新' };
+            case 'hi':    return { home: 'होम',     circles: 'करीबी',   reservations: 'बुकिंग',   me: 'प्रोफ़ाइल', badge: 'नया' };
+            case 'es':    return { home: 'Inicio',   circles: 'Cercanos', reservations: 'Reservas', me: 'Perfil', badge: 'NUEVO' };
+            case 'ar':    return { home: 'الرئيسية', circles: 'المقرّبون', reservations: 'الحجوزات', me: 'الملف الشخصي', badge: 'جديد' };
+            default:      return { home: 'Главная',  circles: 'Близкие',  reservations: 'Брони',    me: 'Профиль', badge: 'NEW' };
           }
         })();
 
@@ -22405,6 +22413,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               } else if (id === 'circles') {
                 setCirclesInitial(null);
                 setScreen('circles');
+                setCirclesNavBadge(false);
+                try { window.localStorage.setItem('circles_nav_badge_seen_v1', '1'); } catch { /* ok */ }
               } else if (id === 'me') {
                 void loadProfile();
                 void loadShowcase();
@@ -22413,7 +22423,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             }}
             items={[
               { id: 'home', icon: '🏠', label: navLabels.home },
-              { id: 'circles', icon: '👥', label: navLabels.circles },
+              { id: 'circles', icon: '👥', label: navLabels.circles, badge: circlesNavBadge ? navLabels.badge : undefined },
               { id: 'reservations', icon: '🎁', label: navLabels.reservations },
               { id: 'me', icon: '👤', label: navLabels.me },
             ]}

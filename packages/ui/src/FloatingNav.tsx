@@ -16,6 +16,12 @@ export interface FloatingNavItem<ID extends string = string> {
   id: ID;
   label: ReactNode;
   icon: ReactNode;
+  /**
+   * Optional discovery badge rendered at the icon's top-right (e.g. a short
+   * "NEW" / "新" tag for a freshly shipped tab). Falsy → no badge. Visual
+   * language mirrors the canonical CounterBadge (danger pill).
+   */
+  badge?: ReactNode;
 }
 
 export interface FloatingNavProps<ID extends string = string> {
@@ -82,7 +88,34 @@ export function FloatingNav<ID extends string = string>({
               letterSpacing: 0,
             }}
           >
-            <span style={{ fontSize: 20, lineHeight: 1 }}>{it.icon}</span>
+            <span style={{ position: 'relative', display: 'inline-flex', fontSize: 20, lineHeight: 1 }}>
+              {it.icon}
+              {it.badge ? (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    position: 'absolute',
+                    top: -7,
+                    left: '100%',
+                    marginLeft: -7,
+                    background: colors.danger,
+                    color: colors.white,
+                    fontSize: 8,
+                    fontWeight: fontWeight.extrabold,
+                    lineHeight: 1,
+                    letterSpacing: '0.02em',
+                    textTransform: 'uppercase',
+                    padding: '2px 4px',
+                    borderRadius: radius.full,
+                    boxShadow: shadows.notificationDanger,
+                    whiteSpace: 'nowrap',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  {it.badge}
+                </span>
+              ) : null}
+            </span>
             <span>{it.label}</span>
             {isActive && (
               <span

@@ -32,6 +32,36 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-06-01 — FloatingNav gains an optional `badge` slot (discovery tag)
+
+**Type:** primitive-change
+
+**Decision.** `FloatingNav` (provisional) gains an optional `badge?: ReactNode`
+field on `FloatingNavItem`. When truthy, a small uppercase pill renders at the
+icon's top-right (e.g. a localized "NEW" / "新" / "نया" tag for a freshly
+shipped tab). The pill's visual language is borrowed from the canonical
+`CounterBadge` (`colors.danger` background, `colors.white` text,
+`shadows.notificationDanger`, `radius.full`) so the two read as one family.
+Falsy/absent `badge` → nothing renders (no layout shift).
+
+**Context / why.** P0.1 «Близкие» shipped as a new 4th nav destination with no
+in-product signal that it exists. The owner asked for a first-run discovery
+marker on the tab. `CounterBadge` only models a numeric count; a short text
+tag ("NEW"/"beta") needed a small additive slot on the nav primitive rather
+than a feature-local clone. Persistence (show until first open) lives in the
+consumer (`MiniApp.tsx`, `localStorage` key `circles_nav_badge_seen_v1`), not
+in the primitive.
+
+**Supersedes.** Nothing. Purely additive — existing `FloatingNav` callers are
+unchanged (`badge` is optional).
+
+**Impact.**
+- Component registry: `FloatingNav` stays `provisional`; capability note added.
+- No migration needed; no breaking change for consumers.
+- `packages/ui/src/FloatingNav.tsx` (interface + render).
+
+**Approved by.** Dmitry.
+
 ## 2026-05-30 — E13 passive guest-view "create your own wishlist" banner approved + shipped
 
 **Type:** approval

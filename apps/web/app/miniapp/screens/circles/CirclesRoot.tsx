@@ -7,7 +7,7 @@
 // clones. The surprise invariant is enforced server-side; the owner-self view
 // simply renders the reassurance banner and never receives reservation data.
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import { t, type Locale } from '@wishlist/shared';
 import { Button, Card, Sheet, SectionHeader, ListRow, Banner, Chip, AvatarStack, HeroCard, SettingsSection, SettingsToggle, TextField } from '@wishlist/ui';
@@ -58,11 +58,12 @@ interface CircleDetail {
 interface ItemView {
   id: string; title: string; url: string | null; priceText: string | null;
   currency: string | null; imageUrl: string | null; priority: string | null;
+  description: string | null; categoryId: string | null;
   reserved: boolean; reservedByMe: boolean;
 }
 interface MemberWishlists {
   member: { name: string; avatarUrl: string | null };
-  wishlists: Array<{ id: string; title: string; emoji: string | null; items: ItemView[] }>;
+  wishlists: Array<{ id: string; title: string; emoji: string | null; categories: { id: string; name: string }[]; items: ItemView[] }>;
 }
 interface ShareOption { wishlistId: string; title: string; emoji: string | null; itemCount: number; shared: boolean }
 interface InvitePreview {
@@ -101,6 +102,16 @@ type View =
 
 export function CirclesRoot({ tgFetch, locale, initial, onExit, onUpsell, pushToast }: CirclesRootProps) {
   const [view, setView] = useState<View>(initial ? { name: 'join', token: initial.token } : { name: 'list' });
+  // First-entry onboarding — a one-time 3-step intro. Skipped when arriving via
+  // a join deep-link (JoinView is its own contextual intro for invitees).
+  const [onboarding, setOnboarding] = useState<boolean>(() => {
+    if (initial) return false;
+    try { return !window.localStorage.getItem('circles_onboarding_seen_v1'); } catch { return false; }
+  });
+  const dismissOnboarding = () => {
+    setOnboarding(false);
+    try { window.localStorage.setItem('circles_onboarding_seen_v1', '1'); } catch { /* ok */ }
+  };
 
   return (
     // Normal-flow content — MiniApp's outer container owns the scroll and the
@@ -135,6 +146,7 @@ export function CirclesRoot({ tgFetch, locale, initial, onExit, onUpsell, pushTo
           onJoined={(id) => setView({ name: 'detail', circleId: id })}
           onDecline={onExit} />
       )}
+      {onboarding && <CirclesOnboarding locale={locale} onDone={dismissOnboarding} />}
     </div>
   );
 }
@@ -468,7 +480,7 @@ function DetailView({ tgFetch, locale, circleId, onBack, onOpenMember, onPrivacy
 
       <div style={{ display: 'flex', gap: sp[2], marginBottom: sp[4] }}>
         <Button variant="secondary" fullWidth onClick={() => void openInvite()}>＋ {t('circle_invite_cta', locale)}</Button>
-        <Button variant="surface" onClick={() => setMenuOpen(true)} aria-label={t('circle_settings', locale)}>⚙</Button>
+        <Button variant="surface" fullWidth onClick={() => setMenuOpen(true)}>⚙ {t('circle_settings_btn', locale)}</Button>
       </div>
 
       {soon.length > 0 && <SectionHeader>{t('circle_soon', locale)}</SectionHeader>}
@@ -536,6 +548,7 @@ function MemberView({ tgFetch, locale, circleId, memberId, onBack, pushToast }: 
   const [data, setData] = useState<MemberWishlists | null>(null);
   const [isSelf, setIsSelf] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [detailItem, setDetailItem] = useState<ItemView | null>(null);
 
   const load = useCallback(async () => {
     const res = await tgFetch(`/tg/circles/${circleId}/members/${memberId}/wishlists`);
@@ -559,6 +572,7 @@ function MemberView({ tgFetch, locale, circleId, memberId, onBack, pushToast }: 
       });
       if (!res.ok) throw new Error('reserve');
       pushToast(t('circle_reserved_toast', locale), 'success');
+      setDetailItem((d) => (d && d.id === itemId ? { ...d, reserved: true, reservedByMe: true } : d));
       await load();
     } catch {
       pushToast(t('circle_err_generic', locale), 'error');
@@ -573,6 +587,7 @@ function MemberView({ tgFetch, locale, circleId, memberId, onBack, pushToast }: 
       await tgFetch(`/tg/circles/${circleId}/items/${itemId}/reserve`, {
         method: 'DELETE', idempotency: { action: `circle.unreserve:${circleId}:${itemId}` },
       });
+      setDetailItem((d) => (d && d.id === itemId ? { ...d, reserved: false, reservedByMe: false } : d));
       await load();
     } catch {
       pushToast(t('circle_err_generic', locale), 'error');
@@ -581,8 +596,8 @@ function MemberView({ tgFetch, locale, circleId, memberId, onBack, pushToast }: 
     }
   };
 
-  // Tapping a wish opens its product URL externally (Telegram in-app browser).
-  const openItem = (url: string | null) => {
+  // "Open in store" — external product URL via Telegram's in-app browser.
+  const openMarket = (url: string | null) => {
     if (!url) return;
     const tg = (window as unknown as { Telegram?: { WebApp?: { openLink?: (u: string) => void } } }).Telegram?.WebApp;
     try { if (tg?.openLink) tg.openLink(url); else window.open(url, '_blank'); } catch { window.open(url, '_blank'); }
@@ -593,6 +608,56 @@ function MemberView({ tgFetch, locale, circleId, memberId, onBack, pushToast }: 
   const allItems = data.wishlists.flatMap((w) => w.items);
   // Owner self-view: the server stripped all reservation state. Show reassurance.
   const ownerSelf = isSelf;
+
+  // Reserve / unreserve / "taken" control. Hidden entirely for the owner-self
+  // view (surprise invariant). `fullWidth` for the detail sheet.
+  const reserveControl = (it: ItemView, fullWidth = false): React.ReactNode => {
+    if (ownerSelf) return null;
+    if (it.reservedByMe) {
+      return <Button variant="ghost" size="sm" fullWidth={fullWidth} disabled={busyId === it.id} loading={busyId === it.id} onClick={(e) => { e.stopPropagation(); void unreserve(it.id); }}>✓ {t('circle_reserved_by_you', locale)}</Button>;
+    }
+    if (it.reserved) return <Chip tone="surface">{t('circle_reserved_taken', locale)}</Chip>;
+    return <Button variant="secondary" size="sm" fullWidth={fullWidth} disabled={busyId === it.id} loading={busyId === it.id} onClick={(e) => { e.stopPropagation(); void reserve(it.id); }}>{t('circle_reserve', locale)}</Button>;
+  };
+
+  // Tapping a row opens the in-app detail sheet (NOT straight to the store).
+  const itemRow = (it: ItemView) => (
+    <ListRow
+      key={it.id}
+      variant="card"
+      interactive
+      onClick={() => setDetailItem(it)}
+      style={{ marginBottom: sp[2] }}
+      leading={
+        <div style={{
+          width: 46, height: 46, minWidth: 46, borderRadius: r.lg,
+          background: it.reservedByMe ? c.successSoft : c.accentSoft,
+          backgroundImage: it.imageUrl ? `url("${it.imageUrl}")` : undefined,
+          backgroundSize: 'cover', backgroundPosition: 'center',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
+        }}>{it.imageUrl ? '' : '🎁'}</div>
+      }
+      title={it.title}
+      subtitle={it.priceText ?? undefined}
+      trailing={ownerSelf ? <span style={{ fontSize: fs.lg, color: c.textMuted }}>›</span> : reserveControl(it)}
+    />
+  );
+
+  // Group a wishlist's items by the owner's categories (in their sortOrder),
+  // uncategorised last — mirroring how the owner organised their list.
+  const renderWishlist = (wl: MemberWishlists['wishlists'][number]): React.ReactNode => {
+    const known = new Set(wl.categories.map((ct) => ct.id));
+    const groups: Array<{ key: string; name: string | null; items: ItemView[] }> = [
+      ...wl.categories.map((cat) => ({ key: cat.id, name: cat.name, items: wl.items.filter((it) => it.categoryId === cat.id) })),
+      { key: '__uncat', name: null, items: wl.items.filter((it) => !it.categoryId || !known.has(it.categoryId)) },
+    ].filter((g) => g.items.length > 0);
+    return groups.map((g) => (
+      <div key={g.key} style={{ marginBottom: sp[3] }}>
+        {g.name ? <SectionHeader>{g.name}</SectionHeader> : (wl.categories.length > 0 ? <SectionHeader>{t('circle_cat_other', locale)}</SectionHeader> : null)}
+        {g.items.map(itemRow)}
+      </div>
+    ));
+  };
 
   return (
     <>
@@ -607,41 +672,30 @@ function MemberView({ tgFetch, locale, circleId, memberId, onBack, pushToast }: 
       )}
       {data.wishlists.map((wl) => (
         <div key={wl.id} style={{ marginBottom: sp[4] }}>
-          {data.wishlists.length > 1 && (
-            <SectionHeader>{coverEmoji('FAMILY', wl.emoji)} {wl.title}</SectionHeader>
-          )}
-          {wl.items.map((it) => (
-            <ListRow
-              key={it.id}
-              variant="card"
-              interactive={!!it.url}
-              onClick={it.url ? () => openItem(it.url) : undefined}
-              style={{ marginBottom: sp[2] }}
-              leading={
-                <div style={{
-                  width: 46, height: 46, minWidth: 46, borderRadius: r.lg,
-                  background: it.reservedByMe ? c.successSoft : c.accentSoft,
-                  backgroundImage: it.imageUrl ? `url("${it.imageUrl}")` : undefined,
-                  backgroundSize: 'cover', backgroundPosition: 'center',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
-                }}>{it.imageUrl ? '' : '🎁'}</div>
-              }
-              title={it.title}
-              subtitle={it.priceText ?? undefined}
-              trailing={
-                // Surprise invariant: the owner's own list shows NO reservation
-                // control or status at all — no reserve button, no chips. Just the
-                // reassurance banner above (reservation data is stripped server-side).
-                // stopPropagation so the reserve tap doesn't also open the product URL.
-                ownerSelf ? undefined
-                  : it.reservedByMe ? <Button variant="ghost" size="sm" disabled={busyId === it.id} loading={busyId === it.id} onClick={(e) => { e.stopPropagation(); void unreserve(it.id); }}>✓ {t('circle_reserved_by_you', locale)}</Button>
-                    : it.reserved ? <Chip tone="surface">{t('circle_reserved_taken', locale)}</Chip>
-                      : <Button variant="secondary" size="sm" disabled={busyId === it.id} loading={busyId === it.id} onClick={(e) => { e.stopPropagation(); void reserve(it.id); }}>{t('circle_reserve', locale)}</Button>
-              }
-            />
-          ))}
+          {data.wishlists.length > 1 && <SectionHeader>{coverEmoji('FAMILY', wl.emoji)} {wl.title}</SectionHeader>}
+          {renderWishlist(wl)}
         </div>
       ))}
+
+      {/* In-app item detail (tap a wish) — image, price, description, store link, reserve */}
+      <Sheet open={!!detailItem} onClose={() => setDetailItem(null)} title={detailItem?.title}>
+        {detailItem && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: sp[3] }}>
+            {detailItem.imageUrl && (
+              <div style={{ width: '100%', height: 200, borderRadius: r.lg, backgroundImage: `url("${detailItem.imageUrl}")`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+            )}
+            {detailItem.priceText && (
+              <div style={{ fontSize: fs.xl, fontWeight: fw.bold, color: c.text }}>{detailItem.priceText}{detailItem.currency ? ` ${detailItem.currency}` : ''}</div>
+            )}
+            {detailItem.description && (
+              <div style={{ fontSize: fs.sm, color: c.textSecondary, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{detailItem.description}</div>
+            )}
+            {!ownerSelf && <div>{reserveControl(detailItem, true)}</div>}
+            {detailItem.url && <Button variant="surface" fullWidth onClick={() => openMarket(detailItem.url)}>{t('circle_open_in_store', locale)}</Button>}
+            <Button variant="ghost" fullWidth onClick={() => setDetailItem(null)}>{t('circle_close', locale)}</Button>
+          </div>
+        )}
+      </Sheet>
     </>
   );
 }
@@ -712,12 +766,48 @@ function PrivacyView({ tgFetch, locale, circleId, onBack, pushToast }: {
 
 // ── Join (invitee, deep-link entry) ─────────────────────────────────────────
 
+// ── First-entry onboarding (one-time intro) ────────────────────────────────────
+// A 3-step explainer shown the first time a user opens the «Близкие» section.
+// Built entirely from Sheet + Button primitives; persistence is the caller's job.
+function CirclesOnboarding({ locale, onDone }: { locale: Locale; onDone: () => void }) {
+  const [step, setStep] = useState(0);
+  const steps = [
+    { emoji: '👥', title: t('circle_onb_t1', locale), body: t('circle_onb_b1', locale) },
+    { emoji: '🤫', title: t('circle_onb_t2', locale), body: t('circle_onb_b2', locale) },
+    { emoji: '🎁', title: t('circle_onb_t3', locale), body: t('circle_onb_b3', locale) },
+  ];
+  const last = step === steps.length - 1;
+  const cur = steps[step];
+  if (!cur) return null;
+  return (
+    <Sheet open onClose={onDone}>
+      <div style={{ textAlign: 'center', paddingTop: sp[2] }}>
+        <div style={{ fontSize: 56, marginBottom: sp[3] }}>{cur.emoji}</div>
+        <div style={{ fontSize: fs.xxl, fontWeight: fw.bold, color: c.text, marginBottom: sp[2] }}>{cur.title}</div>
+        <div style={{ fontSize: fs.lg, color: c.textSecondary, lineHeight: 1.5, margin: `0 ${sp[2]}px` }}>{cur.body}</div>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: sp[1], margin: `${sp[5]}px 0` }}>
+          {steps.map((_, i) => (
+            <span key={i} style={{ width: 7, height: 7, borderRadius: r.full, background: i === step ? c.accent : c.border }} />
+          ))}
+        </div>
+      </div>
+      <Button variant="primary" fullWidth onClick={() => (last ? onDone() : setStep((s) => s + 1))}>
+        {last ? t('circle_onb_start', locale) : t('circle_onb_next', locale)}
+      </Button>
+      {!last && <Button variant="ghost" fullWidth onClick={onDone} style={{ marginTop: sp[1] }}>{t('circle_onb_skip', locale)}</Button>}
+    </Sheet>
+  );
+}
+
 function JoinView({ tgFetch, locale, token, onJoined, onDecline, pushToast }: {
   tgFetch: TgFetchFn; locale: Locale; token: string; onJoined: (id: string) => void; onDecline: () => void; pushToast: CirclesRootProps['pushToast'];
 }) {
   const [preview, setPreview] = useState<InvitePreview | null>(null);
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Keep the latest onJoined callback without retriggering the preview fetch.
+  const onJoinedRef = useRef(onJoined);
+  onJoinedRef.current = onJoined;
 
   useEffect(() => {
     let alive = true;
@@ -726,7 +816,12 @@ function JoinView({ tgFetch, locale, token, onJoined, onDecline, pushToast }: {
         const res = await tgFetch(`/tg/circles/invite/${encodeURIComponent(token)}`);
         if (!res.ok) throw new Error('preview');
         const json = (await res.json()) as { preview: InvitePreview };
-        if (alive) setPreview(json.preview);
+        if (!alive) return;
+        // An existing member / the owner tapping their own invite link skips the
+        // join-onboarding preview entirely and lands straight in the group. The
+        // preview + surprise intro is only for people who aren't members yet.
+        if (json.preview.alreadyMember) { onJoinedRef.current(json.preview.circleId); return; }
+        setPreview(json.preview);
       } catch { if (alive) setError(true); }
     })();
     return () => { alive = false; };
@@ -781,11 +876,10 @@ function JoinView({ tgFetch, locale, token, onJoined, onDecline, pushToast }: {
         </Banner>
       </div>
       <div style={{ paddingTop: sp[4] }}>
-        {preview.alreadyMember ? (
-          <Button variant="primary" fullWidth onClick={() => onJoined(preview.circleId)}>{t('circle_open_group', locale)}</Button>
-        ) : (
-          <Button variant="primary" fullWidth disabled={busy} loading={busy} onClick={() => void join()}>{t('circle_join_cta', locale)}</Button>
-        )}
+        {/* Existing members / the owner never reach this screen — the preview
+            effect redirects them straight into the group. So this is always the
+            new-invitee join CTA. */}
+        <Button variant="primary" fullWidth disabled={busy} loading={busy} onClick={() => void join()}>{t('circle_join_cta', locale)}</Button>
         <Button variant="ghost" fullWidth onClick={onDecline} style={{ marginTop: sp[1] }}>{t('circle_not_now', locale)}</Button>
       </div>
     </div>

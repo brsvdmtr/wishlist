@@ -24,6 +24,20 @@ type ReleaseNoteItem = {
 export type ReleaseNote = { id: string; date: string; items: ReleaseNoteItem[] };
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    id: '2026-06-01',
+    date: '01.06.2026',
+    items: [
+      {
+        ru: '👥 Новый раздел «Близкие»: создавайте приватные группы для семьи, друзей или коллег. Внутри все видят вишлисты и важные даты друг друга, а подарки можно бронировать так, что владелец не узнает, кто что выбрал — сюрприз остаётся сюрпризом',
+        en: '👥 New "People" section: create private groups for family, friends or coworkers. Inside, everyone sees each other\'s wishlists and key dates, and you can reserve gifts so the owner never learns who picked what — the surprise stays a surprise',
+        'zh-CN': '👥 全新「密友」板块：为家人、朋友或同事创建私密群组。在里面，大家都能看到彼此的心愿单和重要日期；预订礼物时物主不会知道是谁选的 — 惊喜依然是惊喜',
+        hi: '👥 नया «करीबी» सेक्शन: परिवार, दोस्तों या सहकर्मियों के लिए निजी ग्रुप बनाओ। अंदर सब एक-दूसरे की विशलिस्ट और ज़रूरी तारीखें देखते हैं, और गिफ्ट ऐसे बुक कर सकते हो कि मालिक को पता न चले किसने क्या चुना — सरप्राइज़ सरप्राइज़ ही रहता है',
+        es: '👥 Nueva sección «Cercanos»: crea grupos privados para familia, amigos o compañeros. Dentro, todos ven las listas de deseos y las fechas importantes de los demás, y puedes reservar regalos sin que el dueño sepa quién eligió qué — la sorpresa sigue siendo sorpresa',
+        ar: '👥 قسم «المقرّبون» الجديد: أنشئ مجموعات خاصة للعائلة أو الأصدقاء أو الزملاء. في الداخل يرى الجميع قوائم أمنيات بعضهم وتواريخهم المهمة، ويمكنك حجز الهدايا دون أن يعرف صاحبها من اختار ماذا — تبقى المفاجأة مفاجأة',
+      },
+    ],
+  },
+  {
     id: '2026-05-28',
     date: '28.05.2026',
     items: [

@@ -86,6 +86,8 @@ export interface CircleItemInput {
   currency: string | null;
   imageUrl: string | null;
   priority: string | null;
+  description: string | null;
+  categoryId: string | null;
 }
 
 export interface CircleItemView {
@@ -96,6 +98,8 @@ export interface CircleItemView {
   currency: string | null;
   imageUrl: string | null;
   priority: string | null;
+  description: string | null;
+  categoryId: string | null;
   reserved: boolean;
   reservedByMe: boolean;
 }
@@ -125,6 +129,8 @@ export function mapCircleItemForViewer(
     currency: item.currency,
     imageUrl: item.imageUrl,
     priority: item.priority,
+    description: item.description,
+    categoryId: item.categoryId,
   };
   if (viewerId === ownerId) {
     // Owner viewing own list — surprise preserved, no reservation state at all.
@@ -566,6 +572,8 @@ export interface MemberWishlistView {
   id: string;
   title: string;
   emoji: string | null;
+  /** Owner's categories in their configured order (sortOrder); items carry categoryId. */
+  categories: { id: string; name: string }[];
   items: CircleItemView[];
 }
 
@@ -600,6 +608,11 @@ export async function getMemberWishlistsForViewer(params: {
           title: true,
           emoji: true,
           ownerId: true,
+          // Owner's categories, in their configured order — mirrored into the circle view.
+          categories: {
+            orderBy: { sortOrder: 'asc' },
+            select: { id: true, name: true },
+          },
           items: {
             where: { status: { in: [...VISIBLE_ITEM_STATUSES] } },
             orderBy: [{ priority: 'desc' }, { position: 'asc' }],
@@ -611,6 +624,8 @@ export async function getMemberWishlistsForViewer(params: {
               currency: true,
               imageUrl: true,
               priority: true,
+              description: true,
+              categoryId: true,
             },
           },
         },
@@ -636,6 +651,7 @@ export async function getMemberWishlistsForViewer(params: {
     id: s.wishlist.id,
     title: s.wishlist.title,
     emoji: s.wishlist.emoji,
+    categories: s.wishlist.categories,
     items: s.wishlist.items.map((it) =>
       mapCircleItemForViewer(it, params.viewerId, s.wishlist.ownerId, {
         reserved: reservedItems.has(it.id),
