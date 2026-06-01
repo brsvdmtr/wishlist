@@ -542,7 +542,10 @@ function DetailView({ tgFetch, locale, circleId, onBack, onOpenMember, onPrivacy
 
 // ── Member's shared lists (surprise invariant applies server-side) ─────────────
 
-function MemberView({ tgFetch, locale, circleId, memberId, onBack, pushToast }: {
+// Exported (alongside JoinView) for the CirclesRoot regression tests — these
+// subviews sit several navigation levels deep, so the tests mount them in
+// isolation rather than clicking through the whole flow.
+export function MemberView({ tgFetch, locale, circleId, memberId, onBack, pushToast }: {
   tgFetch: TgFetchFn; locale: Locale; circleId: string; memberId: string; onBack: () => void; pushToast: CirclesRootProps['pushToast'];
 }) {
   const [data, setData] = useState<MemberWishlists | null>(null);
@@ -799,7 +802,7 @@ function CirclesOnboarding({ locale, onDone }: { locale: Locale; onDone: () => v
   );
 }
 
-function JoinView({ tgFetch, locale, token, onJoined, onDecline, pushToast }: {
+export function JoinView({ tgFetch, locale, token, onJoined, onDecline, pushToast }: {
   tgFetch: TgFetchFn; locale: Locale; token: string; onJoined: (id: string) => void; onDecline: () => void; pushToast: CirclesRootProps['pushToast'];
 }) {
   const [preview, setPreview] = useState<InvitePreview | null>(null);
