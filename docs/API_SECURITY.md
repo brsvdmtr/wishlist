@@ -166,6 +166,24 @@ Wave 1 covers all P0 state-changing endpoints. ~70 routes, all on `tgRouter`.
 `PATCH /me/settings`,
 `DELETE /me/account` (`critical = true`)
 
+### Circles (Близкие) — P0.1
+
+`POST /circles` · `POST /circles/join` (`critical = true`; idempotent at the DB
+level via `unique(circleId,userId)`, capacity serialized with `SELECT … FOR
+UPDATE`) · `POST /circles/:id/invite` (capacity gate → 402 paywall) ·
+`POST /circles/:id/leave` · `DELETE /circles/:id` (`critical = true`) ·
+`DELETE /circles/:id/members/:userId` · `PUT /circles/:id/shares` ·
+`POST|DELETE /circles/:id/items/:itemId/reserve` (surprise-preserving circle
+reservation — creates a `CircleReservation`, never touches `Item.status`, never
+DMs the owner, so AC#3 holds on the write path too).
+
+All ride the global `state.changing` limiter (no dedicated category added — none
+of the 18 fit better, and 60/5m caps abuse); each carries an idempotency entry
+(categories `circle.create|join|invite|member|delete|shares|reserve`). Reads
+(`GET /circles`, `/circles/:id`, `/circles/invite/:token`,
+`/circles/:id/members/:memberId/wishlists`, `/circles/:id/shares`) are guarded
+by active-membership checks in `services/circles.service.ts`.
+
 ---
 
 ## 4. Wave-2 status (2026-05-06 audit)

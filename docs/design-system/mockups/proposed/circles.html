@@ -1,0 +1,870 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>P0.1 · Близкие (Circles) — приватные группы близких</title>
+<style>
+  /* ───── v2.1 tokens (mirror of packages/ui-tokens) ───── */
+  :root {
+    --wb-bg:              #0F0F12;
+    --wb-bg-elev:         #15151A;
+    --wb-surface:         rgba(255,255,255,0.035);
+    --wb-surface-hover:   rgba(255,255,255,0.06);
+    --wb-card:            rgba(255,255,255,0.045);
+    --wb-card-strong:     rgba(255,255,255,0.07);
+    --wb-nav-bg:          rgba(15,15,18,0.72);
+    --wb-accent:          #8B7BFF;
+    --wb-accent-strong:   #B4A6FF;
+    --wb-accent-light:    #C8BDFF;
+    --wb-accent-deep:     #5B48E5;
+    --wb-accent-soft:     rgba(139,123,255,0.14);
+    --wb-accent-soft-strong: rgba(139,123,255,0.30);
+    --wb-accent-glow:     rgba(139,123,255,0.45);
+    --wb-accent-glow-soft:rgba(139,123,255,0.25);
+    --wb-success:         #4ADE80;
+    --wb-success-soft:    rgba(74,222,128,0.14);
+    --wb-warning:         #FBBF24;
+    --wb-warning-soft:    rgba(251,191,36,0.14);
+    --wb-danger:          #FB7185;
+    --wb-danger-soft:     rgba(251,113,133,0.14);
+    --wb-text:            #FFFFFF;
+    --wb-text-secondary:  #C7CAD1;
+    --wb-text-muted:      #8F94A3;
+    --wb-border:          rgba(255,255,255,0.06);
+    --wb-border-light:    rgba(255,255,255,0.10);
+    --wb-border-strong:   rgba(255,255,255,0.12);
+    --wb-grad-mesh:
+      radial-gradient(ellipse 80% 60% at 12% 0%, rgba(139,123,255,0.22), transparent 55%),
+      radial-gradient(ellipse 60% 50% at 100% 20%, rgba(255,120,180,0.10), transparent 55%),
+      radial-gradient(ellipse 100% 70% at 50% 110%, rgba(139,123,255,0.10), transparent 65%);
+    --wb-font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #07070A; color: var(--wb-text); font-family: var(--wb-font); }
+  body { padding: 32px 24px 80px; }
+  h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.025em; margin: 0 0 8px; }
+  h2 { font-size: 19px; font-weight: 650; letter-spacing: -0.015em; margin: 40px 0 6px; }
+  h2 .num { color: var(--wb-accent-strong); font-weight: 700; margin-right: 8px; }
+  .h2sub { font-size: 13px; color: var(--wb-text-muted); margin: 0 0 16px; max-width: 760px; line-height: 1.5; }
+  .lede { font-size: 14.5px; color: var(--wb-text-secondary); max-width: 820px; line-height: 1.6; margin: 0 0 12px; }
+  .lede b { color: var(--wb-text); font-weight: 650; }
+  .meta { font-size: 12px; color: var(--wb-text-muted); margin-bottom: 8px; line-height: 1.7; }
+  .meta b { color: var(--wb-text-secondary); font-weight: 600; }
+  code { font-family: 'SF Mono', Menlo, monospace; font-size: 11.5px; padding: 1px 5px; background: rgba(139,123,255,0.12); border-radius: 4px; color: var(--wb-accent-strong); }
+  .goals { display:flex; gap:10px; flex-wrap:wrap; max-width:820px; margin:14px 0 4px; }
+  .goal { flex:1; min-width:200px; background:var(--wb-bg-elev); border:1px solid var(--wb-border); border-radius:14px; padding:13px 15px; }
+  .goal .k { font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--wb-text-muted); font-weight:650; }
+  .goal .v { font-size:13.5px; color:var(--wb-text-secondary); margin-top:5px; line-height:1.45; }
+  .goal .v b { color:var(--wb-accent-strong); }
+
+  /* ───── Phone frame grid ───── */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 26px; max-width: 1480px; margin: 0 auto 8px; }
+  .frame { background: var(--wb-bg); border-radius: 36px; border: 1px solid var(--wb-border); position: relative; overflow: hidden; height: 740px; display: flex; flex-direction: column; }
+  .frame::before { content: ''; position: absolute; inset: 0; background: var(--wb-grad-mesh); pointer-events: none; opacity: 0.85; }
+  .frame > * { position: relative; z-index: 1; }
+  .frame-label { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--wb-text-secondary); font-weight: 600; letter-spacing: 0.02em; z-index: 9; background: rgba(0,0,0,0.6); padding: 4px 11px; border-radius: 999px; white-space: nowrap; backdrop-filter: blur(8px); }
+  .caption { margin-top: 12px; padding: 12px 14px; background: rgba(255,255,255,0.02); border: 1px solid var(--wb-border); border-radius: 14px; font-size: 12.5px; color: var(--wb-text-secondary); line-height: 1.55; }
+  .caption .tag { display: inline-block; padding: 2px 8px; background: var(--wb-accent-soft); color: var(--wb-accent-strong); border-radius: 6px; font-size: 10px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; margin-right: 6px; margin-bottom: 4px; }
+  .caption .tag.success { background: var(--wb-success-soft); color: var(--wb-success); }
+  .caption .tag.muted { background: rgba(255,255,255,0.05); color: var(--wb-text-muted); }
+  .caption .tag.danger { background: var(--wb-danger-soft); color: var(--wb-danger); }
+  .caption .tag.warn { background: var(--wb-warning-soft); color: var(--wb-warning); }
+
+  /* ───── Phone chrome ───── */
+  .ph-status { height: 46px; padding: 16px 24px 0; display: flex; justify-content: space-between; align-items: flex-start; font-size: 14px; font-weight: 600; flex-shrink: 0; }
+  .ph-status .ic { display:flex; gap:6px; font-size:12px; }
+  .ph-hdr { height: 52px; padding: 6px 14px; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .ph-hdr-btn { width: 38px; height: 38px; border-radius: 13px; background: var(--wb-surface); border: 1px solid var(--wb-border); backdrop-filter: blur(20px); display: flex; align-items: center; justify-content: center; color: var(--wb-text); font-size: 17px; flex-shrink: 0; }
+  .ph-title { flex: 1; text-align: center; font-size: 16px; font-weight: 650; letter-spacing: -0.018em; }
+  .ph-title small { display:block; font-size:11px; color:var(--wb-text-muted); font-weight:500; margin-top:1px; }
+  .ph-scroll { flex: 1; overflow: hidden; padding-bottom: 8px; }
+  .ph-pad { padding: 0 16px; }
+
+  /* bottom nav (4-tab) */
+  .ph-nav { position: absolute; left: 10px; right: 10px; bottom: 12px; display: flex; justify-content: space-around; padding: 7px 4px; background: var(--wb-nav-bg); backdrop-filter: blur(28px) saturate(180%); border: 1px solid var(--wb-border); border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08); z-index: 6; }
+  .ph-nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 5px 2px; color: var(--wb-text-muted); font-size: 9.5px; font-weight: 550; position: relative; }
+  .ph-nav-item .ic { font-size: 19px; line-height: 1; }
+  .ph-nav-item.active { color: var(--wb-accent-strong); }
+  .ph-nav-item.active::after { content: ''; position: absolute; bottom: -2px; left: 50%; transform: translateX(-50%); width: 14px; height: 3px; background: var(--wb-accent); border-radius: 100px; box-shadow: 0 0 8px var(--wb-accent-glow); }
+  .ph-fab { position: absolute; right: 18px; bottom: 90px; width: 54px; height: 54px; border-radius: 19px; background: linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep)); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 300; box-shadow: 0 14px 40px var(--wb-accent-glow), inset 0 1px 0 rgba(255,255,255,0.24); z-index: 6; }
+
+  /* ───── Generic primitives ───── */
+  .sec-hdr { display: flex; align-items: baseline; justify-content: space-between; padding: 14px 4px 8px; }
+  .sec-hdr h3 { margin: 0; font-size: 11px; font-weight: 650; color: var(--wb-text-muted); text-transform: uppercase; letter-spacing: 0.7px; }
+  .sec-hdr .lnk { font-size: 12.5px; color: var(--wb-accent-strong); font-weight: 550; }
+
+  .btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 14px 20px; border-radius: 16px; border: none; font-family: inherit; font-size: 15px; font-weight: 650; letter-spacing: -0.015em; min-height: 50px; }
+  .btn.primary { background: linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep)); color: #fff; box-shadow: 0 12px 32px var(--wb-accent-glow), inset 0 1px 0 rgba(255,255,255,0.22); }
+  .btn.secondary { background: var(--wb-accent-soft); color: var(--wb-accent-strong); border: 1px solid var(--wb-accent-soft-strong); }
+  .btn.surface { background: var(--wb-card-strong); color: var(--wb-text); border: 1px solid var(--wb-border-strong); }
+  .btn.ghost { background: transparent; color: var(--wb-text-secondary); box-shadow: none; }
+  .btn.sm { padding: 9px 14px; min-height: 0; font-size: 13px; border-radius: 12px; width: auto; }
+
+  .chip { display: inline-flex; align-items: center; gap: 3px; padding: 3px 8px; border-radius: 7px; font-size: 10.5px; font-weight: 650; white-space: nowrap; letter-spacing: 0.1px; }
+  .chip.accent { background: var(--wb-accent-soft); color: var(--wb-accent-strong); }
+  .chip.success { background: var(--wb-success-soft); color: var(--wb-success); }
+  .chip.warning { background: var(--wb-warning-soft); color: var(--wb-warning); }
+  .chip.surface { background: var(--wb-surface); color: var(--wb-text-muted); border: 1px solid var(--wb-border); }
+  .chip.pro { background: linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep)); color: #fff; border-radius: 100px; padding: 3px 9px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.18); }
+
+  .banner { display: flex; gap: 10px; padding: 12px 14px; border-radius: 14px; font-size: 12.5px; line-height: 1.5; align-items: flex-start; backdrop-filter: blur(14px); }
+  .banner .bic { flex-shrink: 0; font-size: 16px; margin-top: 1px; }
+  .banner.info { background: var(--wb-accent-soft); border: 1px solid var(--wb-accent-soft-strong); color: var(--wb-text-secondary); }
+  .banner.surprise { background: var(--wb-success-soft); border: 1px solid rgba(74,222,128,0.28); color: var(--wb-text-secondary); }
+  .banner b { color: var(--wb-text); font-weight: 650; }
+
+  .av { border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 650; flex-shrink: 0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
+  .av.g1 { background: linear-gradient(135deg,#8B7BFF,#B4A6FF); }
+  .av.g2 { background: linear-gradient(135deg,#FBBF24,#F59E0B); }
+  .av.g3 { background: linear-gradient(135deg,#4ADE80,#10B981); }
+  .av.g4 { background: linear-gradient(135deg,#F892C9,#F06AB4); }
+  .av.g5 { background: linear-gradient(135deg,#86ABF5,#5B8DEF); }
+  .stack { display: flex; align-items: center; }
+  .stack .av { width: 28px; height: 28px; font-size: 11px; border: 2px solid var(--wb-bg); }
+  .stack .av:not(:first-child) { margin-left: -9px; }
+  .stack .av.plus { background: var(--wb-surface); color: var(--wb-text-secondary); }
+
+  /* ───── Circle card (list) ───── */
+  .circ { background: var(--wb-card); border: 1px solid var(--wb-border); border-radius: 22px; padding: 16px; margin-bottom: 10px; backdrop-filter: blur(16px); position: relative; overflow: hidden; }
+  .circ-top { display: flex; align-items: flex-start; gap: 13px; }
+  .circ-cover { width: 52px; height: 52px; border-radius: 17px; background: linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft)); display: flex; align-items: center; justify-content: center; font-size: 27px; flex-shrink: 0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.08); }
+  .circ-cover.fam { background: linear-gradient(135deg, rgba(139,123,255,0.32), rgba(139,123,255,0.12)); }
+  .circ-cover.fri { background: linear-gradient(135deg, rgba(251,191,36,0.30), rgba(251,191,36,0.10)); }
+  .circ-cover.col { background: linear-gradient(135deg, rgba(134,171,245,0.30), rgba(134,171,245,0.10)); }
+  .circ-meta { flex: 1; min-width: 0; }
+  .circ-title { font-size: 16.5px; font-weight: 650; letter-spacing: -0.018em; display: flex; align-items: center; gap: 7px; }
+  .circ-sub { font-size: 12.5px; color: var(--wb-text-muted); margin-top: 3px; }
+  .circ-chev { font-size: 20px; color: var(--wb-text-muted); align-self: center; }
+  .circ-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 13px; padding-top: 12px; border-top: 1px solid var(--wb-hairline, rgba(255,255,255,0.05)); }
+  .circ-next { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--wb-text-secondary); }
+
+  /* ───── Member card (inside circle) ───── */
+  .mem { display: flex; align-items: center; gap: 12px; background: var(--wb-card); border: 1px solid var(--wb-border); border-radius: 18px; padding: 12px; margin-bottom: 8px; backdrop-filter: blur(14px); }
+  .mem-av { width: 46px; height: 46px; font-size: 17px; }
+  .mem-body { flex: 1; min-width: 0; }
+  .mem-name { font-size: 15px; font-weight: 650; letter-spacing: -0.012em; display: flex; align-items: center; gap: 6px; }
+  .mem-evt { display: flex; align-items: center; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
+  .mem-sub { font-size: 11.5px; color: var(--wb-text-muted); }
+  .open-btn { background: var(--wb-accent-soft); color: var(--wb-accent-strong); border: 1px solid var(--wb-accent-soft-strong); border-radius: 12px; padding: 8px 13px; font-size: 12.5px; font-weight: 650; white-space: nowrap; }
+
+  /* ───── Type selector (create) ───── */
+  .type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+  .type-tile { background: var(--wb-card); border: 1px solid var(--wb-border); border-radius: 16px; padding: 14px 12px; text-align: center; backdrop-filter: blur(14px); }
+  .type-tile.sel { background: linear-gradient(135deg, var(--wb-card-strong), var(--wb-accent-soft)); border-color: var(--wb-accent-soft-strong); box-shadow: 0 0 0 1px var(--wb-accent-soft-strong) inset; }
+  .type-tile .emo { font-size: 26px; }
+  .type-tile .lab { font-size: 13px; font-weight: 600; margin-top: 6px; }
+  .type-tile.sel .lab { color: var(--wb-accent-strong); }
+
+  .field { margin-bottom: 14px; }
+  .label { font-size: 11px; font-weight: 650; color: var(--wb-text-muted); text-transform: uppercase; letter-spacing: 0.7px; margin: 0 0 8px 2px; display: block; }
+  .input { width: 100%; background: var(--wb-card); border: 1px solid var(--wb-border); border-radius: 16px; padding: 14px 16px; font-family: inherit; font-size: 15px; font-weight: 500; color: #fff; backdrop-filter: blur(14px); }
+  .input.focus { border-color: var(--wb-accent-soft-strong); box-shadow: 0 0 0 4px var(--wb-accent-soft); }
+  .input .ph { color: var(--wb-text-muted); }
+  .emoji-strip { display: flex; gap: 8px; }
+  .emoji-cell { width: 44px; height: 44px; border-radius: 13px; background: var(--wb-card); border: 1px solid var(--wb-border); display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  .emoji-cell.sel { border-color: var(--wb-accent-soft-strong); background: var(--wb-accent-soft); }
+
+  /* ───── Invite box ───── */
+  .invite-box { background: var(--wb-card); border: 1px dashed var(--wb-border-strong); border-radius: 16px; padding: 13px 14px; display: flex; align-items: center; gap: 10px; }
+  .invite-link { flex: 1; min-width: 0; font-family: 'SF Mono', Menlo, monospace; font-size: 12.5px; color: var(--wb-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .copy-btn { background: var(--wb-accent-soft); color: var(--wb-accent-strong); border-radius: 10px; padding: 7px 11px; font-size: 12px; font-weight: 650; flex-shrink: 0; }
+  .cap-meter { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--wb-text-muted); margin-top: 10px; }
+  .cap-bar { height: 5px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; margin-top: 7px; }
+  .cap-bar > div { height: 100%; background: linear-gradient(90deg, var(--wb-accent), var(--wb-accent-strong)); border-radius: 3px; }
+  .cap-bar.full > div { background: linear-gradient(90deg, var(--wb-warning), #F59E0B); }
+
+  /* ───── Join hero ───── */
+  .join-hero { text-align: center; padding: 24px 18px 6px; }
+  .join-cover { width: 86px; height: 86px; border-radius: 28px; background: linear-gradient(135deg, rgba(139,123,255,0.32), rgba(139,123,255,0.12)); display: flex; align-items: center; justify-content: center; font-size: 46px; margin: 0 auto 16px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 12px 32px var(--wb-accent-glow-soft); }
+  .join-kick { font-size: 12.5px; color: var(--wb-accent-strong); font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; }
+  .join-title { font-size: 25px; font-weight: 700; letter-spacing: -0.03em; margin: 6px 0 4px; }
+  .join-stack { display: flex; justify-content: center; margin: 14px 0 4px; }
+  .join-by { font-size: 13px; color: var(--wb-text-secondary); }
+
+  /* ───── Privacy rows ───── */
+  .priv-row { display: flex; align-items: center; gap: 12px; background: var(--wb-card); border: 1px solid var(--wb-border); border-radius: 16px; padding: 13px 14px; margin-bottom: 8px; backdrop-filter: blur(14px); }
+  .priv-emo { width: 40px; height: 40px; border-radius: 13px; background: var(--wb-accent-soft); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+  .priv-body { flex: 1; min-width: 0; }
+  .priv-t { font-size: 14.5px; font-weight: 600; }
+  .priv-s { font-size: 11.5px; color: var(--wb-text-muted); margin-top: 2px; }
+  .toggle { width: 46px; height: 28px; border-radius: 100px; background: rgba(255,255,255,0.10); position: relative; flex-shrink: 0; transition: background .2s; }
+  .toggle .knob { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: left .2s; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+  .toggle.on { background: var(--wb-accent); }
+  .toggle.on .knob { left: 21px; }
+  .priv-row.off { opacity: 0.7; }
+  .priv-row.off .priv-emo { background: var(--wb-surface); }
+
+  /* ───── Wish item rows ───── */
+  .wish { display: flex; gap: 12px; align-items: center; background: var(--wb-card); border: 1px solid var(--wb-border); border-radius: 16px; padding: 11px 12px; margin-bottom: 8px; backdrop-filter: blur(14px); }
+  .wish-thumb { width: 46px; height: 46px; border-radius: 13px; background: linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft)); display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+  .wish-body { flex: 1; min-width: 0; }
+  .wish-t { font-size: 14px; font-weight: 600; letter-spacing: -0.012em; line-height: 1.3; }
+  .wish-price { font-size: 12.5px; font-weight: 650; color: var(--wb-text-secondary); margin-top: 2px; }
+  .wish-meta { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .wish.byme { background: linear-gradient(135deg, var(--wb-card), rgba(74,222,128,0.09)); border-color: rgba(74,222,128,0.28); }
+  .wish.byme .wish-thumb { background: linear-gradient(135deg, rgba(74,222,128,0.28), rgba(74,222,128,0.10)); }
+  .res-btn { background: var(--wb-accent-soft); color: var(--wb-accent-strong); border: 1px solid var(--wb-accent-soft-strong); border-radius: 11px; padding: 8px 12px; font-size: 12px; font-weight: 650; white-space: nowrap; align-self: center; }
+
+  /* ───── Paywall feature rows ───── */
+  .pw-title { font-size: 27px; font-weight: 700; letter-spacing: -0.03em; text-align: center; margin: 12px 16px 4px; line-height: 1.1; }
+  .pw-title .grad { background: linear-gradient(135deg, var(--wb-accent) 20%, var(--wb-accent-strong) 80%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .pw-sub { font-size: 14px; color: var(--wb-text-secondary); text-align: center; margin: 0 22px 18px; line-height: 1.45; }
+  .feat { display: flex; align-items: center; gap: 13px; padding: 13px 14px; background: var(--wb-card); border: 1px solid var(--wb-border); border-radius: 16px; margin-bottom: 8px; backdrop-filter: blur(14px); }
+  .feat-ic { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft)); display: flex; align-items: center; justify-content: center; font-size: 19px; flex-shrink: 0; }
+  .feat-t { font-size: 14px; font-weight: 600; }
+  .feat-s { font-size: 12px; color: var(--wb-text-secondary); margin-top: 2px; }
+
+  /* ───── Bottom sheet (overlay in frame) ───── */
+  .scrim { position: absolute; inset: 0; background: rgba(7,7,10,0.55); z-index: 10; backdrop-filter: blur(3px); }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 11; background: var(--wb-bg-elev); border-radius: 26px 26px 0 0; padding: 20px 18px 22px; border: 1px solid var(--wb-border); border-bottom: none; box-shadow: 0 -20px 60px rgba(0,0,0,0.5); }
+  .sheet-handle { width: 38px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.18); margin: -6px auto 16px; }
+  .sheet-title { font-size: 19px; font-weight: 700; letter-spacing: -0.015em; text-align: center; }
+  .sheet-sub { font-size: 13.5px; color: var(--wb-text-secondary); text-align: center; margin: 6px 14px 16px; line-height: 1.5; }
+
+  /* empty state */
+  .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; height: 100%; padding: 0 36px; }
+  .empty-emo { font-size: 60px; margin-bottom: 8px; filter: drop-shadow(0 14px 30px var(--wb-accent-glow-soft)); }
+  .empty-glow { position: relative; }
+  .empty-glow::before { content:''; position:absolute; width:180px; height:180px; left:50%; top:50%; transform:translate(-50%,-60%); background:radial-gradient(circle, var(--wb-accent-glow-soft), transparent 70%); filter:blur(18px); pointer-events:none; }
+  .empty-t { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; }
+  .empty-s { font-size: 14px; color: var(--wb-text-secondary); margin: 10px 0 24px; line-height: 1.5; }
+
+  /* bot DM bubble */
+  .tg-wrap { padding: 16px 12px; display: flex; flex-direction: column; gap: 10px; }
+  .tg-day { align-self: center; font-size: 11px; color: var(--wb-text-muted); background: rgba(255,255,255,0.05); padding: 3px 10px; border-radius: 100px; }
+  .tg-msg { max-width: 86%; background: var(--wb-card); border: 1px solid var(--wb-border); border-radius: 16px 16px 16px 5px; padding: 12px 14px; backdrop-filter: blur(14px); }
+  .tg-bot { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 650; color: var(--wb-accent-strong); margin-bottom: 6px; }
+  .tg-bot .botav { width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep)); display: flex; align-items: center; justify-content: center; font-size: 12px; }
+  .tg-text { font-size: 14px; line-height: 1.5; color: var(--wb-text); }
+  .tg-text b { font-weight: 650; }
+  .tg-time { font-size: 10px; color: var(--wb-text-muted); text-align: right; margin-top: 4px; }
+  .tg-kbd { margin-top: 8px; background: rgba(139,123,255,0.16); border: 1px solid var(--wb-accent-soft-strong); border-radius: 10px; padding: 10px; text-align: center; font-size: 13px; font-weight: 650; color: var(--wb-accent-strong); }
+
+  /* ───── Spec blocks ───── */
+  .spec { background: var(--wb-bg-elev); border-radius: 16px; padding: 22px 26px; border: 1px solid var(--wb-border); margin: 0 auto 16px; max-width: 1200px; }
+  .spec h3 { font-size: 13px; font-weight: 650; margin: 0 0 14px; color: var(--wb-text); text-transform: uppercase; letter-spacing: 0.05em; }
+  .spec h3 .sub { text-transform: none; letter-spacing: 0; color: var(--wb-text-muted); font-weight: 500; font-size: 12px; margin-left: 8px; }
+  .spec table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .spec th { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--wb-border-light); color: var(--wb-text-muted); font-weight: 650; font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .spec td { padding: 9px 10px; border-bottom: 1px solid var(--wb-border); color: var(--wb-text-secondary); vertical-align: top; line-height: 1.55; }
+  .spec td:first-child { color: var(--wb-text); font-weight: 600; white-space: nowrap; }
+  .spec td code { white-space: normal; }
+  .spec ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.75; color: var(--wb-text-secondary); }
+  .spec ul li b, .spec td b { color: var(--wb-text); font-weight: 650; }
+  .spec .invariant { background: rgba(74,222,128,0.07); border-left: 3px solid var(--wb-success); padding: 12px 16px; border-radius: 6px; margin-top: 14px; font-size: 13px; color: var(--wb-text-secondary); line-height: 1.6; }
+  .spec .invariant b { color: var(--wb-success); }
+  .spec .warn { background: rgba(251,191,36,0.08); border-left: 3px solid var(--wb-warning); padding: 12px 16px; border-radius: 6px; margin-top: 12px; font-size: 13px; color: var(--wb-text-secondary); line-height: 1.6; }
+  .spec .warn b { color: var(--wb-warning); }
+  .spec .ask { background: rgba(139,123,255,0.08); border-left: 3px solid var(--wb-accent); padding: 12px 16px; border-radius: 6px; margin-top: 10px; font-size: 13px; color: var(--wb-text-secondary); line-height: 1.6; }
+  .spec .ask b { color: var(--wb-accent-strong); }
+  .pre { font-family: 'SF Mono', Menlo, monospace; font-size: 12px; line-height: 1.65; color: var(--wb-text-secondary); background: #0b0b0e; border: 1px solid var(--wb-border); border-radius: 12px; padding: 16px 18px; overflow-x: auto; white-space: pre; }
+  .pre .kw { color: #C792EA; } .pre .ty { color: #82AAFF; } .pre .cm { color: var(--wb-text-muted); } .pre .en { color: #FFCB6B; } .pre .st { color: #C3E88D; }
+  .legend { display:flex; gap:18px; flex-wrap:wrap; font-size:12px; color:var(--wb-text-muted); margin: 22px 0 0; }
+  .legend span b { color: var(--wb-text-secondary); }
+</style>
+</head>
+<body>
+
+<h1>P0.1 · Близкие (Circles)</h1>
+<p class="lede">Приватные группы близких (<b>семья · друзья · коллеги · пара</b>), внутри которых участники видят списки и события друг друга. Превращает WishBoard из «моего списка раз в год» в социальный граф, к&nbsp;которому возвращаешься круглый год ради других. Ядро: слой группового членства с&nbsp;ролями и приватностью на&nbsp;уровне группы, вступление по&nbsp;Telegram deep-link в&nbsp;один тап, с&nbsp;сохранением сюрприза для владельца.</p>
+<p class="meta">Status: <b>DRAFT — на ревью, без имплементации</b> · Bucket: <b>mockups/proposed/</b> · Source: <code>P0.1 spec</code> · Стек: <code>Circle / CircleMembership / CircleInvite (+ CircleWishlistShare)</code> · Deep-link: <code>?startapp=circ_&lt;token&gt;</code> · Лимит: entitlement <code>participants</code> (FREE 10 / PRO 20)</p>
+
+<div class="goals">
+  <div class="goal"><div class="k">Цель графа</div><div class="v">Доля MAU в&nbsp;≥1&nbsp;группе → <b>50%+</b></div></div>
+  <div class="goal"><div class="k">Цель «за&nbsp;других»</div><div class="v">Доля сессий с&nbsp;действием в&nbsp;чужой группе → <b>30%+</b></div></div>
+  <div class="goal"><div class="k">Ключевая проверка</div><div class="v">D30 retention когорты <b>«в&nbsp;группе» vs «без»</b></div></div>
+  <div class="goal"><div class="k">Фундамент для</div><div class="v">P0.2 лента · P0.3 пуши · P2.4 сбор</div></div>
+</div>
+
+<!-- ════════════════════════ A · ВХОД ════════════════════════ -->
+<h2><span class="num">A</span>Вход в раздел · пустое состояние и список</h2>
+<p class="h2sub">«Близкие» — новая <b>4-я вкладка нижней навигации</b> (🏠 Главная · 👥 Близкие · 🎁 Брони · 👤 Профиль). Стратегически раздел должен быть на расстоянии одного тапа — он и есть движок сессий «за&nbsp;других». Размещение — открытый вопрос (см. §&nbsp;Открытые вопросы).</p>
+<div class="grid">
+
+  <!-- A1: empty -->
+  <div>
+    <div class="frame">
+      <span class="frame-label">A1 · Пусто — нет групп</span>
+      <div class="ph-status"><span>9:41</span><span class="ic">●●● 5G ▰</span></div>
+      <div class="ph-hdr"><div class="ph-hdr-btn">?</div><div class="ph-title">Близкие</div><div class="ph-hdr-btn">⚙</div></div>
+      <div class="ph-scroll">
+        <div class="empty empty-glow">
+          <div class="empty-emo">👥</div>
+          <div class="empty-t">Пока никого</div>
+          <div class="empty-s">Создай группу для семьи или друзей — и&nbsp;вы&nbsp;будете видеть желания и&nbsp;даты друг друга весь год.</div>
+          <button class="btn primary">Собрать близких</button>
+          <button class="btn ghost" style="margin-top:6px;">У&nbsp;меня есть ссылка-приглашение</button>
+        </div>
+      </div>
+      <div class="ph-nav">
+        <div class="ph-nav-item"><span class="ic">🏠</span>Главная</div>
+        <div class="ph-nav-item active"><span class="ic">👥</span>Близкие</div>
+        <div class="ph-nav-item"><span class="ic">🎁</span>Брони</div>
+        <div class="ph-nav-item"><span class="ic">👤</span>Профиль</div>
+      </div>
+    </div>
+    <div class="caption"><span class="tag success">AC#1</span> Нет групп → пустое состояние + CTA «Собрать близких». Второй, тихий путь «есть ссылка» — для тех, кому уже кинули инвайт в чат (вставить <code>circ_</code>-ссылку вручную).</div>
+  </div>
+
+  <!-- A2: list -->
+  <div>
+    <div class="frame">
+      <span class="frame-label">A2 · Список групп</span>
+      <div class="ph-status"><span>9:41</span><span class="ic">●●● 5G ▰</span></div>
+      <div class="ph-hdr"><div class="ph-hdr-btn">?</div><div class="ph-title">Близкие</div><div class="ph-hdr-btn">⚙</div></div>
+      <div class="ph-scroll"><div class="ph-pad">
+        <div class="sec-hdr"><h3>Мои группы · 3</h3></div>
+
+        <div class="circ">
+          <div class="circ-top">
+            <div class="circ-cover fam">🏡</div>
+            <div class="circ-meta">
+              <div class="circ-title">Семья</div>
+              <div class="circ-sub">5 участников · владелец — ты</div>
+            </div>
+            <div class="circ-chev">›</div>
+          </div>
+          <div class="circ-foot">
+            <div class="stack"><div class="av g1">М</div><div class="av g2">П</div><div class="av g3">Б</div><div class="av g4">А</div><div class="av plus">+1</div></div>
+            <div class="circ-next"><span class="chip warning">🎂 5 дней</span> <span style="color:var(--wb-text-muted)">Маша</span></div>
+          </div>
+        </div>
+
+        <div class="circ">
+          <div class="circ-top">
+            <div class="circ-cover fri">🎉</div>
+            <div class="circ-meta">
+              <div class="circ-title">Друзья</div>
+              <div class="circ-sub">8 участников</div>
+            </div>
+            <div class="circ-chev">›</div>
+          </div>
+          <div class="circ-foot">
+            <div class="stack"><div class="av g5">К</div><div class="av g1">Д</div><div class="av g3">Н</div><div class="av plus">+5</div></div>
+            <div class="circ-next"><span class="chip accent">🎂 23 дня</span> <span style="color:var(--wb-text-muted)">Костя</span></div>
+          </div>
+        </div>
+
+        <div class="circ">
+          <div class="circ-top">
+            <div class="circ-cover col">💼</div>
+            <div class="circ-meta">
+              <div class="circ-title">Коллеги</div>
+              <div class="circ-sub">6 участников</div>
+            </div>
+            <div class="circ-chev">›</div>
+          </div>
+          <div class="circ-foot">
+            <div class="stack"><div class="av g2">Р</div><div class="av g4">О</div><div class="av g5">С</div><div class="av plus">+3</div></div>
+            <div class="circ-next"><span style="color:var(--wb-text-muted);font-size:12px">Нет ближайших событий</span></div>
+          </div>
+        </div>
+      </div></div>
+      <div class="ph-fab">+</div>
+      <div class="ph-nav">
+        <div class="ph-nav-item"><span class="ic">🏠</span>Главная</div>
+        <div class="ph-nav-item active"><span class="ic">👥</span>Близкие</div>
+        <div class="ph-nav-item"><span class="ic">🎁</span>Брони</div>
+        <div class="ph-nav-item"><span class="ic">👤</span>Профиль</div>
+      </div>
+    </div>
+    <div class="caption"><span class="tag">crash-of-others</span> Каждая карточка — превью: число участников + <b>ближайшее событие с&nbsp;countdown</b> (главный крючок «зайди за&nbsp;другими»). Срочные (&lt;7 дней) — <span class="chip warning" style="font-size:9px;padding:1px 5px">warning</span>, дальше — <span class="chip accent" style="font-size:9px;padding:1px 5px">accent</span>. FAB «+» = создать группу.</div>
+  </div>
+</div>
+
+<!-- ════════════════════════ B · СОЗДАНИЕ ════════════════════════ -->
+<h2><span class="num">B</span>Создание группы и приглашение</h2>
+<p class="h2sub">Минимум трения: тип + название + эмодзи → сразу ссылка-инвайт, которую кидаешь в семейный/дружеский чат.</p>
+<div class="grid">
+
+  <!-- B1: create -->
+  <div>
+    <div class="frame">
+      <span class="frame-label">B1 · Новая группа</span>
+      <div class="ph-status"><span>9:41</span><span class="ic">●●● 5G ▰</span></div>
+      <div class="ph-hdr"><div class="ph-hdr-btn">←</div><div class="ph-title">Новая группа</div><div class="ph-hdr-btn" style="opacity:.3">✕</div></div>
+      <div class="ph-scroll"><div class="ph-pad">
+        <div class="field">
+          <span class="label">Тип группы</span>
+          <div class="type-grid">
+            <div class="type-tile sel"><div class="emo">🏡</div><div class="lab">Семья</div></div>
+            <div class="type-tile"><div class="emo">🎉</div><div class="lab">Друзья</div></div>
+            <div class="type-tile"><div class="emo">💼</div><div class="lab">Коллеги</div></div>
+            <div class="type-tile"><div class="emo">💞</div><div class="lab">Пара</div></div>
+          </div>
+        </div>
+        <div class="field">
+          <span class="label">Название</span>
+          <div class="input focus">Семья</div>
+        </div>
+        <div class="field">
+          <span class="label">Обложка</span>
+          <div class="emoji-strip">
+            <div class="emoji-cell sel">🏡</div><div class="emoji-cell">👨‍👩‍👧‍👦</div><div class="emoji-cell">❤️</div><div class="emoji-cell">🌳</div><div class="emoji-cell" style="color:var(--wb-text-muted)">···</div>
+          </div>
+        </div>
+        <div class="banner info" style="margin-top:4px;"><span class="bic">🤫</span><div>Внутри группы <b>сюрприз сохраняется</b>: никто не увидит, кто что забронировал тебе.</div></div>
+      </div></div>
+      <div style="position:absolute;left:0;right:0;bottom:0;padding:14px 16px 22px;background:linear-gradient(180deg,transparent,var(--wb-bg) 55%);z-index:5;">
+        <button class="btn primary">Создать группу</button>
+      </div>
+    </div>
+    <div class="caption"><span class="tag">circle.create</span> Тип задаёт дефолтные эмодзи и предзаполняет название. Эмодзи-пикер переиспользует утверждённый паттерн <code>wishlist-emoji-picker.html</code>. <code>POST /tg/circles</code> · идемпотентность <code>circle.create</code>.</div>
+  </div>
+
+  <!-- B2: invite sheet -->
+  <div>
+    <div class="frame">
+      <span class="frame-label">B2 · Приглашение (sheet)</span>
+      <div class="ph-status"><span>9:41</span><span class="ic">●●● 5G ▰</span></div>
+      <div class="ph-hdr"><div class="ph-hdr-btn">←</div><div class="ph-title">Семья</div><div class="ph-hdr-btn">⚙</div></div>
+      <div class="ph-scroll" style="opacity:.4;filter:saturate(.8)"><div class="ph-pad">
+        <div class="mem"><div class="av g1 mem-av">Я</div><div class="mem-body"><div class="mem-name">Ты <span class="chip accent">владелец</span></div><div class="mem-sub">это твоя группа</div></div></div>
+      </div></div>
+      <div class="scrim"></div>
+      <div class="sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-title">Пригласи близких 👋</div>
+        <div class="sheet-sub">Кинь ссылку в&nbsp;семейный чат — родные вступят в&nbsp;один тап, без регистрации.</div>
+        <div class="invite-box">
+          <div class="invite-link">t.me/WishHub_bot?startapp=circ_aZ9kP2</div>
+          <div class="copy-btn">Копировать</div>
+        </div>
+        <div class="cap-meter"><span>В&nbsp;группе: 1&nbsp;из&nbsp;10</span><span style="color:var(--wb-text-muted)">FREE</span></div>
+        <div class="cap-bar"><div style="width:10%"></div></div>
+        <div style="margin-top:16px;"><button class="btn primary">Поделиться ссылкой</button></div>
+        <button class="btn ghost" style="margin-top:4px;">Готово</button>
+      </div>
+    </div>
+    <div class="caption"><span class="tag">circle.invite.create</span> Ссылка <b>многоразовая</b> (один линк → весь чат), хранится в&nbsp;<code>CircleInvite.token</code>. «Поделиться» открывает нативный TG-share. Счётчик ёмкости показывает FREE-лимит заранее — без сюрпризов при апгрейде.</div>
+  </div>
+</div>
+
+<!-- ════════════════════════ C · ВСТУПЛЕНИЕ ════════════════════════ -->
+<h2><span class="num">C</span>Вступление по ссылке · уведомление владельцу</h2>
+<p class="h2sub">Приглашённый открывает <code>?startapp=circ_&lt;token&gt;</code> прямо в&nbsp;Telegram. Identity наследуется из&nbsp;TG — никакой регистрации.</p>
+<div class="grid">
+
+  <!-- C1: join preview -->
+  <div>
+    <div class="frame">
+      <span class="frame-label">C1 · Приглашённый открыл ссылку</span>
+      <div class="ph-status"><span>9:41</span><span class="ic">●●● 5G ▰</span></div>
+      <div class="ph-hdr"><div class="ph-hdr-btn" style="opacity:.3">←</div><div class="ph-title">Приглашение</div><div class="ph-hdr-btn" style="opacity:.3">✕</div></div>
+      <div class="ph-scroll"><div class="ph-pad">
+        <div class="join-hero">
+          <div class="join-cover">🏡</div>
+          <div class="join-kick">Тебя пригласили</div>
+          <div class="join-title">Семья</div>
+          <div class="join-stack stack"><div class="av g1" style="width:34px;height:34px;font-size:13px">М</div><div class="av g2" style="width:34px;height:34px;font-size:13px">П</div><div class="av g3" style="width:34px;height:34px;font-size:13px">Б</div><div class="av g4" style="width:34px;height:34px;font-size:13px">А</div><div class="av plus" style="width:34px;height:34px;font-size:12px">+1</div></div>
+          <div class="join-by">5 участников · пригласила <b style="color:var(--wb-text-secondary)">Маша</b></div>
+        </div>
+        <div class="banner surprise" style="margin-top:6px;"><span class="bic">🤫</span><div>Внутри вы&nbsp;видите желания и&nbsp;даты друг друга. <b>Сюрпризы сохраняются</b> — никто не&nbsp;видит, кто что тебе дарит.</div></div>
+      </div></div>
+      <div style="position:absolute;left:0;right:0;bottom:0;padding:14px 16px 22px;background:linear-gradient(180deg,transparent,var(--wb-bg) 55%);z-index:5;">
+        <button class="btn primary">Вступить</button>
+        <button class="btn ghost" style="margin-top:4px;">Не сейчас</button>
+      </div>
+    </div>
+    <div class="caption"><span class="tag success">AC#2</span><span class="tag">circle.join</span> Один тап «Вступить» → участник, без шага регистрации. <code>POST /tg/circles/join {token}</code>, идемпотентно по&nbsp;<code>(token, userId)</code> — повторный тап не&nbsp;двоит членство.</div>
+  </div>
+
+  <!-- C2: owner notification -->
+  <div>
+    <div class="frame">
+      <span class="frame-label">C2 · Владельцу — пуш о вступлении (P0.3)</span>
+      <div class="ph-status"><span>9:41</span><span class="ic">●●● 5G ▰</span></div>
+      <div class="ph-hdr"><div class="ph-hdr-btn">←</div><div class="ph-title">WishBoard<small>bot</small></div><div class="ph-hdr-btn">⋮</div></div>
+      <div class="ph-scroll">
+        <div class="tg-wrap">
+          <div class="tg-day">сегодня</div>
+          <div class="tg-msg">
+            <div class="tg-bot"><span class="botav">🎁</span>WishBoard</div>
+            <div class="tg-text">👥 <b>Паша</b> вступил в&nbsp;твою группу <b>«Семья»</b>.<br>Теперь вас&nbsp;5. Загляни — может, у&nbsp;кого-то скоро повод 🎂</div>
+            <div class="tg-kbd">Открыть группу →</div>
+            <div class="tg-time">9:41</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="caption"><span class="tag success">AC#2</span><span class="tag">explicit-relationship</span> Владелец получает DM о&nbsp;вступлении (явная связь — ок по&nbsp;правилу нотификаций). Кнопка <code>web_app</code> → <code>?startapp=circ_&lt;token&gt;</code> ведёт прямо в&nbsp;группу. Канал — существующий <code>sendTgBotMessage</code> + <code>buildCircleDeepLink</code>.</div>
+  </div>
+</div>
+
+<!-- ════════════════════════ D · ВНУТРИ КРУГА ════════════════════════ -->
+<h2><span class="num">D</span>Внутри группы · карточки участников и их списки</h2>
+<p class="h2sub">Сердце фичи. Участники отсортированы по&nbsp;ближайшему событию — наверху тот, у&nbsp;кого скоро повод.</p>
+<div class="grid">
+
+  <!-- D1: circle detail -->
+  <div>
+    <div class="frame">
+      <span class="frame-label">D1 · Группа «Семья» (участник)</span>
+      <div class="ph-status"><span>9:41</span><span class="ic">●●● 5G ▰</span></div>
+      <div class="ph-hdr"><div class="ph-hdr-btn">←</div><div class="ph-title">🏡 Семья<small>5 участников</small></div><div class="ph-hdr-btn">⚙</div></div>
+      <div class="ph-scroll"><div class="ph-pad">
+        <button class="btn secondary" style="margin-bottom:14px;">＋ Пригласить в&nbsp;группу</button>
+        <div class="sec-hdr"><h3>Скоро повод</h3></div>
+
+        <div class="mem">
+          <div class="av g1 mem-av">М</div>
+          <div class="mem-body">
+            <div class="mem-name">Маша</div>
+            <div class="mem-evt"><span class="chip warning">🎂 через 5 дней</span><span class="mem-sub">3 желания</span></div>
+          </div>
+          <div class="open-btn">Открыть ›</div>
+        </div>
+
+        <div class="mem">
+          <div class="av g2 mem-av">П</div>
+          <div class="mem-body">
+            <div class="mem-name">Паша</div>
+            <div class="mem-evt"><span class="chip accent">🎂 через 1&nbsp;мес</span><span class="mem-sub">7 желаний</span></div>
+          </div>
+          <div class="open-btn">Открыть ›</div>
+        </div>
+
+        <div class="sec-hdr"><h3>Остальные</h3></div>
+        <div class="mem">
+          <div class="av g3 mem-av">Б</div>
+          <div class="mem-body">
+            <div class="mem-name">Бабушка</div>
+            <div class="mem-evt"><span class="mem-sub">2 желания · нет даты события</span></div>
+          </div>
+          <div class="open-btn">Открыть ›</div>
+        </div>
+        <div class="mem">
+          <div class="av g4 mem-av">А</div>
+          <div class="mem-body">
+            <div class="mem-name">Аня</div>
+            <div class="mem-evt"><span class="mem-sub">список пока пуст</span></div>
+          </div>
+          <div class="open-btn" style="opacity:.5">Открыть ›</div>
+        </div>
+      </div></div>
+      <div class="ph-nav">
+        <div class="ph-nav-item"><span class="ic">🏠</span>Главная</div>
+        <div class="ph-nav-item active"><span class="ic">👥</span>Близкие</div>
+        <div class="ph-nav-item"><span class="ic">🎁</span>Брони</div>
+        <div class="ph-nav-item"><span class="ic">👤</span>Профиль</div>
+      </div>
+    </div>
+    <div class="caption"><span class="tag">за-других</span> Каждая карточка участника — <b>аватар, имя, ближайшее событие с&nbsp;countdown, «Открыть список»</b>. Сортировка по&nbsp;дате события. «Пригласить» видит и&nbsp;участник, и&nbsp;владелец (право инвайта настраивается — см. роли).</div>
+  </div>
+
+  <!-- D2: member's list (viewer can reserve) -->
+  <div>
+    <div class="frame">
+      <span class="frame-label">D2 · Список Маши (ты — гость, можешь бронировать)</span>
+      <div class="ph-status"><span>9:41</span><span class="ic">●●● 5G ▰</span></div>
+      <div class="ph-hdr"><div class="ph-hdr-btn">←</div><div class="ph-title">Маша<small>🎂 через 5 дней</small></div><div class="ph-hdr-btn">⤴</div></div>
+      <div class="ph-scroll"><div class="ph-pad">
+        <div class="sec-hdr"><h3>Желания · 3</h3><span class="lnk">в&nbsp;группе «Семья»</span></div>
+
+        <div class="wish byme">
+          <div class="wish-thumb">🎧</div>
+          <div class="wish-body">
+            <div class="wish-t">Sony WH-1000XM5</div>
+            <div class="wish-price">34 990 ₽</div>
+            <div class="wish-meta"><span class="chip success">✓ ты&nbsp;забронировал</span><span class="chip surface">🤫 сюрприз</span></div>
+          </div>
+        </div>
+
+        <div class="wish">
+          <div class="wish-thumb">📚</div>
+          <div class="wish-body">
+            <div class="wish-t">Подписка на&nbsp;книги</div>
+            <div class="wish-price">2 490 ₽</div>
+          </div>
+          <div class="res-btn">Забронировать</div>
+        </div>
+
+        <div class="wish">
+          <div class="wish-thumb">☕</div>
+          <div class="wish-body">
+            <div class="wish-t">Кофемолка</div>
+            <div class="wish-price">5 900 ₽</div>
+            <div class="wish-meta"><span class="chip surface">занято кем-то</span></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+    <div class="caption"><span class="tag success">AC#4</span> Ты&nbsp;видишь желания Маши, потому что она&nbsp;поделилась этим списком с&nbsp;группой и&nbsp;вы&nbsp;оба в&nbsp;ней. <b>Если кто-то выйдет из&nbsp;группы — его списки и&nbsp;события мгновенно исчезают</b> (фильтр по&nbsp;<code>status=ACTIVE</code> членству). Чужая бронь видна как «занято», без автора.</div>
+  </div>
+</div>
+
+<!-- ════════════════════════ E · ПРИВАТНОСТЬ ════════════════════════ -->
+<h2><span class="num">E</span>Приватность на уровне группы</h2>
+<p class="h2sub">Ключевой инвариант продукта: владелец выбирает, <b>какие списки показывать какой группе</b>. Семье — одно, коллегам — другое.</p>
+<div class="grid">
+
+  <!-- E1: family visibility -->
+  <div>
+    <div class="frame">
+      <span class="frame-label">E1 · Что видит группа «Семья»</span>
+      <div class="ph-status"><span>9:41</span><span class="ic">●●● 5G ▰</span></div>
+      <div class="ph-hdr"><div class="ph-hdr-btn">←</div><div class="ph-title">Видимость · Семья</div><div class="ph-hdr-btn" style="opacity:.3">✕</div></div>
+      <div class="ph-scroll"><div class="ph-pad">
+        <div class="banner info" style="margin:6px 0 14px"><span class="bic">👁</span><div>Эти твои списки увидят участники группы <b>«Семья»</b>. Остальные останутся скрыты.</div></div>
+        <div class="priv-row"><div class="priv-emo">🎂</div><div class="priv-body"><div class="priv-t">На день рождения</div><div class="priv-s">12 желаний</div></div><div class="toggle on"><div class="knob"></div></div></div>
+        <div class="priv-row"><div class="priv-emo">📚</div><div class="priv-body"><div class="priv-t">Книги и&nbsp;хобби</div><div class="priv-s">6 желаний</div></div><div class="toggle on"><div class="knob"></div></div></div>
+        <div class="priv-row off"><div class="priv-emo">🎄</div><div class="priv-body"><div class="priv-t">Новый год</div><div class="priv-s">скрыт от&nbsp;этой группы</div></div><div class="toggle"><div class="knob"></div></div></div>
+      </div></div>
+    </div>
+    <div class="caption"><span class="tag">CircleWishlistShare</span> Тумблер = строка в&nbsp;join-таблице <code>(circleId, wishlistId)</code>. <b>Per-group</b>: тот&nbsp;же экран для «Коллег» покажет другой набор галочек.</div>
+  </div>
+
+  <!-- E2: colleagues visibility (contrast) -->
+  <div>
+    <div class="frame">
+      <span class="frame-label">E2 · Тот же экран для группы «Коллеги»</span>
+      <div class="ph-status"><span>9:41</span><span class="ic">●●● 5G ▰</span></div>
+      <div class="ph-hdr"><div class="ph-hdr-btn">←</div><div class="ph-title">Видимость · Коллеги</div><div class="ph-hdr-btn" style="opacity:.3">✕</div></div>
+      <div class="ph-scroll"><div class="ph-pad">
+        <div class="banner info" style="margin:6px 0 14px"><span class="bic">👁</span><div>Коллегам показываем только <b>нейтральный</b> список. Личное — выключено.</div></div>
+        <div class="priv-row off"><div class="priv-emo">🎂</div><div class="priv-body"><div class="priv-t">На день рождения</div><div class="priv-s">скрыт от&nbsp;этой группы</div></div><div class="toggle"><div class="knob"></div></div></div>
+        <div class="priv-row off"><div class="priv-emo">📚</div><div class="priv-body"><div class="priv-t">Книги и&nbsp;хобби</div><div class="priv-s">скрыт от&nbsp;этой группы</div></div><div class="toggle"><div class="knob"></div></div></div>
+        <div class="priv-row"><div class="priv-emo">☕</div><div class="priv-body"><div class="priv-t">Мелочи для&nbsp;офиса</div><div class="priv-s">8 желаний</div></div><div class="toggle on"><div class="knob"></div></div></div>
+      </div></div>
+    </div>
+    <div class="caption"><span class="tag success">AC: семье&nbsp;— одно, коллегам&nbsp;— другое</span> Тот&nbsp;же владелец, тот&nbsp;же набор списков, <b>разная видимость по&nbsp;группам</b>. Дефолт при создании группы — какие списки шарить (см. Открытые вопросы).</div>
+  </div>
+</div>
+
+<!-- ════════════════════════ F · ИНВАРИАНТ СЮРПРИЗА ════════════════════════ -->
+<h2><span class="num">F</span>Инвариант сюрприза — это правило, а не настройка</h2>
+<p class="h2sub">Самое важное в&nbsp;фиче. Сравнение двух взглядов на&nbsp;один и&nbsp;тот&nbsp;же список Маши.</p>
+<div class="grid">
+
+  <!-- F1: member view -->
+  <div>
+    <div class="frame">
+      <span class="frame-label">F1 · Гость видит брони (но не владелец)</span>
+      <div class="ph-status"><span>9:41</span><span class="ic">●●● 5G ▰</span></div>
+      <div class="ph-hdr"><div class="ph-hdr-btn">←</div><div class="ph-title">Маша<small>ты смотришь как гость</small></div><div class="ph-hdr-btn">⤴</div></div>
+      <div class="ph-scroll"><div class="ph-pad">
+        <div class="banner info" style="margin:6px 0 12px"><span class="bic">🎁</span><div>Ты&nbsp;даришь Маше. Видно, что&nbsp;занято, чтобы <b>не&nbsp;задвоить</b> подарок.</div></div>
+        <div class="wish byme"><div class="wish-thumb">🎧</div><div class="wish-body"><div class="wish-t">Sony WH-1000XM5</div><div class="wish-meta"><span class="chip success">✓ ты&nbsp;забронировал</span></div></div></div>
+        <div class="wish"><div class="wish-thumb">☕</div><div class="wish-body"><div class="wish-t">Кофемолка</div><div class="wish-meta"><span class="chip surface">занято кем-то</span></div></div></div>
+        <div class="wish"><div class="wish-thumb">📚</div><div class="wish-body"><div class="wish-t">Подписка на&nbsp;книги</div></div><div class="res-btn">Забронировать</div></div>
+      </div></div>
+    </div>
+    <div class="caption"><span class="tag">viewer ≠ owner</span> Гость видит статусы броней (занято / ты&nbsp;забронировал), но&nbsp;<b>никогда автора</b> чужой брони. Как в&nbsp;текущем <code>mapItemForPublic</code>: <code>reservedByDisplayName</code> только для&nbsp;своих, иначе нейтральное «занято».</div>
+  </div>
+
+  <!-- F2: owner self view -->
+  <div>
+    <div class="frame">
+      <span class="frame-label">F2 · Маша смотрит СВОЙ список в группе</span>
+      <div class="ph-status"><span>9:41</span><span class="ic">●●● 5G ▰</span></div>
+      <div class="ph-hdr"><div class="ph-hdr-btn">←</div><div class="ph-title">Мой список<small>в группе «Семья»</small></div><div class="ph-hdr-btn">✏️</div></div>
+      <div class="ph-scroll"><div class="ph-pad">
+        <div class="banner surprise" style="margin:6px 0 12px"><span class="bic">🤫</span><div><b>Сюрприз в&nbsp;безопасности.</b> Тебе не&nbsp;покажут, кто и&nbsp;что забронировал — даже если уже выбрали.</div></div>
+        <div class="wish"><div class="wish-thumb">🎧</div><div class="wish-body"><div class="wish-t">Sony WH-1000XM5</div><div class="wish-price">34 990 ₽</div></div></div>
+        <div class="wish"><div class="wish-thumb">☕</div><div class="wish-body"><div class="wish-t">Кофемолка</div><div class="wish-price">5 900 ₽</div></div></div>
+        <div class="wish"><div class="wish-thumb">📚</div><div class="wish-body"><div class="wish-t">Подписка на&nbsp;книги</div><div class="wish-price">2 490 ₽</div></div></div>
+      </div></div>
+    </div>
+    <div class="caption"><span class="tag success">AC#3</span><span class="tag danger">инвариант</span> Тот&nbsp;же список, что&nbsp;в&nbsp;F1, но&nbsp;глазами Маши-владельца: <b>ни&nbsp;одного индикатора брони</b>. Те&nbsp;же три желания выглядят «свободными». Сокрытие — на&nbsp;уровне сервиса, не&nbsp;клиента.</div>
+  </div>
+</div>
+
+<!-- ════════════════════════ G · ЛИМИТ ════════════════════════ -->
+<h2><span class="num">G</span>FREE-лимит участников · paywall</h2>
+<div class="grid">
+  <div>
+    <div class="frame">
+      <span class="frame-label">G1 · Группа заполнена — апгрейд при инвайте</span>
+      <div class="ph-status"><span>9:41</span><span class="ic">●●● 5G ▰</span></div>
+      <div class="ph-hdr"><div class="ph-hdr-btn">←</div><div class="ph-title">Семья</div><div class="ph-hdr-btn">⚙</div></div>
+      <div class="ph-scroll" style="opacity:.4;filter:saturate(.8)"><div class="ph-pad">
+        <div class="mem"><div class="av g1 mem-av">М</div><div class="mem-body"><div class="mem-name">Маша</div></div></div>
+      </div></div>
+      <div class="scrim"></div>
+      <div class="sheet">
+        <div class="sheet-handle"></div>
+        <div style="text-align:center;font-size:42px;margin:2px 0 6px">👥</div>
+        <div class="pw-title">В группе уже <span class="grad">10 человек</span></div>
+        <div class="pw-sub">Это потолок на&nbsp;FREE. Открой PRO — и&nbsp;собери до&nbsp;20 близких в&nbsp;одной группе.</div>
+        <div class="feat"><div class="feat-ic">👥</div><div><div class="feat-t">До 20 участников в&nbsp;группе</div><div class="feat-s">было 10 на&nbsp;FREE</div></div></div>
+        <div class="feat"><div class="feat-ic">📋</div><div><div class="feat-t">До 10 списков и&nbsp;5 подписок</div><div class="feat-s">больше места для&nbsp;желаний</div></div></div>
+        <div style="margin-top:14px;"><button class="btn primary">Открыть PRO · 100 ⭐/мес</button></div>
+        <button class="btn ghost" style="margin-top:4px;">Не сейчас</button>
+      </div>
+    </div>
+    <div class="caption"><span class="tag success">AC#5</span><span class="tag warn">402 paywall</span> При попытке пригласить 11-го — <code>402 PRO_REQUIRED</code>, контекст <code>participant_limit</code> (уже есть в&nbsp;upsell-движке). Инвайт <b>не&nbsp;уходит до&nbsp;апгрейда</b>. На&nbsp;стороне join — backstop: при гонке за&nbsp;последний слот новый участник видит «группа заполнена».</div>
+  </div>
+
+  <div>
+    <div class="caption" style="margin-top:34px;background:rgba(139,123,255,0.06);border-color:var(--wb-accent-soft-strong)">
+      <b style="color:var(--wb-text);font-size:13.5px">Почему лимит на&nbsp;владельце, а&nbsp;не&nbsp;на&nbsp;госте</b><br><br>
+      Ёмкость группы считается по&nbsp;плану <b>владельца</b> (<code>entitlement.participants</code>: FREE&nbsp;10 / PRO&nbsp;20). Гость не&nbsp;может «купить» чужую группу, поэтому:
+      <ul style="margin:10px 0 0;padding-left:18px;line-height:1.7">
+        <li>Paywall показываем <b>владельцу</b> в&nbsp;момент инвайта (он&nbsp;и&nbsp;апгрейдится).</li>
+        <li>Гость при заполненной группе видит нейтральное «группа заполнена, владелец скоро расширит» — без неактивного paywall.</li>
+        <li>Лимит — <b>число ACTIVE-членств</b>, вышедшие (LEFT) не&nbsp;занимают слот.</li>
+      </ul>
+      <span class="tag" style="margin-top:12px">монетизация</span> Открытый вопрос: считать ли по&nbsp;ключу <code>participants</code> или завести отдельный <code>circleMembers</code> (10/20). Спека просит переиспользовать существующий — это дефолт.
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════ SPEC ════════════════════════ -->
+<h2>Модель данных <span style="font-size:13px;color:var(--wb-text-muted);font-weight:500">· Prisma</span></h2>
+<div class="spec">
+  <div class="pre"><span class="cm">// packages/db/prisma/schema.prisma — НОВОЕ</span>
+<span class="kw">model</span> <span class="ty">Circle</span> {
+  id          <span class="ty">String</span>   <span class="en">@id @default(cuid())</span>
+  name        <span class="ty">String</span>
+  type        <span class="ty">CircleType</span>
+  emoji       <span class="ty">String?</span>
+  coverUrl    <span class="ty">String?</span>
+  ownerId     <span class="ty">String</span>
+  createdAt   <span class="ty">DateTime</span> <span class="en">@default(now())</span>
+  owner       <span class="ty">User</span>     <span class="en">@relation(fields: [ownerId], references: [id])</span>
+  memberships <span class="ty">CircleMembership[]</span>
+  invites     <span class="ty">CircleInvite[]</span>
+  shares      <span class="ty">CircleWishlistShare[]</span>
+  <span class="en">@@index([ownerId])</span>
+}
+
+<span class="kw">model</span> <span class="ty">CircleMembership</span> {
+  id        <span class="ty">String</span> <span class="en">@id @default(cuid())</span>
+  circleId  <span class="ty">String</span>
+  userId    <span class="ty">String</span>
+  role      <span class="ty">CircleRole</span>          <span class="en">@default(MEMBER)</span>
+  status    <span class="ty">CircleMemberStatus</span>  <span class="en">@default(ACTIVE)</span>
+  joinedAt  <span class="ty">DateTime</span> <span class="en">@default(now())</span>
+  leftAt    <span class="ty">DateTime?</span>
+  <span class="en">@@unique([circleId, userId])</span>   <span class="cm">// идемпотентный join</span>
+  <span class="en">@@index([userId, status])</span>     <span class="cm">// «мои группы», обратный фильтр</span>
+}
+
+<span class="kw">model</span> <span class="ty">CircleInvite</span> {
+  token     <span class="ty">String</span>   <span class="en">@id</span>           <span class="cm">// url-safe; ?startapp=circ_&lt;token&gt;</span>
+  circleId  <span class="ty">String</span>
+  createdBy <span class="ty">String</span>
+  expiresAt <span class="ty">DateTime?</span>              <span class="cm">// многоразовая, с TTL</span>
+  revokedAt <span class="ty">DateTime?</span>
+  createdAt <span class="ty">DateTime</span> <span class="en">@default(now())</span>
+  <span class="en">@@index([circleId])</span>
+}
+
+<span class="kw">model</span> <span class="ty">CircleWishlistShare</span> {     <span class="cm">// НОВОЕ — нужно для per-circle видимости (AC §E)</span>
+  id             <span class="ty">String</span> <span class="en">@id @default(cuid())</span>
+  circleId       <span class="ty">String</span>
+  wishlistId     <span class="ty">String</span>
+  sharedByUserId <span class="ty">String</span>
+  createdAt      <span class="ty">DateTime</span> <span class="en">@default(now())</span>
+  <span class="en">@@unique([circleId, wishlistId])</span>
+  <span class="en">@@index([circleId])</span>
+}
+
+<span class="kw">enum</span> <span class="ty">CircleType</span> { FAMILY FRIENDS COLLEAGUES COUPLE }
+<span class="kw">enum</span> <span class="ty">CircleRole</span> { OWNER MEMBER }
+<span class="kw">enum</span> <span class="ty">CircleMemberStatus</span> { ACTIVE LEFT }</div>
+  <div class="warn"><b>Отклонение от спеки (нужно подтверждение).</b> Спека перечисляет только <code>Circle / CircleMembership / CircleInvite</code>, но&nbsp;AC&nbsp;§E («семье&nbsp;— одно, коллегам&nbsp;— другое») и&nbsp;UI&nbsp;невозможны без join-таблицы списко-в-группу. Добавил <code>CircleWishlistShare</code>. Альтернатива (хуже): JSON-массив circleId на&nbsp;Wishlist — теряем индексы и&nbsp;обратный запрос «какие группы видят этот список».</div>
+</div>
+
+<h2>Слой видимости и инвариант сюрприза <span style="font-size:13px;color:var(--wb-text-muted);font-weight:500">· services/circles.service.ts</span></h2>
+<div class="spec">
+  <table>
+    <tr><th>Запрос</th><th>Правило (на бэке, не на клиенте)</th></tr>
+    <tr><td>Списки участника U, видимые зрителю V</td><td>U и&nbsp;V — оба <code>ACTIVE</code> в&nbsp;группе C, И&nbsp;список ∈ <code>CircleWishlistShare(C, ·)</code> от&nbsp;U. Иначе — не&nbsp;отдаём.</td></tr>
+    <tr><td>Брони на&nbsp;желаниях U</td><td>Если <code>V === U</code> (владелец смотрит своё) → <b>обнуляем все reservation-поля</b> (status→как доступно, без reservedBy). Иначе — как <code>mapItemForPublic</code>: статус виден, автор&nbsp;— нет (кроме «ты&nbsp;забронировал» для&nbsp;самого V).</td></tr>
+    <tr><td>Участник вышел (LEFT)</td><td>Его membership <code>status=LEFT</code> → выпадает из&nbsp;всех выборок группы мгновенно. Списки/события исчезают у&nbsp;других (AC#4). Обратное: списки V&nbsp;перестают быть видны вышедшему.</td></tr>
+    <tr><td>Ближайшее событие участника</td><td>Из&nbsp;<code>UserProfile</code> (birthday) с&nbsp;учётом <code>birthdayAudience</code>; countdown <code>daysUntil</code> считается тем&nbsp;же helper, что&nbsp;и&nbsp;birthday-reminders. Нет даты → секция «остальные».</td></tr>
+  </table>
+  <div class="invariant"><b>Инвариант (главный).</b> Сокрытие броней от&nbsp;владельца — <b>на&nbsp;уровне сервиса</b>. Клиент физически не&nbsp;получает данные о&nbsp;бронях своего списка. Это поведение уже есть для&nbsp;<code>SecretReservation</code> — переиспользуем тот&nbsp;же предикат «viewer is owner → strip». Покрывается интеграционным тестом на&nbsp;реальной БД (не&nbsp;мок).</div>
+</div>
+
+<h2>Deep-link, join и нотификации</h2>
+<div class="spec">
+  <table>
+    <tr><th>Точка</th><th>Контракт</th></tr>
+    <tr><td>Билдер ссылки</td><td><code>buildCircleDeepLink(token)</code> → <code>${MINI_APP_URL}?startapp=circ_&lt;token&gt;</code> в&nbsp;<code>telegram/deepLinks.ts</code> (рядом с&nbsp;существующими билдерами).</td></tr>
+    <tr><td>Парсер startapp</td><td>Фронт: добавить ветку <code>circ_</code> в&nbsp;дисптчер <code>startapp</code> в&nbsp;MiniApp.tsx → экран C1 (join-preview).</td></tr>
+    <tr><td>Создание</td><td><code>POST /tg/circles</code> · идемпотентность <code>circle.create</code> · rate-limit <code>state.changing</code>.</td></tr>
+    <tr><td>Инвайт</td><td><code>POST /tg/circles/:id/invite</code> · <code>circle.invite.create</code>. Гейт ёмкости тут (AC#5): при лимите → 402, токен не&nbsp;создаётся.</td></tr>
+    <tr><td>Вступление</td><td><code>POST /tg/circles/join {token}</code> · идемпотентность <code>circle.join:&lt;token&gt;</code> · уникальность <code>(circleId,userId)</code> = идемпотентно по&nbsp;спеке. Backstop-проверка ёмкости в&nbsp;транзакции.</td></tr>
+    <tr><td>Выход / удаление</td><td><code>POST /tg/circles/:id/leave</code> (себя) · <code>DELETE /tg/circles/:id/members/:userId</code> (владелец) · <code>circle.member</code>.</td></tr>
+    <tr><td>Видимость списков</td><td><code>PUT /tg/circles/:id/shares {wishlistIds[]}</code> · <code>circle.shares:&lt;id&gt;</code>.</td></tr>
+    <tr><td>Нотификация владельцу</td><td>На&nbsp;join → <code>sendTgBotMessage(owner.tgId, …, buildOpenCircleKeyboard)</code> (P0.3). Гард: не&nbsp;уведомлять о&nbsp;собственном вступлении владельца.</td></tr>
+  </table>
+  <div class="warn"><b>Не&nbsp;трогаем <code>index.ts</code>.</b> Всё новое — в&nbsp;<code>routes/circles.routes.ts</code> + <code>services/circles.service.ts</code>. Переходы состояний членства (<code>ACTIVE↔LEFT</code>) и&nbsp;ёмкость — в&nbsp;сервисе, не&nbsp;в&nbsp;теле хендлера.</div>
+</div>
+
+<h2>Роли и права</h2>
+<div class="spec">
+  <table>
+    <tr><th>Действие</th><th>Владелец (OWNER)</th><th>Участник (MEMBER)</th></tr>
+    <tr><td>Видеть списки/события группы</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Бронировать чужие желания</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Шарить свои списки в&nbsp;группу</td><td>✓</td><td>✓</td></tr>
+    <tr><td>Создавать инвайт-ссылку</td><td>✓</td><td>настраивается (дефолт ✓ — см. вопросы)</td></tr>
+    <tr><td>Удалять участников</td><td>✓</td><td>✗</td></tr>
+    <tr><td>Выйти из&nbsp;группы</td><td>передать владение / удалить группу</td><td>✓</td></tr>
+    <tr><td>Удалить группу</td><td>✓</td><td>✗</td></tr>
+  </table>
+</div>
+
+<h2>Аналитика и метрики</h2>
+<div class="spec">
+  <h3>События <span class="sub">leading-метрики из спеки</span></h3>
+  <table>
+    <tr><td><code>circle.created</code></td><td>props: <code>type</code>. → circle creation rate (доля новых юзеров с&nbsp;группой за&nbsp;7&nbsp;дней).</td></tr>
+    <tr><td><code>circle.invite_sent</code></td><td>тап «Поделиться». → invite send rate.</td></tr>
+    <tr><td><code>circle.joined</code></td><td>props: <code>role</code>, <code>via:'deeplink'</code>. → invite→join conversion, среднее число участников.</td></tr>
+    <tr><td><code>circle.member_list_opened</code></td><td>тап «Открыть» по&nbsp;участнику. → <b>сессии «за&nbsp;других»</b> (lagging).</td></tr>
+    <tr><td><code>circle.left</code> · <code>circle.member_removed</code></td><td>отток членства.</td></tr>
+    <tr><td><code>paywall.viewed</code></td><td>props: <code>context:'participant_limit'</code> — переиспользуем существующее.</td></tr>
+  </table>
+  <div class="invariant"><b>Lagging (ключевая гипотеза).</b> D30 retention когорты «в&nbsp;≥1&nbsp;группе» vs «без группы». Когорту строим по&nbsp;первому <code>circle.joined|created</code>. Также: доля MAU в&nbsp;≥1&nbsp;группе → 50%+, доля сессий, начатых с&nbsp;<code>circle.member_list_opened</code> → 30%+.</div>
+</div>
+
+<h2>Чек-лист (security + architecture, по CLAUDE.md)</h2>
+<div class="spec">
+  <table>
+    <tr><th>Вопрос</th><th>Ответ</th></tr>
+    <tr><td>Домен / роутер</td><td><code>circles</code> · <code>routes/circles.routes.ts</code> (новый, именованный).</td></tr>
+    <tr><td>Сервис</td><td><code>services/circles.service.ts</code> — членство, видимость, ёмкость, инвариант.</td></tr>
+    <tr><td>Переходы состояний</td><td><code>CircleMembership.status ACTIVE↔LEFT</code>, <code>CircleInvite.revokedAt</code> — в&nbsp;сервисе.</td></tr>
+    <tr><td>Идемпотентность</td><td><code>circle.create</code> · <code>circle.invite.create</code> · <code>circle.join:&lt;token&gt;</code> · <code>circle.member</code> · <code>circle.shares:&lt;id&gt;</code>.</td></tr>
+    <tr><td>Rate-limit</td><td><code>state.changing</code> для&nbsp;всех; рассмотреть отдельный <code>circle.join</code> (анти-абуз по&nbsp;инвайт-ссылке) — подтвердить против 24&nbsp;категорий в&nbsp;<code>rateLimits.ts</code>.</td></tr>
+    <tr><td>Side effects</td><td>TG-DM владельцу (P0.3) — через <code>notifications/</code>; никаких inline в&nbsp;хендлере.</td></tr>
+    <tr><td>Тесты</td><td>happy + error на&nbsp;каждый state-changing роут; <b>интеграционный на&nbsp;реальной БД</b> для&nbsp;инварианта сюрприза и&nbsp;гонки за&nbsp;последний слот (P2002 / capacity).</td></tr>
+  </table>
+</div>
+
+<h2>Acceptance criteria — самопроверка</h2>
+<div class="spec">
+  <table>
+    <tr><td>1 · Нет групп → пусто + CTA</td><td>Frame <b>A1</b>.</td></tr>
+    <tr><td>2 · Инвайт → вступление в&nbsp;один тап, владельцу пуш</td><td>Frames <b>C1</b> (join) + <b>C2</b> (DM). <code>circle.join</code> без регистрации.</td></tr>
+    <tr><td>3 · Владелец НЕ&nbsp;видит факт и&nbsp;автора брони</td><td>Frame <b>F2</b> vs <b>F1</b>. Сокрытие на&nbsp;сервисе.</td></tr>
+    <tr><td>4 · Участник вышел → списки/события исчезли</td><td>Caption <b>D2</b> + правило <code>status=ACTIVE</code> в&nbsp;слое видимости.</td></tr>
+    <tr><td>5 · FREE-лимит → paywall, инвайт не&nbsp;уходит</td><td>Frame <b>G1</b>. <code>402</code> на&nbsp;<code>POST …/invite</code>.</td></tr>
+  </table>
+</div>
+
+<h2>Открытые вопросы — решить до имплементации</h2>
+<div class="spec">
+  <div class="ask"><b>1 · Навигация.</b> «Близкие» — отдельная 4-я вкладка (как в&nbsp;мокапе, рекомендую — это движок «за&nbsp;других») <i>или</i> секция внутри Профиля/Главной? Влияет на&nbsp;shell. <i>Дефолт в&nbsp;мокапе: 4-я вкладка.</i></div>
+  <div class="ask"><b>2 · CircleWishlistShare.</b> Подтвердить добавление join-таблицы (нужна для&nbsp;§E). Без неё per-circle видимость невозможна.</div>
+  <div class="ask"><b>3 · Ключ лимита.</b> Переиспользовать <code>entitlement.participants</code> (спека просит) или&nbsp;завести <code>circleMembers</code> (чище семантически, но&nbsp;новый ключ + addon). <i>Дефолт: переиспользуем participants 10/20.</i></div>
+  <div class="ask"><b>4 · Дефолт шаринга при&nbsp;создании.</b> Какие списки группа видит сразу? Варианты: (a)&nbsp;ни&nbsp;одного — владелец явно включает; (b)&nbsp;дефолтный список; (c)&nbsp;все. <i>Рекоменд.: (a) — privacy-first, плюс мягкий nudge «покажи список группе».</i></div>
+  <div class="ask"><b>5 · Кто шлёт инвайты.</b> Только владелец или&nbsp;любой участник? <i>Дефолт: любой участник (рост вирального коэффициента), владелец может отключить.</i></div>
+  <div class="ask"><b>6 · TTL и&nbsp;многоразовость инвайта.</b> Ссылка многоразовая (нужно для&nbsp;«кинул в&nbsp;чат»). TTL по&nbsp;умолчанию? <i>Дефолт: 30&nbsp;дней, регенерируется, ревок вручную.</i></div>
+  <div class="ask"><b>7 · «Пара» (COUPLE).</b> В&nbsp;P0.1 — просто тип (как остальные) или&nbsp;спец-режим на&nbsp;2&nbsp;человек? <i>Дефолт: просто тип, спец-логику — позже.</i></div>
+  <div class="ask"><b>8 · Хуки на&nbsp;будущее.</b> P0.2 (лента активности группы), P0.3 (пуши: «у&nbsp;Маши др через 3&nbsp;дня»), P2.4 (групповой сбор на&nbsp;подарок) — закладываем модель так, чтобы&nbsp;не&nbsp;переделывать. Не&nbsp;рисуем фейковых «coming soon».</div>
+</div>
+
+<div class="legend">
+  <span><b>Бренд:</b> v2.1 · accent #8B7BFF · glass-on-mesh · dark-first</span>
+  <span><b>Примитивы:</b> Card · ListRow · Sheet · Banner · Chip · AvatarStack · Button · Toggle(new)</span>
+  <span><b>Новые паттерны:</b> circle-card · member-card · type-tile · privacy-row — на&nbsp;промоушен после ОК</span>
+</div>
+
+</body>
+</html>
