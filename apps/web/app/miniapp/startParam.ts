@@ -144,3 +144,47 @@ export function parseCircleInvitePayload(payload: string): CircleInvitePayload {
   if (!/^[A-Za-z0-9_-]{8,64}$/.test(token)) return { kind: 'malformed' };
   return { kind: 'ok', token };
 }
+
+export type CircleDetailPayload =
+  | { kind: 'ok'; circleId: string }
+  | { kind: 'malformed' };
+
+// circd_<circleId> — P0.3 event push → open a circle's detail. The recipient is
+// already a member (that's why they got the push), so it addresses the circle
+// by id (a cuid), validated with `looksLikeId`. Symmetric with
+// apps/api/src/telegram/deepLinks.ts `buildCircleDetailDeepLink`.
+export function parseCircleDetailPayload(payload: string): CircleDetailPayload {
+  if (!payload.startsWith('circd_')) return { kind: 'malformed' };
+  let circleId: string;
+  try {
+    circleId = decodeURIComponent(payload.slice('circd_'.length));
+  } catch {
+    return { kind: 'malformed' };
+  }
+  if (!looksLikeId(circleId)) return { kind: 'malformed' };
+  return { kind: 'ok', circleId };
+}
+
+export type CircleMemberPayload =
+  | { kind: 'ok'; circleId: string; memberId: string }
+  | { kind: 'malformed' };
+
+// circm_<circleId>__u_<memberId> — P0.3 event push → open a member's lists
+// inside a circle (new-wish / upcoming-event pushes). Both ids are cuids.
+// Symmetric with apps/api/src/telegram/deepLinks.ts `buildCircleMemberDeepLink`.
+export function parseCircleMemberPayload(payload: string): CircleMemberPayload {
+  if (!payload.startsWith('circm_')) return { kind: 'malformed' };
+  const rest = payload.slice('circm_'.length);
+  const sepIdx = rest.indexOf('__u_');
+  if (sepIdx < 0) return { kind: 'malformed' };
+  let circleId: string;
+  let memberId: string;
+  try {
+    circleId = decodeURIComponent(rest.slice(0, sepIdx));
+    memberId = decodeURIComponent(rest.slice(sepIdx + '__u_'.length));
+  } catch {
+    return { kind: 'malformed' };
+  }
+  if (!looksLikeId(circleId) || !looksLikeId(memberId)) return { kind: 'malformed' };
+  return { kind: 'ok', circleId, memberId };
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseReservationReminderPayload, parseEventReminderPayload, parseSurveyInvitePayload, parseItemOpenPayload, parseSantaPreseasonPayload } from './startParam';
+import { parseReservationReminderPayload, parseEventReminderPayload, parseSurveyInvitePayload, parseItemOpenPayload, parseSantaPreseasonPayload, parseCircleDetailPayload, parseCircleMemberPayload } from './startParam';
 
 describe('parseReservationReminderPayload', () => {
   it('parses a well-formed rrem_<itemId>__m_<metaId> payload', () => {
@@ -254,5 +254,42 @@ describe('parseSantaPreseasonPayload', () => {
     expect(parseSantaPreseasonPayload('spsn_20260')).toEqual({ kind: 'malformed' });
     expect(parseSantaPreseasonPayload('spsn_20a6')).toEqual({ kind: 'malformed' });
     expect(parseSantaPreseasonPayload('spsn_ 026')).toEqual({ kind: 'malformed' });
+  });
+});
+
+// P0.3 «Событийные пуши» deep-link parsers — symmetric with
+// apps/api/src/telegram/deepLinks.ts buildCircleDetailDeepLink / buildCircleMemberDeepLink.
+describe('parseCircleDetailPayload', () => {
+  it('parses a well-formed circd_<circleId> payload', () => {
+    expect(parseCircleDetailPayload('circd_clh2x9abc000d1234567890')).toEqual({ kind: 'ok', circleId: 'clh2x9abc000d1234567890' });
+  });
+  it('does NOT collide with the circ_ invite prefix', () => {
+    // 'circ_<token>' must not be misread as a detail link (different parser).
+    expect(parseCircleDetailPayload('circ_AbC123_def-XYZ')).toEqual({ kind: 'malformed' });
+  });
+  it('rejects a non-cuid circleId and missing prefix', () => {
+    expect(parseCircleDetailPayload('circd_short')).toEqual({ kind: 'malformed' });
+    expect(parseCircleDetailPayload('foo_clh2x9abc000d1234567890')).toEqual({ kind: 'malformed' });
+    expect(parseCircleDetailPayload('')).toEqual({ kind: 'malformed' });
+  });
+});
+
+describe('parseCircleMemberPayload', () => {
+  it('parses circm_<circleId>__u_<memberId>', () => {
+    expect(parseCircleMemberPayload('circm_clh2x9abc000d1234567890__u_clm3y8def000e0987654321')).toEqual({
+      kind: 'ok',
+      circleId: 'clh2x9abc000d1234567890',
+      memberId: 'clm3y8def000e0987654321',
+    });
+  });
+  it('rejects when the __u_ separator is missing', () => {
+    expect(parseCircleMemberPayload('circm_clh2x9abc000d1234567890')).toEqual({ kind: 'malformed' });
+  });
+  it('rejects when either id is not a cuid', () => {
+    expect(parseCircleMemberPayload('circm_short__u_clm3y8def000e0987654321')).toEqual({ kind: 'malformed' });
+    expect(parseCircleMemberPayload('circm_clh2x9abc000d1234567890__u_x')).toEqual({ kind: 'malformed' });
+  });
+  it('rejects a missing circm_ prefix', () => {
+    expect(parseCircleMemberPayload('circd_clh2x9abc000d1234567890')).toEqual({ kind: 'malformed' });
   });
 });

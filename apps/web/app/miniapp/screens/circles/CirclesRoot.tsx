@@ -29,11 +29,16 @@ export interface CirclesRootProps {
   tgFetch: TgFetchFn;
   locale: Locale;
   /**
-   * Deep-link entry. `join` opens the invite preview for a token; `member`
-   * jumps straight to a circle member's shared wishlists (the P0.2 feed CTA
-   * target — "Выбрать подарок" / "Посмотреть" / "Детали").
+   * Deep-link / in-app entry. `join` opens the invite preview (circ_).
+   * `member` jumps to a circle member's shared wishlists — used both by the
+   * P0.2 feed CTA ("Выбрать подарок" / "Посмотреть" / "Детали") and the P0.3
+   * circm_ event push. `detail` opens a circle's detail (P0.3 circd_ push).
    */
-  initial?: { view: 'join'; token: string } | { view: 'member'; circleId: string; memberId: string } | null;
+  initial?:
+    | { view: 'join'; token: string }
+    | { view: 'detail'; circleId: string }
+    | { view: 'member'; circleId: string; memberId: string }
+    | null;
   /** Leave the Circles section (back from the list → host home tab). */
   onExit: () => void;
   /** Show the host paywall sheet (e.g. 'participant_limit'). */
@@ -105,13 +110,12 @@ type View =
   | { name: 'join'; token: string };
 
 export function CirclesRoot({ tgFetch, locale, initial, onExit, onUpsell, pushToast }: CirclesRootProps) {
-  const [view, setView] = useState<View>(
-    initial?.view === 'join'
-      ? { name: 'join', token: initial.token }
-      : initial?.view === 'member'
-        ? { name: 'member', circleId: initial.circleId, memberId: initial.memberId }
-        : { name: 'list' },
-  );
+  const [view, setView] = useState<View>(() => {
+    if (!initial) return { name: 'list' };
+    if (initial.view === 'join') return { name: 'join', token: initial.token };
+    if (initial.view === 'member') return { name: 'member', circleId: initial.circleId, memberId: initial.memberId };
+    return { name: 'detail', circleId: initial.circleId };
+  });
   // First-entry onboarding — a one-time 3-step intro. Skipped when arriving via
   // a join deep-link (JoinView is its own contextual intro for invitees).
   const [onboarding, setOnboarding] = useState<boolean>(() => {
@@ -399,9 +403,24 @@ export function DetailView({ tgFetch, locale, circleId, onBack, onOpenMember, on
   const [confirmDestructive, setConfirmDestructive] = useState(false);
 
   const load = useCallback(async () => {
-    const res = await tgFetch(`/tg/circles/${circleId}`);
-    if (res.ok) setDetail(((await res.json()) as { circle: CircleDetail }).circle);
-  }, [tgFetch, circleId]);
+    let res: Response;
+    try {
+      res = await tgFetch(`/tg/circles/${circleId}`);
+    } catch {
+      pushToast(t('circle_err_generic', locale), 'error');
+      onBack();
+      return;
+    }
+    if (res.ok) {
+      setDetail(((await res.json()) as { circle: CircleDetail }).circle);
+    } else {
+      // No longer a member (left/removed since a deep-link push was sent), or a
+      // transient error. Bounce to the list with a toast rather than hanging on
+      // an empty-title spinner forever (2026-06-02 "empty home" lesson).
+      pushToast(t('circle_err_generic', locale), 'error');
+      onBack();
+    }
+  }, [tgFetch, circleId, pushToast, locale, onBack]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -584,13 +603,25 @@ export function MemberView({ tgFetch, locale, circleId, memberId, onBack, onConf
   const [detailItem, setDetailItem] = useState<ItemView | null>(null);
 
   const load = useCallback(async () => {
-    const res = await tgFetch(`/tg/circles/${circleId}/members/${memberId}/wishlists`);
+    let res: Response;
+    try {
+      res = await tgFetch(`/tg/circles/${circleId}/members/${memberId}/wishlists`);
+    } catch {
+      pushToast(t('circle_err_generic', locale), 'error');
+      onBack();
+      return;
+    }
     if (res.ok) {
       const json = (await res.json()) as MemberWishlists & { isSelf?: boolean };
       setData(json);
       setIsSelf(json.isSelf ?? false);
+    } else {
+      // Member/circle no longer accessible (e.g. deep-link push tapped after
+      // leaving) → bounce instead of an infinite spinner.
+      pushToast(t('circle_err_generic', locale), 'error');
+      onBack();
     }
-  }, [tgFetch, circleId, memberId]);
+  }, [tgFetch, circleId, memberId, pushToast, locale, onBack]);
 
   useEffect(() => { void load(); }, [load]);
 

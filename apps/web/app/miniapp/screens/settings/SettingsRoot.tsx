@@ -618,6 +618,14 @@ export function SettingsRoot(props: SettingsRootProps) {
 
               {/* Notifications */}
               <SettingsSection title={t('settings_notifications_title', locale)}>
+                {/* P0.3 — circle event pushes (FREE). Opens a dedicated screen. */}
+                <SettingsRow
+                  icon={'\u{1F465}'}
+                  label={t('settings_circle_notif_row', locale)}
+                  hint={t('settings_circle_notif_hint', locale)}
+                  onClick={() => setScreen('circle-notifications')}
+                />
+                <SDivider />
                 <SettingsToggle
                   icon={'\u{1F4AC}'}
                   label={t('settings_notify_comments', locale)}

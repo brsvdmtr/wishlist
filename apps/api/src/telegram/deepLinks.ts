@@ -77,3 +77,17 @@ function getBotUsername(): string {
 export function buildCircleShareLink(token: string): string {
   return `https://t.me/${getBotUsername()}?startapp=circ_${encodeURIComponent(token)}`;
 }
+
+// P0.3 «Событийные пуши» — circleId-based deep links for event notifications.
+// Unlike circle-join (which uses an invite token), the recipient of an event
+// push is ALREADY an active member, so we address the circle / member by id and
+// the frontend opens the circle detail (`circd_`) or a member's lists (`circm_`)
+// directly — no invite preview. Symmetric with the parsers in
+// apps/web/app/miniapp/startParam.ts.
+export function buildCircleDetailDeepLink(circleId: string): string {
+  return `${getMiniAppUrl()}?startapp=circd_${encodeURIComponent(circleId)}`;
+}
+
+export function buildCircleMemberDeepLink(circleId: string, memberId: string): string {
+  return `${getMiniAppUrl()}?startapp=circm_${encodeURIComponent(circleId)}__u_${encodeURIComponent(memberId)}`;
+}

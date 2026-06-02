@@ -72,6 +72,35 @@ verbatim under the new Списки tab — same stat tiles, cards, FAB.
 
 **Approved by.** Dmitry (direction + nav Variant A, 2026-06-02).
 
+---
+
+## 2026-06-02 — SettingsToggle gains an optional `hint` slot
+
+**Type:** primitive-change
+
+**Decision.** `SettingsToggle` (provisional) gains an optional `hint?: ReactNode`
+subtitle under the label, mirroring `SettingsRow`'s existing `hint`. Purely
+additive — existing call-sites are unchanged (no `hint` → identical render).
+
+**Context / why.** P0.3 «Событийные пуши» ships a "Уведомления о близких"
+settings screen where each notification-type toggle needs a one-line
+explanation ("За 7 и 3 дня до даты", etc.) directly under the toggle label —
+exactly what `SettingsRow.hint` provides for tappable rows. Adding the same
+affordance keeps the screen on canonical primitives instead of a feature-local
+clone.
+
+**Supersedes.** Nothing.
+
+**Impact.**
+- `packages/ui/src/SettingsList.tsx` — `SettingsToggleProps.hint` added; label
+  wrapped in a column so the hint sits beneath it.
+- Component registry: `SettingsToggle` stays `provisional`.
+- No migration; no breaking change for consumers.
+
+**Approved by.** Dmitry.
+
+---
+
 ## 2026-06-01 — FloatingNav gains an optional `badge` slot (discovery tag)
 
 **Type:** primitive-change

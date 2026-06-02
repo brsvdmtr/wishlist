@@ -82,6 +82,7 @@ import { registerResearchSurveyRouter } from './routes/research-survey.routes';
 import { registerExperimentsRouter } from './routes/experiments.routes';
 import { registerCirclesRouter } from './routes/circles.routes';
 import { registerFeedRouter } from './routes/feed.routes';
+import { registerNotificationPreferencesRouter } from './routes/notification-preferences.routes';
 import { startCleanupSchedulers } from './schedulers/cleanup';
 import { startBillingSchedulers } from './schedulers/billing';
 import { startReferralSchedulers } from './schedulers/referral';
@@ -95,6 +96,7 @@ import { startEventSchedulers } from './schedulers/events';
 import { startLifecycleScheduler } from './schedulers/lifecycle';
 import { startProRenewalReminderScheduler } from './schedulers/pro-renewal';
 import { startBirthdayRemindersScheduler } from './schedulers/birthday-reminders';
+import { startEventNotificationsScheduler } from './schedulers/event-notifications';
 import { startResearchSurveySendScheduler } from './schedulers/research-survey-send';
 import { startDailyActivityRollupScheduler } from './schedulers/daily-activity-rollup';
 import { createSendLifecycleDM } from './services/lifecycle';
@@ -557,6 +559,12 @@ protectTgRoute('DELETE', '/circles/:id/members/:userId',      idem('DELETE /tg/c
 protectTgRoute('PUT',    '/circles/:id/shares',               idem('PUT /tg/circles/:id/shares', { category: 'circle.shares' }));
 protectTgRoute('POST',   '/circles/:id/items/:itemId/reserve', idem('POST /tg/circles/:id/items/:itemId/reserve', { category: 'circle.reserve' }));
 protectTgRoute('DELETE', '/circles/:id/items/:itemId/reserve', idem('DELETE /tg/circles/:id/items/:itemId/reserve', { category: 'circle.reserve' }));
+protectTgRoute('PUT',    '/circles/:id/mute',                 idem('PUT /tg/circles/:id/mute', { category: 'circle.mute' }));
+
+// ── Notification preferences (P0.3 «Событийные пуши») ─────────────────────────
+// FREE feature; the global `state.changing` limiter covers rate. Idempotent
+// settings write (last-write-wins) — not critical.
+protectTgRoute('PATCH',  '/notification-preferences',         idem('PATCH /tg/notification-preferences', { category: 'notification.prefs' }));
 
 // ── Wishlists ────────────────────────────────────────────────────────────────
 // POST /tg/wishlists: idempotency options live in `security/idempotencyRoutes.ts`
@@ -1618,6 +1626,13 @@ const feedRouter = registerFeedRouter({
 });
 tgRouter.use(feedRouter);
 
+// Notification preferences (P0.3 «Событийные пуши») — circle event-push
+// toggles + quiet hours. FREE; thin handlers over services/event-notifications.
+const notificationPreferencesRouter = registerNotificationPreferencesRouter({
+  getOrCreateTgUser,
+});
+tgRouter.use(notificationPreferencesRouter);
+
 const telemetryRouter = registerTelemetryRouter();
 tgRouter.use(telemetryRouter);
 
@@ -1797,6 +1812,15 @@ startReservationReminderScheduler({ prisma, logger, sendTgBotMessage });
 // gift-notes.routes.ts via deps) and are passed through here.
 startEventSchedulers({
   prisma, logger,
+  sendTgBotMessage,
+  BOT_TOKEN_FOR_DM,
+});
+
+// Event pushes (P0.3 «Событийные пуши») — flush outbox buckets (60s) +
+// hourly upcoming-birthday scan. Service uses the prisma singleton; kill
+// switch EVENT_NOTIFICATIONS_ENABLED=false stops enqueue + flush.
+startEventNotificationsScheduler({
+  logger,
   sendTgBotMessage,
   BOT_TOKEN_FOR_DM,
 });
