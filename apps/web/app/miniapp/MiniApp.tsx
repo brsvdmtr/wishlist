@@ -194,6 +194,14 @@ const CirclesRoot = dynamic(
   { ssr: false, loading: () => <Skeleton variant="settings" /> },
 );
 
+// Home feed (Главная → лента близких) — P0.2. The default landing screen.
+// Self-contained lazy chunk (own fetch + view state); receives tgFetch, locale
+// and host nav callbacks. Mirrors CirclesRoot's host-contract pattern.
+const FeedRoot = dynamic(
+  withChunkRetry(() => import('./screens/feed/FeedRoot').then(m => ({ default: m.FeedRoot }))),
+  { ssr: false, loading: () => <Skeleton variant="settings" /> },
+);
+
 // F4 Wave C — Gift Notes cluster (3 screens + 2 sheets, ~695 LOC of JSX).
 // Cold path for users who never unlock Gift Notes; activated by Settings tile,
 // deep-link, or the paywall upsell. State lives in MiniAppInner via
@@ -1120,7 +1128,7 @@ export type GodStats = {
   generatedAt: string;
 };
 
-export type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'changelog' | 'legal' | 'legal-doc' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-manual' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall' | 'gift-notes-onboarding' | 'search'
+export type Screen = 'loading' | 'error' | 'maintenance' | 'feed' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'changelog' | 'legal' | 'legal-doc' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-manual' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall' | 'gift-notes-onboarding' | 'search'
 | 'first-share-prompt'
 | 'circles'
 | 'group-gift-paywall' | 'group-gift-create' | 'group-gift-detail' | 'group-gift-join' | 'group-gift-chat'
@@ -3739,7 +3747,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [screen, setScreen] = useState<Screen>('loading');
   // Circles (Близкие) deep-link entry — set from a circ_ startParam, consumed
   // by CirclesRoot to open the join preview; cleared on normal nav entry.
-  const [circlesInitial, setCirclesInitial] = useState<{ view: 'join'; token: string } | null>(null);
+  const [circlesInitial, setCirclesInitial] = useState<{ view: 'join'; token: string } | { view: 'member'; circleId: string; memberId: string } | null>(null);
   // «Близкие» nav discovery badge — a "NEW" tag shown until the user first
   // opens the tab. Persisted in localStorage; cleared on any entry to circles
   // (nav tap or invite deep-link).
@@ -8716,7 +8724,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
             void loadReservations();
             const redirected = await checkOnboarding();
-            if (!redirected) bootSetScreen('my-wishlists');
+            if (!redirected) bootSetScreen('feed');
           })
           .catch(handleErr);
       } else if (startParam && startParam.startsWith('cs_')) {
@@ -8775,7 +8783,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             void loadReservations();
             // Check onboarding first — if eligible, it sets screen to 'onboarding-entry'
             const redirected = await checkOnboarding();
-            if (!redirected) bootSetScreen('my-wishlists');
+            if (!redirected) bootSetScreen('feed');
           })
           .catch(handleErr);
       }
@@ -21870,6 +21878,25 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         <SantaRoot screen={screen} ctx={santaRootCtx} />
       )}
 
+      {/* Home feed (Главная → лента близких) — P0.2 */}
+      {screen === 'feed' && (
+        <FeedRoot
+          tgFetch={tgFetch}
+          locale={locale}
+          onOpenMember={(circleId, memberId) => { setCirclesInitial({ view: 'member', circleId, memberId }); setScreen('circles'); }}
+          onOpenReservations={() => {
+            setHomeTab('reservations');
+            setResTab('active');
+            if (reservations.length === 0 && santaReservationItems.length === 0) void loadReservations();
+            setScreen('my-wishlists');
+          }}
+          onCreateCircle={() => { setCirclesInitial(null); setScreen('circles'); }}
+          onOpenSearch={() => { setSearchOriginScreen(screen); setScreen('search'); }}
+          onOpenSettings={() => { setSettingsOriginScreen(screen); loadSettings(); setScreen('settings'); }}
+          pushToast={pushToast}
+        />
+      )}
+
       {/* Circles (Близкие) — P0.1 */}
       {screen === 'circles' && (
         <CirclesRoot
@@ -22374,14 +22401,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         // (e.g. the promo-code input on the Profile screen).
         if (keyboardOpen) return null;
 
-        // Derive active nav from (screen, homeTab).
-        let activeNav: 'home' | 'reservations' | 'me' | 'circles' = 'home';
-        if (screen === 'circles') {
+        // Derive active nav from (screen, homeTab). P0.2: 'feed' is the only
+        // Home screen; my-wishlists (wishlists/wishes sub-tabs) → Lists; the
+        // reservations sub-tab + my-reservations → Bookings; everything else
+        // content-ish falls under Lists.
+        let activeNav: 'home' | 'lists' | 'reservations' | 'me' | 'circles' = 'home';
+        if (screen === 'feed') {
+          activeNav = 'home';
+        } else if (screen === 'circles') {
           activeNav = 'circles';
         } else if (screen === 'my-reservations' || (screen === 'my-wishlists' && homeTab === 'reservations')) {
           activeNav = 'reservations';
         } else if (screen === 'profile' || screen === 'settings' || screen === 'public-profile' || screen === 'showcase-editor' || screen === 'showcase-preview') {
           activeNav = 'me';
+        } else {
+          activeNav = 'lists';
         }
 
         // Locale-aware labels. `friends` removed temporarily — see WishBot 2.0
@@ -22390,12 +22424,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         // "Profile" / etc. for clarity over the prior single-glyph "Я".
         const navLabels = (() => {
           switch (locale) {
-            case 'en':    return { home: 'Home',     circles: 'People',   reservations: 'Bookings', me: 'Profile', badge: 'NEW' };
-            case 'zh-CN': return { home: '主页',     circles: '密友',     reservations: '预订',     me: '个人资料', badge: '新' };
-            case 'hi':    return { home: 'होम',     circles: 'करीबी',   reservations: 'बुकिंग',   me: 'प्रोफ़ाइल', badge: 'नया' };
-            case 'es':    return { home: 'Inicio',   circles: 'Cercanos', reservations: 'Reservas', me: 'Perfil', badge: 'NUEVO' };
-            case 'ar':    return { home: 'الرئيسية', circles: 'المقرّبون', reservations: 'الحجوزات', me: 'الملف الشخصي', badge: 'جديد' };
-            default:      return { home: 'Главная',  circles: 'Близкие',  reservations: 'Брони',    me: 'Профиль', badge: 'NEW' };
+            case 'en':    return { home: 'Home',     lists: 'Lists',    circles: 'People',   reservations: 'Bookings', me: 'Profile', badge: 'NEW' };
+            case 'zh-CN': return { home: '主页',     lists: '清单',     circles: '密友',     reservations: '预订',     me: '个人资料', badge: '新' };
+            case 'hi':    return { home: 'होम',     lists: 'सूचियाँ',   circles: 'करीबी',   reservations: 'बुकिंग',   me: 'प्रोफ़ाइल', badge: 'नया' };
+            case 'es':    return { home: 'Inicio',   lists: 'Listas',   circles: 'Cercanos', reservations: 'Reservas', me: 'Perfil', badge: 'NUEVO' };
+            case 'ar':    return { home: 'الرئيسية', lists: 'القوائم',  circles: 'المقرّبون', reservations: 'الحجوزات', me: 'الملف الشخصي', badge: 'جديد' };
+            default:      return { home: 'Главная',  lists: 'Списки',   circles: 'Близкие',  reservations: 'Брони',    me: 'Профиль', badge: 'NEW' };
           }
         })();
 
@@ -22404,11 +22438,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             active={activeNav}
             onSelect={(id) => {
               if (id === 'home') {
-                // Always reset to default sub-state: homeTab='wishlists',
-                // myWishlistsTab='mine'. Tapping 🏠 from any sub-tab (Подписки /
-                // Reservations tab / Archive full-screen) returns to the root.
+                // 🏠 Главная — the feed (the default landing). FeedRoot refetches
+                // on mount, so tapping Home always shows a fresh feed.
+                setScreen('feed');
+              } else if (id === 'lists') {
+                // 📋 Списки — the relocated "my wishlists". Reset to root sub-state:
+                // homeTab='wishlists', myWishlistsTab='mine'.
                 setHomeTab('wishlists');
                 setMyWishlistsTab('mine');
+                if (!wishlistsLoaded) void loadWishlists();
                 setScreen('my-wishlists');
               } else if (id === 'reservations') {
                 // Reset reservations sub-tab to 'active' — primary content.
@@ -22429,6 +22467,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             }}
             items={[
               { id: 'home', icon: '🏠', label: navLabels.home },
+              { id: 'lists', icon: '📋', label: navLabels.lists },
               { id: 'circles', icon: '👥', label: navLabels.circles, badge: circlesNavBadge ? navLabels.badge : undefined },
               { id: 'reservations', icon: '🎁', label: navLabels.reservations },
               { id: 'me', icon: '👤', label: navLabels.me },
