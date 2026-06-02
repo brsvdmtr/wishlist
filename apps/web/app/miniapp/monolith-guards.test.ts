@@ -444,3 +444,29 @@ describe('MiniApp.tsx — E17 paywall.viewed yearlyVariant field-name guard (202
     );
   });
 });
+
+describe('MiniApp.tsx — circ_ deep-link must eager-load owner wishlists (empty-home regression)', () => {
+  // Live-test bug (2026-06-02): opening a circle invite deep link (circ_<token>)
+  // and then exiting to "Главная" — including the invalid/expired-link
+  // "На главную" path — showed an empty "Пока пусто" home, because the circ_
+  // boot branch never loaded the user's OWN wishlists, while every other
+  // deep-link branch (guest, srvy_, br_, item_, …) does. The home renders its
+  // empty state on `wishlists.length === 0`, so a never-loaded list is
+  // indistinguishable from a genuinely empty one.
+  //
+  // The monolith can't be mounted, so we grep the source exactly like the
+  // guards above: the circ_ branch body — from `startsWith('circ_')` up to the
+  // next branch `startsWith('br_')` — must contain a loadWishlists() call.
+  // Fail-before / pass-after: at the buggy revision the branch had no
+  // loadWishlists call and this assertion fails.
+  it('the circ_ deep-link branch calls loadWishlists()', () => {
+    const start = MINI_APP_SRC.indexOf("startsWith('circ_')");
+    const end = MINI_APP_SRC.indexOf("startsWith('br_')", start);
+    expect(start, 'could not find the circ_ deep-link branch').toBeGreaterThan(-1);
+    expect(end, 'could not find the br_ branch that follows circ_').toBeGreaterThan(start);
+    const branch = MINI_APP_SRC.slice(start, end);
+    // Require the actual call `loadWishlists(` — not a mere mention in a comment
+    // — so the guard can't be satisfied by prose that references it.
+    expect(branch).toMatch(/loadWishlists\s*\(/);
+  });
+});

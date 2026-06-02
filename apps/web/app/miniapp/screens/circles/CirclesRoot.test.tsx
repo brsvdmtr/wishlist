@@ -16,9 +16,9 @@
 // exercises the real deep-link wiring end-to-end.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { t } from '@wishlist/shared';
-import { CirclesRoot, JoinView, MemberView } from './CirclesRoot';
+import { CirclesRoot, JoinView, MemberView, DetailView } from './CirclesRoot';
 
 // Minimal Response stand-in — the component only touches `.ok`, `.status`,
 // `.json()`. Cast through `unknown` so we don't have to satisfy the full DOM type.
@@ -67,6 +67,38 @@ function memberWishlists(items: Array<Record<string, unknown>>, over?: Record<st
     ...over,
   };
 }
+
+function circleDetail(over?: Record<string, unknown>) {
+  return {
+    id: 'c1', name: 'Семья', type: 'FAMILY', emoji: null,
+    myRole: 'OWNER', memberCount: 1, capacity: 8, members: [],
+    ...over,
+  };
+}
+
+// tgFetch router for DetailView: the load GET returns the circle; the
+// destructive mutations (DELETE group / POST leave) just resolve ok.
+function detailFetch(detail: Record<string, unknown>) {
+  return vi.fn((url: string, init?: { method?: string }) => {
+    const method = (init?.method ?? 'GET').toUpperCase();
+    if (url === '/tg/circles/c1' && method === 'GET') return Promise.resolve(makeRes({ circle: detail }));
+    return Promise.resolve(makeRes({}));
+  });
+}
+
+function renderDetail(tgFetch: ReturnType<typeof vi.fn>, onLeft = vi.fn()) {
+  render(
+    <DetailView
+      tgFetch={tgFetch} locale="ru" circleId="c1"
+      onBack={vi.fn()} onOpenMember={vi.fn()} onPrivacy={vi.fn()} onUpsell={vi.fn()}
+      onLeft={onLeft} pushToast={vi.fn()}
+    />,
+  );
+  return { onLeft };
+}
+
+const deleteCall = () => expect.objectContaining({ method: 'DELETE' });
+const leavePost = () => expect.objectContaining({ method: 'POST' });
 
 // ── fix #5 — JoinView own-link redirect ───────────────────────────────────────
 
@@ -261,5 +293,70 @@ describe('CirclesRoot › MemberView surprise invariant in the detail sheet (fix
 
     await screen.findByText('Подарок');
     expect(screen.getByRole('button', { name: t('circle_reserve', 'ru') })).toBeInTheDocument();
+  });
+});
+
+// ── bug 1 — destructive group actions require confirmation ─────────────────────
+
+describe('CirclesRoot › DetailView delete/leave confirmation (bug 1)', () => {
+  it('owner: tapping «Удалить группу» opens a confirmation and does NOT delete yet', async () => {
+    const tgFetch = detailFetch(circleDetail({ myRole: 'OWNER', name: 'Семья' }));
+    const { onLeft } = renderDetail(tgFetch);
+
+    await screen.findByText(/Семья/);
+    fireEvent.click(screen.getByRole('button', { name: /Настроить/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Удалить группу/ }));
+
+    // A confirmation question naming the group is shown…
+    expect(await screen.findByText(/Удалить группу «Семья»\?/)).toBeInTheDocument();
+    // …and the menu tap alone deleted nothing.
+    expect(tgFetch).not.toHaveBeenCalledWith('/tg/circles/c1', deleteCall());
+    expect(onLeft).not.toHaveBeenCalled();
+  });
+
+  it('owner: confirming deletes the group and exits', async () => {
+    const tgFetch = detailFetch(circleDetail({ myRole: 'OWNER', name: 'Семья' }));
+    const { onLeft } = renderDetail(tgFetch);
+
+    await screen.findByText(/Семья/);
+    fireEvent.click(screen.getByRole('button', { name: /Настроить/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Удалить группу/ }));
+    // Confirm via the sheet's plain «Удалить группу» button (the menu's
+    // emoji-prefixed one is unmounted once the confirm sheet opens).
+    fireEvent.click(await screen.findByRole('button', { name: 'Удалить группу' }));
+
+    await waitFor(() => expect(tgFetch).toHaveBeenCalledWith('/tg/circles/c1', deleteCall()));
+    await waitFor(() => expect(onLeft).toHaveBeenCalledTimes(1));
+  });
+
+  it('owner: cancelling keeps the group', async () => {
+    const tgFetch = detailFetch(circleDetail({ myRole: 'OWNER', name: 'Семья' }));
+    const { onLeft } = renderDetail(tgFetch);
+
+    await screen.findByText(/Семья/);
+    fireEvent.click(screen.getByRole('button', { name: /Настроить/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Удалить группу/ }));
+    fireEvent.click(await screen.findByRole('button', { name: t('circle_cancel', 'ru') }));
+
+    expect(tgFetch).not.toHaveBeenCalledWith('/tg/circles/c1', deleteCall());
+    expect(onLeft).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Удалить группу «Семья»\?/)).toBeNull();
+  });
+
+  it('member: leaving also requires confirmation before it fires', async () => {
+    const tgFetch = detailFetch(circleDetail({ myRole: 'MEMBER', name: 'Друзья' }));
+    const { onLeft } = renderDetail(tgFetch);
+
+    await screen.findByText(/Друзья/);
+    fireEvent.click(screen.getByRole('button', { name: /Настроить/ }));
+    // A member sees «Выйти из группы» (leave), not delete.
+    fireEvent.click(await screen.findByRole('button', { name: t('circle_leave', 'ru') }));
+
+    expect(await screen.findByText(/Выйти из группы «Друзья»\?/)).toBeInTheDocument();
+    expect(tgFetch).not.toHaveBeenCalledWith('/tg/circles/c1/leave', leavePost());
+
+    fireEvent.click(screen.getByRole('button', { name: t('circle_leave', 'ru') }));
+    await waitFor(() => expect(tgFetch).toHaveBeenCalledWith('/tg/circles/c1/leave', leavePost()));
+    await waitFor(() => expect(onLeft).toHaveBeenCalledTimes(1));
   });
 });

@@ -8539,6 +8539,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         // Circle invite deep link (P0.1 «Близкие»). Token is a url-safe
         // base64url string (not a cuid) — validate shape, then open the
         // Circles join preview. The preview fetch happens inside CirclesRoot.
+        // Eager-load the user's OWN wishlists in the background so that exiting
+        // the join screen — including the invalid/expired-link "На главную"
+        // path — lands on their own data, not an empty "Пока пусто" home.
+        // (Mirrors the guest-link and srvy_ branches; this was the one
+        // deep-link entry missing it.)
+        loadWishlists().catch(() => {});
         const parsed = parseCircleInvitePayload(startParam);
         if (parsed.kind === 'ok') {
           setCirclesInitial({ view: 'join', token: parsed.token });
