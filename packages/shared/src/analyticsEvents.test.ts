@@ -171,6 +171,19 @@ describe('helper functions — happy + edge cases', () => {
     }
   });
 
+  // Pins the P0.3 event-push CTR contract. push.opened must stay client-allowed
+  // (it reaches AnalyticsEvent ONLY via isClientTelemetryAllowedEvent — `push.`
+  // is not in ANALYTICS_EVENT_PREFIXES), and push.sent must stay server-ONLY so
+  // a client can never spoof a delivery (which would inflate the CTR
+  // denominator). If a future PR flips either, CTR-by-type silently breaks —
+  // force a visible failure here.
+  it('push.* events: opened is client-allowed, sent is server-only', () => {
+    expect(isClientTelemetryAllowedEvent('push.opened')).toBe(true);
+    expect(isServerOnlyProductEvent('push.opened')).toBe(false);
+    expect(isServerOnlyProductEvent('push.sent')).toBe(true);
+    expect(isClientTelemetryAllowedEvent('push.sent')).toBe(false);
+  });
+
   it('isServerProductEvent: true if `server` is among sources (incl. multi-source)', () => {
     expect(isServerProductEvent('payment.completed')).toBe(true);
     expect(isServerProductEvent('paywall.viewed')).toBe(false);
@@ -426,6 +439,24 @@ describe('PRODUCT_EVENTS — fixture snapshot', () => {
           "action": "activated",
           "domain": "pro",
           "name": "pro.activated",
+          "pii": "userId-only",
+          "sources": [
+            "server",
+          ],
+        },
+        {
+          "action": "opened",
+          "domain": "push",
+          "name": "push.opened",
+          "pii": "none",
+          "sources": [
+            "client",
+          ],
+        },
+        {
+          "action": "sent",
+          "domain": "push",
+          "name": "push.sent",
           "pii": "userId-only",
           "sources": [
             "server",

@@ -21,6 +21,26 @@
 // fixtures and migration data.
 export const looksLikeId = (s: string): boolean => /^[a-z0-9_-]{10,40}$/i.test(s);
 
+// P0.3 «Событийные пуши» — optional analytics tag the flush appends to the
+// circd_/circm_ deep links as the TRAILING segment `…__p_<pushType>` (symmetric
+// with buildCircleDetailDeepLink / buildCircleMemberDeepLink). The recipient's
+// open then emits push.opened with this `pushType`, closing the CTR-by-type
+// loop against the server's push.sent. We validate by SHAPE (lowercase label,
+// ≤32 chars) rather than against the fixed label set, so a future server-side
+// label still round-trips through an older cached client instead of being
+// dropped; the bare circd_/circm_ shape older messages carry parses unchanged
+// (pushType left undefined). Peeling the LAST `__p_` keeps the id segments
+// (which never contain `__p_` in practice — cuids are [a-z0-9]) intact.
+const PUSH_TYPE_RE = /^[a-z0-9_]{1,32}$/;
+
+export function splitPushType(rest: string): { core: string; pushType?: string } {
+  const idx = rest.lastIndexOf('__p_');
+  if (idx < 0) return { core: rest };
+  const candidate = rest.slice(idx + '__p_'.length);
+  if (!PUSH_TYPE_RE.test(candidate)) return { core: rest };
+  return { core: rest.slice(0, idx), pushType: candidate };
+}
+
 export type ReservationReminderPayload =
   | { kind: 'ok'; itemId: string; reservationMetaId: string }
   | { kind: 'malformed' };
@@ -146,45 +166,49 @@ export function parseCircleInvitePayload(payload: string): CircleInvitePayload {
 }
 
 export type CircleDetailPayload =
-  | { kind: 'ok'; circleId: string }
+  | { kind: 'ok'; circleId: string; pushType?: string }
   | { kind: 'malformed' };
 
-// circd_<circleId> — P0.3 event push → open a circle's detail. The recipient is
-// already a member (that's why they got the push), so it addresses the circle
-// by id (a cuid), validated with `looksLikeId`. Symmetric with
-// apps/api/src/telegram/deepLinks.ts `buildCircleDetailDeepLink`.
+// circd_<circleId>[__p_<pushType>] — P0.3 event push → open a circle's detail.
+// The recipient is already a member (that's why they got the push), so it
+// addresses the circle by id (a cuid), validated with `looksLikeId`. The
+// optional trailing `__p_<pushType>` is the analytics tag (see splitPushType).
+// Symmetric with apps/api/src/telegram/deepLinks.ts `buildCircleDetailDeepLink`.
 export function parseCircleDetailPayload(payload: string): CircleDetailPayload {
   if (!payload.startsWith('circd_')) return { kind: 'malformed' };
+  const { core, pushType } = splitPushType(payload.slice('circd_'.length));
   let circleId: string;
   try {
-    circleId = decodeURIComponent(payload.slice('circd_'.length));
+    circleId = decodeURIComponent(core);
   } catch {
     return { kind: 'malformed' };
   }
   if (!looksLikeId(circleId)) return { kind: 'malformed' };
-  return { kind: 'ok', circleId };
+  return { kind: 'ok', circleId, pushType };
 }
 
 export type CircleMemberPayload =
-  | { kind: 'ok'; circleId: string; memberId: string }
+  | { kind: 'ok'; circleId: string; memberId: string; pushType?: string }
   | { kind: 'malformed' };
 
-// circm_<circleId>__u_<memberId> — P0.3 event push → open a member's lists
-// inside a circle (new-wish / upcoming-event pushes). Both ids are cuids.
-// Symmetric with apps/api/src/telegram/deepLinks.ts `buildCircleMemberDeepLink`.
+// circm_<circleId>__u_<memberId>[__p_<pushType>] — P0.3 event push → open a
+// member's lists inside a circle (new-wish / upcoming-event pushes). Both ids
+// are cuids. The optional trailing `__p_<pushType>` is the analytics tag
+// (peeled first; see splitPushType). Symmetric with
+// apps/api/src/telegram/deepLinks.ts `buildCircleMemberDeepLink`.
 export function parseCircleMemberPayload(payload: string): CircleMemberPayload {
   if (!payload.startsWith('circm_')) return { kind: 'malformed' };
-  const rest = payload.slice('circm_'.length);
-  const sepIdx = rest.indexOf('__u_');
+  const { core, pushType } = splitPushType(payload.slice('circm_'.length));
+  const sepIdx = core.indexOf('__u_');
   if (sepIdx < 0) return { kind: 'malformed' };
   let circleId: string;
   let memberId: string;
   try {
-    circleId = decodeURIComponent(rest.slice(0, sepIdx));
-    memberId = decodeURIComponent(rest.slice(sepIdx + '__u_'.length));
+    circleId = decodeURIComponent(core.slice(0, sepIdx));
+    memberId = decodeURIComponent(core.slice(sepIdx + '__u_'.length));
   } catch {
     return { kind: 'malformed' };
   }
   if (!looksLikeId(circleId) || !looksLikeId(memberId)) return { kind: 'malformed' };
-  return { kind: 'ok', circleId, memberId };
+  return { kind: 'ok', circleId, memberId, pushType };
 }

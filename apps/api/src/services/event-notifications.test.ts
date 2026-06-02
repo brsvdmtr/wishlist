@@ -166,4 +166,21 @@ describe('renderEventMessage', () => {
     )!;
     expect(out.text).toContain('Пользователь'); // ru api_user_fallback
   });
+
+  // The pushType label is the analytics + deep-link tag (push.sent / push.opened
+  // CTR). It must stay in lockstep with the rendered shape: 1:1 for singles, a
+  // one-member NEW_WISH batch stays new_wish, a mixed bucket collapses to grouped.
+  it('tags each rendered message with the canonical pushType label', () => {
+    expect(renderEventMessage([{ type: 'EVENT_UPCOMING_7D', payload: { actorName: 'A', memberId: 'm1', daysUntil: 7 } }], ctx)!.pushType).toBe('event_7d');
+    expect(renderEventMessage([{ type: 'EVENT_UPCOMING_3D', payload: { actorName: 'A', memberId: 'm1', daysUntil: 3 } }], ctx)!.pushType).toBe('event_3d');
+    expect(renderEventMessage([{ type: 'NEW_WISH', payload: { actorName: 'A', memberId: 'm1', itemTitle: 'x' } }], ctx)!.pushType).toBe('new_wish');
+    expect(renderEventMessage([{ type: 'RESERVATION_CHANGED', payload: { actorName: 'A', changeKind: 'edited' } }], ctx)!.pushType).toBe('reservation_changed');
+    expect(renderEventMessage([{ type: 'CIRCLE_JOINED', payload: { actorName: 'A', circleName: 'Семья' } }], ctx)!.pushType).toBe('circle_joined');
+    const manyWish = Array.from({ length: 3 }, () => ({ type: 'NEW_WISH' as const, payload: { actorName: 'A', memberId: 'm1', itemTitle: 'x' } }));
+    expect(renderEventMessage(manyWish, ctx)!.pushType).toBe('new_wish');
+    expect(renderEventMessage([
+      { type: 'NEW_WISH', payload: { actorName: 'A', memberId: 'm1', itemTitle: 'x' } },
+      { type: 'EVENT_UPCOMING_7D', payload: { actorName: 'B', memberId: 'm2', daysUntil: 7 } },
+    ], ctx)!.pushType).toBe('grouped');
+  });
 });

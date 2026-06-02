@@ -147,6 +147,54 @@ suite('event-notifications — real Postgres', () => {
     expect(rows.every((x) => x.status === 'SENT' && x.delivered)).toBe(true);
   });
 
+  it('emits push.sent (type + grouped=false) exactly once per delivered single message', async () => {
+    const actor = await mkUser('actor');
+    const r = await mkUser('r', { profile: recipientProfile() });
+    const circle = await mkCircle(actor.id);
+    await addMember(circle.id, r.id);
+    const { wl, item } = await mkSharedListWithItem(actor.id, circle.id);
+    const t0 = new Date('2026-06-02T12:00:00Z');
+    await enqueueNewWishFromItem({ itemId: item.id, wishlistId: wl.id, actorUserId: actor.id, now: t0 });
+
+    const pushSents: Array<{ pushType: string; grouped: boolean; recipientId: string }> = [];
+    const res = await flushDueEventNotifications({
+      logger: noopLogger,
+      sendTgBotMessage: fakeSend,
+      now: new Date(t0.getTime() + 61 * 60_000),
+      trackPushSent: (e) => pushSents.push(e),
+    });
+    expect(res.messagesSent).toBe(1);
+    // One delivered message → one push.sent; the recipient is the userId.
+    expect(pushSents).toEqual([{ pushType: 'new_wish', grouped: false, recipientId: r.id }]);
+  });
+
+  it('push.sent reports grouped=true for a multi-row digest, and never fires for a suppressed recipient', async () => {
+    const actor = await mkUser('actor');
+    const r = await mkUser('r', { profile: recipientProfile() });
+    const optOut = await mkUser('optout', { profile: recipientProfile({ notifyCircleNewWishes: false }) });
+    const circle = await mkCircle(actor.id);
+    await addMember(circle.id, r.id);
+    await addMember(circle.id, optOut.id);
+    const { wl } = await mkSharedListWithItem(actor.id, circle.id);
+    const t0 = new Date('2026-06-02T12:00:00Z');
+    // Two wishes from one member in the same window → ONE grouped digest each.
+    const i1 = await db.item.create({ data: { wishlistId: wl.id, title: 'Sony', url: `https://ex.com/${PREFIX}-g1`, status: 'AVAILABLE' } });
+    const i2 = await db.item.create({ data: { wishlistId: wl.id, title: 'Lego', url: `https://ex.com/${PREFIX}-g2`, status: 'AVAILABLE' } });
+    await enqueueNewWishFromItem({ itemId: i1.id, wishlistId: wl.id, actorUserId: actor.id, now: t0 });
+    await enqueueNewWishFromItem({ itemId: i2.id, wishlistId: wl.id, actorUserId: actor.id, now: t0 });
+
+    const pushSents: Array<{ pushType: string; grouped: boolean; recipientId: string }> = [];
+    await flushDueEventNotifications({
+      logger: noopLogger,
+      sendTgBotMessage: fakeSend,
+      now: new Date(t0.getTime() + 61 * 60_000),
+      trackPushSent: (e) => pushSents.push(e),
+    });
+    // r is opted in → a grouped 2-wish digest; optOut is suppressed → no event.
+    expect(pushSents).toContainEqual({ pushType: 'new_wish', grouped: true, recipientId: r.id });
+    expect(pushSents.some((e) => e.recipientId === optOut.id)).toBe(false);
+  });
+
   it('flush suppresses a type the recipient opted out of', async () => {
     const actor = await mkUser('actor');
     const r = await mkUser('r', { profile: recipientProfile({ notifyCircleNewWishes: false }) });

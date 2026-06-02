@@ -8566,6 +8566,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         loadWishlists().catch(() => {});
         const parsed = parseCircleMemberPayload(startParam);
         if (parsed.kind === 'ok') {
+          // P0.3 CTR: attribute this open to the push that drove it. Every
+          // circm_ link is built by the event-push flush, so an open here IS a
+          // push open; the __p_ tag carries the type (falls back to 'unknown'
+          // for an older cached link that predates the param).
+          trackEvent('push.opened', { pushType: parsed.pushType ?? 'unknown' });
           setCirclesInitial({ view: 'member', circleId: parsed.circleId, memberId: parsed.memberId });
           bootSetScreen('circles');
           trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
@@ -8578,6 +8583,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         loadWishlists().catch(() => {});
         const parsed = parseCircleDetailPayload(startParam);
         if (parsed.kind === 'ok') {
+          // P0.3 CTR — see the circm_ branch above; circd_ is also push-only.
+          trackEvent('push.opened', { pushType: parsed.pushType ?? 'unknown' });
           setCirclesInitial({ view: 'detail', circleId: parsed.circleId });
           bootSetScreen('circles');
           trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
