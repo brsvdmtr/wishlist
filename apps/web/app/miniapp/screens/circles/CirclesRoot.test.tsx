@@ -198,7 +198,7 @@ describe('CirclesRoot › MemberView tap-opens-detail (fix #2)', () => {
     const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
     const tgFetch = vi.fn().mockResolvedValue(makeRes(memberWishlists([item()])));
 
-    render(<MemberView tgFetch={tgFetch} locale="ru" circleId="c1" memberId="m1" onBack={vi.fn()} pushToast={vi.fn()} />);
+    render(<MemberView tgFetch={tgFetch} locale="ru" circleId="c1" memberId="m1" onBack={vi.fn()} onConfigureShares={vi.fn()} pushToast={vi.fn()} />);
 
     const row = await screen.findByText('Подарок');
     // Sheet is closed before the tap.
@@ -217,7 +217,7 @@ describe('CirclesRoot › MemberView tap-opens-detail (fix #2)', () => {
   it('opens the store only via the explicit «Открыть в магазине» button inside the sheet', async () => {
     const tgFetch = vi.fn().mockResolvedValue(makeRes(memberWishlists([item({ url: 'https://shop.example/p/42' })])));
 
-    render(<MemberView tgFetch={tgFetch} locale="ru" circleId="c1" memberId="m1" onBack={vi.fn()} pushToast={vi.fn()} />);
+    render(<MemberView tgFetch={tgFetch} locale="ru" circleId="c1" memberId="m1" onBack={vi.fn()} onConfigureShares={vi.fn()} pushToast={vi.fn()} />);
 
     fireEvent.click(await screen.findByText('Подарок'));
     const storeBtn = await screen.findByRole('button', { name: t('circle_open_in_store', 'ru') });
@@ -245,7 +245,7 @@ describe('CirclesRoot › MemberView surprise invariant in the detail sheet (fix
       makeRes(memberWishlists([item({ title: 'Личный подарок', reserved: false, reservedByMe: false })], { isSelf: true })),
     );
 
-    render(<MemberView tgFetch={tgFetch} locale="ru" circleId="c1" memberId="me" onBack={vi.fn()} pushToast={vi.fn()} />);
+    render(<MemberView tgFetch={tgFetch} locale="ru" circleId="c1" memberId="me" onBack={vi.fn()} onConfigureShares={vi.fn()} pushToast={vi.fn()} />);
 
     const row = await screen.findByText('Личный подарок');
     // The surprise-safe reassurance banner is shown for the owner-self view.
@@ -268,7 +268,7 @@ describe('CirclesRoot › MemberView surprise invariant in the detail sheet (fix
       makeRes(memberWishlists([item({ reserved: true, reservedByMe: false })], { isSelf: false })),
     );
 
-    render(<MemberView tgFetch={tgFetch} locale="ru" circleId="c1" memberId="m1" onBack={vi.fn()} pushToast={vi.fn()} />);
+    render(<MemberView tgFetch={tgFetch} locale="ru" circleId="c1" memberId="m1" onBack={vi.fn()} onConfigureShares={vi.fn()} pushToast={vi.fn()} />);
 
     fireEvent.click(await screen.findByText('Подарок'));
     await screen.findByRole('button', { name: t('circle_close', 'ru') });
@@ -289,10 +289,40 @@ describe('CirclesRoot › MemberView surprise invariant in the detail sheet (fix
       makeRes(memberWishlists([item({ reserved: false, reservedByMe: false })], { isSelf: false })),
     );
 
-    render(<MemberView tgFetch={tgFetch} locale="ru" circleId="c1" memberId="m1" onBack={vi.fn()} pushToast={vi.fn()} />);
+    render(<MemberView tgFetch={tgFetch} locale="ru" circleId="c1" memberId="m1" onBack={vi.fn()} onConfigureShares={vi.fn()} pushToast={vi.fn()} />);
 
     await screen.findByText('Подарок');
     expect(screen.getByRole('button', { name: t('circle_reserve', 'ru') })).toBeInTheDocument();
+  });
+});
+
+// ── owner self-view empty state offers a "choose lists" CTA ───────────────────
+
+describe('CirclesRoot › MemberView owner-self empty state CTA', () => {
+  it('owner with nothing shared sees a CTA that opens the share picker (not a dead-end)', async () => {
+    const tgFetch = vi.fn().mockResolvedValue(makeRes(memberWishlists([], { isSelf: true, wishlists: [] })));
+    const onConfigureShares = vi.fn();
+
+    render(<MemberView tgFetch={tgFetch} locale="ru" circleId="c1" memberId="me" onBack={vi.fn()} onConfigureShares={onConfigureShares} pushToast={vi.fn()} />);
+
+    const cta = await screen.findByRole('button', { name: t('circle_self_empty_cta', 'ru') });
+    expect(screen.getByText(t('circle_self_empty_title', 'ru'))).toBeInTheDocument();
+    // The plain dead-end empty text is NOT used for the owner-self view.
+    expect(screen.queryByText(t('circle_member_empty', 'ru'))).toBeNull();
+
+    fireEvent.click(cta);
+    expect(onConfigureShares).toHaveBeenCalledTimes(1);
+  });
+
+  it('a co-member viewing an empty list sees the plain empty text and no CTA', async () => {
+    const tgFetch = vi.fn().mockResolvedValue(makeRes(memberWishlists([], { isSelf: false, wishlists: [] })));
+    const onConfigureShares = vi.fn();
+
+    render(<MemberView tgFetch={tgFetch} locale="ru" circleId="c1" memberId="m1" onBack={vi.fn()} onConfigureShares={onConfigureShares} pushToast={vi.fn()} />);
+
+    expect(await screen.findByText(t('circle_member_empty', 'ru'))).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: t('circle_self_empty_cta', 'ru') })).toBeNull();
+    expect(onConfigureShares).not.toHaveBeenCalled();
   });
 });
 
