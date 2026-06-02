@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseReservationReminderPayload, parseEventReminderPayload, parseSurveyInvitePayload, parseItemOpenPayload, parseSantaPreseasonPayload, parseCircleDetailPayload, parseCircleMemberPayload } from './startParam';
+import { parseReservationReminderPayload, parseEventReminderPayload, parseSurveyInvitePayload, parseItemOpenPayload, parseSantaPreseasonPayload, parseCircleDetailPayload, parseCircleMemberPayload, splitPushType } from './startParam';
 
 describe('parseReservationReminderPayload', () => {
   it('parses a well-formed rrem_<itemId>__m_<metaId> payload', () => {
@@ -272,6 +272,23 @@ describe('parseCircleDetailPayload', () => {
     expect(parseCircleDetailPayload('foo_clh2x9abc000d1234567890')).toEqual({ kind: 'malformed' });
     expect(parseCircleDetailPayload('')).toEqual({ kind: 'malformed' });
   });
+  // P0.3 push-attribution: the optional trailing __p_<pushType> analytics tag.
+  it('parses the optional __p_<pushType> tag and keeps the circleId intact', () => {
+    expect(parseCircleDetailPayload('circd_clh2x9abc000d1234567890__p_grouped')).toEqual({
+      kind: 'ok', circleId: 'clh2x9abc000d1234567890', pushType: 'grouped',
+    });
+  });
+  it('leaves pushType undefined for a bare (pre-instrumentation / cached) link', () => {
+    const out = parseCircleDetailPayload('circd_clh2x9abc000d1234567890');
+    expect(out).toEqual({ kind: 'ok', circleId: 'clh2x9abc000d1234567890' });
+    expect(out).toMatchObject({ pushType: undefined });
+  });
+  it('round-trips the circd_ wire format WITH a push-type param', () => {
+    const circleId = 'clh2x9abc000d1234567890';
+    const pushType = 'reservation_changed';
+    const wire = `circd_${encodeURIComponent(circleId)}__p_${encodeURIComponent(pushType)}`;
+    expect(parseCircleDetailPayload(wire)).toEqual({ kind: 'ok', circleId, pushType });
+  });
 });
 
 describe('parseCircleMemberPayload', () => {
@@ -291,5 +308,42 @@ describe('parseCircleMemberPayload', () => {
   });
   it('rejects a missing circm_ prefix', () => {
     expect(parseCircleMemberPayload('circd_clh2x9abc000d1234567890')).toEqual({ kind: 'malformed' });
+  });
+  // P0.3 push-attribution: the optional trailing __p_<pushType> tag, peeled
+  // BEFORE the __u_ split so both ids stay intact.
+  it('parses the optional __p_<pushType> tag after the member id', () => {
+    expect(parseCircleMemberPayload('circm_clh2x9abc000d1234567890__u_clm3y8def000e0987654321__p_new_wish')).toEqual({
+      kind: 'ok', circleId: 'clh2x9abc000d1234567890', memberId: 'clm3y8def000e0987654321', pushType: 'new_wish',
+    });
+  });
+  it('leaves pushType undefined for a bare member link', () => {
+    const out = parseCircleMemberPayload('circm_clh2x9abc000d1234567890__u_clm3y8def000e0987654321');
+    expect(out).toEqual({ kind: 'ok', circleId: 'clh2x9abc000d1234567890', memberId: 'clm3y8def000e0987654321' });
+    expect(out).toMatchObject({ pushType: undefined });
+  });
+  it('round-trips the circm_ wire format WITH a push-type param', () => {
+    const circleId = 'clh2x9abc000d1234567890';
+    const memberId = 'clm3y8def000e0987654321';
+    const pushType = 'event_7d';
+    const wire = `circm_${encodeURIComponent(circleId)}__u_${encodeURIComponent(memberId)}__p_${encodeURIComponent(pushType)}`;
+    expect(parseCircleMemberPayload(wire)).toEqual({ kind: 'ok', circleId, memberId, pushType });
+  });
+});
+
+describe('splitPushType', () => {
+  it('peels a well-formed trailing __p_<type>', () => {
+    expect(splitPushType('abc__u_def__p_new_wish')).toEqual({ core: 'abc__u_def', pushType: 'new_wish' });
+  });
+  it('returns the whole string when there is no __p_ segment', () => {
+    expect(splitPushType('abc__u_def')).toEqual({ core: 'abc__u_def' });
+  });
+  it('does NOT peel a malformed (non-shape) candidate — leaves it in core', () => {
+    // Uppercase fails the lowercase label shape, so it is not treated as a tag.
+    expect(splitPushType('abc__p_BadCaps')).toEqual({ core: 'abc__p_BadCaps' });
+    // Over-long candidate (>32 chars) is rejected too.
+    expect(splitPushType(`abc__p_${'x'.repeat(33)}`)).toEqual({ core: `abc__p_${'x'.repeat(33)}` });
+  });
+  it('peels only the LAST __p_ (so an id-internal __p_ stays in core)', () => {
+    expect(splitPushType('a__p_b__p_grouped')).toEqual({ core: 'a__p_b', pushType: 'grouped' });
   });
 });

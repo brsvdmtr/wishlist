@@ -784,6 +784,38 @@ export const PRODUCT_EVENTS = [
     sources: ['client'],
     pii: 'none',
   },
+  // ── Event pushes (P0.3 «Событийные пуши») delivery + click-through ──
+  // The EventNotification outbox table already records delivery/suppression/
+  // deferral per row; these two events add the AnalyticsEvent-side signals the
+  // table can't give: a type-tagged delivery feed queryable alongside every
+  // other product event (push.sent) and the click-through that closes the loop
+  // (push.opened). CTR-by-type = push.opened / push.sent joined on `pushType`.
+  // `push.` is NOT in ANALYTICS_EVENT_PREFIXES, so push.opened reaches
+  // AnalyticsEvent ONLY via isClientTelemetryAllowedEvent (sources:['client']);
+  // push.sent is sources:['server'] → hard-denied at /tg/telemetry so a client
+  // can never spoof a delivery. Both are gated by EVENT_NOTIFICATIONS_ENABLED
+  // (the service no-ops the whole flush when off, so neither fires). The
+  // `pushType` value is computed once in renderEventMessage and carried
+  // verbatim into the deep-link `__p_` param, so the sent type and the opened
+  // type are guaranteed to match. Readout SQL: docs/research/event-pushes-metrics-sql.md.
+  {
+    name: 'push.sent',
+    domain: 'push',
+    action: 'sent',
+    description:
+      'A P0.3 event-driven bot push (Circles graph) was delivered to a recipient. Server-authoritative — emitted by flushOneGroup in services/event-notifications.ts ONLY after Telegram acknowledges delivery (delivered=true), never on a suppressed/deferred/failed bucket. One event per delivered MESSAGE (a grouped digest of N events is ONE push.sent). AnalyticsEvent.userId is the recipient. props: pushType (event_7d|event_3d|new_wish|reservation_changed|circle_joined|grouped — the same label baked into the deep-link __p_ param) and grouped (true when the message bundled >1 outbox row). The per-type delivery denominator for CTR-by-type (push.opened/push.sent on pushType).',
+    sources: ['server'],
+    pii: 'userId-only',
+  },
+  {
+    name: 'push.opened',
+    domain: 'push',
+    action: 'opened',
+    description:
+      'A recipient tapped a P0.3 event-push deep link (circd_/circm_) and the Mini App bootstrapped onto the circle/member screen. Client UI signal — emitted from the MiniApp.tsx bootstrap. Numerator for CTR-by-type (push.opened/push.sent joined on pushType). Carries the per-app-open bootSessionId (shared with user.session_started), so a push-attributed session = a bootSessionId that has a push.opened. props: pushType (event_7d|event_3d|new_wish|reservation_changed|circle_joined|grouped, or "unknown" for a pre-instrumentation cached deep link that lacked the __p_ payload param). No item / person / circle identifiers.',
+    sources: ['client'],
+    pii: 'none',
+  },
 ] as const satisfies readonly ProductEventDescriptor[];
 
 export type ProductEventName = (typeof PRODUCT_EVENTS)[number]['name'];

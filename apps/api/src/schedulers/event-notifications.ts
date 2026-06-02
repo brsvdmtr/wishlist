@@ -18,6 +18,7 @@ import {
   scanUpcomingEvents,
   purgeOldEventNotifications,
 } from '../services/event-notifications';
+import { trackProductEvent } from '../services/analytics';
 
 export type EventNotificationsSchedulerDeps = {
   logger: Logger;
@@ -43,7 +44,16 @@ export function startEventNotificationsScheduler(deps: EventNotificationsSchedul
     if (!BOT_TOKEN_FOR_DM || flushing) return;
     flushing = true;
     try {
-      const res = await flushDueEventNotifications({ logger, sendTgBotMessage });
+      const res = await flushDueEventNotifications({
+        logger,
+        sendTgBotMessage,
+        // Per-delivered-message product event. trackProductEvent is
+        // fire-and-forget (swallows + debug-logs DB errors), so a flaky
+        // AnalyticsEvent write never blocks or fails the flush. userId = the
+        // recipient; props carry only the type + grouped flag (no PII).
+        trackPushSent: ({ pushType, grouped, recipientId }) =>
+          trackProductEvent({ event: 'push.sent', userId: recipientId, props: { pushType, grouped } }),
+      });
       if (res.messagesSent > 0 || res.deferred > 0 || res.suppressed > 0) {
         logger.info(res, 'event-notifications: flush cycle');
       }

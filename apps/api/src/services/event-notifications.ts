@@ -178,6 +178,31 @@ const TYPE_TO_PREF: Record<EventNotificationType, 'events' | 'newWishes' | 'rese
   CIRCLE_JOINED: 'joins',
 };
 
+/** Canonical push-type label for analytics + the deep-link `__p_` param. A
+ *  single-row bucket maps 1:1 from its EventNotificationType; an all-NEW_WISH
+ *  batch from one member stays `new_wish`; a mixed bucket collapses to
+ *  `grouped`. Computed once in `renderEventMessage` and carried verbatim into
+ *  both `push.sent` (server) and the deep link → `push.opened` (client), so the
+ *  sent type and the opened type are guaranteed identical. Mirrored in the
+ *  PRODUCT_EVENTS descriptors for push.sent/push.opened and validated by shape
+ *  (not enum) in apps/web/app/miniapp/startParam.ts so adding a label here
+ *  doesn't break older cached clients. */
+export type PushTypeLabel =
+  | 'event_7d'
+  | 'event_3d'
+  | 'new_wish'
+  | 'reservation_changed'
+  | 'circle_joined'
+  | 'grouped';
+
+const TYPE_TO_LABEL: Record<EventNotificationType, PushTypeLabel> = {
+  EVENT_UPCOMING_7D: 'event_7d',
+  EVENT_UPCOMING_3D: 'event_3d',
+  NEW_WISH: 'new_wish',
+  RESERVATION_CHANGED: 'reservation_changed',
+  CIRCLE_JOINED: 'circle_joined',
+};
+
 function actorOrFallback(name: string | undefined, locale: Locale): string {
   const esc = escapeTgHtml(name?.trim() ?? '');
   return esc || t('api_user_fallback', locale);
@@ -203,7 +228,7 @@ function wishNoun(count: number, locale: Locale): string {
 export function renderEventMessage(
   rows: RenderRow[],
   ctx: { locale: Locale; circleId: string; circleName: string },
-): { text: string; target: RenderTarget } | null {
+): { text: string; target: RenderTarget; pushType: PushTypeLabel } | null {
   if (rows.length === 0) return null;
   const { locale, circleId } = ctx;
   const circleName = escapeTgHtml(ctx.circleName ?? '');
@@ -212,22 +237,24 @@ export function renderEventMessage(
     const r = rows[0]!;
     const p = r.payload;
     const name = actorOrFallback(p.actorName, locale);
+    const pushType = TYPE_TO_LABEL[r.type];
     const member: RenderTarget = { kind: 'member', circleId, memberId: p.memberId ?? '' };
     const circle: RenderTarget = { kind: 'circle', circleId };
     switch (r.type) {
       case 'EVENT_UPCOMING_7D':
-        return { text: t('cnotif_event_7d', locale, { name }), target: member };
+        return { text: t('cnotif_event_7d', locale, { name }), target: member, pushType };
       case 'EVENT_UPCOMING_3D':
-        return { text: t('cnotif_event_3d', locale, { name }), target: member };
+        return { text: t('cnotif_event_3d', locale, { name }), target: member, pushType };
       case 'NEW_WISH':
-        return { text: t('cnotif_new_wish', locale, { name, title: escapeTgHtml(p.itemTitle ?? '') }), target: member };
+        return { text: t('cnotif_new_wish', locale, { name, title: escapeTgHtml(p.itemTitle ?? '') }), target: member, pushType };
       case 'RESERVATION_CHANGED':
         return {
           text: t(p.changeKind === 'removed' ? 'cnotif_reservation_removed' : 'cnotif_reservation_edited', locale, { name }),
           target: circle,
+          pushType,
         };
       case 'CIRCLE_JOINED':
-        return { text: t('circle_join_notif', locale, { name, circle: circleName }), target: circle };
+        return { text: t('circle_join_notif', locale, { name, circle: circleName }), target: circle, pushType };
     }
   }
 
@@ -241,6 +268,7 @@ export function renderEventMessage(
     return {
       text: t('cnotif_new_wishes_many', locale, { name, count, noun: wishNoun(count, locale) }),
       target: { kind: 'member', circleId, memberId: p.memberId ?? '' },
+      pushType: 'new_wish',
     };
   }
 
@@ -282,6 +310,7 @@ export function renderEventMessage(
   return {
     text: `${t('cnotif_group_header', locale, { circle: circleName })}\n${body}`,
     target: { kind: 'circle', circleId },
+    pushType: 'grouped',
   };
 }
 
@@ -533,6 +562,14 @@ export type FlushDeps = {
   logger: Logger;
   sendTgBotMessage: (chatId: string, text: string, replyMarkup?: Record<string, unknown>) => Promise<boolean>;
   now?: Date;
+  /** Emit the per-delivered-message `push.sent` product event. Injected (not a
+   *  direct import) so the flush stays a pure pipeline over its deps and the
+   *  integration test can spy on it; the scheduler wires it to
+   *  `trackProductEvent({ event: 'push.sent', ... })`. Fired ONLY on a confirmed
+   *  delivery, exactly once per message (a grouped digest = one call). Optional
+   *  so callers that don't care about analytics (and the kill-switch no-op
+   *  path) need not provide it. */
+  trackPushSent?: (e: { pushType: PushTypeLabel; grouped: boolean; recipientId: string }) => void;
 };
 
 async function markStatus(ids: string[], status: 'SENT' | 'SUPPRESSED', delivered: boolean, sentAt: Date | null): Promise<void> {
@@ -645,10 +682,15 @@ async function flushOneGroup(deps: FlushDeps, groupKey: string, now: Date): Prom
     return { sent: 0, suppressed: drop.length + keep.length, deferred: 0 };
   }
 
+  // `pushType` is baked into the deep-link (`__p_`) so the recipient's open can
+  // be attributed back to this exact push type (push.opened CTR); `grouped`
+  // tags whether this one message bundled multiple outbox rows.
+  const pushType = render.pushType;
+  const grouped = keep.length > 1;
   const url =
     render.target.kind === 'member'
-      ? buildCircleMemberDeepLink(render.target.circleId, render.target.memberId)
-      : buildCircleDetailDeepLink(render.target.circleId);
+      ? buildCircleMemberDeepLink(render.target.circleId, render.target.memberId, pushType)
+      : buildCircleDetailDeepLink(render.target.circleId, pushType);
   const buttonText = render.target.kind === 'member' ? t('cnotif_btn_open_list', locale) : t('notif_open_circle_btn', locale);
 
   const delivered = await deps.sendTgBotMessage(recipient.telegramChatId, render.text, {
@@ -656,6 +698,10 @@ async function flushOneGroup(deps: FlushDeps, groupKey: string, now: Date): Prom
   });
   if (delivered) {
     await markStatus(keepIds, 'SENT', true, now);
+    // Type-tagged delivery signal for AnalyticsEvent (the outbox table records
+    // delivered=true, but not in the queryable product-event stream). One call
+    // per delivered message; recipientId becomes AnalyticsEvent.userId.
+    deps.trackPushSent?.({ pushType, grouped, recipientId: recipientUserId });
     return { sent: 1, suppressed: drop.length, deferred: 0 };
   }
   // Not delivered: `sendTgBotMessage` returns false for BOTH a transient outage

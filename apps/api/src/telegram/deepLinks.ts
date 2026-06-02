@@ -84,10 +84,20 @@ export function buildCircleShareLink(token: string): string {
 // the frontend opens the circle detail (`circd_`) or a member's lists (`circm_`)
 // directly — no invite preview. Symmetric with the parsers in
 // apps/web/app/miniapp/startParam.ts.
-export function buildCircleDetailDeepLink(circleId: string): string {
-  return `${getMiniAppUrl()}?startapp=circd_${encodeURIComponent(circleId)}`;
+//
+// Optional `pushType` payload (`__p_<type>`): a lightweight analytics tag the
+// flush appends so an open can be attributed to the push that drove it
+// (push.opened CTR-by-type). It is ALWAYS the trailing segment, so the parser
+// peels it off before reading the ids; omit it and the link is the bare
+// circd_/circm_ shape older cached messages already carry. `pushType` is a
+// fixed lowercase label set (see PushTypeLabel in services/event-notifications.ts),
+// so encodeURIComponent is a no-op here but keeps the encode/decode symmetric.
+export function buildCircleDetailDeepLink(circleId: string, pushType?: string): string {
+  const suffix = pushType ? `__p_${encodeURIComponent(pushType)}` : '';
+  return `${getMiniAppUrl()}?startapp=circd_${encodeURIComponent(circleId)}${suffix}`;
 }
 
-export function buildCircleMemberDeepLink(circleId: string, memberId: string): string {
-  return `${getMiniAppUrl()}?startapp=circm_${encodeURIComponent(circleId)}__u_${encodeURIComponent(memberId)}`;
+export function buildCircleMemberDeepLink(circleId: string, memberId: string, pushType?: string): string {
+  const suffix = pushType ? `__p_${encodeURIComponent(pushType)}` : '';
+  return `${getMiniAppUrl()}?startapp=circm_${encodeURIComponent(circleId)}__u_${encodeURIComponent(memberId)}${suffix}`;
 }
