@@ -57,6 +57,7 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { zodError } from '../lib/http';
 import { getRequestLocale } from '../lib/locale';
 import { profileToLanguageSettings } from '../services/locale';
+import { enqueueReservationChangedForItem } from '../services/event-notifications';
 import { makePlanLimitReached, makeProRequired, sendPaywall } from '../services/paywall';
 import { sendTgNotification } from '../telegram/botApi';
 import { escapeTgHtml } from '../telegram/html';
@@ -677,6 +678,10 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
           data: { status: 'ARCHIVED', archivedAt: new Date() },
           // No purgeAfter — archived items are recoverable indefinitely
         });
+        // P0.3: warn circle gifters who reserved these items (surprise-preserving).
+        for (const archivedId of toArchive) {
+          void enqueueReservationChangedForItem({ itemId: archivedId, changeKind: 'removed' }).catch(() => {});
+        }
       }
 
       for (const id of toArchive) results.push({ itemId: id, ok: true });
@@ -917,6 +922,8 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
           'item_updated',
           { itemTitle: updated.title, wishlistTitle: item.wishlist.title },
         );
+        // P0.3: warn circle gifters who reserved this item that it changed.
+        void enqueueReservationChangedForItem({ itemId: id, changeKind: 'edited' }).catch(() => {});
       }
 
       // After update, if description changed and item was reserved — notify reserver
@@ -981,6 +988,11 @@ export function registerItemsRouter(deps: ItemsRouterDeps): Router {
 
       // Cancel active hints when item is deleted
       void cancelItemHints(id);
+
+      // P0.3: warn circle gifters who reserved this item that it was removed.
+      // CircleReservation rows survive the soft-delete (status only), so the
+      // reserver lookup inside the enqueuer still resolves them.
+      void enqueueReservationChangedForItem({ itemId: id, changeKind: 'removed' }).catch(() => {});
 
       // Onboarding: track demo item deletion for analytics
       if (item.isDemo && item.originVariantKey) {

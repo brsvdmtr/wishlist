@@ -78,6 +78,7 @@ import { PLACEMENT_ORDER_BY } from '../placements/orderBy';
 import { ITEM_ORDER_BY } from '../sort';
 import { recordForeignWishlistAccess, checkForeignWishlistLiveAccess } from '../services/foreign-wishlist-access';
 import { trackProductEvent } from '../services/analytics';
+import { enqueueNewWishFromItem } from '../services/event-notifications';
 import { evaluateGuestConversion } from '../services/wishlists';
 import { HIDDEN_FROM_INVENTORY_SKUS } from '../services/entitlement';
 import { resolveGroupGiftUnlockPrice } from '../services/group-gift-pricing';
@@ -2107,6 +2108,8 @@ export function registerWishlistsRouter(deps: WishlistsRouterDeps): Router {
       // Fire-and-forget; never blocks the response.
       if (wishlist.type === 'REGULAR') {
         void runReferralProgressHook(user.id, 'first_item');
+        // P0.3: notify circle co-members who can see this list (fire-and-forget).
+        void enqueueNewWishFromItem({ itemId: item.id, wishlistId, actorUserId: user.id }).catch(() => {});
       }
 
       // First Share Prompt: is this the user's first real item in a REGULAR wishlist?

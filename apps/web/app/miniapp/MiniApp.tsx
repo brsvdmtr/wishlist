@@ -88,7 +88,7 @@ import {
   SECURITY_TOAST_CODES,
   CLIENT_BUG_CODES,
 } from './idempotency';
-import { parseReservationReminderPayload, parseEventReminderPayload, parseSurveyInvitePayload, parseItemOpenPayload, parseSantaPreseasonPayload, parseCircleInvitePayload, looksLikeId } from './startParam';
+import { parseReservationReminderPayload, parseEventReminderPayload, parseSurveyInvitePayload, parseItemOpenPayload, parseSantaPreseasonPayload, parseCircleInvitePayload, parseCircleDetailPayload, parseCircleMemberPayload, looksLikeId } from './startParam';
 // Tiny constant — the full RELEASE_NOTES array stays in the lazy ChangelogScreen
 // chunk; only the latest id is referenced from the main chunk (changelog "new!"
 // badge in settings). HAND-SYNC on release: see release-notes-latest.ts.
@@ -224,6 +224,13 @@ const GiftNotesRoot = dynamic(
 // live outside the cluster.
 const SettingsRoot = dynamic(
   withChunkRetry(() => import('./screens/settings/SettingsRoot').then(m => ({ default: m.SettingsRoot }))),
+  { ssr: false, loading: () => <Skeleton variant="settings" /> },
+);
+
+// P0.3 «Событийные пуши» — circle event-push settings (FREE). Cold path:
+// Settings → "Уведомления о близких" or a circd_/circm_ deep link.
+const CircleNotificationsScreen = dynamic(
+  withChunkRetry(() => import('./screens/settings/CircleNotificationsScreen').then(m => ({ default: m.CircleNotificationsScreen }))),
   { ssr: false, loading: () => <Skeleton variant="settings" /> },
 );
 
@@ -1131,6 +1138,7 @@ export type GodStats = {
 export type Screen = 'loading' | 'error' | 'maintenance' | 'feed' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'changelog' | 'legal' | 'legal-doc' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-manual' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall' | 'gift-notes-onboarding' | 'search'
 | 'first-share-prompt'
 | 'circles'
+| 'circle-notifications'
 | 'group-gift-paywall' | 'group-gift-create' | 'group-gift-detail' | 'group-gift-join' | 'group-gift-chat'
 | 'curated-view'
 | 'link-management'
@@ -3747,7 +3755,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [screen, setScreen] = useState<Screen>('loading');
   // Circles (Близкие) deep-link entry — set from a circ_ startParam, consumed
   // by CirclesRoot to open the join preview; cleared on normal nav entry.
-  const [circlesInitial, setCirclesInitial] = useState<{ view: 'join'; token: string } | { view: 'member'; circleId: string; memberId: string } | null>(null);
+  const [circlesInitial, setCirclesInitial] = useState<
+    | { view: 'join'; token: string }
+    | { view: 'detail'; circleId: string }
+    | { view: 'member'; circleId: string; memberId: string }
+    | null
+  >(null);
   // «Близкие» nav discovery badge — a "NEW" tag shown until the user first
   // opens the tab. Persisted in localStorage; cleared on any entry to circles
   // (nav tap or invite deep-link).
@@ -7448,6 +7461,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       setLinkMgmtDetailItem(null);
       setLinkMgmtConfirmRevoke(false);
       setScreen('settings');
+    } else if (screen === 'circle-notifications') {
+      // P0.3 settings sub-screen → back to Settings.
+      setScreen('settings');
     } else if (screen === 'public-profile') {
       setPublicProfileData(null);
       setPublicProfileUsername(null);
@@ -8543,6 +8559,31 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           })
           .catch(handleErr);
         loadWishlists().catch(() => { /* non-critical for guest flow */ });
+      } else if (startParam && startParam.startsWith('circm_')) {
+        // P0.3 event push → open a member's lists inside a circle the user
+        // already belongs to. Eager-load own wishlists so a back-out / error
+        // lands on real data, not an empty home (2026-06-02 bugfix lesson).
+        loadWishlists().catch(() => {});
+        const parsed = parseCircleMemberPayload(startParam);
+        if (parsed.kind === 'ok') {
+          setCirclesInitial({ view: 'member', circleId: parsed.circleId, memberId: parsed.memberId });
+          bootSetScreen('circles');
+          trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
+        } else {
+          bootSetScreen('my-wishlists');
+        }
+      } else if (startParam && startParam.startsWith('circd_')) {
+        // P0.3 event push → open a circle's detail (grouped / reservation /
+        // join pushes). Same own-data preload as above.
+        loadWishlists().catch(() => {});
+        const parsed = parseCircleDetailPayload(startParam);
+        if (parsed.kind === 'ok') {
+          setCirclesInitial({ view: 'detail', circleId: parsed.circleId });
+          bootSetScreen('circles');
+          trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
+        } else {
+          bootSetScreen('my-wishlists');
+        }
       } else if (startParam && startParam.startsWith('circ_')) {
         // Circle invite deep link (P0.1 «Близкие»). Token is a url-safe
         // base64url string (not a cuid) — validate shape, then open the
@@ -21909,6 +21950,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         />
       )}
 
+      {screen === 'circle-notifications' && (
+        <CircleNotificationsScreen
+          tgFetch={tgFetch}
+          locale={locale}
+          onBack={() => setScreen('settings')}
+          pushToast={pushToast}
+        />
+      )}
+
       {/* ── ONBOARDING SOFT CTA BANNER (shown when drafts have user content) ── */}
       {showOnboardingSoftCta && screen === 'my-wishlists' && (
         <div style={{
@@ -22412,7 +22462,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           activeNav = 'circles';
         } else if (screen === 'my-reservations' || (screen === 'my-wishlists' && homeTab === 'reservations')) {
           activeNav = 'reservations';
-        } else if (screen === 'profile' || screen === 'settings' || screen === 'public-profile' || screen === 'showcase-editor' || screen === 'showcase-preview') {
+        } else if (screen === 'profile' || screen === 'settings' || screen === 'circle-notifications' || screen === 'public-profile' || screen === 'showcase-editor' || screen === 'showcase-preview') {
           activeNav = 'me';
         } else {
           activeNav = 'lists';

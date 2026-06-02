@@ -198,13 +198,15 @@ export function SettingsRow({
 export interface SettingsToggleProps {
   icon?: ReactNode;
   label: ReactNode;
+  /** Optional subtitle under the label (mirrors `SettingsRow`'s `hint`). */
+  hint?: ReactNode;
   value: boolean;
   onChange: (next: boolean) => void;
   disabled?: boolean;
   proBadge?: ReactNode;
 }
 
-export function SettingsToggle({ icon, label, value, onChange, disabled, proBadge }: SettingsToggleProps) {
+export function SettingsToggle({ icon, label, hint, value, onChange, disabled, proBadge }: SettingsToggleProps) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', gap: 14 }}>
       {icon && (
@@ -221,17 +223,29 @@ export function SettingsToggle({ icon, label, value, onChange, disabled, proBadg
           {icon}
         </div>
       )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
-        <span style={{
-          fontSize: fontSize.lg,
-          fontWeight: fontWeight.semibold,
-          color: disabled ? `var(--wb-text-muted, ${colors.textMuted})` : `var(--wb-text, ${colors.text})`,
-          lineHeight: 1.3,
-          letterSpacing: '-0.012em',
-        }}>
-          {label}
-        </span>
-        {proBadge}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{
+            fontSize: fontSize.lg,
+            fontWeight: fontWeight.semibold,
+            color: disabled ? `var(--wb-text-muted, ${colors.textMuted})` : `var(--wb-text, ${colors.text})`,
+            lineHeight: 1.3,
+            letterSpacing: '-0.012em',
+          }}>
+            {label}
+          </span>
+          {proBadge}
+        </div>
+        {hint && (
+          <div style={{
+            fontSize: 12.5,
+            color: `var(--wb-text-secondary, ${colors.textSecondary})`,
+            marginTop: 2,
+            letterSpacing: '-0.003em',
+          }}>
+            {hint}
+          </div>
+        )}
       </div>
       <button
         type="button"

@@ -426,12 +426,14 @@ export interface CircleListEntry {
   memberCount: number;
   members: Array<{ name: string; avatarUrl: string | null }>;
   nextEvent: { name: string; daysUntil: number } | null;
+  /** P0.3: this member silenced the circle's event pushes. */
+  muted: boolean;
 }
 
 export async function listMyCircles(userId: string): Promise<CircleListEntry[]> {
   const memberships = await prisma.circleMembership.findMany({
     where: { userId, status: 'ACTIVE' },
-    select: { role: true, circle: { select: { id: true, name: true, type: true, emoji: true } } },
+    select: { role: true, mutedAt: true, circle: { select: { id: true, name: true, type: true, emoji: true } } },
   });
   if (memberships.length === 0) return [];
 
@@ -474,6 +476,7 @@ export async function listMyCircles(userId: string): Promise<CircleListEntry[]> 
       memberCount: members.length,
       members: members.slice(0, 5).map((m) => ({ name: memberDisplayName(m.user), avatarUrl: m.user.profile?.avatarUrl ?? null })),
       nextEvent,
+      muted: ms.mutedAt != null,
     };
   });
 
@@ -773,5 +776,20 @@ export async function unreserveInCircle(params: { circleId: string; viewerId: st
   await requireActiveMember(params.circleId, params.viewerId);
   await prisma.circleReservation.deleteMany({
     where: { itemId: params.itemId, reserverUserId: params.viewerId },
+  });
+}
+
+// ── Per-circle mute (P0.3 «Событийные пуши») ──────────────────────────────────
+
+/**
+ * Mute / unmute this circle's event pushes for the caller. Stored on the
+ * caller's own membership (`mutedAt`), so it only ever silences their own
+ * notifications — never anyone else's. Idempotent.
+ */
+export async function setCircleMute(params: { circleId: string; userId: string; muted: boolean }): Promise<void> {
+  await requireActiveMember(params.circleId, params.userId);
+  await prisma.circleMembership.update({
+    where: { circleId_userId: { circleId: params.circleId, userId: params.userId } },
+    data: { mutedAt: params.muted ? new Date() : null },
   });
 }

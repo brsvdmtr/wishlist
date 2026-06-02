@@ -8,17 +8,11 @@
 
 import { Router, type Response } from 'express';
 
-import { prisma } from '@wishlist/db';
-import { t, resolveLocaleWithSource } from '@wishlist/shared';
-
 import { asyncHandler } from '../lib/asyncHandler';
-import { sendTgBotMessage } from '../telegram/botApi';
-import { escapeTgHtml } from '../telegram/html';
 import { buildCircleShareLink } from '../telegram/deepLinks';
-import { buildOpenCircleKeyboard } from '../notifications/openCircleKeyboard';
-import { profileToLanguageSettings } from '../services/locale';
 import { sendPaywall, makePlanLimitReached } from '../services/paywall';
 import { trackEvent } from '../services/analytics';
+import { enqueueCircleJoined } from '../services/event-notifications';
 import * as circles from '../services/circles.service';
 import { CircleError } from '../services/circles.service';
 
@@ -130,24 +124,18 @@ export function registerCirclesRouter(deps: CirclesRouterDeps): Router {
 
         if (result.isNew && user.id !== result.circle.ownerId) {
           trackEvent('circle.joined', user.id, { circleId: result.circle.id, role: 'MEMBER', via: 'deeplink' });
-          // Notify the owner (explicit relationship — allowed). Recipient is the
-          // owner, so resolve THEIR locale from their persisted profile.
-          const owner = await prisma.user.findUnique({
-            where: { id: result.circle.ownerId },
-            select: {
-              telegramChatId: true,
-              profile: { select: { languageMode: true, manualLanguage: true, normalizedLocale: true, language: true } },
-            },
-          });
-          if (owner?.telegramChatId) {
-            const { locale: notifLocale } = resolveLocaleWithSource(profileToLanguageSettings(owner.profile));
-            const joinerName = escapeTgHtml(req.tgUser?.first_name?.trim() || t('api_user_fallback', notifLocale));
-            void sendTgBotMessage(
-              owner.telegramChatId,
-              t('circle_join_notif', notifLocale, { name: joinerName, circle: escapeTgHtml(result.circle.name) }),
-              buildOpenCircleKeyboard(token, notifLocale),
-            ).catch(() => {});
-          }
+          // P0.3: route the owner's join notification through the event-pushes
+          // outbox so it respects the owner's opt-out / quiet hours / grouping.
+          // The name is captured raw here; the recipient's locale is resolved at
+          // flush time. Fire-and-forget — never blocks the join response.
+          const joinerName = req.tgUser?.first_name?.trim() || '';
+          void enqueueCircleJoined({
+            circleId: result.circle.id,
+            recipientUserId: result.circle.ownerId,
+            actorUserId: user.id,
+            actorName: joinerName,
+            circleName: result.circle.name,
+          }).catch(() => {});
         }
 
         res.json({ circle: result.circle, isNew: result.isNew, alreadyMember: result.alreadyMember });
@@ -275,6 +263,22 @@ export function registerCirclesRouter(deps: CirclesRouterDeps): Router {
         const itemId = requireParam(req.params.itemId);
         await circles.unreserveInCircle({ circleId, viewerId: user.id, itemId });
         res.json({ ok: true });
+      }),
+    ),
+  );
+
+  // PUT /tg/circles/:id/mute — mute/unmute this circle's event pushes (P0.3).
+  // Stored on the caller's own membership; never affects other members.
+  router.put(
+    '/circles/:id/mute',
+    asyncHandler(async (req, res) =>
+      runCircle(res, async () => {
+        const user = await getOrCreateTgUser(req.tgUser!);
+        const circleId = requireParam(req.params.id);
+        const muted = (req.body ?? {}).muted === true;
+        await circles.setCircleMute({ circleId, userId: user.id, muted });
+        trackEvent('circle.mute_changed', user.id, { circleId, muted });
+        res.json({ ok: true, muted });
       }),
     ),
   );

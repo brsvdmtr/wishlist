@@ -263,6 +263,9 @@ model User {
   // Circles (Близкие) — private groups of close people (P0.1)
   ownedCircles             Circle[]               @relation("CirclesOwned")
   circleMemberships        CircleMembership[]      @relation("CircleMemberships")
+
+  // Event pushes (P0.3) — outbox rows destined for this user as recipient.
+  eventNotifications       EventNotification[]     @relation("EventNotificationsRecipient")
 }
 
 model Wishlist {
@@ -565,6 +568,20 @@ model UserProfile {
   birthdayPrimaryWishlistId      String?
   birthdayCustomMessage          String?   @db.VarChar(200)
   birthdayOptInPromptSeenAt      DateTime?
+
+  // Settings — Circle event pushes (P0.3 «Событийные пуши»).
+  // FREE for everyone — a retention driver, NOT Pro-gated like the notify*
+  // flags above. Opt-out model: all default ON. Quiet hours default 22:00–09:00
+  // in notifyTimezone (IANA tz; null → Europe/Moscow fallback). The flush
+  // pipeline lives in services/event-notifications.ts.
+  notifyCircleEvents             Boolean   @default(true)  // birthdays 7d/3d
+  notifyCircleNewWishes          Boolean   @default(true)
+  notifyCircleReservationChanges Boolean   @default(true)
+  notifyCircleJoins              Boolean   @default(true)
+  quietHoursEnabled              Boolean   @default(true)
+  quietHoursStart                String    @default("22:00") // "HH:mm" local
+  quietHoursEnd                  String    @default("09:00") // "HH:mm" local
+  notifyTimezone                 String?                     // IANA tz, e.g. "Europe/Moscow"
 
   // Settings — Privacy
   profileVisibility ProfileVisibility @default(ALL)
@@ -2559,6 +2576,8 @@ model CircleMembership {
   status   CircleMemberStatus @default(ACTIVE)
   joinedAt DateTime           @default(now())
   leftAt   DateTime?
+  // P0.3: member silenced this circle's event pushes (null = receiving).
+  mutedAt  DateTime?
 
   circle Circle @relation(fields: [circleId], references: [id], onDelete: Cascade)
   user   User   @relation("CircleMemberships", fields: [userId], references: [id], onDelete: Cascade)
@@ -2622,4 +2641,58 @@ model CircleReservation {
   @@unique([itemId, reserverUserId])
   @@index([circleId])
   @@index([itemId])
+}
+
+// ── P0.3 «Событийные пуши» — event-driven bot notifications ───────────────────
+// Outbox/queue for circle event notifications. One row = one domain event
+// destined for one recipient. The flush scheduler groups PENDING rows per
+// (recipient × circle), applies per-type opt-out + circle mute + quiet hours +
+// daily cap, renders ONE Telegram message with a deep-link, and marks the rows
+// SENT (or SUPPRESSED when filtered out). `dedupeKey` makes enqueue idempotent:
+// re-enqueuing the same logical event for the same recipient is a no-op (the
+// P2002 unique violation is swallowed by the enqueuer). Pipeline lives in
+// services/event-notifications.ts; flushed by schedulers/event-notifications.ts.
+enum EventNotificationType {
+  EVENT_UPCOMING_7D
+  EVENT_UPCOMING_3D
+  NEW_WISH
+  RESERVATION_CHANGED
+  CIRCLE_JOINED
+}
+
+model EventNotification {
+  id              String                @id @default(cuid())
+  recipientUserId String
+  circleId        String?
+  type            EventNotificationType
+  // Idempotency key: "<type>:<entity>:<recipient>[:<period>]". Unique.
+  dedupeKey       String                @unique
+  // Render inputs captured at enqueue time (actorName, itemTitle?, memberId?,
+  // daysUntil?, circleName?, changeKind?). JSON so the renderer stays pure.
+  payload         Json
+  // Grouping bucket = "<recipientUserId>:<circleId>". All PENDING rows in a
+  // bucket flush together into a single message.
+  groupKey        String
+  // Earliest flush time = createdAt + per-type grouping window. Deferral
+  // (quiet hours / daily cap) pushes this forward; the row stays PENDING.
+  groupUntil      DateTime
+  // PENDING → SENDING (claimed by a flush tick, atomic) → SENT | SUPPRESSED.
+  // SENDING is a crash-recovery marker: orphaned rows are reclaimed to PENDING
+  // at the next flush start (the scheduler runs flush single-threaded).
+  status          String                @default("PENDING")
+  delivered       Boolean               @default(false)
+  // Transient send failures (Telegram blip) bump this and re-defer; only a
+  // confirmed delivery or `attempts >= MAX` burns the row.
+  attempts        Int                   @default(0)
+  sentAt          DateTime?
+  createdAt       DateTime              @default(now())
+
+  recipient User @relation("EventNotificationsRecipient", fields: [recipientUserId], references: [id], onDelete: Cascade)
+
+  // Flush scan: PENDING rows whose window has elapsed.
+  @@index([status, groupUntil])
+  // Load all PENDING rows for one grouping bucket.
+  @@index([groupKey, status])
+  // Daily-cap count: SENT rows for a recipient within the tz day.
+  @@index([recipientUserId, status, sentAt])
 }

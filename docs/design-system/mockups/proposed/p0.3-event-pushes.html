@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>P0.3 — Событийные пуши · DRAFT для согласования</title>
+<style>
+  /* ============================================================
+     WishBoard design tokens (v2.1, mirrored from
+     packages/ui-tokens/src/*.ts — verbatim values)
+     ============================================================ */
+  :root, .wb {
+    --wb-bg: #0F0F12;
+    --wb-bg-elev: #15151A;
+    --wb-surface: rgba(255,255,255,0.035);
+    --wb-card: rgba(255,255,255,0.045);
+    --wb-card-strong: rgba(255,255,255,0.07);
+    --wb-nav-bg: rgba(15,15,18,0.72);
+    --wb-border: rgba(255,255,255,0.06);
+    --wb-border-strong: rgba(255,255,255,0.12);
+    --wb-hairline: rgba(255,255,255,0.05);
+    --wb-accent: #8B7BFF;
+    --wb-accent-strong: #B4A6FF;
+    --wb-accent-deep: #5B48E5;
+    --wb-accent-r: 139; --wb-accent-g: 123; --wb-accent-b: 255;
+    --wb-accent-soft: rgba(139,123,255,0.14);
+    --wb-accent-soft-strong: rgba(139,123,255,0.30);
+    --wb-accent-shadow: rgba(139,123,255,0.45);
+    --wb-accent-shadow-soft: rgba(139,123,255,0.25);
+    --wb-success: #4ADE80; --wb-success-soft: rgba(74,222,128,0.14);
+    --wb-warning: #FBBF24; --wb-warning-soft: rgba(251,191,36,0.14);
+    --wb-danger: #FB7185;  --wb-danger-soft: rgba(251,113,133,0.14);
+    --wb-text: #FFFFFF;
+    --wb-text-secondary: #C7CAD1;
+    --wb-text-muted: #8F94A3;
+    --wb-font: -apple-system, BlinkMacSystemFont, 'SF Pro Display','Inter','Segoe UI', sans-serif;
+    /* Telegram "Night" chat palette (faithful, for the push bubbles) */
+    --tg-bg: #0E1621;
+    --tg-bubble: #182533;
+    --tg-text: #FFFFFF;
+    --tg-sub: #6D8197;
+    --tg-link: #6AB3F3;
+    --tg-btn: rgba(255,255,255,0.06);
+    --tg-btn-text: #7CB7F0;
+    --tg-service: rgba(24,38,51,0.85);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: #08080B;
+    background-image: radial-gradient(ellipse 1100px 720px at 50% -8%, rgba(139,123,255,0.13), transparent 60%);
+    color: #F4F4F6;
+    font-family: var(--wb-font);
+    padding: 44px 24px 140px;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.45;
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; }
+  a { color: var(--wb-accent-strong); }
+
+  /* ---- header ---- */
+  .kicker {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase;
+    color: var(--wb-accent-strong);
+    background: var(--wb-accent-soft); border: 1px solid var(--wb-accent-soft-strong);
+    padding: 6px 12px; border-radius: 999px; margin-bottom: 20px;
+  }
+  h1.title {
+    font-size: 40px; font-weight: 800; letter-spacing: -0.025em; margin: 0 0 12px;
+    background: linear-gradient(120deg, #fff 30%, var(--wb-accent-strong));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .lead { font-size: 17px; color: var(--wb-text-secondary); max-width: 760px; margin: 0 0 22px; }
+  .principles { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
+  .pchip {
+    font-size: 13px; font-weight: 550; color: var(--wb-text-secondary);
+    background: var(--wb-card); border: 1px solid var(--wb-border);
+    padding: 8px 14px; border-radius: 999px;
+  }
+
+  /* ---- section scaffold ---- */
+  section.block { margin-top: 64px; }
+  .sec-num {
+    font-size: 12px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;
+    color: var(--wb-accent); margin-bottom: 8px;
+  }
+  h2.sec-title { font-size: 26px; font-weight: 750; letter-spacing: -0.02em; margin: 0 0 8px; }
+  .sec-sub { font-size: 15px; color: var(--wb-text-muted); max-width: 720px; margin: 0 0 28px; }
+
+  /* ---- CJM flow ---- */
+  .flow { display: flex; align-items: stretch; gap: 6px; flex-wrap: wrap; }
+  .flow-step {
+    flex: 1; min-width: 150px;
+    background: var(--wb-card); border: 1px solid var(--wb-border); border-radius: 18px;
+    padding: 18px 16px; text-align: center;
+  }
+  .flow-ic {
+    width: 44px; height: 44px; border-radius: 13px; margin: 0 auto 12px;
+    background: linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft));
+    display: flex; align-items: center; justify-content: center; font-size: 21px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07);
+  }
+  .flow-t { font-size: 14px; font-weight: 650; margin-bottom: 5px; }
+  .flow-d { font-size: 11.5px; color: var(--wb-text-muted); font-family: ui-monospace, 'SF Mono', Menlo, monospace; }
+  .flow-arrow { align-self: center; color: var(--wb-accent); font-size: 22px; font-weight: 700; }
+
+  /* ---- scenario cards ---- */
+  .scenario {
+    display: grid; grid-template-columns: 372px 1fr; gap: 26px; align-items: start;
+    background: rgba(255,255,255,0.022); border: 1px solid var(--wb-border);
+    border-radius: 24px; padding: 24px; margin-bottom: 18px;
+  }
+  .scenario.future { opacity: 0.62; }
+
+  /* Telegram mini-chat strip */
+  .tg {
+    background: var(--tg-bg);
+    background-image:
+      radial-gradient(circle at 18% 12%, rgba(110,150,200,0.05), transparent 40%),
+      radial-gradient(circle at 82% 88%, rgba(139,123,255,0.05), transparent 42%);
+    border-radius: 18px; padding: 16px 14px 18px;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  .tg-row { display: flex; gap: 8px; align-items: flex-end; }
+  .tg-av {
+    width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+    background: linear-gradient(135deg, #8B7BFF, #5B48E5);
+    display: flex; align-items: center; justify-content: center; font-size: 15px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  }
+  .tg-stack { display: flex; flex-direction: column; gap: 5px; max-width: 300px; }
+  .tg-bubble {
+    background: var(--tg-bubble); color: var(--tg-text);
+    border-radius: 7px 16px 16px 16px; padding: 9px 12px 8px;
+    font-size: 14.5px; line-height: 1.42; box-shadow: 0 1px 1px rgba(0,0,0,0.18);
+    position: relative; word-wrap: break-word;
+  }
+  .tg-bubble b { font-weight: 600; }
+  .tg-bubble .muted { color: var(--tg-sub); }
+  .tg-time { font-size: 11px; color: var(--tg-sub); float: right; margin: 5px -2px -2px 10px; }
+  .tg-li { display: flex; gap: 7px; margin-top: 2px; }
+  .tg-li::before { content: "•"; color: var(--tg-link); }
+  .tg-btn {
+    background: var(--tg-btn); color: var(--tg-btn-text);
+    border-radius: 10px; padding: 10px; text-align: center;
+    font-size: 13.5px; font-weight: 550; margin-top: 2px; letter-spacing: 0.1px;
+    border: 1px solid rgba(124,183,240,0.12);
+  }
+  .tg-service {
+    align-self: center; font-size: 11.5px; color: #aebfce;
+    background: var(--tg-service); padding: 4px 11px; border-radius: 999px; margin: 4px auto;
+  }
+  .tg-caption { font-size: 11px; color: var(--wb-text-muted); margin-top: 12px; text-align: center; }
+
+  /* annotation panel */
+  .sc-tag {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.4px;
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    color: var(--wb-accent-strong); background: var(--wb-accent-soft);
+    border: 1px solid var(--wb-accent-soft-strong); padding: 4px 10px; border-radius: 8px; margin-bottom: 12px;
+  }
+  .sc-tag.ship { color: var(--wb-success); background: var(--wb-success-soft); border-color: rgba(74,222,128,0.3); }
+  .sc-tag.soon { color: var(--wb-warning); background: var(--wb-warning-soft); border-color: rgba(251,191,36,0.3); }
+  .scenario h3 { font-size: 19px; font-weight: 700; margin: 0 0 10px; }
+  .sc-when { font-size: 14px; color: var(--wb-text-secondary); margin-bottom: 14px; }
+  .sc-when b { color: var(--wb-text); }
+  .sc-meta { list-style: none; padding: 0; margin: 0; display: grid; gap: 9px; }
+  .sc-meta li { font-size: 13px; color: var(--wb-text-secondary); display: flex; gap: 9px; align-items: baseline; }
+  .sc-meta .k { color: var(--wb-text-muted); flex-shrink: 0; min-width: 96px; }
+  .sc-meta code {
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12px;
+    color: var(--wb-accent-strong); background: rgba(139,123,255,0.10); padding: 1px 6px; border-radius: 6px;
+  }
+
+  /* ---- phones row ---- */
+  .phones { display: flex; gap: 48px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
+  .phone-wrap { text-align: center; }
+  .phone {
+    width: 338px; border-radius: 46px; background: #000; padding: 10px;
+    box-shadow: 0 50px 100px -24px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.06), 0 0 0 9px #111114, 0 0 0 10px #000;
+  }
+  .screen { border-radius: 37px; overflow: hidden; height: 712px; position: relative; background: var(--wb-bg); }
+  .phone-label { margin-top: 20px; font-size: 13px; font-weight: 600; color: var(--wb-text-secondary); }
+  .phone-sub { font-size: 12px; color: var(--wb-text-muted); margin-top: 3px; }
+
+  .statusbar {
+    height: 44px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 22px; font-size: 14px; font-weight: 600; color: #fff; position: relative; z-index: 3;
+  }
+
+  /* Telegram phone */
+  .tgp { background: var(--tg-bg); height: 100%; display: flex; flex-direction: column; }
+  .tgp .statusbar { color: #fff; }
+  .tgp-hdr {
+    display: flex; align-items: center; gap: 11px; padding: 8px 14px;
+    background: #17212B; border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .tgp-hdr .back { color: var(--tg-link); font-size: 24px; line-height: 1; }
+  .tgp-hdr .av { width: 38px; height: 38px; border-radius: 50%;
+    background: linear-gradient(135deg, #8B7BFF, #5B48E5); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .tgp-hdr .nm { font-size: 15px; font-weight: 600; color: #fff; }
+  .tgp-hdr .st { font-size: 12px; color: var(--tg-sub); }
+  .tgp-chat {
+    flex: 1; overflow: hidden; padding: 14px 12px; display: flex; flex-direction: column; gap: 8px;
+    background-image:
+      radial-gradient(circle at 15% 10%, rgba(110,150,200,0.06), transparent 38%),
+      radial-gradient(circle at 85% 92%, rgba(139,123,255,0.06), transparent 40%);
+  }
+  .tgp-input {
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    background: #17212B; color: var(--tg-sub); font-size: 14px;
+  }
+  .tgp-input .box { flex: 1; background: #242F3D; border-radius: 18px; padding: 9px 14px; color: var(--tg-sub); }
+
+  /* WishBoard settings phone */
+  .wbp { background: var(--wb-bg); height: 100%; position: relative; overflow: hidden; }
+  .wbp::before {
+    content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse 80% 55% at 12% 0%, rgba(139,123,255,0.22), transparent 55%),
+      radial-gradient(ellipse 60% 45% at 100% 16%, rgba(255,120,180,0.10), transparent 55%),
+      radial-gradient(ellipse 100% 65% at 50% 108%, rgba(139,123,255,0.10), transparent 65%);
+  }
+  .wbp-hdr {
+    position: relative; z-index: 2; display: flex; align-items: center; gap: 12px;
+    padding: 4px 18px 12px; font-size: 17px; font-weight: 700; color: #fff;
+  }
+  .wbp-hdr .back { font-size: 20px; color: var(--wb-text-secondary); }
+  .wbp-scroll { position: relative; z-index: 2; padding: 6px 18px 30px; height: calc(100% - 44px - 44px); overflow: hidden; }
+
+  .set-title {
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.7px; text-transform: uppercase;
+    color: var(--wb-text-muted); padding: 2px 4px 9px; margin-top: 20px;
+  }
+  .set-title:first-child { margin-top: 4px; }
+  .set-sec {
+    background: var(--wb-card); border: 1px solid var(--wb-border); border-radius: 20px;
+    padding: 2px 16px; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  }
+  .set-sec.free { border-color: rgba(74,222,128,0.18); }
+  .set-row { display: flex; align-items: center; gap: 13px; padding: 12px 0; }
+  .set-row + .set-row { border-top: 1px solid var(--wb-hairline); }
+  .set-ic {
+    width: 36px; height: 36px; border-radius: 11px; flex-shrink: 0; font-size: 17px;
+    background: linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft));
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07);
+  }
+  .set-tx { flex: 1; min-width: 0; }
+  .set-label { font-size: 14.5px; font-weight: 600; color: var(--wb-text); }
+  .set-hint { font-size: 11.5px; color: var(--wb-text-muted); margin-top: 2px; }
+  .free-pill {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.4px; color: var(--wb-success);
+    background: var(--wb-success-soft); border: 1px solid rgba(74,222,128,0.3);
+    padding: 2px 7px; border-radius: 6px; margin-left: 8px; vertical-align: middle;
+  }
+
+  /* toggle */
+  .tgl { width: 46px; height: 28px; border-radius: 100px; flex-shrink: 0; position: relative;
+    background: rgba(255,255,255,0.10); border: 1px solid var(--wb-border); transition: all .2s; }
+  .tgl .knob { width: 22px; height: 22px; border-radius: 50%; background: #fff; position: absolute;
+    top: 2px; left: 2px; transition: left .22s; box-shadow: 0 1px 3px rgba(0,0,0,0.35); }
+  .tgl.on { background: linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep));
+    border-color: transparent; box-shadow: 0 2px 10px var(--wb-accent-shadow-soft); }
+  .tgl.on .knob { left: 22px; }
+
+  /* quiet-hours time pills */
+  .qh { display: flex; align-items: center; gap: 10px; padding: 11px 0 13px 49px; }
+  .qh .pill {
+    font-size: 15px; font-weight: 650; color: var(--wb-text);
+    background: var(--wb-card-strong); border: 1px solid var(--wb-border-strong);
+    padding: 7px 14px; border-radius: 12px;
+  }
+  .qh .dash { color: var(--wb-text-muted); font-size: 13px; }
+  .tz-val { font-size: 13px; color: var(--wb-accent-strong); }
+  .chev { color: var(--wb-text-muted); font-size: 16px; }
+
+  .set-foot {
+    font-size: 11.5px; color: var(--wb-text-muted); padding: 10px 4px 0; line-height: 1.5;
+  }
+
+  /* ---- anti-spam grid ---- */
+  .guards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .guard {
+    background: var(--wb-card); border: 1px solid var(--wb-border); border-radius: 20px; padding: 20px;
+  }
+  .guard .gic { font-size: 26px; margin-bottom: 12px; }
+  .guard h4 { font-size: 15px; font-weight: 700; margin: 0 0 7px; }
+  .guard p { font-size: 12.5px; color: var(--wb-text-muted); margin: 0; line-height: 1.5; }
+  .guard code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px;
+    color: var(--wb-accent-strong); background: rgba(139,123,255,0.10); padding: 1px 5px; border-radius: 5px; }
+
+  /* quiet-hours timeline */
+  .timeline {
+    margin-top: 22px; background: var(--wb-card); border: 1px solid var(--wb-border);
+    border-radius: 20px; padding: 24px 26px;
+  }
+  .tl-track { position: relative; height: 4px; background: rgba(255,255,255,0.08); border-radius: 4px; margin: 38px 10px 30px; }
+  .tl-quiet { position: absolute; top: 0; height: 4px; border-radius: 4px;
+    background: linear-gradient(90deg, var(--wb-accent-deep), var(--wb-accent)); opacity: 0.55; }
+  .tl-pt { position: absolute; top: 50%; transform: translate(-50%,-50%); text-align: center; }
+  .tl-dot { width: 14px; height: 14px; border-radius: 50%; margin: 0 auto; border: 2px solid var(--wb-bg); }
+  .tl-lbl { position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 11px; }
+  .tl-lbl.top { bottom: 20px; } .tl-lbl.bot { top: 20px; }
+
+  /* ---- decisions ---- */
+  .decisions { display: grid; gap: 12px; }
+  .decision {
+    display: flex; gap: 16px; align-items: flex-start;
+    background: var(--wb-card); border: 1px solid var(--wb-border); border-radius: 16px; padding: 18px 20px;
+  }
+  .decision .dn {
+    width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0; font-size: 14px; font-weight: 700;
+    background: var(--wb-accent-soft); color: var(--wb-accent-strong);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .decision .dt { font-size: 14.5px; }
+  .decision .dt b { color: var(--wb-text); }
+  .decision .dt .rec { color: var(--wb-success); font-weight: 650; }
+  .decision .dq { color: var(--wb-text-secondary); }
+
+  .note {
+    margin-top: 14px; font-size: 13px; color: var(--wb-text-muted);
+    border-left: 2px solid var(--wb-accent-soft-strong); padding: 4px 0 4px 14px;
+  }
+
+  @media (max-width: 820px) {
+    .scenario { grid-template-columns: 1fr; }
+    .guards { grid-template-columns: 1fr 1fr; }
+    .flow-arrow { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ============ HERO ============ -->
+  <header>
+    <div class="kicker">● WishBoard · Roadmap P0.3 · DRAFT — жду «ок» перед реализацией</div>
+    <h1 class="title">Событийные пуши</h1>
+    <p class="lead">
+      Точечный сигнал о событиях графа «Близкие» с deep-link сразу в нужный экран.
+      Не дайджест — релевантный триггер «событие → правило → отправка» со строгим анти-спамом.
+      Бесплатный и уникальный для Telegram драйвер возврата.
+    </p>
+    <div class="principles">
+      <span class="pchip">🎯 Точечно, не дайджест</span>
+      <span class="pchip">♻️ Дедупликация</span>
+      <span class="pchip">⏱️ Тротлинг (cap/сутки)</span>
+      <span class="pchip">🧺 Группировка в окне</span>
+      <span class="pchip">🌙 Тихие часы по таймзоне</span>
+      <span class="pchip">🔕 Opt-out по типам + мьют круга</span>
+    </div>
+  </header>
+
+  <!-- ============ 1. CJM FLOW ============ -->
+  <section class="block">
+    <div class="sec-num">01 — Как это работает</div>
+    <h2 class="sec-title">Путь сигнала: событие → правило → пуш → действие</h2>
+    <p class="sec-sub">
+      Каждое доменное событие проходит через слой правил (релевантность + анти-флуд) перед отправкой.
+      Если получатель отписан от типа, в тихих часах или круг замьючен — пуш не уходит или откладывается.
+    </p>
+    <div class="flow">
+      <div class="flow-step"><div class="flow-ic">➕</div><div class="flow-t">Близкий добавил желание</div><div class="flow-d">wishlist.item.created</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><div class="flow-ic">📥</div><div class="flow-t">Событие в очередь</div><div class="flow-d">domain event bus</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><div class="flow-ic">🛡️</div><div class="flow-t">Правило: релевантность + анти-флуд</div><div class="flow-d">дедуп · тротлинг · тихие часы · мьют</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><div class="flow-ic">📲</div><div class="flow-t">Пуш с deep-link</div><div class="flow-d">«У сестры новое желание 🎁»</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><div class="flow-ic">👆</div><div class="flow-t">Тап → её список</div><div class="flow-d">действие: бронь</div></div>
+    </div>
+  </section>
+
+  <!-- ============ 2. PUSH CATALOG ============ -->
+  <section class="block">
+    <div class="sec-num">02 — Каталог пушей</div>
+    <h2 class="sec-title">Как выглядит каждый пуш и когда он отрабатывает</h2>
+    <p class="sec-sub">
+      Слева — реальный вид сообщения в чате бота (тёмная тема Telegram, с deep-link кнопкой).
+      Справа — событие-триггер, сценарий, назначение ссылки и анти-спам-механика.
+    </p>
+
+    <!-- A. event 7d -->
+    <div class="scenario">
+      <div class="tg">
+        <div class="tg-row">
+          <div class="tg-av">🎁</div>
+          <div class="tg-stack">
+            <div class="tg-bubble">
+              🎂 <b>День рождения Ани</b> — через 7 дней<br/>
+              <span class="muted">Загляни в её список, пока есть время выбрать подарок.</span>
+              <span class="tg-time">10:02</span>
+            </div>
+            <div class="tg-btn">🎁 Открыть список Ани</div>
+          </div>
+        </div>
+        <div class="tg-caption">пуш за 7 дней до даты</div>
+      </div>
+      <div class="sc-info">
+        <span class="sc-tag">A · event.upcoming · lead 7d</span>
+        <h3>Приближение события — за неделю</h3>
+        <div class="sc-when"><b>Когда:</b> у участника круга «Семья» день рождения через 7 дней (из <code>UserProfile.birthday</code> / занесённого события).</div>
+        <ul class="sc-meta">
+          <li><span class="k">🔗 Ведёт в</span> список желаний Ани внутри круга</li>
+          <li><span class="k">♻️ Дедуп-ключ</span> <code>evt:7d:{occasionId}:{recipientId}</code></li>
+          <li><span class="k">⏱️ Анти-флуд</span> 1 пуш на участника на событие; уважает тихие часы</li>
+          <li><span class="k">🔕 Тумблер</span> «События близких»</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- B. event 3d -->
+    <div class="scenario">
+      <div class="tg">
+        <div class="tg-row">
+          <div class="tg-av">🎁</div>
+          <div class="tg-stack">
+            <div class="tg-bubble">
+              🎂 <b>День рождения Ани</b> — уже через 3 дня!<br/>
+              <span class="muted">Самое время определиться с подарком.</span>
+              <span class="tg-time">10:01</span>
+            </div>
+            <div class="tg-btn">🎁 Выбрать подарок</div>
+          </div>
+        </div>
+        <div class="tg-caption">пуш за 3 дня — более срочный тон</div>
+      </div>
+      <div class="sc-info">
+        <span class="sc-tag">B · event.upcoming · lead 3d</span>
+        <h3>Приближение события — за 3 дня</h3>
+        <div class="sc-when"><b>Когда:</b> то же событие, второй порог. Отдельный дедуп-ключ, поэтому 7d и 3d приходят по одному, без дублей.</div>
+        <ul class="sc-meta">
+          <li><span class="k">🔗 Ведёт в</span> список желаний Ани</li>
+          <li><span class="k">♻️ Дедуп-ключ</span> <code>evt:3d:{occasionId}:{recipientId}</code></li>
+          <li><span class="k">⏱️ Анти-флуд</span> не шлётся, если бронь уже сделана этим дарителем</li>
+          <li><span class="k">🔕 Тумблер</span> «События близких»</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- C. new wish (single + grouped) -->
+    <div class="scenario">
+      <div class="tg">
+        <div class="tg-row">
+          <div class="tg-av">🎁</div>
+          <div class="tg-stack">
+            <div class="tg-bubble">
+              🎁 <b>У Ани новое желание</b><br/>
+              «Наушники Sony WH-1000XM5»
+              <span class="tg-time">18:30</span>
+            </div>
+            <div class="tg-btn">👀 Посмотреть</div>
+          </div>
+        </div>
+        <div class="tg-service">а если несколько за час — группируется ↓</div>
+        <div class="tg-row">
+          <div class="tg-av">🎁</div>
+          <div class="tg-stack">
+            <div class="tg-bubble">
+              🎁 <b>У Ани 3 новых желания</b><br/>
+              <span class="muted">в списке «Хочу на ДР»</span>
+              <span class="tg-time">19:30</span>
+            </div>
+            <div class="tg-btn">👀 Открыть список</div>
+          </div>
+        </div>
+      </div>
+      <div class="sc-info">
+        <span class="sc-tag">C · wishlist.item.created</span>
+        <h3>Новое желание у близкого</h3>
+        <div class="sc-when"><b>Когда:</b> участник круга добавляет желание в список, расшаренный на круг. Идёт всем активным участникам (кроме автора).</div>
+        <ul class="sc-meta">
+          <li><span class="k">🔗 Ведёт в</span> карточку желания / список</li>
+          <li><span class="k">🧺 Группировка</span> ≥2 желаний за 60 мин → одно сообщение «N новых желаний»</li>
+          <li><span class="k">⏱️ Тротлинг</span> учитывается в дневном cap; глушится мьютом круга</li>
+          <li><span class="k">🔕 Тумблер</span> «Новые желания»</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- D. reservation changed -->
+    <div class="scenario">
+      <div class="tg">
+        <div class="tg-row">
+          <div class="tg-av">🎁</div>
+          <div class="tg-stack">
+            <div class="tg-bubble">
+              📦 <b>Бронь обновилась</b><br/>
+              <span class="muted">Желание, которое ты выбрал для Ани, изменили. Проверь, не устарело ли.</span>
+              <span class="tg-time">14:12</span>
+            </div>
+            <div class="tg-btn">🔍 Проверить бронь</div>
+          </div>
+        </div>
+        <div class="tg-service">или если желание сняли ↓</div>
+        <div class="tg-row">
+          <div class="tg-av">🎁</div>
+          <div class="tg-stack">
+            <div class="tg-bubble">
+              📦 <b>Желание сняли</b><br/>
+              <span class="muted">То, что ты забронировал для Ани, удалили из списка.</span>
+              <span class="tg-time">14:12</span>
+            </div>
+            <div class="tg-btn">👥 Открыть круг</div>
+          </div>
+        </div>
+      </div>
+      <div class="sc-info">
+        <span class="sc-tag">D · reservation.changed</span>
+        <h3>Изменение брони</h3>
+        <div class="sc-when"><b>Когда:</b> владелец редактирует / архивирует / удаляет желание, которое <b>ты</b> забронировал в круге. <b>Только дарителю</b> — владелец ничего не узнаёт (сюрприз сохраняется через <code>CircleReservation</code>).</div>
+        <ul class="sc-meta">
+          <li><span class="k">🔗 Ведёт в</span> карточку брони / круг</li>
+          <li><span class="k">👤 Получатель</span> только <code>reserverUserId</code>, не владелец</li>
+          <li><span class="k">✅ Отношение</span> явное (ты сам забронировал) — допустимый триггер</li>
+          <li><span class="k">🔕 Тумблер</span> «Изменения броней»</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- E. circle joined (ships) -->
+    <div class="scenario">
+      <div class="tg">
+        <div class="tg-row">
+          <div class="tg-av">🎁</div>
+          <div class="tg-stack">
+            <div class="tg-bubble">
+              🎉 <b>Аня</b> вступила в твою группу «Семья»
+              <span class="tg-time">12:40</span>
+            </div>
+            <div class="tg-btn">👥 Открыть группу</div>
+          </div>
+        </div>
+        <div class="tg-caption">уже в проде — переносим под общий контроль типов</div>
+      </div>
+      <div class="sc-info">
+        <span class="sc-tag ship">E · circle.member.joined · УЖЕ В ПРОДЕ (P0.1)</span>
+        <h3>Вступление в круг</h3>
+        <div class="sc-when"><b>Когда:</b> кто-то присоединился к твоему кругу по инвайту. Уже отправляется (<code>circle_join_notif</code> + <code>buildOpenCircleKeyboard</code>). P0.3 заводит её под единый opt-out/тихие часы/группировку.</div>
+        <ul class="sc-meta">
+          <li><span class="k">🔗 Ведёт в</span> экран круга (deep-link <code>circ_{token}</code>)</li>
+          <li><span class="k">♻️ Дедуп</span> по членству (идемпотентный join)</li>
+          <li><span class="k">🔕 Тумблер</span> «Вступления в круг»</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- F. grouping -->
+    <div class="scenario">
+      <div class="tg">
+        <div class="tg-row">
+          <div class="tg-av">🎁</div>
+          <div class="tg-stack">
+            <div class="tg-bubble">
+              🔔 <b>Обновления в «Семья»</b><br/>
+              <span class="tg-li">У Ани 2 новых желания</span>
+              <span class="tg-li">День рождения Пети через 7 дней</span>
+              <span class="tg-time">20:00</span>
+            </div>
+            <div class="tg-btn">👥 Открыть «Семья»</div>
+          </div>
+        </div>
+        <div class="tg-caption">разнотипные события одного круга в окне → один пуш</div>
+      </div>
+      <div class="sc-info">
+        <span class="sc-tag">F · grouping (несколько событий)</span>
+        <h3>Группировка в коротком окне</h3>
+        <div class="sc-when"><b>Когда:</b> на одного получателя в окне (≈60 мин) пришло ≥2 событий по одному кругу — собираем в одно сообщение со списком, вместо серии пушей.</div>
+        <ul class="sc-meta">
+          <li><span class="k">🔗 Ведёт в</span> экран круга</li>
+          <li><span class="k">🧺 Логика</span> буфер на (получатель × круг), флаш по таймеру окна</li>
+          <li><span class="k">🎯 Зачем</span> ключевая защита от бана/отписок при всплеске активности</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- G. price drop (future) -->
+    <div class="scenario future">
+      <div class="tg">
+        <div class="tg-row">
+          <div class="tg-av">🎁</div>
+          <div class="tg-stack">
+            <div class="tg-bubble">
+              📉 <b>Цена снизилась</b><br/>
+              «Наушники Sony» в списке Ани — дешевле на 20%
+              <span class="tg-time">09:15</span>
+            </div>
+            <div class="tg-btn">🛒 Посмотреть</div>
+          </div>
+        </div>
+        <div class="tg-caption">задел на будущее — не в этой итерации</div>
+      </div>
+      <div class="sc-info">
+        <span class="sc-tag soon">G · price.dropped · ПОЗЖЕ (P1.1)</span>
+        <h3>Цена упала</h3>
+        <div class="sc-when"><b>Когда:</b> отслеживаемая цена товара из списка близкого снизилась. Требует трекинга цен (P1.1) — закладываем тип в архитектуру, но не реализуем сейчас.</div>
+        <ul class="sc-meta">
+          <li><span class="k">🔗 Ведёт в</span> карточку товара</li>
+          <li><span class="k">🧩 Зависимость</span> модуль мониторинга цен (P1.1)</li>
+          <li><span class="k">🔕 Тумблер</span> отдельный «Снижение цены» (когда появится)</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3. PHONES ============ -->
+  <section class="block">
+    <div class="sec-num">03 — В контексте</div>
+    <h2 class="sec-title">Ритм в чате бота и экран управления</h2>
+    <p class="sec-sub">
+      Слева — как пуши ложатся в чат за несколько дней (≈1 релевантное сообщение в день, не спам).
+      Справа — экран настроек в Mini App: типы, тихие часы, мьют кругов.
+    </p>
+    <div class="phones">
+
+      <!-- Telegram chat phone -->
+      <div class="phone-wrap">
+        <div class="phone"><div class="screen tgp">
+          <div class="statusbar"><span>9:41</span><span>● ● ●&nbsp;&nbsp;5G&nbsp;&nbsp;▮</span></div>
+          <div class="tgp-hdr">
+            <span class="back">‹</span>
+            <div class="av">🎁</div>
+            <div><div class="nm">WishBoard</div><div class="st">bot</div></div>
+          </div>
+          <div class="tgp-chat">
+            <div class="tg-service">5 июня</div>
+            <div class="tg-row"><div class="tg-av">🎁</div><div class="tg-stack">
+              <div class="tg-bubble">🎉 <b>Аня</b> вступила в твою группу «Семья»<span class="tg-time">12:40</span></div>
+              <div class="tg-btn">👥 Открыть группу</div>
+            </div></div>
+
+            <div class="tg-service">8 июня</div>
+            <div class="tg-row"><div class="tg-av">🎁</div><div class="tg-stack">
+              <div class="tg-bubble">🎁 <b>У Ани 2 новых желания</b><br/><span class="muted">в списке «Хочу на ДР»</span><span class="tg-time">19:30</span></div>
+              <div class="tg-btn">👀 Открыть список</div>
+            </div></div>
+
+            <div class="tg-row"><div class="tg-av">🎁</div><div class="tg-stack">
+              <div class="tg-bubble">🎂 <b>День рождения Ани</b> — через 7 дней<span class="tg-time">10:02</span></div>
+              <div class="tg-btn">🎁 Открыть список Ани</div>
+            </div></div>
+
+            <div class="tg-service">12 июня · 09:00 — после тихих часов</div>
+            <div class="tg-row"><div class="tg-av">🎁</div><div class="tg-stack">
+              <div class="tg-bubble">🎂 <b>День рождения Ани</b> — уже через 3 дня!<span class="tg-time">09:00</span></div>
+              <div class="tg-btn">🎁 Выбрать подарок</div>
+            </div></div>
+          </div>
+          <div class="tgp-input"><span>😊</span><div class="box">Сообщение</div><span>🎤</span></div>
+        </div></div>
+        <div class="phone-label">Чат бота</div>
+        <div class="phone-sub">ритм за 7 дней — без флуда</div>
+      </div>
+
+      <!-- Settings phone -->
+      <div class="phone-wrap">
+        <div class="phone"><div class="screen wbp">
+          <div class="statusbar"><span>9:41</span><span>● ● ●&nbsp;&nbsp;5G&nbsp;&nbsp;▮</span></div>
+          <div class="wbp-hdr"><span class="back">‹</span><span>Уведомления о близких</span></div>
+          <div class="wbp-scroll">
+
+            <div class="set-title">Типы событий <span class="free-pill">БЕСПЛАТНО</span></div>
+            <div class="set-sec free">
+              <div class="set-row">
+                <div class="set-ic">🎂</div>
+                <div class="set-tx"><div class="set-label">События близких</div><div class="set-hint">За 7 и 3 дня до даты</div></div>
+                <div class="tgl on"><div class="knob"></div></div>
+              </div>
+              <div class="set-row">
+                <div class="set-ic">🎁</div>
+                <div class="set-tx"><div class="set-label">Новые желания</div><div class="set-hint">Когда близкий добавляет желание</div></div>
+                <div class="tgl on"><div class="knob"></div></div>
+              </div>
+              <div class="set-row">
+                <div class="set-ic">📦</div>
+                <div class="set-tx"><div class="set-label">Изменения броней</div><div class="set-hint">Если изменилось то, что ты выбрал</div></div>
+                <div class="tgl on"><div class="knob"></div></div>
+              </div>
+              <div class="set-row">
+                <div class="set-ic">👥</div>
+                <div class="set-tx"><div class="set-label">Вступления в круг</div><div class="set-hint">Новый участник в твоём круге</div></div>
+                <div class="tgl on"><div class="knob"></div></div>
+              </div>
+            </div>
+
+            <div class="set-title">Тихие часы</div>
+            <div class="set-sec">
+              <div class="set-row">
+                <div class="set-ic">🌙</div>
+                <div class="set-tx"><div class="set-label">Не беспокоить ночью</div><div class="set-hint">Не-срочные пуши откладываются</div></div>
+                <div class="tgl on"><div class="knob"></div></div>
+              </div>
+              <div class="qh">
+                <span class="pill">22:00</span><span class="dash">до</span><span class="pill">09:00</span>
+              </div>
+              <div class="set-row">
+                <div class="set-ic">🌍</div>
+                <div class="set-tx"><div class="set-label">Часовой пояс</div></div>
+                <span class="tz-val">Europe/Moscow · авто</span><span class="chev">›</span>
+              </div>
+            </div>
+
+            <div class="set-title">Уведомления по кругам</div>
+            <div class="set-sec">
+              <div class="set-row">
+                <div class="set-ic">👨‍👩‍👧</div>
+                <div class="set-tx"><div class="set-label">Семья</div><div class="set-hint">5 участников</div></div>
+                <div class="tgl on"><div class="knob"></div></div>
+              </div>
+              <div class="set-row">
+                <div class="set-ic">🧑‍🤝‍🧑</div>
+                <div class="set-tx"><div class="set-label">Друзья</div><div class="set-hint">Замьючен · без уведомлений</div></div>
+                <div class="tgl"><div class="knob"></div></div>
+              </div>
+            </div>
+
+            <div class="set-foot">События группируются: несколько за короткое время → одно сообщение. Дневной лимит защищает от флуда.</div>
+          </div>
+        </div></div>
+        <div class="phone-label">Mini App · Настройки</div>
+        <div class="phone-sub">типы · тихие часы · мьют круга</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ 4. ANTI-SPAM ============ -->
+  <section class="block">
+    <div class="sec-num">04 — Анти-спам</div>
+    <h2 class="sec-title">Четыре механики против отписок и банов</h2>
+    <p class="sec-sub">Неаккуратные пуши = отписки и баны бота. Поэтому каждый сигнал проходит через эти фильтры.</p>
+    <div class="guards">
+      <div class="guard">
+        <div class="gic">♻️</div>
+        <h4>Дедупликация</h4>
+        <p>Idempotency-ключ на <code>событие+получатель</code>. Один и тот же сигнал не придёт дважды — даже при повторной обработке очереди.</p>
+      </div>
+      <div class="guard">
+        <div class="gic">⏱️</div>
+        <h4>Тротлинг</h4>
+        <p>Cap N пушей/сутки на пользователя + backoff под лимиты Telegram (~1 msg/sec на чат, ~30/sec глобально). Батчинг при всплесках.</p>
+      </div>
+      <div class="guard">
+        <div class="gic">🧺</div>
+        <h4>Группировка</h4>
+        <p>Несколько событий на получателя в окне ≈60 мин → одно сообщение со списком. Буфер на <code>(получатель × круг)</code>.</p>
+      </div>
+      <div class="guard">
+        <div class="gic">🌙</div>
+        <h4>Тихие часы</h4>
+        <p>Не-критичные события откладываются до конца тихих часов по таймзоне пользователя. Плюс per-type opt-out и мьют круга.</p>
+      </div>
+    </div>
+
+    <div class="timeline">
+      <div style="font-size:14px;font-weight:650;margin-bottom:4px;">Тихие часы: пример отложенной доставки</div>
+      <div style="font-size:12.5px;color:var(--wb-text-muted);">Событие в 23:30 во время тихих часов (22:00–09:00) не будит — копится и уходит в 09:00.</div>
+      <div class="tl-track">
+        <div class="tl-quiet" style="left:0;width:31%"></div>
+        <div class="tl-quiet" style="left:92%;width:8%"></div>
+        <div class="tl-pt" style="left:0%"><div class="tl-lbl top" style="color:var(--wb-text-muted)">22:00</div><div class="tl-dot" style="background:var(--wb-accent-deep)"></div><div class="tl-lbl bot" style="color:var(--wb-text-muted)">начало тихих</div></div>
+        <div class="tl-pt" style="left:31%"><div class="tl-lbl top" style="color:var(--wb-warning)">23:30 · событие</div><div class="tl-dot" style="background:var(--wb-warning)"></div><div class="tl-lbl bot" style="color:var(--wb-text-muted)">✋ отложено</div></div>
+        <div class="tl-pt" style="left:92%"><div class="tl-lbl top" style="color:var(--wb-success)">09:00 · доставлено</div><div class="tl-dot" style="background:var(--wb-success)"></div><div class="tl-lbl bot" style="color:var(--wb-text-muted)">конец тихих</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. DECISIONS ============ -->
+  <section class="block">
+    <div class="sec-num">05 — Жду решения</div>
+    <h2 class="sec-title">Что согласовать перед «пилить»</h2>
+    <p class="sec-sub">Дефолты, которые я заложил в мокап. Подтверди или поправь — и начну реализацию.</p>
+    <div class="decisions">
+      <div class="decision"><div class="dn">1</div><div class="dt"><b>Бесплатность.</b> <span class="dq">Эти пуши — бесплатный драйвер возврата (в отличие от Pro-гейченных «комментарии/брони/подписки»).</span> <span class="rec">→ предлагаю: free для всех</span></div></div>
+      <div class="decision"><div class="dn">2</div><div class="dt"><b>Дефолт.</b> <span class="dq">Все 4 типа включены по умолчанию (opt-out, а не opt-in), как у Telegram-нативных ботов.</span> <span class="rec">→ предлагаю: все ВКЛ</span></div></div>
+      <div class="decision"><div class="dn">3</div><div class="dt"><b>Лимиты.</b> <span class="dq">Окно группировки 60 мин; дневной cap на пользователя.</span> <span class="rec">→ предлагаю: cap = 5/сутки</span></div></div>
+      <div class="decision"><div class="dn">4</div><div class="dt"><b>Тихие часы.</b> <span class="dq">Дефолт 22:00–09:00, таймзона — автоопределение (Telegram/последняя активность), с ручным выбором.</span> <span class="rec">→ предлагаю: 22:00–09:00 авто</span></div></div>
+      <div class="decision"><div class="dn">5</div><div class="dt"><b>Сюрприз.</b> <span class="dq">«Изменение брони» уходит только дарителю; владелец желания ничего не получает.</span> <span class="rec">→ предлагаю: только даритель</span></div></div>
+      <div class="decision"><div class="dn">6</div><div class="dt"><b>Объём первой итерации.</b> <span class="dq">Типы A–F сейчас; «Цена упала» (G) — позже с трекингом цен P1.1.</span> <span class="rec">→ предлагаю: A–F, G отложить</span></div></div>
+      <div class="decision"><div class="dn">7</div><div class="dt"><b>Deep-link.</b> <span class="dq">Переиспользуем навигацию кругов (<code>circ_</code>) + точечный экран участника/желания, без нового формата без нужды.</span> <span class="rec">→ предлагаю: расширить circle-навигацию</span></div></div>
+    </div>
+    <div class="note">
+      Архитектурно: новая таблица предпочтений (типы + тихие часы + tz), мьюты на <code>CircleMembership</code>, очередь доменных событий → правила-обработчики → <code>sendTgBotMessage</code> с deep-link.
+      Переиспользуем существующую инфраструктуру бота, дедуп-по-уникальному-индексу и дневные cap (как в birthday-reminders). Подробный технический план — после твоего «ок» по UI.
+    </div>
+  </section>
+
+</div>
+</body>
+</html>
