@@ -32,6 +32,46 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-06-02 — Home becomes the «лента близких» feed (P0.2)
+
+**Type:** approval
+
+**Decision.** The Mini App home screen changes from the static "my wishlists"
+list to a ranked **feed** of close-circle activity: upcoming member birthdays
+with a countdown, co-members' new/updated wishes, and the viewer's own
+reservation reminders. "My wishlists" relocates to a new 📋 **Списки** tab. The
+bottom nav goes 4 → 5 tabs (🏠 Главная · 📋 Списки · 👥 Близкие · 🎁 Брони · 👤 Я)
+— **Variant A**, the least-disruptive option (the just-shipped Близкие/Брони tabs
+stay; only Списки is added). Binding visual:
+[`mockups/approved/home-feed-p02.html`](mockups/approved/home-feed-p02.html).
+
+**Context / why.** The old home showed a static personal list — no reason to
+open it often. The feed makes every session start with a trigger to act (P0.2
+goals: more sessions/user/week, ≥50% "actionable" sessions, better D7/D30). The
+no-circles empty state bridges to P0.1 «Создай круг». Nav Variant A vs B chosen
+by the owner on 2026-06-02.
+
+**Feed cards = composition, NOT a new primitive.** The event / activity /
+reservation cards are a feature-level composition of canonical primitives (a
+glass card shell + `Chip` + `Button` + `UserAvatar`) inside
+`apps/web/app/miniapp/screens/feed/FeedRoot.tsx`, built entirely from
+`@wishlist/ui-tokens` (0 raw hex, verified). No `FeedCard` primitive is added to
+`@wishlist/ui` yet — if the shape proves reusable across surfaces it gets
+extracted (status `provisional`) in a follow-up, with its own registry row.
+
+**Supersedes.** Nothing. The legacy home (`my-wishlists` screen) is retained
+verbatim under the new Списки tab — same stat tiles, cards, FAB.
+
+**Impact.**
+- COMPONENT_REGISTRY: no rows change (no new primitive; cards compose existing).
+- `FloatingNav` (provisional) now renders 5 items — already supported (`flex:1`
+  per item, generic `ID extends string`). No primitive change.
+- New backend read endpoint `GET /tg/feed` (`services/feed.service.ts`) — no
+  state change, no new token, no security category (read-only).
+- Mockup promoted `proposed/home-feed-p02.html` → `approved/`.
+
+**Approved by.** Dmitry (direction + nav Variant A, 2026-06-02).
+
 ## 2026-06-01 — FloatingNav gains an optional `badge` slot (discovery tag)
 
 **Type:** primitive-change

@@ -28,8 +28,12 @@ export type TgFetchFn = (url: string, init?: TgFetchInit) => Promise<Response>;
 export interface CirclesRootProps {
   tgFetch: TgFetchFn;
   locale: Locale;
-  /** Deep-link entry: when present, open the join preview for this token. */
-  initial?: { view: 'join'; token: string } | null;
+  /**
+   * Deep-link entry. `join` opens the invite preview for a token; `member`
+   * jumps straight to a circle member's shared wishlists (the P0.2 feed CTA
+   * target — "Выбрать подарок" / "Посмотреть" / "Детали").
+   */
+  initial?: { view: 'join'; token: string } | { view: 'member'; circleId: string; memberId: string } | null;
   /** Leave the Circles section (back from the list → host home tab). */
   onExit: () => void;
   /** Show the host paywall sheet (e.g. 'participant_limit'). */
@@ -101,7 +105,13 @@ type View =
   | { name: 'join'; token: string };
 
 export function CirclesRoot({ tgFetch, locale, initial, onExit, onUpsell, pushToast }: CirclesRootProps) {
-  const [view, setView] = useState<View>(initial ? { name: 'join', token: initial.token } : { name: 'list' });
+  const [view, setView] = useState<View>(
+    initial?.view === 'join'
+      ? { name: 'join', token: initial.token }
+      : initial?.view === 'member'
+        ? { name: 'member', circleId: initial.circleId, memberId: initial.memberId }
+        : { name: 'list' },
+  );
   // First-entry onboarding — a one-time 3-step intro. Skipped when arriving via
   // a join deep-link (JoinView is its own contextual intro for invitees).
   const [onboarding, setOnboarding] = useState<boolean>(() => {

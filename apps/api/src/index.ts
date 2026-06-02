@@ -81,6 +81,7 @@ import { registerSearchRouter } from './routes/search.routes';
 import { registerResearchSurveyRouter } from './routes/research-survey.routes';
 import { registerExperimentsRouter } from './routes/experiments.routes';
 import { registerCirclesRouter } from './routes/circles.routes';
+import { registerFeedRouter } from './routes/feed.routes';
 import { startCleanupSchedulers } from './schedulers/cleanup';
 import { startBillingSchedulers } from './schedulers/billing';
 import { startReferralSchedulers } from './schedulers/referral';
@@ -1607,6 +1608,15 @@ const circlesRouter = registerCirclesRouter({
   getOrCreateTgUser,
 });
 tgRouter.use(circlesRouter);
+
+// Home feed (Главная → лента близких) — P0.2. Read-only aggregate over the
+// viewer's circles (events + wish deltas + own circle reservations). No
+// state-changing route → no protectTgRoute entry (GET is auth-gated by the
+// global tgRouter middleware). Logic lives in services/feed.service.ts.
+const feedRouter = registerFeedRouter({
+  getOrCreateTgUser,
+});
+tgRouter.use(feedRouter);
 
 const telemetryRouter = registerTelemetryRouter();
 tgRouter.use(telemetryRouter);
