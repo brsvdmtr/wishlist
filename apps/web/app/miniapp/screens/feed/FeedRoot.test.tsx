@@ -6,7 +6,7 @@
 //     plus the «Мои брони» summary block.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { t } from '@wishlist/shared';
 import { FeedRoot } from './FeedRoot';
 import { hashKeyForLog } from '../../idempotency';
@@ -63,6 +63,8 @@ function tracked(onTrack: ReturnType<typeof vi.fn>, event: string): Array<Record
   return onTrack.mock.calls.filter((c) => c[0] === event).map((c) => (c[1] ?? {}) as Record<string, unknown>);
 }
 
+const personEvent = (id: string, name: string) => ({ ...eventItem, id: `event:c1:${id}`, memberUserId: id, person: { name, avatarUrl: null } });
+
 beforeEach(() => vi.clearAllMocks());
 
 describe('FeedRoot — empty state (no circles)', () => {
@@ -110,6 +112,31 @@ describe('FeedRoot — populated feed', () => {
     render(<FeedRoot {...baseProps(tgFetch)} />);
 
     await waitFor(() => expect(screen.getByText(t('feed_quiet_title', 'ru'))).toBeTruthy());
+  });
+
+  it('ignores a stale out-of-order response when the filter changes (reqSeq guard)', async () => {
+    const resolvers: Array<(r: Response) => void> = [];
+    const tgFetch = vi.fn(() => new Promise<Response>((resolve) => { resolvers.push(resolve); }));
+    render(<FeedRoot {...baseProps(tgFetch)} />);
+
+    // call 1 (initial, filter=null) — resolve so the filter chips render.
+    await waitFor(() => expect(resolvers).toHaveLength(1));
+    await act(async () => { resolvers[0]!(makeRes(feed({ items: [personEvent('anya', 'Аня')] }))); });
+    expect(screen.getByText('Аня')).toBeTruthy();
+
+    // Tap «Семья» → call 2, then «Все» → call 3 (the latest).
+    fireEvent.click(screen.getByText(/Семья/));
+    await waitFor(() => expect(resolvers).toHaveLength(2));
+    fireEvent.click(screen.getByText(t('feed_filter_all', 'ru')));
+    await waitFor(() => expect(resolvers).toHaveLength(3));
+
+    // Resolve the LATEST (call 3 = «Все», Аня) first…
+    await act(async () => { resolvers[2]!(makeRes(feed({ items: [personEvent('anya', 'Аня')] }))); });
+    expect(screen.getByText('Аня')).toBeTruthy();
+    // …then the STALE earlier (call 2 = «Семья», Боря) — must be ignored.
+    await act(async () => { resolvers[1]!(makeRes(feed({ items: [personEvent('boris', 'Боря')] }))); });
+    expect(screen.queryByText('Боря')).toBeNull();
+    expect(screen.getByText('Аня')).toBeTruthy();
   });
 });
 

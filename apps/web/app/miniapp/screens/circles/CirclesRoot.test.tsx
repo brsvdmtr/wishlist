@@ -390,3 +390,22 @@ describe('CirclesRoot › DetailView delete/leave confirmation (bug 1)', () => {
     await waitFor(() => expect(onLeft).toHaveBeenCalledTimes(1));
   });
 });
+
+// ── MemberView error state — no dead loader on a stale deep-link / 404 ─────────
+// A P0.2 feed CTA (and a P0.3 event push) can deep-link to a member who has
+// since left (404). The view must NOT hang on CenteredLoader forever — it
+// bounces back to the previous screen with a toast.
+
+describe('CirclesRoot › MemberView error state (stale deep-link / 404)', () => {
+  it('bounces back with a toast instead of hanging when the member load 404s', async () => {
+    const onBack = vi.fn();
+    const pushToast = vi.fn();
+    const tgFetch = vi.fn().mockResolvedValue(makeRes({}, { ok: false, status: 404 }));
+
+    render(<MemberView tgFetch={tgFetch} locale="ru" circleId="c1" memberId="m1" onBack={onBack} onConfigureShares={vi.fn()} pushToast={pushToast} />);
+
+    // 404 → bounce out (onBack) + an error toast — never an endless loader.
+    await waitFor(() => expect(onBack).toHaveBeenCalledTimes(1));
+    expect(pushToast).toHaveBeenCalledWith(t('circle_err_generic', 'ru'), 'error');
+  });
+});
