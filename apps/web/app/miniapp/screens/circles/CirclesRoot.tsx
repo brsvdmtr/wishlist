@@ -101,7 +101,7 @@ type View =
   | { name: 'create' }
   | { name: 'detail'; circleId: string }
   | { name: 'member'; circleId: string; memberId: string }
-  | { name: 'privacy'; circleId: string }
+  | { name: 'privacy'; circleId: string; returnToMemberId?: string }
   | { name: 'join'; token: string };
 
 export function CirclesRoot({ tgFetch, locale, initial, onExit, onUpsell, pushToast }: CirclesRootProps) {
@@ -145,11 +145,14 @@ export function CirclesRoot({ tgFetch, locale, initial, onExit, onUpsell, pushTo
       )}
       {view.name === 'member' && (
         <MemberView tgFetch={tgFetch} locale={locale} circleId={view.circleId} memberId={view.memberId} pushToast={pushToast}
-          onBack={() => setView({ name: 'detail', circleId: view.circleId })} />
+          onBack={() => setView({ name: 'detail', circleId: view.circleId })}
+          onConfigureShares={() => setView({ name: 'privacy', circleId: view.circleId, returnToMemberId: view.memberId })} />
       )}
       {view.name === 'privacy' && (
         <PrivacyView tgFetch={tgFetch} locale={locale} circleId={view.circleId} pushToast={pushToast}
-          onBack={() => setView({ name: 'detail', circleId: view.circleId })} />
+          onBack={() => setView(view.returnToMemberId
+            ? { name: 'member', circleId: view.circleId, memberId: view.returnToMemberId }
+            : { name: 'detail', circleId: view.circleId })} />
       )}
       {view.name === 'join' && (
         <JoinView tgFetch={tgFetch} locale={locale} token={view.token} pushToast={pushToast}
@@ -572,8 +575,8 @@ export function DetailView({ tgFetch, locale, circleId, onBack, onOpenMember, on
 // Exported (alongside JoinView) for the CirclesRoot regression tests — these
 // subviews sit several navigation levels deep, so the tests mount them in
 // isolation rather than clicking through the whole flow.
-export function MemberView({ tgFetch, locale, circleId, memberId, onBack, pushToast }: {
-  tgFetch: TgFetchFn; locale: Locale; circleId: string; memberId: string; onBack: () => void; pushToast: CirclesRootProps['pushToast'];
+export function MemberView({ tgFetch, locale, circleId, memberId, onBack, onConfigureShares, pushToast }: {
+  tgFetch: TgFetchFn; locale: Locale; circleId: string; memberId: string; onBack: () => void; onConfigureShares: () => void; pushToast: CirclesRootProps['pushToast'];
 }) {
   const [data, setData] = useState<MemberWishlists | null>(null);
   const [isSelf, setIsSelf] = useState(false);
@@ -698,7 +701,18 @@ export function MemberView({ tgFetch, locale, circleId, memberId, onBack, pushTo
         </Banner>
       )}
       {allItems.length === 0 && (
-        <div style={{ textAlign: 'center', color: c.textMuted, padding: `${sp[8]}px 0`, fontSize: fs.lg }}>{t('circle_member_empty', locale)}</div>
+        // Owner-self with nothing shared: don't dead-end on "empty" — surface a
+        // direct CTA to the share picker (otherwise it's buried in ⚙ → visibility).
+        ownerSelf ? (
+          <div style={{ textAlign: 'center', padding: `${sp[6]}px ${sp[2]}px` }}>
+            <div style={{ fontSize: 48, marginBottom: sp[3] }}>📝</div>
+            <div style={{ fontSize: fs.xl, fontWeight: fw.bold, color: c.text, marginBottom: sp[2] }}>{t('circle_self_empty_title', locale)}</div>
+            <div style={{ fontSize: fs.md, color: c.textSecondary, lineHeight: 1.5, marginBottom: sp[5] }}>{t('circle_self_empty_sub', locale)}</div>
+            <Button variant="primary" fullWidth onClick={onConfigureShares}>{t('circle_self_empty_cta', locale)}</Button>
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', color: c.textMuted, padding: `${sp[8]}px 0`, fontSize: fs.lg }}>{t('circle_member_empty', locale)}</div>
+        )
       )}
       {data.wishlists.map((wl) => (
         <div key={wl.id} style={{ marginBottom: sp[4] }}>
