@@ -369,7 +369,8 @@ function Label({ text }: { locale: Locale; text: string }) {
 
 // ── Detail (members) ──────────────────────────────────────────────────────────
 
-function DetailView({ tgFetch, locale, circleId, onBack, onOpenMember, onPrivacy, onUpsell, onLeft, pushToast }: {
+// Exported (alongside JoinView/MemberView) for the CirclesRoot regression tests.
+export function DetailView({ tgFetch, locale, circleId, onBack, onOpenMember, onPrivacy, onUpsell, onLeft, pushToast }: {
   tgFetch: TgFetchFn; locale: Locale; circleId: string; onBack: () => void;
   onOpenMember: (memberId: string) => void; onPrivacy: () => void; onUpsell: (ctx: string) => void; onLeft: () => void;
   pushToast: CirclesRootProps['pushToast'];
@@ -379,6 +380,10 @@ function DetailView({ tgFetch, locale, circleId, onBack, onOpenMember, onPrivacy
   const [invite, setInvite] = useState<{ link: string; memberCount: number; capacity: number } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<MemberView | null>(null);
+  // Destructive confirm for delete (owner) / leave (member). Both wipe access
+  // and are painful to undo, so they go through an explicit confirmation step
+  // rather than firing on the first menu tap.
+  const [confirmDestructive, setConfirmDestructive] = useState(false);
 
   const load = useCallback(async () => {
     const res = await tgFetch(`/tg/circles/${circleId}`);
@@ -517,9 +522,9 @@ function DetailView({ tgFetch, locale, circleId, onBack, onOpenMember, onPrivacy
         <div style={{ display: 'flex', flexDirection: 'column', gap: sp[2] }}>
           <Button variant="surface" fullWidth onClick={() => { setMenuOpen(false); onPrivacy(); }}>👁 {t('circle_manage_visibility', locale)}</Button>
           {isOwner ? (
-            <Button variant="surface" fullWidth onClick={() => { setMenuOpen(false); void remove(); }} style={{ color: c.danger }}>🗑 {t('circle_delete', locale)}</Button>
+            <Button variant="surface" fullWidth onClick={() => { setMenuOpen(false); setConfirmDestructive(true); }} style={{ color: c.danger }}>🗑 {t('circle_delete', locale)}</Button>
           ) : (
-            <Button variant="surface" fullWidth onClick={() => { setMenuOpen(false); void leave(); }} style={{ color: c.danger }}>{t('circle_leave', locale)}</Button>
+            <Button variant="surface" fullWidth onClick={() => { setMenuOpen(false); setConfirmDestructive(true); }} style={{ color: c.danger }}>{t('circle_leave', locale)}</Button>
           )}
           <Button variant="ghost" fullWidth onClick={() => setMenuOpen(false)}>{t('circle_done', locale)}</Button>
         </div>
@@ -535,6 +540,18 @@ function DetailView({ tgFetch, locale, circleId, onBack, onOpenMember, onPrivacy
           onClick={() => { const target = removeTarget; setRemoveTarget(null); if (target) void doRemove(target.userId); }}
         >{t('circle_remove_member', locale)}</Button>
         <Button variant="ghost" fullWidth onClick={() => setRemoveTarget(null)} style={{ marginTop: sp[1] }}>{t('circle_cancel', locale)}</Button>
+      </Sheet>
+
+      {/* Delete (owner) / leave (member) confirmation — destructive, needs an explicit yes */}
+      <Sheet open={confirmDestructive} onClose={() => setConfirmDestructive(false)} title={isOwner ? t('circle_delete', locale) : t('circle_leave', locale)}>
+        <div style={{ fontSize: fs.sm, color: c.textSecondary, textAlign: 'center', margin: `0 ${sp[3]}px ${sp[4]}px`, lineHeight: 1.5 }}>
+          {isOwner ? t('circle_delete_q', locale, { name: detail.name }) : t('circle_leave_q', locale, { name: detail.name })}
+        </div>
+        <Button
+          variant="surface" fullWidth style={{ color: c.danger }}
+          onClick={() => { setConfirmDestructive(false); if (isOwner) void remove(); else void leave(); }}
+        >{isOwner ? t('circle_delete', locale) : t('circle_leave', locale)}</Button>
+        <Button variant="ghost" fullWidth onClick={() => setConfirmDestructive(false)} style={{ marginTop: sp[1] }}>{t('circle_cancel', locale)}</Button>
       </Sheet>
     </>
   );
