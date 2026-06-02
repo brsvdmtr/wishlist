@@ -158,6 +158,19 @@ describe('helper functions — happy + edge cases', () => {
     expect(isClientTelemetryAllowedEvent('pro_cancel.confirmed')).toBe(true);
   });
 
+  // Pins the contract for the P0.2 home-feed funnel. The `feed.` domain is NOT
+  // in ANALYTICS_EVENT_PREFIXES (apps/api/src/routes/telemetry.routes.ts), so
+  // these reach AnalyticsEvent ONLY via isClientTelemetryAllowedEvent. If a
+  // future PR drops them from PRODUCT_EVENTS, /tg/telemetry silently stops
+  // persisting the entire feed funnel (CTR-by-type, %-actionable,
+  // time-to-first-action become unmeasurable) — this forces a visible failure.
+  it('feed.* funnel events are client-telemetry allowed (and never server-only)', () => {
+    for (const name of ['feed.viewed', 'feed.card_clicked', 'feed.filter_changed', 'feed.empty_cta_clicked']) {
+      expect(isClientTelemetryAllowedEvent(name)).toBe(true);
+      expect(isServerOnlyProductEvent(name)).toBe(false);
+    }
+  });
+
   it('isServerProductEvent: true if `server` is among sources (incl. multi-source)', () => {
     expect(isServerProductEvent('payment.completed')).toBe(true);
     expect(isServerProductEvent('paywall.viewed')).toBe(false);
@@ -209,6 +222,42 @@ describe('PRODUCT_EVENTS — fixture snapshot', () => {
           "pii": "userId-only",
           "sources": [
             "server",
+          ],
+        },
+        {
+          "action": "card_clicked",
+          "domain": "feed",
+          "name": "feed.card_clicked",
+          "pii": "none",
+          "sources": [
+            "client",
+          ],
+        },
+        {
+          "action": "empty_cta_clicked",
+          "domain": "feed",
+          "name": "feed.empty_cta_clicked",
+          "pii": "none",
+          "sources": [
+            "client",
+          ],
+        },
+        {
+          "action": "filter_changed",
+          "domain": "feed",
+          "name": "feed.filter_changed",
+          "pii": "hashed",
+          "sources": [
+            "client",
+          ],
+        },
+        {
+          "action": "viewed",
+          "domain": "feed",
+          "name": "feed.viewed",
+          "pii": "none",
+          "sources": [
+            "client",
           ],
         },
         {

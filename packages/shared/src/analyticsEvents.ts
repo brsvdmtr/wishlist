@@ -738,6 +738,52 @@ export const PRODUCT_EVENTS = [
     sources: ['bot'],
     pii: 'userId-only',
   },
+  // ── Home feed (P0.2 «Главная → лента близких») client UI funnel ──
+  // The feed is the default home for all users (no flag), so these fire at
+  // app-open volume. `feed.` is NOT in ANALYTICS_EVENT_PREFIXES, so they reach
+  // AnalyticsEvent ONLY via isClientTelemetryAllowedEvent (sources: ['client']).
+  // feed.viewed (impression, with per-kind card counts) + feed.card_clicked
+  // (CTA taps, with kind + position) together yield CTR-by-type, %-actionable
+  // sessions, and time-to-first-action — the P0.2 leading metrics. Readout SQL:
+  // docs/research/feed-metrics-sql.md. No item/person identifiers ever land in
+  // props; feed.filter_changed carries a djb2 fingerprint of the circleId, never
+  // the raw id (90-day, unencrypted AnalyticsEvent table).
+  {
+    name: 'feed.viewed',
+    domain: 'feed',
+    action: 'viewed',
+    description:
+      'Home feed finished loading and rendered for the viewer. UI impression emitted from the Mini App once per successful /tg/feed load (not per render — fired in the load success path). props: hasCircles, itemCount (ranked cards), eventCount, activityCount, reservationCount (per-kind breakdown of the ranked cards — these are the per-type CTR denominators), circleCount (filter chips shown), filtered (a circle chip was active for this load). Pairs with feed.card_clicked to derive CTR-by-type, %-actionable sessions, and time-to-first-action.',
+    sources: ['client'],
+    pii: 'none',
+  },
+  {
+    name: 'feed.card_clicked',
+    domain: 'feed',
+    action: 'card_clicked',
+    description:
+      'Viewer tapped the primary CTA of a ranked home-feed card. props: kind (event | activity | reservation), position (0-based index in the ranked list), and for event cards daysUntil + urgency (today | soon | upcoming). Numerator for per-type feed CTR (denominator = the matching *Count in feed.viewed). Carries no item / person / circle identifiers.',
+    sources: ['client'],
+    pii: 'none',
+  },
+  {
+    name: 'feed.filter_changed',
+    domain: 'feed',
+    action: 'filter_changed',
+    description:
+      'Viewer selected a circle filter chip on the home feed. Fires only on an actual change, never on a re-tap of the already-active chip. props.scope: "all" for the All chip, otherwise a djb2 fingerprint (hashKeyForLog) of the circleId — the raw circleId is never logged, so cross-circle filter distribution stays measurable without an identifier in AnalyticsEvent.',
+    sources: ['client'],
+    pii: 'hashed',
+  },
+  {
+    name: 'feed.empty_cta_clicked',
+    domain: 'feed',
+    action: 'empty_cta_clicked',
+    description:
+      'Viewer with no circles tapped the empty-state «Создать круг» CTA, bridging from the home feed into the P0.1 circle-creation flow. Intent signal for the empty → first-circle activation funnel.',
+    sources: ['client'],
+    pii: 'none',
+  },
 ] as const satisfies readonly ProductEventDescriptor[];
 
 export type ProductEventName = (typeof PRODUCT_EVENTS)[number]['name'];

@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { t } from '@wishlist/shared';
 import { FeedRoot } from './FeedRoot';
+import { hashKeyForLog } from '../../idempotency';
 
 function makeRes(body: unknown, init?: { ok?: boolean; status?: number }): Response {
   const ok = init?.ok ?? true;
@@ -34,6 +35,17 @@ const eventItem = {
   daysUntil: 3, urgency: 'soon', itemCount: 2, previewItems: [{ id: 'i1', title: 'Наушники', imageUrl: null }],
 };
 
+const activityItem = {
+  kind: 'activity', id: 'activity:c1:boris', circleId: 'c1', circleName: 'Семья', memberUserId: 'boris',
+  person: { name: 'Борис', avatarUrl: null }, addedCount: 2, updatedCount: 0, at: '2026-06-01T00:00:00.000Z',
+  itemCount: 2, previewItems: [{ id: 'i2', title: 'Книга', imageUrl: null }],
+};
+
+const reservationCard = {
+  kind: 'reservation', id: 'reservation:r1', circleId: 'c1', circleName: 'Семья', itemId: 'i3',
+  itemTitle: 'Часы', itemImageUrl: null, forUserId: 'vera', forName: 'Вера', daysUntilEvent: 10,
+};
+
 function baseProps(tgFetch: ReturnType<typeof vi.fn>) {
   return {
     tgFetch,
@@ -42,7 +54,13 @@ function baseProps(tgFetch: ReturnType<typeof vi.fn>) {
     onOpenReservations: vi.fn(),
     onCreateCircle: vi.fn(),
     pushToast: vi.fn(),
+    onTrack: vi.fn(),
   };
+}
+
+/** All onTrack calls for one event name → their props objects. */
+function tracked(onTrack: ReturnType<typeof vi.fn>, event: string): Array<Record<string, unknown>> {
+  return onTrack.mock.calls.filter((c) => c[0] === event).map((c) => (c[1] ?? {}) as Record<string, unknown>);
 }
 
 beforeEach(() => vi.clearAllMocks());
@@ -92,5 +110,76 @@ describe('FeedRoot — populated feed', () => {
     render(<FeedRoot {...baseProps(tgFetch)} />);
 
     await waitFor(() => expect(screen.getByText(t('feed_quiet_title', 'ru'))).toBeTruthy());
+  });
+});
+
+describe('FeedRoot — analytics (P0.2 instrumentation)', () => {
+  it('fires feed.viewed exactly once per load, with the per-kind ranked-card counts', async () => {
+    const tgFetch = vi.fn(async () => makeRes(feed({
+      items: [eventItem, activityItem, reservationCard],
+      reservations: { count: 1, names: ['Вера'] },
+    })));
+    const props = baseProps(tgFetch);
+    render(<FeedRoot {...props} />);
+
+    await waitFor(() => expect(tracked(props.onTrack, 'feed.viewed')).toHaveLength(1));
+    expect(tracked(props.onTrack, 'feed.viewed')[0]).toEqual({
+      hasCircles: true,
+      itemCount: 3,
+      eventCount: 1,
+      activityCount: 1,
+      reservationCount: 1,
+      circleCount: 1,
+      filtered: false,
+    });
+  });
+
+  it('fires feed.card_clicked with kind + position (and event-only daysUntil/urgency), then navigates', async () => {
+    const tgFetch = vi.fn(async () => makeRes(feed({ items: [eventItem, activityItem, reservationCard] })));
+    const props = baseProps(tgFetch);
+    render(<FeedRoot {...props} />);
+
+    await waitFor(() => expect(screen.getByText(/Выбрать подарок/)).toBeTruthy());
+    fireEvent.click(screen.getByText(/Выбрать подарок/));        // event card → position 0
+    fireEvent.click(screen.getByText(t('feed_cta_view', 'ru')));  // activity card → position 1
+    fireEvent.click(screen.getByText(t('feed_cta_details', 'ru'))); // reservation card → position 2
+
+    expect(tracked(props.onTrack, 'feed.card_clicked')).toEqual([
+      { kind: 'event', position: 0, daysUntil: 3, urgency: 'soon' },
+      { kind: 'activity', position: 1 },
+      { kind: 'reservation', position: 2 },
+    ]);
+    // The CTA still performs its navigation alongside the analytics call.
+    expect(props.onOpenMember).toHaveBeenCalledWith('c1', 'anya');
+    expect(props.onOpenMember).toHaveBeenCalledWith('c1', 'vera');
+  });
+
+  it('fires feed.filter_changed with a hashed scope (never the raw circleId) and skips re-taps of the active chip', async () => {
+    const tgFetch = vi.fn(async () => makeRes(feed({ items: [], reservations: { count: 0, names: [] } })));
+    const props = baseProps(tgFetch);
+    render(<FeedRoot {...props} />);
+
+    fireEvent.click(await screen.findByText('🏡 Семья'));          // null → c1 : fires (hashed)
+    fireEvent.click(screen.getByText('🏡 Семья'));                 // c1 → c1  : guarded, no fire
+    fireEvent.click(screen.getByText(t('feed_filter_all', 'ru'))); // c1 → null : fires ('all')
+
+    // The re-tap is guarded, so only the two real changes emit. waitFor also
+    // lets the filter-triggered reloads settle (avoids an act() warning).
+    await waitFor(() => expect(tracked(props.onTrack, 'feed.filter_changed'))
+      .toEqual([{ scope: hashKeyForLog('c1') }, { scope: 'all' }]));
+    // One reload (→ feed.viewed) per real change + the initial load; the
+    // guarded re-tap adds none.
+    await waitFor(() => expect(tracked(props.onTrack, 'feed.viewed')).toHaveLength(3));
+    expect(tracked(props.onTrack, 'feed.filter_changed')[0]!.scope).not.toBe('c1'); // raw id never logged
+  });
+
+  it('fires feed.empty_cta_clicked from the no-circles bridge CTA', async () => {
+    const tgFetch = vi.fn(async () => makeRes(feed({ hasCircles: false, circles: [] })));
+    const props = baseProps(tgFetch);
+    render(<FeedRoot {...props} />);
+
+    fireEvent.click(await screen.findByText(t('feed_empty_cta', 'ru')));
+    expect(tracked(props.onTrack, 'feed.empty_cta_clicked')).toHaveLength(1);
+    expect(props.onCreateCircle).toHaveBeenCalledTimes(1);
   });
 });
