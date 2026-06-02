@@ -5,6 +5,66 @@ New entries go at the top.
 
 ---
 
+## 2026-06-02 — P0.3 event-pushes: retention purge silently shrank to 7 days (would have erased the delivery record)
+
+Found while answering "can we verify it works in a week?" — the audit trail the
+question depends on was being deleted at ~day 7.
+
+### Ошибка
+
+`purgeOldEventNotifications` was meant to keep terminal (`SENT`/`SUPPRESSED`)
+`EventNotification` rows for `RETENTION_DAYS` (30) — the queryable delivery
+history — and only drop **stuck** non-terminal rows (`PENDING`/`SENDING`) after
+a `STALE_DAYS` (7) floor. Instead it deleted **every** row older than 7 days.
+
+### Корень
+
+The OR had two clauses; the stale-floor clause omitted its status filter:
+
+```ts
+OR: [
+  { status: { in: ['SENT','SUPPRESSED'] }, createdAt: { lt: thirtyDays } },
+  { createdAt: { lt: sevenDays } },          // ← no status filter: matches EVERYTHING >7d
+]
+```
+
+The second clause is a strict superset of the first for terminal rows, so the
+30-day retention was dead — effective retention was 7 days for all rows. The
+delivery record (sent/delivered/by-type) would vanish exactly when someone went
+to check it a week later.
+
+### Урок
+
+- A "catch-all stale floor" clause in a delete/purge is a loaded gun: if it
+  forgets the status/state filter, it quietly overrides every more-specific
+  retention rule next to it. The narrow rule looks intentional; the broad rule
+  silently wins.
+- Retention bugs are invisible until the retention window elapses — by then the
+  data you'd debug with is already gone. They need a test that asserts the
+  *mid-window survivor*, not just the obvious "old → deleted / fresh → kept".
+
+### Правило
+
+- Every clause in a multi-condition purge that is scoped to a *subset* of rows
+  (here: non-terminal) MUST carry that scope filter explicitly. Never write a
+  bare `createdAt < cutoff` next to status-scoped retention rules.
+- Retention tests must include a row inside the retention window that MUST
+  survive, positioned to fail under the over-broad variant.
+
+### Лучший код
+
+```ts
+OR: [
+  { status: { in: ['SENT','SUPPRESSED'] }, createdAt: { lt: terminalCutoff } },
+  { status: { in: ['PENDING','SENDING'] }, createdAt: { lt: staleCutoff } }, // scoped
+]
+```
+
+Regression guard: a `SENT` row at 12 days (inside the 30-day window) is now
+asserted to survive a purge — it was deleted under the bug.
+
+---
+
 ## 2026-06-02 — Circles «Близкие» live-test round 3: пустая «Главная» после битого инвайта · удаление группы без подтверждения · одинаковые иконки в уведомлении и кнопке
 
 Три бага из живого теста «Близких». Главный — №2 (системный класс:

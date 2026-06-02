@@ -336,7 +336,7 @@ suite('event-notifications — real Postgres', () => {
     expect(row?.delivered).toBe(false);
   });
 
-  it('purge drops terminal rows >30d and ANY row >7d, keeps fresh + recent-deferred', async () => {
+  it('purge keeps terminal history for the full retention window; only drops stuck non-terminal rows past the stale floor', async () => {
     const r = await mkUser('r');
     const now = new Date('2026-06-02T12:00:00Z');
     const daysAgo = (d: number) => new Date(now.getTime() - d * 24 * 3600_000);
@@ -347,16 +347,21 @@ suite('event-notifications — real Postgres', () => {
           payload: {}, groupKey: `${r.id}:p`, groupUntil: createdAt, status, createdAt,
         },
       });
-    const oldSent = await mk('a', 'SENT', daysAgo(31));         // terminal + old → delete
-    const oldPending = await mk('b', 'PENDING', daysAgo(8));    // stale → delete
-    const recentSuppressed = await mk('c', 'SUPPRESSED', daysAgo(3)); // terminal but recent → keep
-    const freshPending = await mk('d', 'PENDING', daysAgo(1));  // fresh → keep
+    const oldSent = await mk('a', 'SENT', daysAgo(31));              // terminal + >30d → delete
+    const oldPending = await mk('b', 'PENDING', daysAgo(8));         // non-terminal + >7d → delete
+    // Regression guard: a SENT row in the 7–30d window MUST survive. Under the
+    // pre-fix bug (stale clause had no status filter) it was wrongly deleted at
+    // ~7d, shrinking retention to a week and erasing the delivery record.
+    const midSent = await mk('e', 'SENT', daysAgo(12));             // terminal + <30d → KEEP
+    const recentSuppressed = await mk('c', 'SUPPRESSED', daysAgo(3)); // terminal + recent → keep
+    const freshPending = await mk('d', 'PENDING', daysAgo(1));       // non-terminal + fresh → keep
 
     const deleted = await purgeOldEventNotifications(now);
     expect(deleted).toBe(2);
     const surviving = await db.eventNotification.findMany({ where: { recipientUserId: r.id }, select: { id: true } });
     const ids = surviving.map((x) => x.id).sort();
-    expect(ids).toEqual([recentSuppressed.id, freshPending.id].sort());
+    expect(ids).toEqual([midSent.id, recentSuppressed.id, freshPending.id].sort());
+    expect(ids).toContain(midSent.id);     // the regression assertion
     expect(ids).not.toContain(oldSent.id);
     expect(ids).not.toContain(oldPending.id);
   });

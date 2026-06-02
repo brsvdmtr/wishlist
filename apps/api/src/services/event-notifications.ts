@@ -714,10 +714,14 @@ export async function flushDueEventNotifications(
   return { groups, messagesSent, suppressed, deferred };
 }
 
-/** Bound table growth: delete terminal (SENT / SUPPRESSED) rows past the
- *  retention window, plus ANY row past the stale floor (a fresh PENDING/SENDING
- *  bucket that never delivered for a week — e.g. perpetual cap deferral — is
- *  noise, not a push worth firing late). */
+/** Bound table growth WITHOUT destroying the delivery record:
+ *  - terminal rows (SENT / SUPPRESSED) are kept the full retention window
+ *    (RETENTION_DAYS) so the sent/delivered/by-type history stays queryable;
+ *  - only NON-terminal rows (PENDING / SENDING) stuck past the stale floor
+ *    (STALE_DAYS — e.g. perpetual cap deferral, or a crash orphan) are dropped
+ *    early, since a week-late push is noise.
+ *  The stale clause MUST keep its status filter — without it, the 7-day floor
+ *  would also delete terminal rows and silently shrink retention to a week. */
 export async function purgeOldEventNotifications(now: Date = new Date()): Promise<number> {
   const terminalCutoff = new Date(now.getTime() - RETENTION_DAYS * 24 * 3600_000);
   const staleCutoff = new Date(now.getTime() - STALE_DAYS * 24 * 3600_000);
@@ -725,7 +729,7 @@ export async function purgeOldEventNotifications(now: Date = new Date()): Promis
     where: {
       OR: [
         { status: { in: ['SENT', 'SUPPRESSED'] }, createdAt: { lt: terminalCutoff } },
-        { createdAt: { lt: staleCutoff } },
+        { status: { in: ['PENDING', 'SENDING'] }, createdAt: { lt: staleCutoff } },
       ],
     },
   });
