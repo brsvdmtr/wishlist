@@ -39,6 +39,10 @@ export const RESERVATION_REMINDER_HORIZON_DAYS = 45;
 /** Hard cap on returned feed items (the dataset is naturally small — a handful
  *  of circles × members — so this is a safety ceiling, not real pagination). */
 export const FEED_ITEM_CAP = 60;
+/** Newest items fetched per shared list — bounds the per-list scan. Covers the
+ *  3 preview thumbs + the ACTIVITY_WINDOW_DAYS change detection comfortably.
+ *  Exact totals come from a separate bounded count (`groupBy`), not this slice. */
+export const FEED_PREVIEW_FETCH = 24;
 
 /** Item statuses visible inside a circle (active wishes only). Mirrors
  *  circles.service.ts VISIBLE_ITEM_STATUSES. */
@@ -163,9 +167,11 @@ function toPreview(items: Array<{ id: string; title: string; imageUrl: string | 
  * content to that one circle (the chip filter); the `circles` chip list always
  * reflects ALL the viewer's circles so the filter UI stays complete.
  */
-export async function getFeed(params: { viewerId: string; circleId?: string | null }): Promise<FeedResponse> {
+export async function getFeed(params: { viewerId: string; circleId?: string | null; now?: Date }): Promise<FeedResponse> {
   const { viewerId } = params;
-  const now = new Date();
+  // `now` is injectable so date-dependent behaviour (MSK event-date anchoring,
+  // activity window) is deterministically testable; production passes none.
+  const now = params.now ?? new Date();
 
   // All active memberships → chip list + the full circle scope.
   const memberships = await prisma.circleMembership.findMany({
@@ -209,10 +215,16 @@ export async function getFeed(params: { viewerId: string; circleId?: string | nu
         circleId: true,
         wishlist: {
           select: {
+            id: true,
             ownerId: true,
+            // Bounded: the N most-recently-TOUCHED visible items per shared
+            // list. Ordered by updatedAt (not createdAt) so an old wish that was
+            // edited recently still lands in the slice → its update surfaces as
+            // activity. Exact totals come from a separate count, not this slice.
             items: {
               where: { status: { in: [...VISIBLE_ITEM_STATUSES] } },
-              orderBy: { createdAt: 'desc' },
+              orderBy: { updatedAt: 'desc' },
+              take: FEED_PREVIEW_FETCH,
               select: { id: true, title: true, imageUrl: true, createdAt: true, updatedAt: true },
             },
           },
@@ -242,16 +254,42 @@ export async function getFeed(params: { viewerId: string; circleId?: string | nu
     }),
   ]);
 
-  // Index shared items by (circleId, ownerId).
+  // Active co-members + shared owners per circle — used to (a) attribute events
+  // and (b) drop reservations whose recipient left the circle / un-shared their
+  // lists (else the card would deep-link into a 404 → MemberView dead-loader).
+  const activeMemberSet = new Set(members.map((m) => `${m.circleId}:${m.userId}`));
+  const sharedMemberSet = new Set(shares.map((s) => `${s.circleId}:${s.wishlist.ownerId}`));
+
+  // Accurate visible-item counts per shared list (one bounded row per list) —
+  // the `take`-bounded items above can't be trusted for totals.
+  const sharedWishlistIds = [...new Set(shares.map((s) => s.wishlist.id))];
+  const countRows = sharedWishlistIds.length
+    ? await prisma.item.groupBy({
+        by: ['wishlistId'],
+        where: { wishlistId: { in: sharedWishlistIds }, status: { in: [...VISIBLE_ITEM_STATUSES] } },
+        _count: { _all: true },
+      })
+    : [];
+  const countByWishlist = new Map(countRows.map((r) => [r.wishlistId, r._count._all]));
+
+  // Index shared items + accurate totals by (circleId, ownerId).
   type SharedItem = { id: string; title: string; imageUrl: string | null; createdAt: Date; updatedAt: Date };
   const itemsByCircleMember = new Map<string, SharedItem[]>();
+  const countByCircleMember = new Map<string, number>();
   for (const s of shares) {
     const key = `${s.circleId}:${s.wishlist.ownerId}`;
     const arr = itemsByCircleMember.get(key) ?? [];
     arr.push(...s.wishlist.items);
     itemsByCircleMember.set(key, arr);
+    countByCircleMember.set(key, (countByCircleMember.get(key) ?? 0) + (countByWishlist.get(s.wishlist.id) ?? 0));
   }
 
+  // MSK-anchored "today" so the displayed event date matches the MSK-based
+  // countdown (daysUntilNextBirthday) — avoids a UTC/MSK off-by-one near midnight.
+  const mskMidnightUtc = (() => {
+    const msk = new Date(now.getTime() + 3 * 3600_000);
+    return Date.UTC(msk.getUTCFullYear(), msk.getUTCMonth(), msk.getUTCDate());
+  })();
   const activityCutoff = now.getTime() - ACTIVITY_WINDOW_DAYS * 86400_000;
 
   // ── EVENTS — one card per member (dedup across circles, prefer the circle
@@ -260,10 +298,12 @@ export async function getFeed(params: { viewerId: string; circleId?: string | nu
   for (const m of members) {
     const days = daysUntilNextBirthday(m.user.profile?.birthday ?? null, now);
     if (days == null || days > EVENT_HORIZON_DAYS) continue;
-    const shared = (itemsByCircleMember.get(`${m.circleId}:${m.userId}`) ?? []).slice().sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const key = `${m.circleId}:${m.userId}`;
+    const shared = (itemsByCircleMember.get(key) ?? []).slice().sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const itemCount = countByCircleMember.get(key) ?? shared.length;
     const prev = eventByMember.get(m.userId);
-    if (prev && prev.itemCount >= shared.length) continue; // keep richer circle
-    const eventDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) + days * 86400_000);
+    if (prev && prev.itemCount >= itemCount) continue; // keep the circle where they shared more
+    const eventDate = new Date(mskMidnightUtc + days * 86400_000);
     eventByMember.set(m.userId, {
       kind: 'event',
       id: `event:${m.circleId}:${m.userId}`,
@@ -275,7 +315,7 @@ export async function getFeed(params: { viewerId: string; circleId?: string | nu
       eventDate: eventDate.toISOString(),
       daysUntil: days,
       urgency: deriveUrgency(days),
-      itemCount: shared.length,
+      itemCount,
       previewItems: toPreview(shared),
     });
   }
@@ -283,7 +323,8 @@ export async function getFeed(params: { viewerId: string; circleId?: string | nu
   // ── ACTIVITY — one card per member: wishes added/changed in the window.
   const activityByMember = new Map<string, FeedActivityItem>();
   for (const m of members) {
-    const shared = itemsByCircleMember.get(`${m.circleId}:${m.userId}`) ?? [];
+    const key = `${m.circleId}:${m.userId}`;
+    const shared = itemsByCircleMember.get(key) ?? [];
     if (shared.length === 0) continue;
     const changed = shared.filter((it) => it.createdAt.getTime() >= activityCutoff || it.updatedAt.getTime() >= activityCutoff);
     if (changed.length === 0) continue;
@@ -303,21 +344,29 @@ export async function getFeed(params: { viewerId: string; circleId?: string | nu
       addedCount: added.length,
       updatedCount: updatedOnly.length,
       at: new Date(latestMs).toISOString(),
-      itemCount: shared.length,
+      itemCount: countByCircleMember.get(key) ?? shared.length,
       previewItems: toPreview(added.length > 0 ? added : newestFirst),
     });
   }
 
-  // ── RESERVATIONS — viewer's own circle reservations. Cards only for those
-  //    whose recipient event is near; ALL count toward the summary block.
+  // ── RESERVATIONS — the viewer's own circle reservations.
+  // The viewer still "holds" a reservation as long as the recipient is an ACTIVE
+  // co-member → those drive the summary count (a recipient who LEFT the circle is
+  // dropped: the reservation is no longer reachable/relevant). A "don't forget"
+  // CARD additionally requires the event to be near AND the recipient's list to
+  // still be shared, so its "Детали" CTA opens a non-empty member page rather
+  // than a dead/empty one — but un-sharing must NOT silently shrink the count.
+  const heldReservations = reservations.filter((rsv) =>
+    activeMemberSet.has(`${rsv.circleId}:${rsv.item.wishlist.ownerId}`));
   const reservationItems: FeedReservationItem[] = [];
   const reservationNames: Array<{ name: string; days: number }> = [];
-  for (const rsv of reservations) {
+  for (const rsv of heldReservations) {
     const owner = rsv.item.wishlist.owner;
     const forName = displayName(owner);
     const days = daysUntilNextBirthday(owner.profile?.birthday ?? null, now);
     reservationNames.push({ name: forName, days: days ?? Number.POSITIVE_INFINITY });
-    if (days != null && days <= RESERVATION_REMINDER_HORIZON_DAYS) {
+    const stillShared = sharedMemberSet.has(`${rsv.circleId}:${rsv.item.wishlist.ownerId}`);
+    if (stillShared && days != null && days <= RESERVATION_REMINDER_HORIZON_DAYS) {
       reservationItems.push({
         kind: 'reservation',
         id: `reservation:${rsv.id}`,
@@ -353,7 +402,7 @@ export async function getFeed(params: { viewerId: string; circleId?: string | nu
     hasCircles,
     circles,
     items,
-    reservations: { count: reservations.length, names: summaryNames },
+    reservations: { count: heldReservations.length, names: summaryNames },
     generatedAt: now.toISOString(),
     nextCursor: null,
   };

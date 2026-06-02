@@ -12,11 +12,11 @@
 // (Card/Chip/Button/UserAvatar), not a new primitive. If the FeedCard shape
 // proves reusable it gets extracted to packages/ui (see DESIGN_DECISIONS).
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import { t, type Locale } from '@wishlist/shared';
 import { Button, Chip } from '@wishlist/ui';
-import { colors as c, radius as r, spacing as sp, fontSize as fs, fontWeight as fw, shadows as sh, gradients as g } from '@wishlist/ui-tokens';
+import { colors as c, radius as r, spacing as sp, fontSize as fs, fontWeight as fw, shadows as sh, gradients as g, touchTarget as tt } from '@wishlist/ui-tokens';
 
 import { UserAvatar } from '../../components/UserAvatar';
 import { hashKeyForLog } from '../../idempotency';
@@ -259,14 +259,21 @@ export function FeedRoot({ tgFetch, locale, onOpenMember, onOpenReservations, on
   const [data, setData] = useState<FeedResponse | null>(null);
   const [error, setError] = useState(false);
   const [filter, setFilter] = useState<string | null>(null);
+  // Monotonic request id — guards against a slow earlier fetch (e.g. rapid chip
+  // taps "Все → Семья → Все") overwriting a newer response out of order.
+  const reqSeq = useRef(0);
 
   const load = useCallback(async (circleId: string | null) => {
+    const seq = ++reqSeq.current;
     setError(false);
     try {
       const res = await tgFetch(`/tg/feed${circleId ? `?circleId=${encodeURIComponent(circleId)}` : ''}`);
       if (!res.ok) throw new Error('feed_failed');
       const json = await res.json() as FeedResponse;
-      setData(json);
+      // Guard only the state write: a superseded earlier fetch (rapid filter
+      // taps "Все → Семья → Все") must not overwrite newer data. Analytics
+      // still fire per load (the P0.2 feed.viewed impression semantics).
+      if (seq === reqSeq.current) setData(json);
       // feed.viewed — fire once per successful load (here, NOT in render), so
       // re-renders don't re-emit. Per-kind ranked-card counts are the CTR
       // denominators consumed by feed.card_clicked analysis.
@@ -286,11 +293,16 @@ export function FeedRoot({ tgFetch, locale, onOpenMember, onOpenReservations, on
         filtered: circleId !== null,
       });
     } catch {
-      setError(true);
+      if (seq === reqSeq.current) setError(true);
     }
   }, [tgFetch, onTrack]);
 
-  useEffect(() => { void load(filter); }, [filter, load]);
+  useEffect(() => {
+    void load(filter);
+    // Bump the seq on unmount / filter change so an in-flight response can't
+    // setState after FeedRoot is gone (or after a newer load has started).
+    return () => { reqSeq.current++; };
+  }, [filter, load]);
 
   // Circle chip selection. Guard against re-tapping the active chip (mirrors
   // SearchScreen.handleFilterChange) so filter_changed reflects real changes.
@@ -302,7 +314,7 @@ export function FeedRoot({ tgFetch, locale, onOpenMember, onOpenReservations, on
   }, [filter, onTrack]);
 
   const headerBtn = (icon: string, onClick: () => void) => (
-    <button type="button" onClick={onClick} aria-label={icon} style={{ width: 38, height: 38, borderRadius: r.lg, background: c.surface, border: `1px solid ${c.border}`, color: c.text, fontSize: 17, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>{icon}</button>
+    <button type="button" onClick={onClick} aria-label={icon} style={{ width: tt.min, height: tt.min, minWidth: tt.min, minHeight: tt.min, borderRadius: r.lg, background: c.surface, border: `1px solid ${c.border}`, color: c.text, fontSize: 17, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>{icon}</button>
   );
 
   return (
@@ -392,7 +404,7 @@ function FilterChip({ label, active, onClick }: { label: string; active: boolean
       type="button"
       onClick={onClick}
       style={{
-        flex: '0 0 auto', height: 34, padding: `0 ${sp[3] + 2}px`, borderRadius: r.full, cursor: 'pointer',
+        flex: '0 0 auto', height: tt.min, minHeight: tt.min, padding: `0 ${sp[4]}px`, borderRadius: r.full, cursor: 'pointer',
         fontSize: fs.base, fontWeight: fw.semibold, letterSpacing: '-0.01em', whiteSpace: 'nowrap',
         background: active ? g.accentDeep : c.surface,
         border: `1px solid ${active ? 'transparent' : c.border}`,
