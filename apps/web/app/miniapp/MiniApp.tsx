@@ -21935,6 +21935,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           onOpenSearch={() => { setSearchOriginScreen(screen); setScreen('search'); }}
           onOpenSettings={() => { setSettingsOriginScreen(screen); loadSettings(); setScreen('settings'); }}
           pushToast={pushToast}
+          onTrack={trackEvent}
         />
       )}
 

@@ -19,6 +19,7 @@ import { Button, Chip } from '@wishlist/ui';
 import { colors as c, radius as r, spacing as sp, fontSize as fs, fontWeight as fw, shadows as sh, gradients as g } from '@wishlist/ui-tokens';
 
 import { UserAvatar } from '../../components/UserAvatar';
+import { hashKeyForLog } from '../../idempotency';
 import { getEmoji } from '../../lib/emoji';
 
 // ── Host contract ─────────────────────────────────────────────────────────────
@@ -38,6 +39,9 @@ export interface FeedRootProps {
   onOpenSearch?: () => void;
   onOpenSettings?: () => void;
   pushToast: (message: string, kind: 'success' | 'error' | 'info') => void;
+  /** Analytics sink — wired to MiniApp's `trackEvent`. Optional so a stale host
+   *  that predates the P0.2 analytics wiring can't crash the feed chunk. */
+  onTrack?: (event: string, props?: Record<string, unknown>) => void;
 }
 
 // ── Wire shapes (mirror services/feed.service.ts) ─────────────────────────────
@@ -251,7 +255,7 @@ function FeedSkeleton() {
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 
-export function FeedRoot({ tgFetch, locale, onOpenMember, onOpenReservations, onCreateCircle, onOpenSearch, onOpenSettings }: FeedRootProps) {
+export function FeedRoot({ tgFetch, locale, onOpenMember, onOpenReservations, onCreateCircle, onOpenSearch, onOpenSettings, onTrack }: FeedRootProps) {
   const [data, setData] = useState<FeedResponse | null>(null);
   const [error, setError] = useState(false);
   const [filter, setFilter] = useState<string | null>(null);
@@ -261,13 +265,41 @@ export function FeedRoot({ tgFetch, locale, onOpenMember, onOpenReservations, on
     try {
       const res = await tgFetch(`/tg/feed${circleId ? `?circleId=${encodeURIComponent(circleId)}` : ''}`);
       if (!res.ok) throw new Error('feed_failed');
-      setData(await res.json() as FeedResponse);
+      const json = await res.json() as FeedResponse;
+      setData(json);
+      // feed.viewed — fire once per successful load (here, NOT in render), so
+      // re-renders don't re-emit. Per-kind ranked-card counts are the CTR
+      // denominators consumed by feed.card_clicked analysis.
+      let eventCount = 0, activityCount = 0, reservationCount = 0;
+      for (const it of json.items) {
+        if (it.kind === 'event') eventCount++;
+        else if (it.kind === 'activity') activityCount++;
+        else reservationCount++;
+      }
+      onTrack?.('feed.viewed', {
+        hasCircles: json.hasCircles,
+        itemCount: json.items.length,
+        eventCount,
+        activityCount,
+        reservationCount,
+        circleCount: json.circles.length,
+        filtered: circleId !== null,
+      });
     } catch {
       setError(true);
     }
-  }, [tgFetch]);
+  }, [tgFetch, onTrack]);
 
   useEffect(() => { void load(filter); }, [filter, load]);
+
+  // Circle chip selection. Guard against re-tapping the active chip (mirrors
+  // SearchScreen.handleFilterChange) so filter_changed reflects real changes.
+  // scope = 'all' | djb2 fingerprint of the circleId — never the raw id.
+  const selectFilter = useCallback((next: string | null) => {
+    if (next === filter) return;
+    setFilter(next);
+    onTrack?.('feed.filter_changed', { scope: next === null ? 'all' : hashKeyForLog(next) });
+  }, [filter, onTrack]);
 
   const headerBtn = (icon: string, onClick: () => void) => (
     <button type="button" onClick={onClick} aria-label={icon} style={{ width: 38, height: 38, borderRadius: r.lg, background: c.surface, border: `1px solid ${c.border}`, color: c.text, fontSize: 17, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>{icon}</button>
@@ -300,7 +332,7 @@ export function FeedRoot({ tgFetch, locale, onOpenMember, onOpenReservations, on
       )}
 
       {/* No circles → bridge to P0.1 */}
-      {data && !data.hasCircles && <EmptyState locale={locale} onCreate={onCreateCircle} />}
+      {data && !data.hasCircles && <EmptyState locale={locale} onCreate={() => { onTrack?.('feed.empty_cta_clicked'); onCreateCircle(); }} />}
 
       {/* Ready */}
       {data && data.hasCircles && (
@@ -308,9 +340,9 @@ export function FeedRoot({ tgFetch, locale, onOpenMember, onOpenReservations, on
           {/* Circle filter chips */}
           {data.circles.length > 0 && (
             <div style={{ display: 'flex', gap: sp[2], overflowX: 'auto', paddingBottom: sp[3], margin: `0 -${sp[4]}px ${sp[1]}px`, paddingLeft: sp[4], paddingRight: sp[4], scrollbarWidth: 'none' }}>
-              <FilterChip label={t('feed_filter_all', locale)} active={filter === null} onClick={() => setFilter(null)} />
+              <FilterChip label={t('feed_filter_all', locale)} active={filter === null} onClick={() => selectFilter(null)} />
               {data.circles.map((cc) => (
-                <FilterChip key={cc.id} label={`${cc.emoji || TYPE_EMOJI[cc.type]} ${cc.name}`} active={filter === cc.id} onClick={() => setFilter(cc.id)} />
+                <FilterChip key={cc.id} label={`${cc.emoji || TYPE_EMOJI[cc.type]} ${cc.name}`} active={filter === cc.id} onClick={() => selectFilter(cc.id)} />
               ))}
             </div>
           )}
@@ -319,10 +351,10 @@ export function FeedRoot({ tgFetch, locale, onOpenMember, onOpenReservations, on
             <QuietState locale={locale} />
           ) : (
             <>
-              {data.items.map((it) => {
-                if (it.kind === 'event') return <EventCard key={it.id} item={it} locale={locale} onOpen={() => onOpenMember(it.circleId, it.memberUserId)} />;
-                if (it.kind === 'activity') return <ActivityCard key={it.id} item={it} locale={locale} onOpen={() => onOpenMember(it.circleId, it.memberUserId)} />;
-                return <ReservationCard key={it.id} item={it} locale={locale} onOpen={() => onOpenMember(it.circleId, it.forUserId)} />;
+              {data.items.map((it, idx) => {
+                if (it.kind === 'event') return <EventCard key={it.id} item={it} locale={locale} onOpen={() => { onTrack?.('feed.card_clicked', { kind: 'event', position: idx, daysUntil: it.daysUntil, urgency: it.urgency }); onOpenMember(it.circleId, it.memberUserId); }} />;
+                if (it.kind === 'activity') return <ActivityCard key={it.id} item={it} locale={locale} onOpen={() => { onTrack?.('feed.card_clicked', { kind: 'activity', position: idx }); onOpenMember(it.circleId, it.memberUserId); }} />;
+                return <ReservationCard key={it.id} item={it} locale={locale} onOpen={() => { onTrack?.('feed.card_clicked', { kind: 'reservation', position: idx }); onOpenMember(it.circleId, it.forUserId); }} />;
               })}
 
               {/* «Мои брони» summary block */}

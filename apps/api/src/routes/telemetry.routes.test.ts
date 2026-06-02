@@ -101,6 +101,29 @@ describe('POST /telemetry — PRODUCT_EVENTS source-permission gate', () => {
     expect(res.body).toMatchObject({ ok: true, accepted: 1, dropped: 0 });
   });
 
+  // P0.2 home-feed funnel. `feed.` is NOT a legacy prefix, so the entire funnel
+  // reaches AnalyticsEvent ONLY through the clientAllowed gate. This locks the
+  // exact HTTP ingest path the metrics depend on (regression: silent drop).
+  it('accepts the feed.* home-feed funnel and keeps the hashed filter scope', async () => {
+    const res = await request(makeApp()).post('/telemetry').send({
+      events: [
+        { event: 'feed.viewed', ts: Date.now(), props: { itemCount: 3, eventCount: 1, filtered: false } },
+        { event: 'feed.card_clicked', ts: Date.now(), props: { kind: 'event', position: 0 } },
+        { event: 'feed.filter_changed', ts: Date.now(), props: { scope: 'a1b2c3d4' } },
+        { event: 'feed.empty_cta_clicked', ts: Date.now() },
+      ],
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, accepted: 4, dropped: 0 });
+    const rows = shared.analyticsEvent.createMany.mock.calls[0]![0].data;
+    expect(rows.map((r: { event: string }) => r.event)).toEqual([
+      'feed.viewed', 'feed.card_clicked', 'feed.filter_changed', 'feed.empty_cta_clicked',
+    ]);
+    // The hashed circle scope is a privacy-safe shape signal — sanitizeAnalyticsProps keeps it.
+    const filterRow = rows.find((r: { event: string }) => r.event === 'feed.filter_changed');
+    expect(filterRow.props.scope).toBe('a1b2c3d4');
+  });
+
   it('HARD-DENIES payment.completed (serverOnly), even though `payment.` is a legacy prefix', async () => {
     const res = await request(makeApp()).post('/telemetry').send({
       events: [{ event: 'payment.completed', ts: Date.now(), props: { amount: 999 } }],
